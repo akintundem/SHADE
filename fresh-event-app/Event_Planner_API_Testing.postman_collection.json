@@ -1,0 +1,835 @@
+{
+	"info": {
+		"_postman_id": "fresh-event-planner-api-tests",
+		"name": "Event Planner API - Comprehensive Testing",
+		"description": "Complete test suite for the fresh Event Planner API with all CRUD operations and search functionality",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Generate unique test data for each run",
+					"if (!pm.environment.get('test_event_id')) {",
+					"    const timestamp = Date.now();",
+					"    pm.environment.set('test_event_id', '');",
+					"    pm.environment.set('test_event_name', 'Test Event ' + timestamp);",
+					"    pm.environment.set('test_event_description', 'Test Description ' + timestamp);",
+					"    pm.environment.set('test_event_location', 'Test Location ' + timestamp);",
+					"    console.log('Generated test data for run:', timestamp);",
+					"}"
+				]
+			}
+		}
+	],
+	"item": [
+		{
+			"name": "🏥 Health Check",
+			"item": [
+				{
+					"name": "API Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/health",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "health"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Health check should return 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response should contain status UP', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.status).to.eql('UP');",
+									"});",
+									"",
+									"pm.test('Response should contain service name', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.service).to.eql('Event Planner API');",
+									"});",
+									"",
+									"pm.test('Response should contain version', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.version).to.eql('1.0.0');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "📅 Event CRUD Operations",
+			"item": [
+				{
+					"name": "Get All Events (Empty)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Get all events should return 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response should be an array', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('Initial events list should be empty', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.lengthOf(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Create Event",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"{{test_event_name}}\",\n    \"description\": \"{{test_event_description}}\",\n    \"startDate\": \"2025-12-25T10:00:00\",\n    \"endDate\": \"2025-12-25T18:00:00\",\n    \"location\": \"{{test_event_location}}\",\n    \"status\": \"PLANNING\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/events",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Create event should return 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Response should contain event data', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.property('id');",
+									"    pm.expect(responseJson).to.have.property('name');",
+									"    pm.expect(responseJson).to.have.property('description');",
+									"    pm.expect(responseJson).to.have.property('location');",
+									"    pm.expect(responseJson).to.have.property('status');",
+									"    pm.expect(responseJson).to.have.property('createdAt');",
+									"    pm.expect(responseJson).to.have.property('updatedAt');",
+									"});",
+									"",
+									"pm.test('Event name should match request', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.name).to.eql(pm.environment.get('test_event_name'));",
+									"});",
+									"",
+									"pm.test('Event status should be PLANNING', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.status).to.eql('PLANNING');",
+									"});",
+									"",
+									"// Save the event ID for subsequent tests",
+									"const responseJson = pm.response.json();",
+									"pm.environment.set('test_event_id', responseJson.id);",
+									"console.log('Saved event ID:', responseJson.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Get All Events (With Data)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Get all events should return 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response should be an array', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('Events list should contain one event', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.lengthOf(1);",
+									"});",
+									"",
+									"pm.test('Event should have correct name', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson[0].name).to.eql(pm.environment.get('test_event_name'));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Get Event by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/{{test_event_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "{{test_event_id}}"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Get event by ID should return 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response should contain event data', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.property('id');",
+									"    pm.expect(responseJson).to.have.property('name');",
+									"    pm.expect(responseJson).to.have.property('description');",
+									"    pm.expect(responseJson).to.have.property('location');",
+									"    pm.expect(responseJson).to.have.property('status');",
+									"});",
+									"",
+									"pm.test('Event ID should match requested ID', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.id).to.eql(pm.environment.get('test_event_id'));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Update Event",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated {{test_event_name}}\",\n    \"description\": \"Updated {{test_event_description}}\",\n    \"startDate\": \"2025-12-25T10:00:00\",\n    \"endDate\": \"2025-12-25T18:00:00\",\n    \"location\": \"Updated {{test_event_location}}\",\n    \"status\": \"PUBLISHED\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/{{test_event_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "{{test_event_id}}"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Update event should return 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response should contain updated event data', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.property('id');",
+									"    pm.expect(responseJson).to.have.property('name');",
+									"    pm.expect(responseJson).to.have.property('description');",
+									"    pm.expect(responseJson).to.have.property('location');",
+									"    pm.expect(responseJson).to.have.property('status');",
+									"});",
+									"",
+									"pm.test('Event name should be updated', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.name).to.eql('Updated ' + pm.environment.get('test_event_name'));",
+									"});",
+									"",
+									"pm.test('Event status should be PUBLISHED', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.status).to.eql('PUBLISHED');",
+									"});",
+									"",
+									"pm.test('UpdatedAt should be different from createdAt', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.updatedAt).to.not.eql(responseJson.createdAt);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Delete Event",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/{{test_event_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "{{test_event_id}}"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Delete event should return 204', function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test('Response body should be empty', function () {",
+									"    pm.expect(pm.response.text()).to.be.empty;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Get All Events (After Delete)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Get all events should return 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response should be an array', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('Events list should be empty after delete', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.lengthOf(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "🔍 Search & Filter Operations",
+			"item": [
+				{
+					"name": "Create Multiple Test Events",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Tech Conference 2025\",\n    \"description\": \"Annual technology conference\",\n    \"startDate\": \"2025-06-15T09:00:00\",\n    \"endDate\": \"2025-06-15T17:00:00\",\n    \"location\": \"San Francisco Convention Center\",\n    \"status\": \"PUBLISHED\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/events",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Create first test event should return 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"// Save the first event ID",
+									"const responseJson = pm.response.json();",
+									"pm.environment.set('search_event_1_id', responseJson.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Create Second Test Event",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Marketing Workshop\",\n    \"description\": \"Digital marketing workshop\",\n    \"startDate\": \"2025-07-20T10:00:00\",\n    \"endDate\": \"2025-07-20T16:00:00\",\n    \"location\": \"New York Business Center\",\n    \"status\": \"PLANNING\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/events",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Create second test event should return 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"// Save the second event ID",
+									"const responseJson = pm.response.json();",
+									"pm.environment.set('search_event_2_id', responseJson.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Search Events by Name",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/search?name=Conference",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "search"],
+							"query": [
+								{
+									"key": "name",
+									"value": "Conference"
+								}
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Search by name should return 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response should be an array', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('Should find events containing Conference', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.length).to.be.at.least(1);",
+									"    const hasConference = responseJson.some(event => event.name.includes('Conference'));",
+									"    pm.expect(hasConference).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Search Events by Location",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/search?location=San Francisco",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "search"],
+							"query": [
+								{
+									"key": "location",
+									"value": "San Francisco"
+								}
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Search by location should return 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response should be an array', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('Should find events in San Francisco', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.length).to.be.at.least(1);",
+									"    const hasSanFrancisco = responseJson.some(event => event.location.includes('San Francisco'));",
+									"    pm.expect(hasSanFrancisco).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Search Events by Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/search?status=PUBLISHED",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "search"],
+							"query": [
+								{
+									"key": "status",
+									"value": "PUBLISHED"
+								}
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Search by status should return 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response should be an array', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('All events should have PUBLISHED status', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.length).to.be.at.least(1);",
+									"    responseJson.forEach(event => {",
+									"        pm.expect(event.status).to.eql('PUBLISHED');",
+									"    });",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Search Events (No Parameters)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/search",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "search"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Search without parameters should return 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response should be an array', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('Should return all events when no search parameters', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.length).to.be.at.least(2);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "❌ Error Handling Tests",
+			"item": [
+				{
+					"name": "Get Non-existent Event",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/00000000-0000-0000-0000-000000000000",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "00000000-0000-0000-0000-000000000000"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Get non-existent event should return 404', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Update Non-existent Event",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Non-existent Event\",\n    \"description\": \"This event does not exist\",\n    \"startDate\": \"2025-12-25T10:00:00\",\n    \"endDate\": \"2025-12-25T18:00:00\",\n    \"location\": \"Nowhere\",\n    \"status\": \"DRAFT\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/00000000-0000-0000-0000-000000000000",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "00000000-0000-0000-0000-000000000000"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Update non-existent event should return 404', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Delete Non-existent Event",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/00000000-0000-0000-0000-000000000000",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "00000000-0000-0000-0000-000000000000"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Delete non-existent event should return 404', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Create Event with Invalid Data",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"\",\n    \"description\": \"Event with empty name\",\n    \"startDate\": \"2025-12-25T10:00:00\",\n    \"endDate\": \"2025-12-25T18:00:00\",\n    \"location\": \"Test Location\",\n    \"status\": \"INVALID_STATUS\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/events",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Create event with invalid data should return 400', function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "🧹 Cleanup",
+			"item": [
+				{
+					"name": "Delete All Test Events",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/{{search_event_1_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "{{search_event_1_id}}"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Delete first test event should return 204', function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Delete Second Test Event",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events/{{search_event_2_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events", "{{search_event_2_id}}"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Delete second test event should return 204', function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Verify Cleanup",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/events",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "events"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Get all events should return 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Events list should be empty after cleanup', function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.lengthOf(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080"
+		}
+	]
+}

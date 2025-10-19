@@ -1,0 +1,28 @@
+# Build artifacts
+/target/
+**/target/
+*.jar
+
+# IntelliJ / IDEA / Eclipse / VS Code
+.idea/
+.project
+.classpath
+.settings/
+.vscode/
+
+# Logs and runtime files
+*.log
+/server.log
+/app.log
+/test-results/
+
+# Environment & credentials
+.env
+*.env
+
+# OS generated files
+.DS_Store
+
+# Temporary files
+/tmp-*.json
+/test-environment-with-auth.json

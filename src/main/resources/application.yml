@@ -1,0 +1,143 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: event-planner-monolith
+  
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+  
+  # Enable JPA for auth system only
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.elasticsearch.ReactiveElasticsearchRepositoriesAutoConfiguration
+  
+  # Component scan to exclude problematic services
+  main:
+    allow-bean-definition-overriding: true
+  
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+    defer-datasource-initialization: true
+  
+  # Database Configuration
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  # H2 Console
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  
+  # redis:
+  #   host: ${SPRING_REDIS_HOST:localhost}
+  #   port: ${SPRING_REDIS_PORT:6379}
+  #   timeout: 2000ms
+  #   lettuce:
+  #     pool:
+  #       max-active: 8
+  #       max-idle: 8
+  #       min-idle: 0
+  
+  
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:your-openai-api-key}
+      chat:
+        options:
+          model: gpt-4o-mini
+          temperature: 0.4
+          max-tokens: 1000
+      embedding:
+        options:
+          model: text-embedding-3-small
+          dimensions: 1536
+    pinecone:
+      api-key: ${PINECONE_API_KEY:your-pinecone-api-key}
+      environment: ${PINECONE_ENVIRONMENT:us-east-1-aws}
+      project-name: ${PINECONE_PROJECT:event-planner}
+      index-name: ${PINECONE_INDEX:event-templates}
+    vectorstore:
+      pinecone:
+        index-name: event-templates
+        namespace: event-planning
+  
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=300s
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:myVerySecureSecretKeyThatIsAtLeast32CharactersLongForJWT}
+  expiration: 86400000 # 24 hours in milliseconds
+  refresh-expiration: 604800000 # 7 days in milliseconds
+
+# External API Keys
+external:
+  stripe:
+    api-key: ${STRIPE_API_KEY:your-stripe-api-key}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:your-stripe-webhook-secret}
+  twilio:
+    account-sid: ${TWILIO_ACCOUNT_SID:your-twilio-account-sid}
+    auth-token: ${TWILIO_AUTH_TOKEN:your-twilio-auth-token}
+    phone-number: ${TWILIO_PHONE_NUMBER:your-twilio-phone-number}
+  sendgrid:
+    api-key: ${SENDGRID_API_KEY:your-sendgrid-api-key}
+  google:
+    maps-api-key: ${GOOGLE_MAPS_API_KEY:your-google-maps-api-key}
+  openweather:
+    api-key: ${OPENWEATHER_API_KEY:your-openweather-api-key}
+
+# Logging
+logging:
+  level:
+    ai.eventplanner: DEBUG
+    org.springframework.security: INFO
+    org.springframework.web: INFO
+    org.springframework.ai: DEBUG
+    org.springframework.validation: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+    # Management endpoints
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: health,info,metrics,env
+      endpoint:
+        health:
+          show-details: always
+      health:
+        elasticsearch:
+          enabled: false
+
+# OpenAPI Documentation
+springdoc:
+  swagger-ui:
+    path: /swagger-ui
+  api-docs:
+    path: /v3/api-docs
+  info:
+    title: Event Planner API
+    description: AI-powered event planning platform
+    version: 1.0.0
