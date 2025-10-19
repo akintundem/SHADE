@@ -1,5 +1,6 @@
 package ai.eventplanner.assistant.service;
 
+import ai.eventplanner.assistant.client.OpenAiClient;
 import ai.eventplanner.assistant.dto.ShadeConversationRequest;
 import ai.eventplanner.assistant.dto.ShadeConversationResponse;
 import ai.eventplanner.event.dto.request.CreateEventRequest;
@@ -7,17 +8,11 @@ import ai.eventplanner.assistant.entity.AssistantMessageEntity;
 import ai.eventplanner.assistant.entity.AssistantSessionEntity;
 import ai.eventplanner.assistant.repository.AssistantMessageRepository;
 import ai.eventplanner.assistant.repository.AssistantSessionRepository;
-import ai.eventplanner.common.exception.ResourceNotFoundException;
 import ai.eventplanner.event.service.EventService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -181,7 +176,7 @@ public class ShadeConversationService {
     private final AssistantSessionRepository sessionRepository;
     private final AssistantMessageRepository messageRepository;
     private final EventService eventService;
-    private final Optional<ChatClient> chatClient;
+    private final OpenAiClient openAiClient;
     private final ObjectMapper objectMapper;
     private final Environment environment;
 
@@ -210,49 +205,36 @@ public class ShadeConversationService {
         return response;
     }
 
-    private ShadeConversationResponse generateShadeResponse(AssistantSessionEntity session, 
-                                                           List<AssistantMessageEntity> history, 
-                                                           ShadeConversationRequest request) {
-        if (chatClient.isPresent() && isApiKeyConfigured()) {
+    private ShadeConversationResponse generateShadeResponse(AssistantSessionEntity session,
+                                                            List<AssistantMessageEntity> history,
+                                                            ShadeConversationRequest request) {
+        if (openAiClient.isConfigured()) {
             return generateWithAI(session, history, request);
-        } else {
-            return generateFallbackResponse(session, request);
         }
+        return buildLlmUnavailableResponse(session);
     }
 
     private ShadeConversationResponse generateWithAI(AssistantSessionEntity session,
-                                                    List<AssistantMessageEntity> history,
-                                                    ShadeConversationRequest request) {
-        List<Message> messages = new ArrayList<>();
-        
-        // Add system prompt
-        messages.add(new SystemMessage(SHADE_SYSTEM_PROMPT));
-        
-        // Add session context
-        messages.add(new SystemMessage(buildSessionContext(session)));
-        
-        // Add conversation history
+                                                     List<AssistantMessageEntity> history,
+                                                     ShadeConversationRequest request) {
+        List<Map<String, String>> messages = new ArrayList<>();
+
+        messages.add(message("system", SHADE_SYSTEM_PROMPT));
+        messages.add(message("system", buildSessionContext(session)));
+
         history.forEach(message -> {
-            if ("user".equalsIgnoreCase(message.getRole())) {
-                messages.add(new UserMessage(message.getContent()));
-            } else {
-                messages.add(new AssistantMessage(message.getContent()));
-            }
+            String role = "assistant".equalsIgnoreCase(message.getRole()) ? "assistant" : "user";
+            messages.add(message(role, message.getContent()));
         });
-        
-        // Add current user message
-        messages.add(new UserMessage(request.getMessage()));
-        
+
+        messages.add(message("user", request.getMessage()));
+
         try {
-            String response = chatClient.get().prompt()
-                    .messages(messages)
-                    .call()
-                    .content();
-            
+            String response = openAiClient.createChatCompletion(messages);
             return parseShadeResponse(response, session, request);
         } catch (Exception e) {
             log.error("Error generating AI response", e);
-            return generateFallbackResponse(session, request);
+            return buildLlmUnavailableResponse(session);
         }
     }
 
@@ -407,60 +389,6 @@ public class ShadeConversationService {
         }
     }
 
-    private ShadeConversationResponse generateFallbackResponse(AssistantSessionEntity session, 
-                                                              ShadeConversationRequest request) {
-        String intent = detectIntent(request.getMessage());
-        
-        switch (intent) {
-            case "capabilities":
-                return handleCapabilitiesQuery(session, request);
-            case "eventTypes":
-                return handleEventTypesQuery(session, request);
-            case "eventTypeDetails":
-                return handleEventTypeDetailsQuery(session, request);
-            case "createEvent":
-                return handleEventPlanningFallback(session, request);
-            case "updateEvent":
-            case "listEvents":
-            case "deleteEvent":
-                return handleEventManagementQuery(session, request, intent);
-            default:
-                return handleOutOfScopeQuery(session, request);
-        }
-    }
-
-    private ShadeConversationResponse handleEventPlanningFallback(AssistantSessionEntity session, 
-                                                                 ShadeConversationRequest request) {
-        Map<String, Object> collectedData = extractEventData(request.getMessage(), session);
-        List<String> missingFields = getMissingRequiredFields(session);
-        
-        String responseMessage;
-        if (missingFields.isEmpty()) {
-            responseMessage = "Great! I have all the information I need. Would you like me to create this event?";
-        } else {
-            String nextField = missingFields.get(0);
-            responseMessage = generateFieldQuestion(nextField, collectedData);
-        }
-        
-        return ShadeConversationResponse.builder()
-                .sessionId(session.getId())
-                .message(responseMessage)
-                .intent("createEvent")
-                .collectedData(collectedData)
-                .missingFields(missingFields)
-                .followUpQuestions(generateFollowUpQuestions(session))
-                .suggestions(generateSuggestions(session))
-                .action(ShadeConversationResponse.ShadeAction.builder()
-                        .type("createEvent")
-                        .arguments(collectedData)
-                        .ready(missingFields.isEmpty())
-                        .build())
-                .timestamp(OffsetDateTime.now())
-                .requiresConfirmation(missingFields.isEmpty())
-                .confirmationMessage(missingFields.isEmpty() ? "Would you like me to create this event?" : null)
-                .build();
-    }
-
     // Helper methods
     private AssistantSessionEntity applySessionUpdates(AssistantSessionEntity session, ShadeConversationRequest request) {
         boolean updated = false;
@@ -495,7 +423,15 @@ public class ShadeConversationService {
     private AssistantSessionEntity getOrCreateSession(UUID sessionId) {
         if (sessionId != null) {
             return sessionRepository.findById(sessionId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
+                    .orElseGet(() -> {
+                        // If session doesn't exist, create a new one
+                        log.info("Session {} not found, creating new session", sessionId);
+                        AssistantSessionEntity newSession = new AssistantSessionEntity();
+                        newSession.setDomain("EVENT");
+                        newSession.setStatus("in_discovery");
+                        newSession.setAiGenerated(true);
+                        return sessionRepository.save(newSession);
+                    });
         } else {
             AssistantSessionEntity session = new AssistantSessionEntity();
             session.setDomain("EVENT");
@@ -895,6 +831,32 @@ public class ShadeConversationService {
         return suggestions;
     }
 
+    private Map<String, String> message(String role, String content) {
+        Map<String, String> map = new HashMap<>();
+        map.put("role", role);
+        map.put("content", content);
+        return map;
+    }
+
+    private ShadeConversationResponse buildLlmUnavailableResponse(AssistantSessionEntity session) {
+        List<String> missingFields = getMissingRequiredFields(session);
+        return ShadeConversationResponse.builder()
+                .sessionId(session.getId())
+                .message("Having problem connecting to LLM. Please try again shortly.")
+                .intent("systemIssue")
+                .collectedData(extractEventData("", session))
+                .missingFields(missingFields)
+                .followUpQuestions(generateFollowUpQuestions(session))
+                .suggestions(generateSuggestions(session))
+                .action(ShadeConversationResponse.ShadeAction.builder()
+                        .type("none")
+                        .ready(false)
+                        .build())
+                .timestamp(OffsetDateTime.now())
+                .requiresConfirmation(false)
+                .build();
+    }
+
     private String cleanString(Object value) {
         if (value == null) {
             return null;
@@ -1160,11 +1122,6 @@ public class ShadeConversationService {
         return Optional.empty();
     }
 
-
-    private boolean isApiKeyConfigured() {
-        String apiKey = environment.getProperty("spring.ai.openai.api-key");
-        return StringUtils.hasText(apiKey) && !"your-openai-api-key".equals(apiKey);
-    }
 
     private String defaultString(String value) {
         return StringUtils.hasText(value) ? value : "unknown";

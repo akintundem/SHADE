@@ -7,6 +7,7 @@ import ai.eventplanner.common.security.JwtValidationUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -21,6 +22,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/assistant/shade")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "*")
 public class ShadeController {
 
     private final ShadeConversationService shadeConversationService;
@@ -40,11 +42,6 @@ public class ShadeController {
         ShadeConversationResponse response = shadeConversationService.converse(request);
         return ResponseEntity.ok(response);
     }
-
-    private boolean isMissingAuthorization(String authorization) {
-        return authorization == null || authorization.isBlank();
-    }
-
     private boolean isAcceptableToken(String authorization) {
         String token = extractToken(authorization);
         if (token == null || token.isBlank() || token.equalsIgnoreCase("undefined") || token.equalsIgnoreCase("null") || token.contains("{{")) {
