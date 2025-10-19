@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.Map;
-import java.util.UUID;
 
 @Service
 public class CommsService {

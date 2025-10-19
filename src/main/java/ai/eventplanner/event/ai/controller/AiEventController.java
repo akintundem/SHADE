@@ -1,8 +1,6 @@
 package ai.eventplanner.event.ai.controller;
 
 import ai.eventplanner.event.ai.dto.AiConversationRequest;
-import ai.eventplanner.event.ai.dto.AiEventFlyerResponse;
-import ai.eventplanner.event.ai.dto.AiEventPlanResponse;
 import ai.eventplanner.event.ai.dto.AiEventRequest;
 import ai.eventplanner.event.ai.dto.AiEventResponse;
 import ai.eventplanner.event.ai.dto.AiEventTypeCapabilitiesResponse;
@@ -10,7 +8,6 @@ import ai.eventplanner.event.ai.dto.AiEventTypeResponse;
 import ai.eventplanner.event.ai.dto.AiFlyerRequest;
 import ai.eventplanner.event.ai.dto.AiPlanRequest;
 import ai.eventplanner.event.ai.dto.AiWorkflowRequest;
-import ai.eventplanner.event.ai.dto.AiWorkflowResponse;
 import ai.eventplanner.event.ai.service.AiEventService;
 import ai.eventplanner.common.exception.ResourceNotFoundException;
 import ai.eventplanner.common.security.JwtValidationUtil;
