@@ -39,8 +39,11 @@ echo "Starting test infrastructure..."
 (cd "$ROOT_DIR" && docker-compose up -d postgres redis)
 INFRA_STARTED=1
 
+echo "Cleaning previous build artifacts..."
+rm -rf "$ROOT_DIR/target"
+
 echo "Building application jar..."
-(cd "$ROOT_DIR" && mvn package -DskipTests)
+(cd "$ROOT_DIR" && mvn clean package -DskipTests)
 
 if [[ ! -f "$APP_JAR" ]]; then
   echo "Unable to locate application jar at $APP_JAR" >&2

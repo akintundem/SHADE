@@ -51,6 +51,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/verify-email/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/validate-token").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/organizations/**").permitAll()
+                .requestMatchers("/api/v1/assistant/shade/**").permitAll()
                 .requestMatchers(
                         "/api/v1/events/**",
                         "/api/v1/simple-events/**",

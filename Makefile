@@ -32,7 +32,13 @@ start:
 	@echo "Auth health check: http://localhost:8080/api/v1/auth/health"
 	@echo "Press Ctrl+C to stop the application"
 	@echo ""
-	java -jar target/event-planner-monolith-1.0.0.jar
+	@if [ -f .env ]; then \
+		echo "Loading environment variables from .env file..."; \
+		export $$(grep -v '^#' .env | grep -v '^$$' | xargs) && java -jar target/event-planner-monolith-1.0.0.jar; \
+	else \
+		echo "No .env file found, starting without environment variables..."; \
+		java -jar target/event-planner-monolith-1.0.0.jar; \
+	fi
 
 stop:
 	@echo "Stopping application..."

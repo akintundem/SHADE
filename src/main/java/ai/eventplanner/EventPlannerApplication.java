@@ -20,7 +20,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "ai.eventplanner.timeline.repo",
     "ai.eventplanner.budget.repo",
     "ai.eventplanner.comms.repository",
-    "ai.eventplanner.auth.repo"
+    "ai.eventplanner.auth.repo",
+    "ai.eventplanner.assistant.repository"
 })
 @EntityScan(basePackages = {
     "ai.eventplanner.event.model",
@@ -28,7 +29,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "ai.eventplanner.timeline.model",
     "ai.eventplanner.budget.model",
     "ai.eventplanner.comms.model",
-    "ai.eventplanner.auth.entity"
+    "ai.eventplanner.auth.entity",
+    "ai.eventplanner.assistant.entity"
 })
 public class EventPlannerApplication {
 
