@@ -47,6 +47,7 @@ class ChatResponse(BaseModel):
     reply: str
     tool_used: str
     data: Optional[dict] = None
+    show_chips: Optional[bool] = False
 
 
 def process_message(message: str) -> ChatResponse:
@@ -63,7 +64,7 @@ def process_message(message: str) -> ChatResponse:
                 # Reset conversation state
                 conversation_state["active_tool"] = None
                 conversation_state["tool_instance"] = None
-            elif result.get("conversation_state") in ["collecting_required", "collecting_optional"]:
+            elif result.get("conversation_state") in ["collecting_required", "collecting_optional", "collecting_additional"]:
                 # Keep the tool active for next message
                 pass
             else:
@@ -74,7 +75,8 @@ def process_message(message: str) -> ChatResponse:
             return ChatResponse(
                 reply=result["message"],
                 tool_used=conversation_state["active_tool"] or "None",
-                data=result.get("data")
+                data=result.get("data"),
+                show_chips=result.get("show_chips", False)
             )
         except Exception as e:
             # Reset on error
@@ -94,26 +96,29 @@ def process_message(message: str) -> ChatResponse:
                 result = tool.process(message)
                 
                 # If the tool starts a conversation, make it active
-                if result.get("conversation_state") in ["collecting_required", "collecting_optional"]:
+                if result.get("conversation_state") in ["collecting_required", "collecting_optional", "collecting_additional"]:
                     conversation_state["active_tool"] = tool.__class__.__name__
                     conversation_state["tool_instance"] = tool
                 
                 return ChatResponse(
                     reply=result["message"],
                     tool_used=tool.__class__.__name__,
-                    data=result.get("data")
+                    data=result.get("data"),
+                    show_chips=result.get("show_chips", False)
                 )
             except Exception as e:
                 return ChatResponse(
                     reply=f"Oops! I had a little hiccup there. Let me try that again - could you repeat what you just said? 😊",
                     tool_used=tool.__class__.__name__,
-                    data=None
+                    data=None,
+                    show_chips=False
                 )
     
     return ChatResponse(
         reply="Hi there! I am Shade, your super excited event planning assistant! 🎉 I can help you create amazing events or check the weather for your outdoor plans. Just say 'Create an event' to get started, or ask me about the weather! ✨",
         tool_used="None",
-        data=None
+        data=None,
+        show_chips=False
     )
 
 
@@ -240,6 +245,57 @@ async def home():
         .example:hover {
             background: #e9ecef;
         }
+        
+        .chips-container {
+            margin-top: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .chip {
+            background: #007bff;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        
+        .chip:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+        
+        .chip:active {
+            transform: translateY(0);
+        }
+        
+        .chip.yes {
+            background: #28a745;
+        }
+        
+        .chip.yes:hover {
+            background: #1e7e34;
+        }
+        
+        .chip.no {
+            background: #6c757d;
+        }
+        
+        .chip.no:hover {
+            background: #545b62;
+        }
+        
+        .chip.view {
+            background: #17a2b8;
+        }
+        
+        .chip.view:hover {
+            background: #138496;
+        }
     </style>
 </head>
 <body>
@@ -314,10 +370,40 @@ async def home():
             console.log('All elements found, setting up event listeners...');
 
             // Add message to chat
-            function addMessage(content, isUser = false) {
+            function addMessage(content, isUser = false, showChips = false) {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
                 messageDiv.innerHTML = content;
+                
+                // Add chips if requested
+                if (showChips && !isUser) {
+                    const chipsContainer = document.createElement('div');
+                    chipsContainer.className = 'chips-container';
+                    
+                    // Add common response chips
+                    const chips = [
+                        { text: 'Yes!', class: 'yes', value: 'yes' },
+                        { text: 'No thanks', class: 'no', value: 'no' },
+                        { text: 'Add description', class: '', value: 'Add a description' },
+                        { text: 'Set capacity', class: '', value: 'Set capacity' },
+                        { text: 'Add venue info', class: '', value: 'Add venue requirements' },
+                        { text: 'View Events', class: 'view', value: 'Show my events' }
+                    ];
+                    
+                    chips.forEach(chip => {
+                        const chipButton = document.createElement('button');
+                        chipButton.className = `chip ${chip.class}`;
+                        chipButton.textContent = chip.text;
+                        chipButton.onclick = () => {
+                            messageInput.value = chip.value;
+                            sendMessage();
+                        };
+                        chipsContainer.appendChild(chipButton);
+                    });
+                    
+                    messageDiv.appendChild(chipsContainer);
+                }
+                
                 chatContainer.appendChild(messageDiv);
                 chatContainer.scrollTop = chatContainer.scrollHeight;
             }
@@ -356,7 +442,7 @@ async def home():
 
                     const data = await response.json();
                     console.log('Received response:', data);
-                    addMessage(data.reply, false);
+                    addMessage(data.reply, false, data.show_chips || false);
                 } catch (error) {
                     console.error('Error sending message:', error);
                     addMessage(`Oops! I had trouble with that. Could you try again? 😊`, false);

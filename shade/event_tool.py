@@ -6,6 +6,9 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Simple in-memory event storage
+EVENT_STORAGE = []
+
 # Import LangChain components
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -78,9 +81,19 @@ class EventTool:
         keywords = ["create event", "create a", "planning an event", "organize event", "event planning"]
         general_keywords = ["conference", "meeting", "workshop", "party", "launch"]
         
+        # Read/view keywords
+        read_keywords = [
+            "show", "list", "view", "see", "display", "get", "find", "search",
+            "events", "my events", "all events", "what events", "which events"
+        ]
+        
         message_lower = message.lower()
         
-        # Check for specific event creation phrases first
+        # Check for read/view keywords first
+        if any(keyword in message_lower for keyword in read_keywords):
+            return True
+        
+        # Check for specific event creation phrases
         if any(keyword in message_lower for keyword in keywords):
             return True
             
@@ -178,8 +191,12 @@ Important:
         return summary
     
     def process(self, message: str) -> Dict[str, Any]:
-        """Process the conversational event creation."""
+        """Process the conversational event creation and reading."""
         try:
+            # Handle read/view requests first
+            if self._is_read_request(message):
+                return self._handle_read_request(message)
+            
             # Handle special commands
             if message.lower() in ["done", "finish", "complete"]:
                 missing_required = self._check_required_fields()
@@ -200,18 +217,20 @@ Important:
                             "conversation_state": self.conversation_state
                         }
                 
-                self.conversation_state = "complete"
-                
-                # Execute the createEvent tool (prints to terminal only)
+                # Automatically create the event
                 self.createEvent(self.event_data)
                 
-                # Return a personable completion message (no technical details)
+                # Set conversation state to collecting additional info
+                self.conversation_state = "collecting_additional"
+                
+                # Return message about event creation and ask for additional info
                 event_name = self.event_data.get('name', 'your event')
                 return {
                     "success": True,
-                    "message": f"🎉✨ Amazing! I've just created '{event_name}' for you! Your event is all set up and ready to go. I'm so excited to help make this happen! 🎊",
+                    "message": f"🎉✨ Perfect! I've just created '{event_name}' for you! Your event is all set up and ready to go! 🎊\n\nNow, would you like to add some additional details to make it even more amazing? I can help you with things like description, capacity, venue requirements, or any other special touches!",
                     "data": self.event_data,
-                    "conversation_state": self.conversation_state
+                    "conversation_state": self.conversation_state,
+                    "show_chips": True
                 }
             
             if message.lower() in ["skip", "next"]:
@@ -221,6 +240,10 @@ Important:
                     "data": self.event_data,
                     "conversation_state": self.conversation_state
                 }
+            
+            # Handle additional information collection
+            if self.conversation_state == "collecting_additional":
+                return self._handle_additional_info(message)
             
             if message.lower() in ["review", "summary", "show"]:
                 return {
@@ -246,22 +269,34 @@ Important:
                 if value is not None:
                     self.event_data[key] = value
             
-            # Update conversation state
+            # Check if all required fields are present
             missing_required = self._check_required_fields()
             if missing_required:
                 self.conversation_state = "collecting_required"
+                # Get next question for missing required field
+                next_question = self._get_next_question()
+                return {
+                    "success": True,
+                    "message": next_question,
+                    "data": self.event_data,
+                    "conversation_state": self.conversation_state
+                }
             else:
-                self.conversation_state = "collecting_optional"
-            
-            # Get next question
-            next_question = self._get_next_question()
-            
-            return {
-                "success": True,
-                "message": next_question,
-                "data": self.event_data,
-                "conversation_state": self.conversation_state
-            }
+                # All required fields are present - automatically create the event
+                self.createEvent(self.event_data)
+                
+                # Set conversation state to collecting additional info
+                self.conversation_state = "collecting_additional"
+                
+                # Return message about event creation and ask for additional info
+                event_name = self.event_data.get('name', 'your event')
+                return {
+                    "success": True,
+                    "message": f"🎉✨ Perfect! I've just created '{event_name}' for you! Your event is all set up and ready to go! 🎊\n\nNow, would you like to add some additional details to make it even more amazing? I can help you with things like description, capacity, venue requirements, or any other special touches!",
+                    "data": self.event_data,
+                    "conversation_state": self.conversation_state,
+                    "show_chips": True
+                }
             
         except Exception as e:
             return {
@@ -276,6 +311,138 @@ Important:
         print("Tool being called: CreateEvent")
         print(f"This is the data we are passing in: {event_data}")
         print(self._format_event_summary())
+        
+        # Store the event in memory
+        event_id = len(EVENT_STORAGE) + 1
+        event_record = {
+            "id": event_id,
+            "created_at": datetime.now().isoformat(),
+            **event_data
+        }
+        EVENT_STORAGE.append(event_record)
+        print(f"Event stored with ID: {event_id}")
+    
+    def updateEvent(self, event_data: Dict[str, Any]) -> None:
+        """Execute the updateEvent tool - prints tool name and data to terminal."""
+        print("Tool being called: UpdateEvent")
+        print(f"This is the data we are passing in: {event_data}")
+        print(self._format_event_summary())
+        
+        # Update the most recent event in storage with new information
+        if EVENT_STORAGE:
+            # Find the most recent event and update it
+            latest_event = EVENT_STORAGE[-1]
+            latest_event.update(event_data)
+            print(f"Updated event ID {latest_event['id']} with new information")
+    
+    def _handle_additional_info(self, message: str) -> Dict[str, Any]:
+        """Handle additional information collection after event creation."""
+        # Handle yes/no responses
+        if message.lower() in ["yes", "yeah", "yep", "sure", "ok", "okay", "definitely", "absolutely"]:
+            return {
+                "success": True,
+                "message": "Fantastic! What would you like to add? You can tell me about:\n• Event description\n• Capacity or attendee count\n• Venue requirements\n• Special features (QR codes, approval needed, etc.)\n• Or anything else that would make your event special!",
+                "data": self.event_data,
+                "conversation_state": self.conversation_state,
+                "show_chips": True
+            }
+        
+        if message.lower() in ["no", "nope", "not now", "skip", "done", "that's all", "finish"]:
+            self.conversation_state = "complete"
+            return {
+                "success": True,
+                "message": "Perfect! Your event is all set and ready to go! 🎉 If you need to make any changes later, just let me know!",
+                "data": self.event_data,
+                "conversation_state": self.conversation_state
+            }
+        
+        # Extract additional information
+        extracted = self._extract_event_info(message)
+        
+        if "error" in extracted:
+            return {
+                "success": False,
+                "message": "Oops! I had a little trouble understanding that. Could you try saying it differently? 😊",
+                "data": self.event_data,
+                "conversation_state": self.conversation_state
+            }
+        
+        # Update event data with new information
+        updated = False
+        for key, value in extracted.items():
+            if value is not None and key in self.optional_fields:
+                self.event_data[key] = value
+                updated = True
+        
+        if updated:
+            # Call updateEvent tool
+            self.updateEvent(self.event_data)
+            
+            return {
+                "success": True,
+                "message": "Great! I've updated your event with that information! Is there anything else you'd like to add?",
+                "data": self.event_data,
+                "conversation_state": self.conversation_state,
+                "show_chips": True
+            }
+        else:
+            return {
+                "success": True,
+                "message": "I didn't catch any specific event details in that. Could you tell me what you'd like to add? For example: 'Add a description about networking' or 'Set capacity to 100 people'?",
+                "data": self.event_data,
+                "conversation_state": self.conversation_state,
+                "show_chips": True
+            }
+    
+    def _is_read_request(self, message: str) -> bool:
+        """Check if the message is a read/view request."""
+        read_keywords = [
+            "show", "list", "view", "see", "display", "get", "find", "search",
+            "events", "my events", "all events", "what events", "which events"
+        ]
+        message_lower = message.lower()
+        return any(keyword in message_lower for keyword in read_keywords)
+    
+    def _handle_read_request(self, message: str) -> Dict[str, Any]:
+        """Handle read/view requests for events."""
+        if not EVENT_STORAGE:
+            return {
+                "success": True,
+                "message": "📅 You don't have any events yet! Why not create your first amazing event? Just say 'Create an event' and I'll help you plan something spectacular! 🎉",
+                "data": None,
+                "conversation_state": "initial"
+            }
+        
+        # Format events for display
+        events_text = self._format_events_list()
+        
+        return {
+            "success": True,
+            "message": f"📅 Here are all your amazing events:\n\n{events_text}\n\nWould you like to create a new event or add details to an existing one?",
+            "data": {"events": EVENT_STORAGE},
+            "conversation_state": "initial",
+            "show_chips": True
+        }
+    
+    def _format_events_list(self) -> str:
+        """Format the list of events for display."""
+        if not EVENT_STORAGE:
+            return "No events found."
+        
+        events_text = ""
+        for i, event in enumerate(EVENT_STORAGE, 1):
+            events_text += f"**{i}. {event.get('name', 'Unnamed Event')}**\n"
+            events_text += f"   • Type: {event.get('eventType', 'Not specified')}\n"
+            events_text += f"   • Date: {event.get('startDateTime', 'Not specified')}\n"
+            if event.get('description'):
+                events_text += f"   • Description: {event['description']}\n"
+            if event.get('capacity'):
+                events_text += f"   • Capacity: {event['capacity']}\n"
+            if event.get('venue'):
+                events_text += f"   • Venue: {event['venue']}\n"
+            events_text += f"   • Created: {event.get('created_at', 'Unknown')}\n\n"
+        
+        return events_text.strip()
     
     def reset(self):
         """Reset the event tool for a new event."""
