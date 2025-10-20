@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from event_tool import EventTool
 from weather_tool import WeatherTool
+from time_tool import TimeTool
 
 # Load environment variables
 load_dotenv()
@@ -89,7 +90,7 @@ def process_message(message: str) -> ChatResponse:
             )
     
     # No active tool, try to find a new tool to handle the message
-    for tool_class in [EventTool, WeatherTool]:
+    for tool_class in [EventTool, WeatherTool, TimeTool]:
         tool = tool_class()
         if tool.can_handle(message):
             try:
@@ -115,7 +116,7 @@ def process_message(message: str) -> ChatResponse:
                 )
     
     return ChatResponse(
-        reply="Hi there! I am Shade, your super excited event planning assistant! 🎉 I can help you create amazing events or check the weather for your outdoor plans. Just say 'Create an event' to get started, or ask me about the weather! ✨",
+        reply="Hey there, gorgeous! I'm Shade, and I'm absolutely THRILLED to be your personal event planning superstar! 🎉✨ I'm here to help you create ONE absolutely INCREDIBLE event that will have everyone talking for years! I can help with every single detail, check the weather, verify timing, and make sure everything is absolutely PERFECT! Just say 'Create an event' and let's make some magic happen! 🎊",
         tool_used="None",
         data=None,
         show_chips=False
@@ -304,11 +305,13 @@ async def home():
         
         <div class="chat-container" id="chatContainer">
             <div class="message assistant">
-                <div>Hey there! I am Shade, and I am absolutely THRILLED to help you plan the most amazing events! 🎉✨</div>
+                <div>Hey there, gorgeous! I am Shade, and I am absolutely THRILLED to be your personal event planning superstar! 🎉✨</div>
                 <div>I can help you with:</div>
-                <div>• Creating spectacular events (conferences, parties, workshops, meetings, and more!)</div>
-                <div>• Checking the weather so your outdoor events are perfect</div>
-                <div>• Making sure every detail is just right for your special occasion</div>
+                <div>• Creating ONE absolutely INCREDIBLE event that will have everyone talking for years!</div>
+                <div>• Planning every single detail to absolute perfection</div>
+                <div>• Checking the weather and timing to ensure your special day is flawless</div>
+                <div>• Making recommendations that will make your event absolutely SPECTACULAR</div>
+                <div>• Focusing on ONE event at a time for the most amazing results</div>
                 <div>Just say "Create an event" and let's make some magic happen! 🎊</div>
             </div>
         </div>

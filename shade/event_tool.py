@@ -25,6 +25,23 @@ class EventTool:
         self._chat = None
         self.event_data = {}
         self.conversation_state = "initial"  # initial, collecting_required, collecting_optional, complete
+        self.event_created = False
+        self.pending_update = False
+        self.pending_data = None
+        
+        # Conversation guards
+        self.banned_topics = [
+            "politics", "political", "election", "vote", "government", "president", "minister",
+            "war", "conflict", "violence", "hate", "racism", "discrimination",
+            "religion", "religious", "church", "mosque", "temple", "god", "jesus", "allah",
+            "crypto", "bitcoin", "cryptocurrency", "trading", "investment", "stocks",
+            "gambling", "casino", "betting", "lottery"
+        ]
+        
+        self.banned_words = [
+            "fuck", "shit", "damn", "hell", "bitch", "ass", "crap", "stupid", "idiot",
+            "hate", "kill", "die", "death", "murder", "suicide", "bomb", "terrorist"
+        ]
         
         # Required fields from CreateEventRequest DTO
         self.required_fields = {
@@ -76,7 +93,17 @@ class EventTool:
         return self._chat
     
     def can_handle(self, message: str) -> bool:
-        """Check if this tool can handle the message."""
+        """Check if this tool can handle the message with conversation guards."""
+        message_lower = message.lower()
+        
+        # Check for banned content first
+        if self._contains_banned_content(message_lower):
+            return False
+        
+        # Check for multiple event creation attempts
+        if self.event_created and any(word in message_lower for word in ["create", "new event", "another event", "plan another"]):
+            return False
+        
         # More specific keywords to avoid conflicts with weather tool
         keywords = ["create event", "create a", "planning an event", "organize event", "event planning"]
         general_keywords = ["conference", "meeting", "workshop", "party", "launch"]
@@ -86,8 +113,6 @@ class EventTool:
             "show", "list", "view", "see", "display", "get", "find", "search",
             "events", "my events", "all events", "what events", "which events"
         ]
-        
-        message_lower = message.lower()
         
         # Check for read/view keywords first
         if any(keyword in message_lower for keyword in read_keywords):
@@ -103,6 +128,39 @@ class EventTool:
             return False
             
         return any(keyword in message_lower for keyword in general_keywords)
+    
+    def _contains_banned_content(self, message_lower: str) -> bool:
+        """Check if message contains banned topics or words."""
+        # Check for banned topics
+        for topic in self.banned_topics:
+            if topic in message_lower:
+                return True
+        
+        # Check for banned words
+        for word in self.banned_words:
+            if word in message_lower:
+                return True
+        
+        return False
+    
+    def _handle_banned_content(self, message: str) -> Dict[str, Any]:
+        """Handle messages with banned content."""
+        return {
+            "success": False,
+            "message": "Oh darling, I'm here to help you create the most AMAZING event ever! Let's focus on all the wonderful, exciting things we can plan together! What kind of spectacular event are you dreaming of? I'm absolutely buzzing with ideas! ✨🎉",
+            "data": None,
+            "conversation_state": self.conversation_state
+        }
+    
+    def _handle_multiple_events(self, message: str) -> Dict[str, Any]:
+        """Handle attempts to create multiple events."""
+        event_name = self.event_data.get('name', 'this event')
+        return {
+            "success": False,
+            "message": f"Oh my goodness, I'm SO excited about '{event_name}' that I want to make it absolutely PERFECT before we even think about anything else! This event is going to be absolutely INCREDIBLE, and I want to give it all my attention! ✨\n\nWhat would you like to add or improve to make this event even more spectacular? I'm here to help you create something absolutely unforgettable! 🎊",
+            "data": self.event_data,
+            "conversation_state": self.conversation_state
+        }
     
     def _extract_event_info(self, message: str) -> Dict[str, Any]:
         """Extract event information from user message using AI."""
@@ -165,9 +223,9 @@ Important:
     def _get_field_prompt(self, field: str) -> str:
         """Get a helpful prompt for a specific field."""
         prompts = {
-            "name": "🎉 Ooh, I'm so excited! What should we call this amazing event?",
-            "eventType": "What kind of fabulous event are we planning? Is it a conference, party, workshop, meeting, or something else?",
-            "startDateTime": "Perfect! When should this spectacular event take place? You can tell me like 'next Friday at 2 PM' or 'December 25th at 6 PM' - I'm flexible! 😊"
+            "name": "Oh my goodness, I'm absolutely buzzing with excitement! What should we call this incredible event? I want to make sure the name captures the magic we're about to create! ✨",
+            "eventType": "I'm getting goosebumps just thinking about this! What kind of spectacular event are we bringing to life? Is it a conference, party, workshop, meeting, or something else entirely? I love the variety! 🎊",
+            "startDateTime": "Perfect timing question! When should this magnificent event take place? You can tell me like 'next Friday at 2 PM' or 'December 25th at 6 PM' - I'm here to make it work perfectly! ⏰"
         }
         return prompts.get(field, f"Tell me about the {self.required_fields[field].lower()}")
     
@@ -191,8 +249,16 @@ Important:
         return summary
     
     def process(self, message: str) -> Dict[str, Any]:
-        """Process the conversational event creation and reading."""
+        """Process the conversational event creation and reading with guards."""
         try:
+            # Check for banned content
+            if self._contains_banned_content(message.lower()):
+                return self._handle_banned_content(message)
+            
+            # Check for multiple event creation attempts
+            if self.event_created and any(word in message.lower() for word in ["create", "new event", "another event", "plan another"]):
+                return self._handle_multiple_events(message)
+            
             # Handle read/view requests first
             if self._is_read_request(message):
                 return self._handle_read_request(message)
@@ -225,9 +291,10 @@ Important:
                 
                 # Return message about event creation and ask for additional info
                 event_name = self.event_data.get('name', 'your event')
+                event_type = self.event_data.get('eventType', 'event')
                 return {
                     "success": True,
-                    "message": f"🎉✨ Perfect! I've just created '{event_name}' for you! Your event is all set up and ready to go! 🎊\n\nNow, would you like to add some additional details to make it even more amazing? I can help you with things like description, capacity, venue requirements, or any other special touches!",
+                    "message": f"OH MY GOODNESS! 🤩 I just created '{event_name}' and I'm literally jumping with excitement! This {event_type.lower()} is going to be absolutely INCREDIBLE! I can already feel the energy and magic we're about to create together! ✨\n\nNow, darling, let's make this event absolutely PERFECT! I want to add those special touches that will make your guests' jaws drop. What would you like to work on first? I'm thinking description, capacity, venue details, or maybe something else that will make this event unforgettable? 🎊",
                     "data": self.event_data,
                     "conversation_state": self.conversation_state,
                     "show_chips": True
@@ -290,9 +357,10 @@ Important:
                 
                 # Return message about event creation and ask for additional info
                 event_name = self.event_data.get('name', 'your event')
+                event_type = self.event_data.get('eventType', 'event')
                 return {
                     "success": True,
-                    "message": f"🎉✨ Perfect! I've just created '{event_name}' for you! Your event is all set up and ready to go! 🎊\n\nNow, would you like to add some additional details to make it even more amazing? I can help you with things like description, capacity, venue requirements, or any other special touches!",
+                    "message": f"OH MY GOODNESS! 🤩 I just created '{event_name}' and I'm literally jumping with excitement! This {event_type.lower()} is going to be absolutely INCREDIBLE! I can already feel the energy and magic we're about to create together! ✨\n\nNow, darling, let's make this event absolutely PERFECT! I want to add those special touches that will make your guests' jaws drop. What would you like to work on first? I'm thinking description, capacity, venue details, or maybe something else that will make this event unforgettable? 🎊",
                     "data": self.event_data,
                     "conversation_state": self.conversation_state,
                     "show_chips": True
@@ -321,6 +389,9 @@ Important:
         }
         EVENT_STORAGE.append(event_record)
         print(f"Event stored with ID: {event_id}")
+        
+        # Mark event as created to prevent multiple events
+        self.event_created = True
     
     def updateEvent(self, event_data: Dict[str, Any]) -> None:
         """Execute the updateEvent tool - prints tool name and data to terminal."""
@@ -337,11 +408,46 @@ Important:
     
     def _handle_additional_info(self, message: str) -> Dict[str, Any]:
         """Handle additional information collection after event creation."""
-        # Handle yes/no responses
+        # Handle confirmation for updates
+        if self.pending_update:
+            if message.lower() in ["yes", "yeah", "yep", "sure", "ok", "okay", "definitely", "absolutely", "go ahead", "do it"]:
+                # Apply the pending update
+                for key, value in self.pending_data.items():
+                    if value is not None and key in self.optional_fields:
+                        self.event_data[key] = value
+                
+                # Call updateEvent tool
+                self.updateEvent(self.event_data)
+                
+                # Clear pending update
+                self.pending_update = False
+                self.pending_data = None
+                
+                return {
+                    "success": True,
+                    "message": "DONE! ✨ I've just updated your event with those fantastic details! I'm getting chills thinking about how amazing this is going to be! 🎊\n\nIs there anything else you'd like to add to make this event even more spectacular? I'm here to help you create something absolutely unforgettable!",
+                    "data": self.event_data,
+                    "conversation_state": self.conversation_state,
+                    "show_chips": True
+                }
+            elif message.lower() in ["no", "nope", "not now", "skip", "cancel"]:
+                # Clear pending update without applying
+                self.pending_update = False
+                self.pending_data = None
+                
+                return {
+                    "success": True,
+                    "message": "No problem at all, darling! Let's keep it as is for now. What else would you like to work on? I'm here to help you perfect every detail! ✨",
+                    "data": self.event_data,
+                    "conversation_state": self.conversation_state,
+                    "show_chips": True
+                }
+        
+        # Handle yes/no responses for adding details
         if message.lower() in ["yes", "yeah", "yep", "sure", "ok", "okay", "definitely", "absolutely"]:
             return {
                 "success": True,
-                "message": "Fantastic! What would you like to add? You can tell me about:\n• Event description\n• Capacity or attendee count\n• Venue requirements\n• Special features (QR codes, approval needed, etc.)\n• Or anything else that would make your event special!",
+                "message": "YES! I'm so excited you want to add more details! This is where the magic really happens, darling! ✨\n\nWhat would you like to work on first? I'm thinking:\n• **Event description** - Let's craft something that makes people's hearts skip a beat!\n• **Capacity** - How many amazing people are we expecting?\n• **Venue details** - Where should this spectacular event take place?\n• **Special touches** - QR codes, approval processes, or other magical elements?\n\nWhat speaks to you first? I'm here to make it absolutely perfect! 🎊",
                 "data": self.event_data,
                 "conversation_state": self.conversation_state,
                 "show_chips": True
@@ -349,9 +455,10 @@ Important:
         
         if message.lower() in ["no", "nope", "not now", "skip", "done", "that's all", "finish"]:
             self.conversation_state = "complete"
+            event_name = self.event_data.get('name', 'your event')
             return {
                 "success": True,
-                "message": "Perfect! Your event is all set and ready to go! 🎉 If you need to make any changes later, just let me know!",
+                "message": f"Absolutely PERFECT! 🎉✨ Your '{event_name}' event is now completely set up and ready to absolutely blow everyone's minds! I'm so proud of what we've created together - this is going to be absolutely INCREDIBLE! \n\nIf you need to make any changes or want to add more magical touches later, just say the word and I'll be right here to help you make it even more spectacular! You've got this! 🎊",
                 "data": self.event_data,
                 "conversation_state": self.conversation_state
             }
@@ -375,16 +482,24 @@ Important:
                 updated = True
         
         if updated:
-            # Call updateEvent tool
-            self.updateEvent(self.event_data)
+            # Show what we're about to update before doing it
+            updated_fields = []
+            for key, value in extracted.items():
+                if value is not None and key in self.optional_fields:
+                    updated_fields.append(f"• {self.optional_fields[key]}: {value}")
             
-            return {
-                "success": True,
-                "message": "Great! I've updated your event with that information! Is there anything else you'd like to add?",
-                "data": self.event_data,
-                "conversation_state": self.conversation_state,
-                "show_chips": True
-            }
+            if updated_fields:
+                fields_text = "\n".join(updated_fields)
+                # Set pending update state
+                self.pending_update = True
+                self.pending_data = extracted
+                return {
+                    "success": True,
+                    "message": f"Perfect! I love what you're thinking! Let me update your event with:\n\n{fields_text}\n\nShould I go ahead and add these amazing details to your event? I'm so excited about how this is shaping up! ✨",
+                    "data": self.event_data,
+                    "conversation_state": self.conversation_state,
+                    "show_chips": True
+                }
         else:
             return {
                 "success": True,

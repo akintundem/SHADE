@@ -61,26 +61,66 @@ class WeatherTool:
         }
     
     def process(self, message: str) -> Dict[str, Any]:
-        """Process the message and return weather info."""
+        """Process the message and return weather info with event planning focus."""
         # Always return mock data regardless of API key
         mock_data = self._generate_mock_weather()
         
-        # Create a personable weather response
+        # Create event-focused weather response
         condition = mock_data['condition']
         temp = mock_data['temperature']
         recommendation = mock_data['recommendation']
         
+        # Event-specific weather analysis
+        event_analysis = self._analyze_weather_for_event(mock_data)
+        
         if "sunny" in condition.lower():
-            message = f"☀️ Oh my, it's absolutely gorgeous out there! {condition} and {temp} - perfect weather for your event! {recommendation}"
+            message = f"☀️ Perfect event weather! {condition} and {temp} - absolutely ideal for your event! {recommendation}\n\n{event_analysis}"
         elif "rain" in condition.lower():
-            message = f"🌧️ Well, we've got some {condition.lower()} with {temp} today. {recommendation} But don't worry, we can make your event amazing indoors too!"
+            message = f"🌧️ Weather check: {condition.lower()} with {temp}. {recommendation}\n\n{event_analysis}"
         elif "snow" in condition.lower():
-            message = f"❄️ Brrr! It's a winter wonderland out there - {condition} and {temp}! {recommendation} Perfect for a cozy indoor gathering!"
+            message = f"❄️ Winter wonderland! {condition} and {temp}! {recommendation}\n\n{event_analysis}"
         else:
-            message = f"🌤️ The weather is looking {condition.lower()} with {temp} today. {recommendation}"
+            message = f"🌤️ Weather update: {condition.lower()} with {temp}. {recommendation}\n\n{event_analysis}"
         
         return {
             "success": True,
             "message": message,
             "data": mock_data
         }
+    
+    def _analyze_weather_for_event(self, weather_data: Dict[str, Any]) -> str:
+        """Analyze weather data specifically for event planning."""
+        condition = weather_data['condition'].lower()
+        temp_str = weather_data['temperature']
+        temp = int(temp_str.replace('°C', ''))
+        
+        # Extract temperature for analysis
+        if temp >= 25:
+            temp_category = "hot"
+        elif temp >= 15:
+            temp_category = "warm"
+        elif temp >= 5:
+            temp_category = "cool"
+        else:
+            temp_category = "cold"
+        
+        # Event-specific recommendations
+        if "sunny" in condition:
+            if temp_category == "hot":
+                return "🎯 **Event Planning Tips:**\n• Consider shade or indoor options for comfort\n• Provide plenty of water and cooling stations\n• Schedule breaks in air-conditioned areas\n• Perfect for outdoor photos and activities!"
+            elif temp_category == "warm":
+                return "🎯 **Event Planning Tips:**\n• Ideal weather for outdoor events!\n• Consider light refreshments and seating\n• Perfect for networking and mingling\n• Great for photo opportunities!"
+            else:
+                return "🎯 **Event Planning Tips:**\n• Beautiful clear weather for your event\n• Consider heating options for comfort\n• Perfect for outdoor activities\n• Great visibility for all attendees!"
+        
+        elif "rain" in condition:
+            return "🎯 **Event Planning Tips:**\n• **Indoor backup plan essential!**\n• Consider covered outdoor areas\n• Provide umbrellas and rain gear\n• Cozy indoor atmosphere can be magical\n• Perfect for intimate gatherings!"
+        
+        elif "snow" in condition:
+            return "🎯 **Event Planning Tips:**\n• **Indoor venue recommended**\n• Create cozy, warm atmosphere\n• Consider hot beverages and comfort food\n• Perfect for winter-themed events\n• Beautiful backdrop for photos!"
+        
+        elif "cloudy" in condition:
+            return "🎯 **Event Planning Tips:**\n• Excellent weather for events!\n• No harsh sun or rain concerns\n• Perfect for outdoor activities\n• Comfortable temperature for all\n• Great for long-duration events!"
+        
+        else:
+            return "🎯 **Event Planning Tips:**\n• Weather looks good for your event!\n• Monitor conditions as event approaches\n• Have backup plans ready\n• Consider attendee comfort needs\n• Focus on making it memorable!"
