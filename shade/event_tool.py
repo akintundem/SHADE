@@ -4,6 +4,10 @@ import json
 import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from mongodb_service import mongodb_service
+from validation_service import validation_service
+from dto_validation import ValidationError
+from venue_tool import VenueTool
 from dotenv import load_dotenv
 
 # Simple in-memory event storage
@@ -248,7 +252,7 @@ Important:
         
         return summary
     
-    def process(self, message: str) -> Dict[str, Any]:
+    async def process(self, message: str, chat_id: str = None) -> Dict[str, Any]:
         """Process the conversational event creation and reading with guards."""
         try:
             # Check for banned content
@@ -282,9 +286,9 @@ Important:
                             "data": None,
                             "conversation_state": self.conversation_state
                         }
-                
-                # Automatically create the event
-                self.createEvent(self.event_data)
+                else:
+                    # Automatically create the event
+                    event_id = await self.createEvent(self.event_data, chat_id)
                 
                 # Set conversation state to collecting additional info
                 self.conversation_state = "collecting_additional"
@@ -310,7 +314,7 @@ Important:
             
             # Handle additional information collection
             if self.conversation_state == "collecting_additional":
-                return self._handle_additional_info(message)
+                return await self._handle_additional_info(message, chat_id)
             
             if message.lower() in ["review", "summary", "show"]:
                 return {
@@ -349,21 +353,45 @@ Important:
                     "conversation_state": self.conversation_state
                 }
             else:
-                # All required fields are present - automatically create the event
-                self.createEvent(self.event_data)
+                # All required fields are present - validate and prepare for Java EventService
+                tool_result = await self.createEvent(self.event_data, chat_id)
                 
                 # Set conversation state to collecting additional info
                 self.conversation_state = "collecting_additional"
                 
-                # Return message about event creation and ask for additional info
+                # Search for venues for this event
+                venue_tool = VenueTool()
+                venue_search_message = f"Find venues for {event_name} {event_type.lower()}"
+                venue_result = await venue_tool.process(venue_search_message, chat_id)
+                
+                # Return message about event preparation with venue suggestions
                 event_name = self.event_data.get('name', 'your event')
                 event_type = self.event_data.get('eventType', 'event')
+                
+                message = f"OH MY GOODNESS! 🤩 I've prepared '{event_name}' and I'm literally jumping with excitement! This {event_type.lower()} is going to be absolutely INCREDIBLE! I can already feel the energy and magic we're about to create together! ✨\n\n"
+                
+                if venue_result.get("success") and venue_result.get("data", {}).get("venues"):
+                    venues = venue_result["data"]["venues"]
+                    message += f"I also found {len(venues)} amazing venues for your event! Take a look at these perfect locations:\n\n"
+                    for i, venue in enumerate(venues[:3], 1):  # Show top 3 venues
+                        message += f"**{i}. {venue['name']}** ⭐ {venue['rating']}\n"
+                        message += f"📍 {venue['address']}\n"
+                        message += f"👥 {venue['capacity']} | 💰 {venue['price_range']}\n\n"
+                    message += "Tap on any venue to see more details, or let me know if you'd like to add other details like description, capacity, or theme! 🎊"
+                else:
+                    message += "Now, let's make this event absolutely PERFECT! I want to add those special touches that will make your guests' jaws drop. What would you like to work on first? I'm thinking description, capacity, venue details, or maybe something else that will make this event unforgettable? 🎊"
+                
                 return {
                     "success": True,
-                    "message": f"OH MY GOODNESS! 🤩 I just created '{event_name}' and I'm literally jumping with excitement! This {event_type.lower()} is going to be absolutely INCREDIBLE! I can already feel the energy and magic we're about to create together! ✨\n\nNow, darling, let's make this event absolutely PERFECT! I want to add those special touches that will make your guests' jaws drop. What would you like to work on first? I'm thinking description, capacity, venue details, or maybe something else that will make this event unforgettable? 🎊",
-                    "data": self.event_data,
+                    "message": message,
+                    "data": {
+                        **tool_result,  # Contains validated_data for Java
+                        "venues": venue_result.get("data", {}).get("venues", []) if venue_result.get("success") else []
+                    },
                     "conversation_state": self.conversation_state,
-                    "show_chips": True
+                    "show_chips": True,
+                    "tool_call_required": True,  # Flag for Java to know it needs to call EventService
+                    "tool_name": "CreateEvent"
                 }
             
         except Exception as e:
@@ -374,39 +402,70 @@ Important:
                 "conversation_state": self.conversation_state
             }
     
-    def createEvent(self, event_data: Dict[str, Any]) -> None:
-        """Execute the createEvent tool - prints tool name and data to terminal."""
+    async def createEvent(self, event_data: Dict[str, Any], chat_id: str = None) -> Dict[str, Any]:
+        """Validate event data for Java Event Service - returns validated data for Java to process."""
         print("Tool being called: CreateEvent")
         print(f"This is the data we are passing in: {event_data}")
+        
+        # Validate the event data before processing
+        validation_result = validation_service.validate_create_event(event_data)
+        
+        if not validation_result.is_valid:
+            print(f"❌ Validation failed: {validation_result.errors}")
+            print(f"Retry message: {validation_result.retry_message}")
+            # Return the retry message to LangChain
+            raise ValidationError(validation_result.retry_message)
+        
+        # Use validated data
+        validated_data = validation_result.data
+        print(f"✅ Validation passed. Using validated data: {validated_data}")
         print(self._format_event_summary())
         
-        # Store the event in memory
-        event_id = len(EVENT_STORAGE) + 1
-        event_record = {
-            "id": event_id,
-            "created_at": datetime.now().isoformat(),
-            **event_data
-        }
-        EVENT_STORAGE.append(event_record)
-        print(f"Event stored with ID: {event_id}")
+        # Return validated data for Java to process
+        # Java will call EventService.createEvent(validated_data)
+        print("📤 Returning validated data to Java for EventService.createEvent()")
         
         # Mark event as created to prevent multiple events
         self.event_created = True
+        
+        return {
+            "tool_name": "CreateEvent",
+            "validated_data": validated_data,
+            "chat_id": chat_id,
+            "message": "Event data validated successfully. Java EventService should now create the event."
+        }
     
-    def updateEvent(self, event_data: Dict[str, Any]) -> None:
-        """Execute the updateEvent tool - prints tool name and data to terminal."""
+    async def updateEvent(self, event_data: Dict[str, Any], event_id: str = None) -> Dict[str, Any]:
+        """Validate event data for Java Event Service - returns validated data for Java to process."""
         print("Tool being called: UpdateEvent")
         print(f"This is the data we are passing in: {event_data}")
+        
+        # Validate the event data before processing
+        validation_result = validation_service.validate_update_event(event_data)
+        
+        if not validation_result.is_valid:
+            print(f"❌ Validation failed: {validation_result.errors}")
+            print(f"Retry message: {validation_result.retry_message}")
+            # Return the retry message to LangChain
+            raise ValidationError(validation_result.retry_message)
+        
+        # Use validated data
+        validated_data = validation_result.data
+        print(f"✅ Validation passed. Using validated data: {validated_data}")
         print(self._format_event_summary())
         
-        # Update the most recent event in storage with new information
-        if EVENT_STORAGE:
-            # Find the most recent event and update it
-            latest_event = EVENT_STORAGE[-1]
-            latest_event.update(event_data)
-            print(f"Updated event ID {latest_event['id']} with new information")
+        # Return validated data for Java to process
+        # Java will call EventService.updateEvent(event_id, validated_data)
+        print("📤 Returning validated data to Java for EventService.updateEvent()")
+        
+        return {
+            "tool_name": "UpdateEvent",
+            "validated_data": validated_data,
+            "event_id": event_id,
+            "message": "Event data validated successfully. Java EventService should now update the event."
+        }
     
-    def _handle_additional_info(self, message: str) -> Dict[str, Any]:
+    async def _handle_additional_info(self, message: str, chat_id: str = None) -> Dict[str, Any]:
         """Handle additional information collection after event creation."""
         # Handle confirmation for updates
         if self.pending_update:
@@ -417,7 +476,7 @@ Important:
                         self.event_data[key] = value
                 
                 # Call updateEvent tool
-                self.updateEvent(self.event_data)
+                tool_result = await self.updateEvent(self.event_data, getattr(self, 'current_event_id', None))
                 
                 # Clear pending update
                 self.pending_update = False
@@ -426,9 +485,11 @@ Important:
                 return {
                     "success": True,
                     "message": "DONE! ✨ I've just updated your event with those fantastic details! I'm getting chills thinking about how amazing this is going to be! 🎊\n\nIs there anything else you'd like to add to make this event even more spectacular? I'm here to help you create something absolutely unforgettable!",
-                    "data": self.event_data,
+                    "data": tool_result,  # Contains validated_data for Java
                     "conversation_state": self.conversation_state,
-                    "show_chips": True
+                    "show_chips": True,
+                    "tool_call_required": True,  # Flag for Java to know it needs to call EventService
+                    "tool_name": "UpdateEvent"
                 }
             elif message.lower() in ["no", "nope", "not now", "skip", "cancel"]:
                 # Clear pending update without applying
@@ -462,7 +523,7 @@ Important:
                 "data": self.event_data,
                 "conversation_state": self.conversation_state
             }
-        
+            
         # Extract additional information
         extracted = self._extract_event_info(message)
         

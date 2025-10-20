@@ -15,11 +15,25 @@ sys.path.insert(0, str(Path(__file__).parent))
 from event_tool import EventTool
 from weather_tool import WeatherTool
 from time_tool import TimeTool
+from venue_tool import VenueTool
+from mongodb_service import mongodb_service
+from chat_service import chat_service
+from dto_validation import ValidationError
 
 # Load environment variables
 load_dotenv()
 
 app = FastAPI(title="Event Planner AI Assistant", description="AI-powered event planning and weather checking tools")
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize MongoDB connection on startup."""
+    await mongodb_service.connect()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close MongoDB connection on shutdown."""
+    await mongodb_service.disconnect()
 
 # Initialize tools
 tools = [
@@ -42,6 +56,9 @@ def reset_conversation_state():
 
 class ChatRequest(BaseModel):
     message: str
+    user_id: str
+    chat_id: Optional[str] = None
+    event_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -49,77 +66,195 @@ class ChatResponse(BaseModel):
     tool_used: str
     data: Optional[dict] = None
     show_chips: Optional[bool] = False
+    chat_id: str
+    user_id: str
+    event_id: Optional[str] = None
 
 
-def process_message(message: str) -> ChatResponse:
+async def process_message(message: str, user_id: str, chat_id: str = None, event_id: str = None) -> ChatResponse:
     """Process message using available tools with conversation state management."""
     global conversation_state
     
-    # If there's an active tool, try to continue the conversation with it
-    if conversation_state["active_tool"] and conversation_state["tool_instance"]:
-        try:
-            result = conversation_state["tool_instance"].process(message)
+    # Get or create chat
+    if not chat_id:
+        chat_id = await chat_service.get_or_create_chat(user_id, event_id)
+    
+    # Save user message
+    await chat_service.add_message(chat_id, message, is_user=True)
+    
+    # Get conversation state from database (without tool_instance)
+    db_conversation_state = await chat_service.get_conversation_state(chat_id)
+    if db_conversation_state:
+        # Don't restore tool_instance from DB, only restore active_tool
+        conversation_state["active_tool"] = db_conversation_state.get("active_tool")
+        # tool_instance will be recreated when needed
+    
+    # If there's an active tool, recreate the tool instance and continue
+    if conversation_state.get("active_tool"):
+        # Recreate tool instance based on active tool
+        tool_class = None
+        if conversation_state["active_tool"] == "EventTool":
+            tool_class = EventTool
+        elif conversation_state["active_tool"] == "WeatherTool":
+            tool_class = WeatherTool
+        elif conversation_state["active_tool"] == "TimeTool":
+            tool_class = TimeTool
+        
+        if tool_class:
+            tool_instance = tool_class()
+            conversation_state["tool_instance"] = tool_instance
             
-            # Check if the conversation is complete
-            if result.get("conversation_state") == "complete":
-                # Reset conversation state
+            try:
+                result = await tool_instance.process(message, chat_id)
+                
+                # Check if the conversation is complete
+                if result.get("conversation_state") == "complete":
+                    # Reset conversation state
+                    conversation_state["active_tool"] = None
+                    conversation_state["tool_instance"] = None
+                elif result.get("conversation_state") in ["collecting_required", "collecting_optional", "collecting_additional"]:
+                    # Keep the tool active for next message
+                    pass
+                else:
+                    # Tool finished or error, reset state
+                    conversation_state["active_tool"] = None
+                    conversation_state["tool_instance"] = None
+                
+                # Save conversation state (without tool_instance)
+                state_to_save = {
+                    "active_tool": conversation_state.get("active_tool"),
+                    "tool_instance": None  # Don't save the object
+                }
+                await chat_service.save_conversation_state(chat_id, state_to_save)
+                
+                # Save assistant response
+                await chat_service.add_message(
+                    chat_id, 
+                    result["message"], 
+                    is_user=False, 
+                    tool_used=conversation_state.get("active_tool") or "None",
+                    data=result.get("data")
+                )
+                
+                return ChatResponse(
+                    reply=result["message"],
+                    tool_used=conversation_state.get("active_tool") or "None",
+                    data=result.get("data"),
+                    show_chips=result.get("show_chips", False),
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    event_id=event_id
+                )
+            except ValidationError as e:
+                # Handle validation errors - send retry message to LangChain
+                retry_message = f"I need to fix the data structure. {str(e)} Please provide the event data in the correct format."
+                await chat_service.add_message(chat_id, retry_message, is_user=False)
+                
+                return ChatResponse(
+                    reply=retry_message,
+                    tool_used=conversation_state.get("active_tool") or "None",
+                    data=None,
+                    show_chips=False,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    event_id=event_id
+                )
+            except Exception as e:
+                # Reset on error
                 conversation_state["active_tool"] = None
                 conversation_state["tool_instance"] = None
-            elif result.get("conversation_state") in ["collecting_required", "collecting_optional", "collecting_additional"]:
-                # Keep the tool active for next message
-                pass
-            else:
-                # Tool finished or error, reset state
-                conversation_state["active_tool"] = None
-                conversation_state["tool_instance"] = None
-            
-            return ChatResponse(
-                reply=result["message"],
-                tool_used=conversation_state["active_tool"] or "None",
-                data=result.get("data"),
-                show_chips=result.get("show_chips", False)
-            )
-        except Exception as e:
-            # Reset on error
-            conversation_state["active_tool"] = None
-            conversation_state["tool_instance"] = None
-            return ChatResponse(
-                reply=f"❌ Error with {conversation_state['active_tool']}: {str(e)}",
-                tool_used=conversation_state["active_tool"] or "None",
-                data=None
-            )
+                await chat_service.save_conversation_state(chat_id, {"active_tool": None, "tool_instance": None})
+                
+                error_message = f"Oops! I had a little hiccup there. Let me try that again - could you repeat what you just said? 😊"
+                await chat_service.add_message(chat_id, error_message, is_user=False)
+                
+                return ChatResponse(
+                    reply=error_message,
+                    tool_used="None",
+                    data=None,
+                    show_chips=False,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    event_id=event_id
+                )
     
     # No active tool, try to find a new tool to handle the message
-    for tool_class in [EventTool, WeatherTool, TimeTool]:
+    for tool_class in [EventTool, WeatherTool, TimeTool, VenueTool]:
         tool = tool_class()
         if tool.can_handle(message):
             try:
-                result = tool.process(message)
+                result = await tool.process(message, chat_id)
                 
                 # If the tool starts a conversation, make it active
                 if result.get("conversation_state") in ["collecting_required", "collecting_optional", "collecting_additional"]:
                     conversation_state["active_tool"] = tool.__class__.__name__
                     conversation_state["tool_instance"] = tool
                 
+                # Save conversation state (without tool_instance)
+                state_to_save = {
+                    "active_tool": conversation_state.get("active_tool"),
+                    "tool_instance": None  # Don't save the object
+                }
+                await chat_service.save_conversation_state(chat_id, state_to_save)
+                
+                # Save assistant response
+                await chat_service.add_message(
+                    chat_id, 
+                    result["message"], 
+                    is_user=False, 
+                    tool_used=tool.__class__.__name__,
+                    data=result.get("data")
+                )
+                
                 return ChatResponse(
                     reply=result["message"],
                     tool_used=tool.__class__.__name__,
                     data=result.get("data"),
-                    show_chips=result.get("show_chips", False)
+                    show_chips=result.get("show_chips", False),
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    event_id=event_id
                 )
-            except Exception as e:
+            except ValidationError as e:
+                # Handle validation errors - send retry message to LangChain
+                retry_message = f"I need to fix the data structure. {str(e)} Please provide the event data in the correct format."
+                await chat_service.add_message(chat_id, retry_message, is_user=False)
+                
                 return ChatResponse(
-                    reply=f"Oops! I had a little hiccup there. Let me try that again - could you repeat what you just said? 😊",
+                    reply=retry_message,
                     tool_used=tool.__class__.__name__,
                     data=None,
-                    show_chips=False
+                    show_chips=False,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    event_id=event_id
+                )
+            except Exception as e:
+                error_message = f"Oops! I had a little hiccup there. Let me try that again - could you repeat what you just said? 😊"
+                await chat_service.add_message(chat_id, error_message, is_user=False)
+                
+                return ChatResponse(
+                    reply=error_message,
+                    tool_used=tool.__class__.__name__,
+                    data=None,
+                    show_chips=False,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    event_id=event_id
                 )
     
+    # Default response
+    default_message = "Hey there, gorgeous! I'm Shade, and I'm absolutely THRILLED to be your personal event planning superstar! 🎉✨ I'm here to help you create ONE absolutely INCREDIBLE event that will have everyone talking for years! I can help with every single detail, check the weather, verify timing, and make sure everything is absolutely PERFECT! Just say 'Create an event' and let's make some magic happen! 🎊"
+    await chat_service.add_message(chat_id, default_message, is_user=False)
+    
     return ChatResponse(
-        reply="Hey there, gorgeous! I'm Shade, and I'm absolutely THRILLED to be your personal event planning superstar! 🎉✨ I'm here to help you create ONE absolutely INCREDIBLE event that will have everyone talking for years! I can help with every single detail, check the weather, verify timing, and make sure everything is absolutely PERFECT! Just say 'Create an event' and let's make some magic happen! 🎊",
+        reply=default_message,
         tool_used="None",
         data=None,
-        show_chips=False
+        show_chips=False,
+        chat_id=chat_id,
+        user_id=user_id,
+        event_id=event_id
     )
 
 
@@ -127,9 +262,23 @@ def process_message(message: str) -> ChatResponse:
 async def chat(request: ChatRequest):
     """Chat endpoint."""
     try:
-        return process_message(request.message)
+        response = await process_message(
+            request.message, 
+            request.user_id, 
+            request.chat_id, 
+            request.event_id
+        )
+        return response
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ChatResponse(
+            reply=f"Error: {str(e)}",
+            tool_used="Error",
+            data=None,
+            show_chips=False,
+            chat_id=request.chat_id or "error",
+            user_id=request.user_id,
+            event_id=request.event_id
+        )
 
 
 @app.post("/reset")
@@ -137,6 +286,46 @@ async def reset_conversation():
     """Reset conversation state."""
     reset_conversation_state()
     return {"message": "Conversation state reset successfully"}
+
+@app.get("/chats/{user_id}")
+async def get_user_chats(user_id: str):
+    """Get all chats for a user."""
+    try:
+        chats = await chat_service.get_user_chats(user_id)
+        return {"chats": chats}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/chat/{chat_id}")
+async def get_chat(chat_id: str):
+    """Get specific chat by ID."""
+    try:
+        chat = await chat_service.get_chat(chat_id)
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        return chat
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/chat/{chat_id}/messages")
+async def get_chat_messages(chat_id: str):
+    """Get all messages for a chat."""
+    try:
+        messages = await chat_service.get_chat_messages(chat_id)
+        return {"messages": messages}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/event/{event_id}/chat")
+async def get_event_chat(event_id: str):
+    """Get chat for a specific event."""
+    try:
+        chat = await mongodb_service.get_event_chat(event_id)
+        if not chat:
+            raise HTTPException(status_code=404, detail="Event chat not found")
+        return chat
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -407,13 +596,13 @@ async def home():
                     messageDiv.appendChild(chipsContainer);
                 }
                 
-                chatContainer.appendChild(messageDiv);
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-            }
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
 
             // Send message function
-            async function sendMessage() {
-                const message = messageInput.value.trim();
+        async function sendMessage() {
+            const message = messageInput.value.trim();
                 if (!message) {
                     console.log('No message to send');
                     return;
@@ -422,40 +611,40 @@ async def home():
                 console.log('Sending message:', message);
 
                 // Add user message to chat
-                addMessage(message, true);
+            addMessage(message, true);
                 
                 // Clear input immediately and show visual feedback
-                messageInput.value = '';
+            messageInput.value = '';
                 messageInput.placeholder = 'Sending message...';
-                sendButton.disabled = true;
+            sendButton.disabled = true;
                 sendButton.textContent = 'Sending...';
 
-                try {
-                    const response = await fetch('/chat', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ message: message })
-                    });
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message })
+                });
 
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
 
-                    const data = await response.json();
+                const data = await response.json();
                     console.log('Received response:', data);
                     addMessage(data.reply, false, data.show_chips || false);
-                } catch (error) {
+            } catch (error) {
                     console.error('Error sending message:', error);
                     addMessage(`Oops! I had trouble with that. Could you try again? 😊`, false);
-                } finally {
-                    sendButton.disabled = false;
+            } finally {
+                sendButton.disabled = false;
                     sendButton.textContent = 'Send';
                     messageInput.placeholder = 'Ask me about events or weather...';
-                    messageInput.focus();
-                }
+                messageInput.focus();
             }
+        }
 
             // Reset conversation
             async function resetConversation() {
