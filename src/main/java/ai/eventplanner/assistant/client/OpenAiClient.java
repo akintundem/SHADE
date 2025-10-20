@@ -20,7 +20,7 @@ import java.util.Map;
 @Slf4j
 public class OpenAiClient {
 
-    private static final String DEFAULT_MODEL = "gpt-4o-mini";
+    private static final String DEFAULT_MODEL = "gpt-5-mini";
 
     private final Environment environment;
 
@@ -29,6 +29,10 @@ public class OpenAiClient {
     }
 
     public String createChatCompletion(List<Map<String, String>> messages) {
+        return createChatCompletion(messages, null);
+    }
+
+    public String createChatCompletion(List<Map<String, String>> messages, Map<String, Object> responseFormat) {
         if (CollectionUtils.isEmpty(messages)) {
             throw new IllegalArgumentException("messages must not be empty");
         }
@@ -49,6 +53,9 @@ public class OpenAiClient {
         requestBody.put("messages", messages);
         requestBody.put("temperature", 0.4);
         requestBody.put("max_tokens", 800);
+        if (responseFormat != null && !responseFormat.isEmpty()) {
+            requestBody.put("response_format", responseFormat);
+        }
 
         JsonNode response = restClient.post()
                 .uri("/v1/chat/completions")

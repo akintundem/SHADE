@@ -21,7 +21,6 @@ public class ProductionSecurityConfig {
         http
             .authorizeHttpRequests(authz -> authz
                 // In production, restrict access to development tools
-                .requestMatchers("/h2-console/**").denyAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").denyAll()
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
                 

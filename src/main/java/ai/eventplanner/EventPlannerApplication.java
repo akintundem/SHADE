@@ -24,13 +24,19 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "ai.eventplanner.assistant.repository"
 })
 @EntityScan(basePackages = {
+    "ai.eventplanner.event.entity",
     "ai.eventplanner.event.model",
     "ai.eventplanner.attendee.model",
     "ai.eventplanner.timeline.model",
     "ai.eventplanner.budget.model",
     "ai.eventplanner.comms.model",
     "ai.eventplanner.auth.entity",
-    "ai.eventplanner.assistant.entity"
+    "ai.eventplanner.assistant.entity",
+    "ai.eventplanner.vendor.entity",
+    "ai.eventplanner.checklist.entity",
+    "ai.eventplanner.program.entity",
+    "ai.eventplanner.roles.entity",
+    "ai.eventplanner.user.entity"
 })
 public class EventPlannerApplication {
 

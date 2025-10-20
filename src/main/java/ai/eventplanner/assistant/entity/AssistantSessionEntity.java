@@ -26,13 +26,13 @@ import java.util.UUID;
 public class AssistantSessionEntity {
 
     @Id
-    @Column(name = "id", nullable = false, columnDefinition = "BINARY(16)")
+    @Column(name = "id", nullable = false)
     private UUID id;
 
     @Column(name = "domain", nullable = false, length = 64)
     private String domain;
 
-    @Column(name = "organizer_id", columnDefinition = "BINARY(16)")
+    @Column(name = "organizer_id")
     private UUID organizerId;
 
     @Column(name = "name", length = 255)

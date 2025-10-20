@@ -15,7 +15,6 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchDataAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchRepositoriesAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ReactiveElasticsearchRepositoriesAutoConfiguration
@@ -27,35 +26,30 @@ spring:
   # JPA Configuration
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     show-sql: true
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
+        dialect: org.hibernate.dialect.PostgreSQLDialect
     defer-datasource-initialization: true
   
   # Database Configuration
   datasource:
-    url: jdbc:h2:mem:testdb
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: 
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:eventplanner}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
   
-  # H2 Console
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-  
-  # redis:
-  #   host: ${SPRING_REDIS_HOST:localhost}
-  #   port: ${SPRING_REDIS_PORT:6379}
-  #   timeout: 2000ms
-  #   lettuce:
-  #     pool:
-  #       max-active: 8
-  #       max-idle: 8
-  #       min-idle: 0
+  redis:
+    host: ${SPRING_REDIS_HOST:redis}
+    port: ${SPRING_REDIS_PORT:6379}
+    password: ${SPRING_REDIS_PASSWORD:}
+    timeout: ${SPRING_REDIS_TIMEOUT:2000ms}
+    lettuce:
+      pool:
+        max-active: ${SPRING_REDIS_POOL_MAX_ACTIVE:8}
+        max-idle: ${SPRING_REDIS_POOL_MAX_IDLE:8}
+        min-idle: ${SPRING_REDIS_POOL_MIN_IDLE:0}
   
   
   ai:
@@ -84,6 +78,10 @@ spring:
     type: caffeine
     caffeine:
       spec: maximumSize=1000,expireAfterWrite=300s
+
+assistant:
+  service:
+    base-url: ${SHADE_ASSISTANT_URL:http://localhost:9000}
 
 # JWT Configuration
 jwt:

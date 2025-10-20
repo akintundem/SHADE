@@ -1,7 +1,8 @@
 package ai.eventplanner.event.controller;
 
-import ai.eventplanner.event.dto.EventCreateRequest;
-import ai.eventplanner.event.model.EventEntity;
+import ai.eventplanner.event.dto.request.CreateEventRequest;
+import ai.eventplanner.event.dto.response.EventResponse;
+import ai.eventplanner.event.entity.Event;
 import ai.eventplanner.event.service.EventService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -11,16 +12,20 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
-import java.io.IOException;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -40,48 +45,39 @@ public class EventCrudController {
     @Operation(summary = "Get event by ID", description = "Retrieve a specific event by its unique identifier")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event found",
-                content = @Content(schema = @Schema(implementation = EventEntity.class))),
+                content = @Content(schema = @Schema(implementation = EventResponse.class))),
         @ApiResponse(responseCode = "404", description = "Event not found"),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token")
     })
-    public ResponseEntity<EventEntity> get(
+    public ResponseEntity<EventResponse> get(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
-        Optional<EventEntity> found = eventService.getById(id);
-        return found.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+        Optional<Event> found = eventService.getById(id);
+        return found
+                .map(eventService::toResponse)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping
     @Operation(summary = "Create new event", description = "Create a new event with the provided details")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "201", description = "Event created successfully",
-                content = @Content(schema = @Schema(implementation = EventEntity.class))),
+                content = @Content(schema = @Schema(implementation = EventResponse.class))),
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token")
     })
-    public ResponseEntity<EventEntity> create(
-            @Valid @RequestBody EventCreateRequest req,
-            @Parameter(description = "Authorization header with Bearer token")
-            @RequestHeader(value = "Authorization", required = false) String authHeader,
+    public ResponseEntity<EventResponse> create(
+            @Valid @RequestBody CreateEventRequest request,
             @Parameter(description = "Gateway injected user identifier")
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
-        String userId = extractUserIdFromHeaders(userIdHeader, authHeader);
-
-        EventEntity entity = new EventEntity();
-        // id and status will be set in prePersist
-        if (userId != null && !userId.isBlank()) {
-            entity.setOrganizerId(UUID.fromString(userId));
-        } else {
-            entity.setOrganizerId(UUID.randomUUID());
+        try {
+            UUID ownerId = resolveOwnerId(userIdHeader);
+            Event created = eventService.create(request, ownerId);
+            EventResponse response = eventService.toResponse(created);
+            return ResponseEntity.created(URI.create("/api/v1/events/" + response.getId())).body(response);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
-        entity.setOrganizationId(req.getOrganizationId());
-        entity.setName(req.getName());
-        entity.setType(req.getType());
-        entity.setDate(req.getDate());
-        entity.setVenueId(req.getVenueId());
-        entity.setMetadata(req.getMetadata() != null ? req.getMetadata() : Map.of());
-
-        EventEntity created = eventService.create(entity);
-        return ResponseEntity.created(URI.create("/api/v1/events/" + created.getId())).body(created);
     }
 
     @DeleteMapping("/{id}")
@@ -91,22 +87,19 @@ public class EventCrudController {
         @ApiResponse(responseCode = "404", description = "Event not found"),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token")
     })
-    public void delete(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            HttpServletResponse response) throws IOException {
+    public ResponseEntity<Void> delete(
+            @Parameter(description = "Event ID") @PathVariable UUID id) {
         eventService.delete(id);
-        response.setStatus(HttpStatus.NO_CONTENT.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write("{}");
-        response.getWriter().flush();
+        return ResponseEntity.noContent().build();
     }
-    
-    private String extractUserIdFromHeaders(String userIdHeader, String authHeader) {
+
+    private UUID resolveOwnerId(String userIdHeader) {
         if (userIdHeader != null && !userIdHeader.isBlank()) {
-            return userIdHeader;
-        }
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            return null; // Gateway already validated token; no fallback user id available.
+            try {
+                return UUID.fromString(userIdHeader);
+            } catch (IllegalArgumentException ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid X-User-Id header. Must be a UUID.", ex);
+            }
         }
         return null;
     }

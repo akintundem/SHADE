@@ -38,15 +38,25 @@ The monolith includes all the functionality from the original microservices:
 
 2. **Start infrastructure services:**
    ```bash
-   docker-compose up -d postgres redis rabbitmq mailhog
+   docker-compose up -d postgres redis
+   ```
+   > Alternatively, install PostgreSQL locally and ensure it is running on `localhost:5432` with credentials matching `.env`.
+
+3. **Start the LangChain assistant (Python):**
+   ```bash
+   cd shade-assistant
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   uvicorn app.main:app --port 9000 --reload
    ```
 
-3. **Run the application:**
+4. **Run the application:**
    ```bash
    mvn spring-boot:run
    ```
 
-4. **Access the application:**
+5. **Access the application:**
    - API: http://localhost:8080
    - Swagger UI: http://localhost:8080/swagger-ui
    - Health Check: http://localhost:8080/actuator/health

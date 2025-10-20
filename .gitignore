@@ -19,6 +19,7 @@
 # Environment & credentials
 .env
 *.env
+.venv/
 
 # OS generated files
 .DS_Store

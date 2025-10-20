@@ -24,10 +24,10 @@ import java.util.UUID;
 public class AssistantMessageEntity {
 
     @Id
-    @Column(name = "id", nullable = false, columnDefinition = "BINARY(16)")
+    @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "session_id", nullable = false, columnDefinition = "BINARY(16)")
+    @Column(name = "session_id", nullable = false)
     private UUID sessionId;
 
     @Column(name = "role", nullable = false, length = 50)
