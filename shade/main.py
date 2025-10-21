@@ -15,8 +15,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 # Load environment variables
 load_dotenv()
 
-# Import the real agent system
-from agent import create_agent_graph, AgentState
+# Import the LangGraph Flow Manager
+from flow import FlowManager, SharedContextMemory
+from agents import MasterOrchestrator
+from knowledge import RAGGateway, VectorStore, EmbeddingPipeline, DocumentLoader
+from external import GoogleAPIService, WeatherAPIService, SearchAPIService, PaymentAPIService
+from data import DataManager
 from langchain_core.messages import HumanMessage, AIMessage
 
 app = FastAPI(title="Event Planner AI Assistant", description="AI-powered event planning with full agent functionality")
@@ -36,28 +40,56 @@ class ChatResponse(BaseModel):
     user_id: str
     event_id: Optional[str] = None
 
-# Real agent processor using LangGraph
+# LangGraph Flow Manager processor
 class ShadeAgentProcessor:
     def __init__(self):
-        """Initialize the real agent with LangGraph on startup."""
-        print("🔄 Initializing agent graph...")
+        """Initialize the LangGraph Flow Manager on startup."""
+        print("🔄 Initializing LangGraph Flow Manager...")
         try:
-            self.agent_graph = create_agent_graph()
-            print("✅ Real agent initialized successfully with LangGraph")
+            # Initialize data layer
+            self.data_manager = DataManager()
+            
+            # Initialize shared context memory
+            self.shared_context = SharedContextMemory()
+            
+            # Initialize knowledge layer
+            self.vector_store = VectorStore()
+            self.embedding_pipeline = EmbeddingPipeline()
+            self.document_loader = DocumentLoader()
+            self.rag_gateway = RAGGateway(self.vector_store, self.embedding_pipeline)
+            
+            # Initialize external APIs
+            self.google_apis = GoogleAPIService()
+            self.weather_api = WeatherAPIService()
+            self.search_api = SearchAPIService()
+            self.payment_api = PaymentAPIService()
+            
+            # Initialize domain agents
+            self.orchestrator = MasterOrchestrator()
+            
+            # Initialize LangGraph Flow Manager
+            self.flow_manager = FlowManager(
+                domain_agents=self.orchestrator.agents,
+                shared_context=self.shared_context
+            )
+            
+            print("✅ LangGraph Flow Manager initialized successfully")
+            print(f"📊 Available agents: {list(self.orchestrator.agents.keys())}")
+            print("🧠 Knowledge layer: RAG Gateway with mock data")
+            print("🔌 External APIs: Google, Weather, Search, Payment (mocked)")
+            print("💾 Data layer: MongoDB, Redis, Async Queue")
+            print("🔄 LangGraph flow with routing, domain processing, and aggregation")
         except Exception as e:
-            print(f"❌ Error initializing agent: {e}")
-            # Fallback to simple graph if full graph fails
-            try:
-                from agent.graph import create_simple_agent_graph
-                self.agent_graph = create_simple_agent_graph()
-                print("✅ Fallback to simple agent graph")
-            except Exception as e2:
-                print(f"❌ Fallback also failed: {e2}")
-                self.agent_graph = None
+            import traceback
+            print(f"❌ Error initializing LangGraph Flow Manager: {e}")
+            print(f"❌ Full traceback: {traceback.format_exc()}")
+            self.flow_manager = None
+            self.orchestrator = None
+            self.data_manager = None
     
     async def process(self, message: str, user_id: str = "default_user", chat_id: str = "default_chat", event_id: str = None) -> Dict[str, Any]:
-        """Process message using the real LangGraph agent."""
-        if not self.agent_graph:
+        """Process message using the LangGraph Flow Manager."""
+        if not self.flow_manager:
             return {
                 "reply": "I'm currently experiencing technical difficulties. Please try again later.",
                 "tool_used": "error",
@@ -65,80 +97,46 @@ class ShadeAgentProcessor:
             }
         
         try:
-            print(f"🤖 Real agent processing: '{message}'")
+            print(f"🔄 LangGraph Flow processing: '{message}'")
             
-            # Create initial state
-            initial_state = {
-                "messages": [HumanMessage(content=message)],
-                "current_user_id": user_id,
-                "current_chat_id": chat_id,
-                "current_event_id": event_id,
-                "pending_actions": [],
-                "user_preferences": {},
-                "requires_approval": False,
-                "approval_pending": None,
-                "tool_history": [],
-                "last_tool_results": [],
-                "conversation_summary": None,
-                "mentioned_entities": {},
-                "current_plan": None,
-                "plan_step": 0,
-                "plan_complete": False,
-                "retry_count": 0,
-                "last_error": None
-            }
+            # Process with LangGraph Flow Manager
+            result = await self.flow_manager.process_request(message, user_id, chat_id, event_id)
             
-            # Run the agent graph
-            result = await self.agent_graph.ainvoke(initial_state)
+            # Save conversation to data layer (disabled for now to focus on tool issues)
+            # if self.data_manager:
+            #     try:
+            #         await self.data_manager.save_conversation(
+            #             user_id, chat_id, message, result["reply"], 
+            #             {"agent_used": result.get("agent_used", "langgraph_flow")}
+            #         )
+            #     except Exception as e:
+            #         print(f"Error saving conversation: {e}")
+            #         # Continue without failing the request
             
-            # Extract the response
-            messages = result.get("messages", [])
-            if messages:
-                last_message = messages[-1]
-                if hasattr(last_message, 'content'):
-                    reply = last_message.content
-                else:
-                    reply = str(last_message)
-            else:
-                reply = "I processed your request but didn't generate a response."
-            
-            # Determine tool used from the last message
-            tool_used = "agent_reasoning"
-            if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-                tool_used = last_message.tool_calls[0].get("name", "unknown_tool")
-            
-            # Extract any relevant data
-            data = {
-                "agent_state": result,
-                "tool_history": result.get("tool_history", []),
-                "current_plan": result.get("current_plan"),
-                "requires_approval": result.get("requires_approval", False)
-            }
-            
-            print(f"✅ Agent completed processing")
+            print(f"✅ LangGraph Flow completed processing")
             
             return {
-                "reply": reply,
-                "tool_used": tool_used,
-                "data": data
+                "reply": result["reply"],
+                "tool_used": result.get("agent_used", "langgraph_flow"),
+                "data": result.get("data", {})
             }
             
         except Exception as e:
-            print(f"❌ Error in agent processing: {e}")
+            print(f"❌ Error in LangGraph Flow processing: {e}")
             return {
                 "reply": f"I encountered an error while processing your request: {str(e)}. Please try again!",
                 "tool_used": "error",
                 "data": {"error": str(e)}
             }
 
-# Initialize the real agent
+# Initialize the LangGraph Flow Manager
 shade_agent = ShadeAgentProcessor()
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Chat endpoint with real agent functionality."""
+    """Chat endpoint with LangGraph Flow functionality."""
     try:
-        # Process with the real agent
+        # Process with the LangGraph Flow Manager
         result = await shade_agent.process(
             message=request.message,
             user_id=request.user_id,
@@ -172,6 +170,129 @@ async def reset_conversation():
     """Reset conversation state."""
     return {"message": "Conversation state reset successfully"}
 
+@app.get("/health")
+async def health():
+    """Health check endpoint."""
+    return {"status": "healthy", "agent": "Shade AI LangGraph Flow Manager", "version": "3.0.0"}
+
+@app.get("/agents/status")
+async def get_agent_status():
+    """Get status of all agents."""
+    try:
+        if shade_agent.orchestrator:
+            status = shade_agent.orchestrator.get_agent_status()
+            return {"agents": status}
+        else:
+            return {"error": "Orchestrator not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/flow/status")
+async def get_flow_status():
+    """Get LangGraph Flow status."""
+    try:
+        if shade_agent.flow_manager:
+            stats = await shade_agent.flow_manager.get_flow_stats()
+            return stats
+        else:
+            return {"error": "Flow Manager not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/agents/communication")
+async def get_communication_stats():
+    """Get communication statistics."""
+    try:
+        if shade_agent.orchestrator:
+            stats = await shade_agent.orchestrator.get_communication_stats()
+            return stats
+        else:
+            return {"error": "Orchestrator not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/knowledge/status")
+async def get_knowledge_status():
+    """Get knowledge layer status."""
+    try:
+        if shade_agent.rag_gateway:
+            stats = await shade_agent.rag_gateway.get_gateway_stats()
+            return stats
+        else:
+            return {"error": "RAG Gateway not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/external/status")
+async def get_external_apis_status():
+    """Get external APIs status."""
+    try:
+        status = {}
+        
+        if shade_agent.google_apis:
+            status["google"] = await shade_agent.google_apis.get_service_stats()
+        
+        if shade_agent.weather_api:
+            status["weather"] = await shade_agent.weather_api.get_service_stats()
+            
+        if shade_agent.search_api:
+            status["search"] = await shade_agent.search_api.get_service_stats()
+            
+        if shade_agent.payment_api:
+            status["payment"] = await shade_agent.payment_api.get_service_stats()
+        
+        return status
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/external/weather/current")
+async def get_current_weather(location: str = "New York, NY"):
+    """Get current weather."""
+    try:
+        if shade_agent.weather_api:
+            result = await shade_agent.weather_api.get_current_weather(location)
+            return result
+        else:
+            return {"error": "Weather API not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/external/weather/forecast")
+async def get_weather_forecast(location: str = "New York, NY", days: int = 5):
+    """Get weather forecast."""
+    try:
+        if shade_agent.weather_api:
+            result = await shade_agent.weather_api.get_forecast(location, days)
+            return result
+        else:
+            return {"error": "Weather API not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/external/search/venues")
+async def search_venues(query: str, location: str = None, capacity: int = None):
+    """Search for venues."""
+    try:
+        if shade_agent.search_api:
+            result = await shade_agent.search_api.search_venues(query, location, capacity)
+            return result
+        else:
+            return {"error": "Search API not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/external/search/vendors")
+async def search_vendors(query: str, vendor_type: str = None, location: str = None):
+    """Search for vendors."""
+    try:
+        if shade_agent.search_api:
+            result = await shade_agent.search_api.search_vendors(query, vendor_type, location)
+            return result
+        else:
+            return {"error": "Search API not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.get("/", response_class=HTMLResponse)
 async def home():
     """Enhanced HTML interface for the full agent."""
@@ -186,9 +307,78 @@ async def home():
             status_code=404
         )
 
+@app.get("/data/health")
+async def data_health():
+    """Data layer health check."""
+    try:
+        if shade_agent.data_manager:
+            health_status = await shade_agent.data_manager.health_check()
+            return health_status
+        else:
+            return {"error": "Data manager not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/data/stats")
+async def data_stats():
+    """Get data layer statistics."""
+    try:
+        if shade_agent.data_manager:
+            stats = await shade_agent.data_manager.get_system_stats()
+            return stats
+        else:
+            return {"error": "Data manager not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/data/cleanup")
+async def data_cleanup(days: int = 30):
+    """Clean up old data."""
+    try:
+        if shade_agent.data_manager:
+            results = await shade_agent.data_manager.cleanup_old_data(days)
+            return {"message": f"Cleanup completed", "results": results}
+        else:
+            return {"error": "Data manager not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/data/task")
+async def enqueue_task(task_name: str, payload: dict, priority: str = "normal"):
+    """Enqueue a background task."""
+    try:
+        if shade_agent.data_manager:
+            from data.async_queue import TaskPriority
+            priority_enum = TaskPriority.NORMAL
+            if priority.lower() == "high":
+                priority_enum = TaskPriority.HIGH
+            elif priority.lower() == "urgent":
+                priority_enum = TaskPriority.URGENT
+            elif priority.lower() == "low":
+                priority_enum = TaskPriority.LOW
+            
+            task_id = await shade_agent.data_manager.enqueue_background_task(task_name, payload, priority_enum)
+            return {"task_id": task_id, "status": "enqueued"}
+        else:
+            return {"error": "Data manager not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 Starting Shade AI Agent...")
+    import asyncio
+    
+    async def startup():
+        """Initialize data layer on startup."""
+        if shade_agent.data_manager:
+            await shade_agent.data_manager.initialize()
+            print("💾 Data layer initialized successfully")
+    
+    # Initialize data layer
+    asyncio.run(startup())
+    
+    print("🚀 Starting Shade AI LangGraph Flow Manager...")
     print("📱 Web interface: http://localhost:8000")
-    print("🧠 Agent initialized on startup")
+    print("🧠 LangGraph Flow Manager initialized on startup")
+    print("💾 Data layer: MongoDB, Redis, Async Queue")
     uvicorn.run(app, host="0.0.0.0", port=8000, ws="none")
