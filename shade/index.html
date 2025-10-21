@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shade AI Agent - Full Functionality</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .chat-container {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            margin-bottom: 20px;
+            background: #fafafa;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        .user {
+            background: #007bff;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+        .assistant {
+            background: #e9ecef;
+            color: #333;
+        }
+        .input-container {
+            display: flex;
+            gap: 10px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        button {
+            padding: 12px 24px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .examples {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        .examples h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .example {
+            margin: 5px 0;
+            padding: 5px 10px;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid #dee2e6;
+        }
+        .example:hover {
+            background: #e9ecef;
+        }
+        .status {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Shade AI Agent - Real LangGraph Agent</h1>
+        
+        <div class="status">
+            <strong>✅ Status:</strong> Real LangGraph agent with intelligent reasoning, tool selection, and comprehensive event planning!
+        </div>
+        
+        <div class="chat-container" id="chatContainer">
+            <div class="message assistant">
+                <div>Hello! I'm Shade, your AI event planning agent! 🎉</div>
+                <div>I can help you with comprehensive event planning:</div>
+                <div>• <strong>Create & Manage Events</strong> - Full event lifecycle</div>
+                <div>• <strong>Find & Book Venues</strong> - Search with detailed results</div>
+                <div>• <strong>Coordinate Vendors</strong> - Find caterers, photographers, etc.</div>
+                <div>• <strong>Manage Budgets</strong> - Track expenses and create budgets</div>
+                <div>• <strong>Handle Guest Lists</strong> - Manage attendees and RSVPs</div>
+                <div>• <strong>Create Timelines</strong> - Build detailed event schedules</div>
+                <div>• <strong>Assess Risks</strong> - Weather, capacity, and other risks</div>
+                <div>• <strong>Complex Planning</strong> - Multi-step event coordination</div>
+                <div>Now powered by real LangGraph agent with intelligent reasoning! 🧠</div>
+            </div>
+        </div>
+        
+        <div class="input-container">
+            <input type="text" id="messageInput" placeholder="Try: 'Plan my wedding for 200 people'..." />
+            <button id="sendButton">Send</button>
+            <button id="resetButton" style="background: #dc3545;">Reset</button>
+        </div>
+        
+        <div class="examples">
+            <h3>Try these examples (now with real AI reasoning!):</h3>
+            <div class="example" onclick="sendExample('Plan my wedding for 200 people in June with $50k budget')">
+                💒 Plan my wedding for 200 people in June with $50k budget
+            </div>
+            <div class="example" onclick="sendExample('Create a tech conference event')">
+                🏢 Create a tech conference event
+            </div>
+            <div class="example" onclick="sendExample('Find venues for my birthday party')">
+                🎂 Find venues for my birthday party
+            </div>
+            <div class="example" onclick="sendExample('Search for catering vendors')">
+                🍽️ Search for catering vendors
+            </div>
+            <div class="example" onclick="sendExample('Check the weather for my outdoor event')">
+                🌤️ Check the weather for my outdoor event
+            </div>
+            <div class="example" onclick="sendExample('Create a budget for my event')">
+                💰 Create a budget for my event
+            </div>
+            <div class="example" onclick="sendExample('Manage my guest list')">
+                👥 Manage my guest list
+            </div>
+            <div class="example" onclick="sendExample('Create a timeline for my event')">
+                📅 Create a timeline for my event
+            </div>
+            <div class="example" onclick="sendExample('Assess risks for my event')">
+                ⚠️ Assess risks for my event
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let chatContainer, messageInput, sendButton, resetButton;
+
+        function initializeApp() {
+            chatContainer = document.getElementById('chatContainer');
+            messageInput = document.getElementById('messageInput');
+            sendButton = document.getElementById('sendButton');
+            resetButton = document.getElementById('resetButton');
+
+            function addMessage(content, isUser = false) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+                messageDiv.innerHTML = content.replace(/\\n/g, '<br>');
+                chatContainer.appendChild(messageDiv);
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+
+            async function sendMessage() {
+                const message = messageInput.value.trim();
+                if (!message) return;
+
+                addMessage(message, true);
+                messageInput.value = '';
+                sendButton.disabled = true;
+                sendButton.textContent = 'Sending...';
+
+                try {
+                    const response = await fetch('/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            message: message,
+                            user_id: 'test_user'
+                        })
+                    });
+
+                    const data = await response.json();
+                    addMessage(data.reply, false);
+                } catch (error) {
+                    addMessage('Error: ' + error.message, false);
+                } finally {
+                    sendButton.disabled = false;
+                    sendButton.textContent = 'Send';
+                }
+            }
+
+            sendButton.onclick = sendMessage;
+            messageInput.onkeypress = (e) => {
+                if (e.key === 'Enter') sendMessage();
+            };
+            resetButton.onclick = () => {
+                chatContainer.innerHTML = '<div class="message assistant"><div>Chat reset! Ready for new messages.</div></div>';
+            };
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            initializeApp();
+        }
+    </script>
+</body>
+</html>

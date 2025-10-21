@@ -1,211 +1,155 @@
-"""MongoDB service for chat persistence and event management."""
+"""MongoDB service for the Shade AI Agent."""
 
 import os
 from datetime import datetime
-from typing import Dict, Any, List, Optional
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import MongoClient
-from bson import ObjectId
-from dotenv import load_dotenv
+from pymongo.errors import ConnectionFailure
+import logging
 
-load_dotenv()
+logger = logging.getLogger(__name__)
 
 class MongoDBService:
-    """MongoDB service for chat and event persistence."""
+    """MongoDB service for handling database operations."""
     
     def __init__(self):
-        self.mongo_url = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
-        self.database_name = os.getenv("MONGODB_DATABASE", "event_planner")
+        """Initialize MongoDB connection."""
         self.client = None
         self.db = None
+        self.connected = False
+        self._memory_store = {}  # Fallback in-memory storage
         
     async def connect(self):
         """Connect to MongoDB."""
         try:
-            self.client = AsyncIOMotorClient(self.mongo_url)
-            self.db = self.client[self.database_name]
-            # Test connection
+            # Get MongoDB URI from environment or use default
+            mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+            database_name = os.getenv("MONGODB_DATABASE", "shade_agent")
+            
+            self.client = AsyncIOMotorClient(mongodb_uri, serverSelectionTimeoutMS=2000)
+            self.db = self.client[database_name]
+            
+            # Test connection with timeout
             await self.client.admin.command('ping')
-            print("✅ Connected to MongoDB successfully!")
-            return True
+            self.connected = True
+            logger.info(f"Connected to MongoDB: {database_name}")
+            
+        except ConnectionFailure as e:
+            logger.warning(f"MongoDB not available: {e}. Running in memory-only mode.")
+            self.connected = False
+            self._memory_store = {}  # Fallback to in-memory storage
         except Exception as e:
-            print(f"❌ Failed to connect to MongoDB: {e}")
-            return False
+            logger.warning(f"MongoDB connection error: {e}. Running in memory-only mode.")
+            self.connected = False
+            self._memory_store = {}  # Fallback to in-memory storage
     
     async def disconnect(self):
         """Disconnect from MongoDB."""
         if self.client:
             self.client.close()
+            self.connected = False
+            logger.info("Disconnected from MongoDB")
     
-    # Chat Management
-    async def create_chat(self, user_id: str, event_id: Optional[str] = None) -> str:
-        """Create a new chat session."""
-        chat_doc = {
-            "user_id": user_id,
-            "event_id": event_id,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
-            "status": "active",
-            "messages": []
-        }
-        result = await self.db.chats.insert_one(chat_doc)
-        return str(result.inserted_id)
+    async def get_collection(self, collection_name: str):
+        """Get a collection from the database."""
+        if not self.connected:
+            await self.connect()
+        
+        if self.connected and self.db is not None:
+            return self.db[collection_name]
+        else:
+            raise ConnectionError("Not connected to MongoDB")
     
-    async def get_chat(self, chat_id: str) -> Optional[Dict[str, Any]]:
-        """Get chat by ID."""
+    async def insert_document(self, collection_name: str, document: dict):
+        """Insert a document into a collection."""
         try:
-            chat = await self.db.chats.find_one({"_id": ObjectId(chat_id)})
-            if chat:
-                chat["_id"] = str(chat["_id"])
-            return chat
+            collection = await self.get_collection(collection_name)
+            result = await collection.insert_one(document)
+            return result.inserted_id
         except Exception as e:
-            print(f"Error getting chat: {e}")
+            logger.error(f"Error inserting document: {e}")
             return None
     
-    async def get_user_chats(self, user_id: str) -> List[Dict[str, Any]]:
-        """Get all chats for a user."""
+    async def find_documents(self, collection_name: str, query: dict = None, limit: int = None):
+        """Find documents in a collection."""
         try:
-            chats = await self.db.chats.find({"user_id": user_id}).to_list(length=None)
-            for chat in chats:
-                chat["_id"] = str(chat["_id"])
-            return chats
+            collection = await self.get_collection(collection_name)
+            cursor = collection.find(query or {})
+            if limit:
+                cursor = cursor.limit(limit)
+            return await cursor.to_list(length=limit)
         except Exception as e:
-            print(f"Error getting user chats: {e}")
+            logger.error(f"Error finding documents: {e}")
             return []
     
-    async def get_event_chat(self, event_id: str) -> Optional[Dict[str, Any]]:
-        """Get chat for a specific event."""
+    async def update_document(self, collection_name: str, query: dict, update: dict):
+        """Update a document in a collection."""
         try:
-            chat = await self.db.chats.find_one({"event_id": event_id})
-            if chat:
-                chat["_id"] = str(chat["_id"])
-            return chat
+            collection = await self.get_collection(collection_name)
+            result = await collection.update_one(query, update)
+            return result.modified_count
         except Exception as e:
-            print(f"Error getting event chat: {e}")
-            return None
+            logger.error(f"Error updating document: {e}")
+            return 0
     
-    async def add_message(self, chat_id: str, message: Dict[str, Any]) -> bool:
-        """Add a message to a chat."""
+    async def delete_document(self, collection_name: str, query: dict):
+        """Delete a document from a collection."""
         try:
-            message["timestamp"] = datetime.utcnow()
-            result = await self.db.chats.update_one(
-                {"_id": ObjectId(chat_id)},
-                {
-                    "$push": {"messages": message},
-                    "$set": {"updated_at": datetime.utcnow()}
-                }
-            )
-            return result.modified_count > 0
+            collection = await self.get_collection(collection_name)
+            result = await collection.delete_one(query)
+            return result.deleted_count
         except Exception as e:
-            print(f"Error adding message: {e}")
-            return False
+            logger.error(f"Error deleting document: {e}")
+            return 0
     
-    async def update_chat_event(self, chat_id: str, event_id: str) -> bool:
-        """Update chat with event ID."""
-        try:
-            result = await self.db.chats.update_one(
-                {"_id": ObjectId(chat_id)},
-                {
-                    "$set": {
-                        "event_id": event_id,
-                        "updated_at": datetime.utcnow()
-                    }
-                }
-            )
-            return result.modified_count > 0
-        except Exception as e:
-            print(f"Error updating chat event: {e}")
-            return False
-    
-    # Event Management
-    async def save_event(self, event_data: Dict[str, Any], chat_id: str) -> str:
-        """Save event to MongoDB."""
-        try:
-            event_doc = {
-                "chat_id": chat_id,
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow(),
-                **event_data
-            }
-            result = await self.db.events.insert_one(event_doc)
-            event_id = str(result.inserted_id)
-            
-            # Update chat with event ID
-            await self.update_chat_event(chat_id, event_id)
-            
-            return event_id
-        except Exception as e:
-            print(f"Error saving event: {e}")
-            return None
-    
-    async def update_event(self, event_id: str, event_data: Dict[str, Any]) -> bool:
-        """Update event in MongoDB."""
-        try:
-            result = await self.db.events.update_one(
-                {"_id": ObjectId(event_id)},
-                {
-                    "$set": {
-                        **event_data,
-                        "updated_at": datetime.utcnow()
-                    }
-                }
-            )
-            return result.modified_count > 0
-        except Exception as e:
-            print(f"Error updating event: {e}")
-            return False
-    
-    async def get_event(self, event_id: str) -> Optional[Dict[str, Any]]:
-        """Get event by ID."""
-        try:
-            event = await self.db.events.find_one({"_id": ObjectId(event_id)})
-            if event:
-                event["_id"] = str(event["_id"])
-            return event
-        except Exception as e:
-            print(f"Error getting event: {e}")
-            return None
-    
-    async def get_chat_events(self, chat_id: str) -> List[Dict[str, Any]]:
-        """Get all events for a chat."""
-        try:
-            events = await self.db.events.find({"chat_id": chat_id}).to_list(length=None)
-            for event in events:
-                event["_id"] = str(event["_id"])
-            return events
-        except Exception as e:
-            print(f"Error getting chat events: {e}")
-            return []
-    
-    # Conversation State Management
-    async def save_conversation_state(self, chat_id: str, state: Dict[str, Any]) -> bool:
+    async def save_conversation_state(self, chat_id: str, state: dict):
         """Save conversation state for a chat."""
         try:
-            result = await self.db.chats.update_one(
-                {"_id": ObjectId(chat_id)},
-                {
-                    "$set": {
-                        "conversation_state": state,
-                        "updated_at": datetime.utcnow()
-                    }
+            if self.connected and self.db is not None:
+                collection = await self.get_collection("conversations")
+                document = {
+                    "chat_id": chat_id,
+                    "state": state,
+                    "updated_at": datetime.utcnow()
                 }
-            )
-            return result.modified_count > 0
+                
+                # Upsert: update if exists, insert if not
+                result = await collection.replace_one(
+                    {"chat_id": chat_id},
+                    document,
+                    upsert=True
+                )
+                return result.acknowledged
+            else:
+                # Fallback to in-memory storage
+                if not hasattr(self, '_memory_store'):
+                    self._memory_store = {}
+                self._memory_store[chat_id] = {
+                    "state": state,
+                    "updated_at": datetime.utcnow()
+                }
+                return True
         except Exception as e:
-            print(f"Error saving conversation state: {e}")
+            logger.error(f"Error saving conversation state: {e}")
             return False
     
-    async def get_conversation_state(self, chat_id: str) -> Optional[Dict[str, Any]]:
+    async def get_conversation_state(self, chat_id: str):
         """Get conversation state for a chat."""
         try:
-            chat = await self.db.chats.find_one(
-                {"_id": ObjectId(chat_id)},
-                {"conversation_state": 1}
-            )
-            return chat.get("conversation_state") if chat else None
+            if self.connected and self.db is not None:
+                collection = await self.get_collection("conversations")
+                document = await collection.find_one({"chat_id": chat_id})
+                
+                if document:
+                    return document.get("state")
+                return None
+            else:
+                # Fallback to in-memory storage
+                if hasattr(self, '_memory_store') and chat_id in self._memory_store:
+                    return self._memory_store[chat_id].get("state")
+                return None
         except Exception as e:
-            print(f"Error getting conversation state: {e}")
+            logger.error(f"Error getting conversation state: {e}")
             return None
 
-# Global MongoDB service instance
+# Global instance
 mongodb_service = MongoDBService()
