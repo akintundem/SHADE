@@ -12,7 +12,7 @@ from external.google_apis import GoogleAPIService
 from knowledge.rag_gateway import RAGGateway
 from knowledge.vector_store import VectorStore
 from knowledge.embedding_pipeline import EmbeddingPipeline
-from tools.validation import EventValidator
+from .validation import EventValidator
 
 # Global client instance
 _java_client = None
@@ -190,6 +190,7 @@ async def search_venues_google(
         "message": f"Here are venues around {area} that fit your event.",
         "ui": {"cards": venues, "nextStep": {"prompt": "Select a venue or send an inquiry.", "suggestedActions": ["Select Venue", "Send Inquiry"]}}
     }
+
 @tool
 async def start_event_creation(
     name: str,

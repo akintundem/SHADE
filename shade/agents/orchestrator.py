@@ -38,19 +38,19 @@ class MasterOrchestrator:
     def _initialize_agents(self):
         """Initialize all specialized agents."""
         self.agents = {
-            "event": EnhancedEventAgent(message_bus=self.message_bus),
-            "budget": BudgetAgent(message_bus=self.message_bus),
-            "venue": VenueAgent(message_bus=self.message_bus),
-            "vendor": VendorAgent(message_bus=self.message_bus),
-            "risk": RiskAgent(message_bus=self.message_bus),
-            "attendee": AttendeeAgent(message_bus=self.message_bus),
-            "weather": WeatherAgent(message_bus=self.message_bus),
-            "communication": CommunicationAgent(message_bus=self.message_bus)
+            "event": EnhancedEventAgent(message_bus=self.message_bus)
         }
         
         # Setup each agent
         for agent in self.agents.values():
-            agent.setup_agent()
+            # Some agents may require async setup; handle both
+            setup = getattr(agent, "setup_agent", None)
+            if callable(setup):
+                result = setup()
+                if hasattr(result, "__await__"):
+                    # If setup_agent is async in some implementations
+                    import asyncio as _asyncio
+                    _asyncio.get_event_loop().run_until_complete(result)
             
         logger.info(f"Initialized {len(self.agents)} specialized agents with communication")
     

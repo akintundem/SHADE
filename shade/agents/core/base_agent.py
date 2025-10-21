@@ -6,7 +6,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
-from .communication import CommunicationProtocol, MessageBus, AgentMessage, MessageType, MessagePriority
+from ..shared.communication import CommunicationProtocol, MessageBus, AgentMessage, MessageType, MessagePriority
 import asyncio
 import logging
 
@@ -16,9 +16,11 @@ logger = logging.getLogger(__name__)
 class BaseAgent(ABC):
     """Base class for all specialized agents."""
     
-    def __init__(self, agent_name: str, model_name: str = "gpt-4o", temperature: float = 0.7, message_bus: Optional[MessageBus] = None):
+    def __init__(self, agent_name: str, model_name: str = "gpt-4o", temperature: float = 0.7, 
+                 message_bus: Optional[MessageBus] = None, config: Optional[Any] = None):
         """Initialize the base agent."""
         self.agent_name = agent_name
+        self.config = config
         self.model = ChatOpenAI(model=model_name, temperature=temperature)
         self.model_with_tools = None
         self.tools = []
@@ -29,7 +31,7 @@ class BaseAgent(ABC):
         self.communication_protocol = None
         
     @abstractmethod
-    def get_system_prompt(self) -> str:
+    def get_system_prompt(self, context: Dict[str, Any] = None) -> str:
         """Get the system prompt for this agent."""
         pass
     
@@ -43,7 +45,7 @@ class BaseAgent(ABC):
         """Get the RAG system for this agent."""
         pass
     
-    def setup_agent(self):
+    async def setup_agent(self):
         """Setup the agent with tools and RAG."""
         self.tools = self.get_tools()
         self.model_with_tools = self.model.bind_tools(self.tools)
@@ -53,7 +55,7 @@ class BaseAgent(ABC):
         if self.message_bus:
             self.communication_protocol = CommunicationProtocol(self.agent_name, self.message_bus)
             # Communication protocol will be started when needed
-        
+    
     async def process_message(self, message: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """Process a message with this agent."""
         try:
@@ -62,13 +64,11 @@ class BaseAgent(ABC):
             try:
                 import inspect as _inspect
                 sig = _inspect.signature(system_prompt_fn)
-                # If method accepts a 'context' parameter (besides self), pass it; otherwise call without
                 if len(sig.parameters) >= 2:
                     system_prompt = system_prompt_fn(context)
                 else:
                     system_prompt = system_prompt_fn()
             except Exception:
-                # Safe fallback
                 try:
                     system_prompt = system_prompt_fn(context)
                 except Exception:
@@ -323,3 +323,19 @@ class BaseAgent(ABC):
                 suggestions.append("Choose entertainment")
         
         return suggestions[:3]  # Return top 3 suggestions
+    
+    async def cleanup(self):
+        """Cleanup agent resources."""
+        try:
+            if self.communication_protocol:
+                await self.communication_protocol.cleanup()
+            
+            # Clear conversation memory
+            self.conversation_memory.clear()
+            
+            # Clear agent state
+            self.agent_state.clear()
+            
+            logger.info(f"Cleaned up agent: {self.agent_name}")
+        except Exception as e:
+            logger.error(f"Error cleaning up agent {self.agent_name}: {e}")
