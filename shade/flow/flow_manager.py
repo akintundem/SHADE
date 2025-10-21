@@ -11,6 +11,8 @@ from .routing_node import RoutingNode
 from .aggregator_node import AggregatorNode
 from .shared_context import SharedContextMemory
 from .observability import ObservabilityHooks
+from .workflow_orchestrator import WorkflowOrchestrator
+from .agent_coordinator import AgentCoordinator
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,8 @@ class FlowState(TypedDict):
     final_response: Optional[str]
     metadata: Dict[str, Any]
     timestamp: str
+    workflow_context: Optional[Dict[str, Any]]
+    workflow_execution_id: Optional[str]
 
 
 class FlowManager:
@@ -40,8 +44,13 @@ class FlowManager:
         self.observability = ObservabilityHooks()
         self.routing_node = RoutingNode(domain_agents, shared_context)
         self.aggregator_node = AggregatorNode(shared_context)
+        self.workflow_orchestrator = WorkflowOrchestrator()
+        self.agent_coordinator = AgentCoordinator(domain_agents)
         self.graph = None
         self._build_graph()
+        
+        # Set up coordination between orchestrator and coordinator
+        self.workflow_orchestrator.set_agent_coordinator(self.agent_coordinator)
         
     def _build_graph(self):
         """Build the LangGraph workflow."""
@@ -159,6 +168,9 @@ class FlowManager:
     async def process_request(self, message: str, user_id: str, chat_id: str, event_id: Optional[str] = None) -> Dict[str, Any]:
         """Process a request through the LangGraph flow."""
         try:
+            # Check if this is a workflow request
+            workflow_context = await self._check_workflow_request(message, user_id, chat_id)
+            
             # Create initial state
             initial_state: FlowState = {
                 "messages": [HumanMessage(content=message)],
@@ -174,7 +186,9 @@ class FlowManager:
                     "request_id": f"{user_id}_{chat_id}_{datetime.utcnow().timestamp()}",
                     "start_time": datetime.utcnow().isoformat()
                 },
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
+                "workflow_context": workflow_context,
+                "workflow_execution_id": None
             }
             
             # Execute the graph
@@ -211,11 +225,71 @@ class FlowManager:
                 "multi_agent": False
             }
     
+    async def _check_workflow_request(self, message: str, user_id: str, chat_id: str) -> Optional[Dict[str, Any]]:
+        """Check if this is a workflow request and return workflow context."""
+        message_lower = message.lower()
+        
+        # Check for workflow keywords
+        workflow_keywords = ["workflow", "plan", "start planning", "begin planning", "create workflow"]
+        if any(keyword in message_lower for keyword in workflow_keywords):
+            # Determine event type from context
+            context = await self.shared_context.get_context(user_id, chat_id)
+            event_type = context.get("current_event", {}).get("eventType", "UNKNOWN")
+            
+            # Get workflow recommendations
+            recommendations = await self.workflow_orchestrator.get_workflow_recommendations(event_type, context)
+            
+            return {
+                "is_workflow_request": True,
+                "event_type": event_type,
+                "recommendations": recommendations,
+                "available_templates": await self.workflow_orchestrator.get_available_templates()
+            }
+        
+        return None
+    
+    async def start_workflow(self, template_id: str, user_id: str, chat_id: str, context: Dict[str, Any]) -> str:
+        """Start a workflow execution."""
+        try:
+            execution_id = await self.workflow_orchestrator.start_workflow(template_id, context, user_id, chat_id)
+            logger.info(f"Started workflow {execution_id} for template {template_id}")
+            return execution_id
+        except Exception as e:
+            logger.error(f"Error starting workflow: {e}")
+            raise
+    
+    async def get_workflow_status(self, execution_id: str) -> Dict[str, Any]:
+        """Get workflow execution status."""
+        try:
+            return await self.workflow_orchestrator.get_workflow_status(execution_id)
+        except Exception as e:
+            logger.error(f"Error getting workflow status: {e}")
+            return {"error": str(e)}
+    
+    async def resume_workflow(self, execution_id: str, user_input: Dict[str, Any]) -> bool:
+        """Resume a paused workflow."""
+        try:
+            await self.workflow_orchestrator.resume_workflow(execution_id, user_input)
+            return True
+        except Exception as e:
+            logger.error(f"Error resuming workflow: {e}")
+            return False
+    
+    async def get_available_workflows(self) -> List[Dict[str, Any]]:
+        """Get available workflow templates."""
+        try:
+            return await self.workflow_orchestrator.get_available_templates()
+        except Exception as e:
+            logger.error(f"Error getting available workflows: {e}")
+            return []
+    
     async def get_flow_stats(self) -> Dict[str, Any]:
         """Get flow manager statistics."""
         return {
             "domain_agents": list(self.domain_agents.keys()),
             "shared_context_stats": await self.shared_context.get_stats(),
             "observability_stats": self.observability.get_stats(),
-            "graph_compiled": self.graph is not None
+            "graph_compiled": self.graph is not None,
+            "workflow_orchestrator_available": self.workflow_orchestrator is not None,
+            "agent_coordinator_available": self.agent_coordinator is not None
         }

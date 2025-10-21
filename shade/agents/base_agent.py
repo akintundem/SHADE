@@ -57,9 +57,10 @@ class BaseAgent(ABC):
     async def process_message(self, message: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """Process a message with this agent."""
         try:
-            # Build messages starting with system prompt
+            # Build messages starting with system prompt (with dynamic context)
+            system_prompt = self.get_system_prompt(context) if hasattr(self, 'get_system_prompt') and callable(getattr(self, 'get_system_prompt')) else self.get_system_prompt()
             messages = [
-                SystemMessage(content=self.get_system_prompt()),
+                SystemMessage(content=system_prompt),
             ]
             
             # Add conversation history (keep only non-tool messages to avoid API errors)
@@ -211,3 +212,87 @@ class BaseAgent(ABC):
             return None
         
         return await self.communication_protocol.query_agent(recipient, query_content, priority)
+    
+    async def store_interaction(self, interaction_data: Dict[str, Any]) -> None:
+        """Store interaction data for learning."""
+        try:
+            # This would be implemented by each agent's RAG system
+            if self.rag_system and hasattr(self.rag_system, 'store_interaction_pattern'):
+                await self.rag_system.store_interaction_pattern(
+                    interaction_data.get("event_type", "UNKNOWN"),
+                    interaction_data.get("planning_phase", "general"),
+                    interaction_data.get("user_action", ""),
+                    interaction_data.get("agent_response", ""),
+                    interaction_data.get("success_metrics", {}),
+                    interaction_data.get("context", {})
+                )
+        except Exception as e:
+            logger.error(f"Error storing interaction: {e}")
+    
+    async def get_workflow_context(self) -> Dict[str, Any]:
+        """Get workflow context for coordination."""
+        return {
+            "agent_name": self.agent_name,
+            "conversation_length": len(self.conversation_memory),
+            "has_rag": self.rag_system is not None,
+            "tools_available": [tool.name for tool in self.tools]
+        }
+    
+    async def validate_tool_result(self, tool_name: str, tool_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate tool result and provide feedback."""
+        try:
+            # Basic validation - can be overridden by specific agents
+            if "error" in tool_result:
+                return {
+                    "is_valid": False,
+                    "message": f"Tool {tool_name} failed: {tool_result['error']}",
+                    "suggestion": "Please try again or provide different parameters"
+                }
+            
+            return {
+                "is_valid": True,
+                "message": f"Tool {tool_name} executed successfully",
+                "suggestion": None
+            }
+        except Exception as e:
+            return {
+                "is_valid": False,
+                "message": f"Error validating tool result: {e}",
+                "suggestion": "Please try again"
+            }
+    
+    async def suggest_next_action(self, context: Dict[str, Any]) -> List[str]:
+        """Suggest next actions based on context."""
+        suggestions = []
+        
+        # Basic suggestions based on agent type
+        if "event" in self.agent_name.lower():
+            suggestions.extend([
+                "Create or update event details",
+                "Check event status",
+                "Add venue requirements"
+            ])
+        elif "budget" in self.agent_name.lower():
+            suggestions.extend([
+                "Set budget constraints",
+                "Track expenses",
+                "Calculate costs"
+            ])
+        elif "venue" in self.agent_name.lower():
+            suggestions.extend([
+                "Search for venues",
+                "Compare venue options",
+                "Book venue"
+            ])
+        
+        # Add context-specific suggestions
+        if context.get("event_type"):
+            event_type = context["event_type"]
+            if event_type == "WEDDING":
+                suggestions.append("Plan wedding timeline")
+            elif event_type == "CONFERENCE":
+                suggestions.append("Setup technical requirements")
+            elif event_type == "BIRTHDAY":
+                suggestions.append("Choose entertainment")
+        
+        return suggestions[:3]  # Return top 3 suggestions

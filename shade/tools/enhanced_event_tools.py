@@ -12,6 +12,7 @@ from external.google_apis import GoogleAPIService
 from knowledge.rag_gateway import RAGGateway
 from knowledge.vector_store import VectorStore
 from knowledge.embedding_pipeline import EmbeddingPipeline
+from tools.validation import EventValidator
 
 # Global client instance
 _java_client = None
@@ -42,6 +43,7 @@ async def _write_event_fact(event: Dict[str, Any], summary: str):
 # External service singletons
 _weather_api = WeatherAPIService()
 _google_api = GoogleAPIService()
+_validator = EventValidator()
 _ext_initialized = False
 
 async def _ensure_ext_initialized():
@@ -219,6 +221,25 @@ async def start_event_creation(
         if description:
             event_data["description"] = description
         
+        # Validate event data before creation
+        validation_report = await _validator.validate_event_creation(event_data)
+        
+        # Check for critical validation issues
+        if not validation_report.is_valid:
+            critical_issues = validation_report.critical_issues
+            if critical_issues:
+                return {
+                    "success": False,
+                    "error": "Validation failed",
+                    "message": f"I found some issues that need to be fixed: {'; '.join(critical_issues)}",
+                    "validation_report": {
+                        "is_valid": False,
+                        "critical_issues": critical_issues,
+                        "warnings": validation_report.warnings,
+                        "suggestions": validation_report.suggestions
+                    }
+                }
+        
         # Create the event immediately
         client = get_java_client()
         result = await client.create_event(event_data, "550e8400-e29b-41d4-a716-446655440000")
@@ -227,6 +248,11 @@ async def start_event_creation(
             event = result.get("event", {})
             global _current_event_id
             _current_event_id = event.get("id")
+            
+            # Get predictive warnings and best practices
+            predictions = await _validator.predict_issues(event_data)
+            best_practices = _validator.get_best_practices(event_type)
+            seasonal_recs = _validator.get_seasonal_recommendations(event_data)
             
             # Create human-like confirmation
             human_date = format_datetime_for_human(start_datetime)
@@ -254,6 +280,24 @@ Would you like to add:
 
 Just let me know what you'd like to focus on next! 😊
 """
+            
+            # Add validation warnings if any
+            if validation_report.warnings:
+                confirmation += f"\n⚠️ **Planning Notes:**\n"
+                for warning in validation_report.warnings:
+                    confirmation += f"• {warning}\n"
+            
+            # Add predictive warnings
+            if predictions:
+                confirmation += f"\n🔮 **Heads Up:**\n"
+                for prediction in predictions:
+                    confirmation += f"• {prediction}\n"
+            
+            # Add best practices
+            if best_practices:
+                confirmation += f"\n💡 **Best Practices for {event_type.replace('_', ' ').title()}:**\n"
+                for practice in best_practices[:3]:  # Show top 3
+                    confirmation += f"• {practice}\n"
             
             # Store fact in RAG
             await _write_event_fact(event, f"Created event '{name}' on {human_date} ({event_type}).")
@@ -368,8 +412,35 @@ async def enhance_event_details(
                 "message": "I need some details to update your event. What would you like to add or change?"
             }
         
-        # Update the event
+        # Get current event data for validation
         client = get_java_client()
+        current_event_result = await client.get_event(_current_event_id)
+        
+        if current_event_result.get("success"):
+            current_event = current_event_result.get("event", {})
+            # Merge current data with updates for validation
+            updated_event_data = {**current_event, **update_data}
+            
+            # Validate the updated event data
+            validation_report = await _validator.validate_event_update(updated_event_data, current_event)
+            
+            # Check for critical validation issues
+            if not validation_report.is_valid:
+                critical_issues = validation_report.critical_issues
+                if critical_issues:
+                    return {
+                        "success": False,
+                        "error": "Validation failed",
+                        "message": f"I found some issues with the updates: {'; '.join(critical_issues)}",
+                        "validation_report": {
+                            "is_valid": False,
+                            "critical_issues": critical_issues,
+                            "warnings": validation_report.warnings,
+                            "suggestions": validation_report.suggestions
+                        }
+                    }
+        
+        # Update the event
         result = await client.update_event(_current_event_id, update_data, "550e8400-e29b-41d4-a716-446655440000")
         
         if result.get("success"):

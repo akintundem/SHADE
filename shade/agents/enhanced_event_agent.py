@@ -18,9 +18,9 @@ class EnhancedEventAgent(BaseAgent):
     def __init__(self, message_bus=None):
         super().__init__("Enhanced Event Agent", "gpt-4o", 0.7, message_bus)
     
-    def get_system_prompt(self) -> str:
-        """Get the system prompt for the Enhanced Event Agent."""
-        return """
+    def get_system_prompt(self, context: Dict[str, Any] = None) -> str:
+        """Get the system prompt for the Enhanced Event Agent with dynamic context."""
+        base_prompt = """
         You are a professional event planner who creates amazing events through natural conversation! 🎉
         
         **YOUR WORKFLOW:**
@@ -65,6 +65,77 @@ class EnhancedEventAgent(BaseAgent):
         - Be helpful and suggest next steps
         - Keep responses conversational and friendly
         """
+        
+        # Add dynamic context if available
+        if context:
+            dynamic_context = self._build_dynamic_context(context)
+            if dynamic_context:
+                base_prompt += f"\n\n**CURRENT CONTEXT:**\n{dynamic_context}"
+        
+        return base_prompt
+    
+    def _build_dynamic_context(self, context: Dict[str, Any]) -> str:
+        """Build dynamic context for the system prompt."""
+        context_parts = []
+        
+        # Add event type specific guidance
+        event_type = context.get("event_type")
+        if event_type:
+            event_guidance = self._get_event_type_guidance(event_type)
+            if event_guidance:
+                context_parts.append(f"**{event_type} PLANNING GUIDANCE:**\n{event_guidance}")
+        
+        # Add learned patterns
+        learned_patterns = context.get("learned_patterns", [])
+        if learned_patterns:
+            patterns_text = "\n".join([f"- {pattern}" for pattern in learned_patterns[:3]])
+            context_parts.append(f"**SUCCESSFUL PATTERNS:**\n{patterns_text}")
+        
+        # Add validation context
+        validation_context = context.get("validation_context")
+        if validation_context:
+            context_parts.append(f"**VALIDATION NOTES:**\n{validation_context}")
+        
+        # Add workflow context
+        workflow_context = context.get("workflow_context")
+        if workflow_context:
+            context_parts.append(f"**WORKFLOW STATUS:**\n{workflow_context}")
+        
+        return "\n\n".join(context_parts)
+    
+    def _get_event_type_guidance(self, event_type: str) -> str:
+        """Get event type specific guidance."""
+        guidance = {
+            "WEDDING": """
+            - Start with guest count and budget
+            - Book venue 12-18 months in advance
+            - Consider photographer, catering, and flowers
+            - Plan for weather backup if outdoor ceremony
+            - Send save-the-dates 6-8 months before
+            """,
+            "CONFERENCE": """
+            - Define technical requirements early
+            - Book venue 6-12 months in advance
+            - Plan for dietary restrictions
+            - Test all AV equipment beforehand
+            - Consider accessibility needs
+            """,
+            "BIRTHDAY": """
+            - Choose age-appropriate theme
+            - Book entertainment 2-4 weeks ahead
+            - Plan activities for the age group
+            - Consider dietary restrictions
+            - Send invitations 2-3 weeks before
+            """,
+            "CORPORATE": """
+            - Define objectives and agenda
+            - Book venue 3-6 months in advance
+            - Plan for security if needed
+            - Consider parking and transportation
+            - Have backup technical support
+            """
+        }
+        return guidance.get(event_type, "")
     
     def get_tools(self) -> List[Any]:
         """Get tools available to the Enhanced Event Agent."""

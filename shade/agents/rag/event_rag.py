@@ -1,7 +1,12 @@
 """Event RAG system for event planning knowledge."""
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from datetime import datetime
 from .base_rag import BaseRAGSystem
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+from knowledge.interaction_store import InteractionPatternStore, InteractionPattern
 
 
 class EventRAGSystem(BaseRAGSystem):
@@ -9,6 +14,7 @@ class EventRAGSystem(BaseRAGSystem):
     
     def __init__(self):
         super().__init__("event_planning")
+        self.interaction_store = InteractionPatternStore()
         self._initialize_knowledge_base()
     
     def _initialize_knowledge_base(self):
@@ -67,3 +73,48 @@ class EventRAGSystem(BaseRAGSystem):
             
         except Exception as e:
             return f"Error retrieving event planning context: {str(e)}"
+    
+    async def store_interaction_pattern(self, event_type: str, planning_phase: str, user_action: str, agent_response: str, success_metrics: Dict[str, Any], context: Dict[str, Any]) -> str:
+        """Store a successful interaction pattern."""
+        try:
+            pattern = InteractionPattern(
+                event_type=event_type,
+                planning_phase=planning_phase,
+                user_action=user_action,
+                agent_response=agent_response,
+                success_metrics=success_metrics,
+                context=context,
+                timestamp=datetime.utcnow().isoformat(),
+                pattern_id=""
+            )
+            return await self.interaction_store.store_interaction_pattern(pattern)
+        except Exception as e:
+            return f"Error storing interaction pattern: {str(e)}"
+    
+    async def get_similar_patterns(self, event_type: str, planning_phase: str, context: Dict[str, Any], limit: int = 5) -> List[InteractionPattern]:
+        """Get similar interaction patterns."""
+        try:
+            return await self.interaction_store.get_similar_patterns(event_type, planning_phase, context, limit)
+        except Exception as e:
+            return []
+    
+    async def get_recommended_next_steps(self, event_type: str, current_phase: str, completed_actions: List[str]) -> List[str]:
+        """Get recommended next steps based on successful patterns."""
+        try:
+            return await self.interaction_store.get_recommended_next_steps(event_type, current_phase, completed_actions)
+        except Exception as e:
+            return []
+    
+    async def get_best_practices(self, event_type: str, planning_phase: str) -> List[str]:
+        """Get best practices for event type and phase."""
+        try:
+            return await self.interaction_store.get_best_practices(event_type, planning_phase)
+        except Exception as e:
+            return []
+    
+    async def learn_from_success(self, event_type: str, completed_sequence: List[str], success_metrics: Dict[str, Any]) -> None:
+        """Learn from a successful planning sequence."""
+        try:
+            await self.interaction_store.learn_from_success(event_type, completed_sequence, success_metrics)
+        except Exception as e:
+            pass  # Fail silently for learning
