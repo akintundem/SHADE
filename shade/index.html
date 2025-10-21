@@ -3,196 +3,558 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shade AI Agent - Full Functionality</title>
+    <title>Shade - Your AI Event Planner</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background: #f5f5f5;
+            background: #f8f9fa;
+            height: 100vh;
+            overflow: hidden;
         }
-        .container {
-            background: white;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 30px;
-        }
+
         .chat-container {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            height: 400px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        /* Header */
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            background: white;
+            border-bottom: 1px solid #e9ecef;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .back-button {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #6c757d;
+        }
+
+        .profile-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .profile-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .profile-info h2 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #212529;
+            margin: 0;
+        }
+
+        .profile-info p {
+            font-size: 14px;
+            color: #6c757d;
+            margin: 0;
+        }
+
+        .theme-toggle {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #6c757d;
+        }
+
+        /* Messages Area */
+        .messages-container {
+            flex: 1;
             overflow-y: auto;
-            padding: 15px;
-            margin-bottom: 20px;
-            background: #fafafa;
+            padding: 20px;
+            background: #f8f9fa;
         }
+
         .message {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 8px;
-            max-width: 80%;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
         }
-        .user {
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .message.user .message-avatar {
+            background: #e9ecef;
+            color: #6c757d;
+        }
+
+        .message.assistant .message-avatar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .message-content {
+            max-width: 80%;
+            background: white;
+            padding: 12px 16px;
+            border-radius: 18px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .message.user .message-content {
             background: #007bff;
             color: white;
-            margin-left: auto;
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 4px;
             text-align: right;
         }
-        .assistant {
-            background: #e9ecef;
-            color: #333;
+
+        .message.user .message-time {
+            text-align: left;
         }
-        .input-container {
+
+        /* Venue Cards */
+        .venue-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin: 12px 0;
+        }
+
+        .venue-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            position: relative;
+        }
+
+        .venue-rating {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
             display: flex;
-            gap: 10px;
+            align-items: center;
+            gap: 4px;
         }
-        input[type="text"] {
-            flex: 1;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
+
+        .venue-details {
+            padding: 16px;
+        }
+
+        .venue-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #212529;
+            margin-bottom: 8px;
+        }
+
+        .venue-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+
+        .venue-info-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #6c757d;
+        }
+
+        .venue-price {
             font-size: 16px;
+            font-weight: 600;
+            color: #28a745;
         }
-        button {
-            padding: 12px 24px;
+
+        .venue-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .action-button {
+            flex: 1;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .action-button.primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .action-button.secondary {
+            background: #f8f9fa;
+            color: #6c757d;
+            border: 1px solid #dee2e6;
+        }
+
+        .action-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        /* Email Template */
+        .email-template {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin: 12px 0;
+        }
+
+        .email-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .email-header h3 {
+            font-size: 16px;
+            color: #212529;
+            margin: 0;
+        }
+
+        .email-close {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: #6c757d;
+        }
+
+        .email-field {
+            margin-bottom: 16px;
+        }
+
+        .email-field label {
+            display: block;
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .email-field input,
+        .email-field textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #f8f9fa;
+        }
+
+        .email-field textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .email-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .email-send-button {
+            flex: 1;
+            background: #212529;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .email-disclaimer {
+            font-size: 12px;
+            color: #6c757d;
+            text-align: center;
+            margin-top: 12px;
+        }
+
+        /* Chips */
+        .chips-container {
+            display: flex;
+            gap: 8px;
+            margin: 12px 0;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .chip {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .chip:hover {
+            background: #f8f9fa;
+            border-color: #007bff;
+        }
+
+        .chip.selected {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        /* Input Area */
+        .input-container {
+            padding: 16px 20px;
+            background: white;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .chips-input {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #f8f9fa;
+            border-radius: 24px;
+            padding: 8px 16px;
+        }
+
+        .message-input {
+            flex: 1;
+            border: none;
+            background: none;
+            outline: none;
+            font-size: 16px;
+            padding: 8px 0;
+        }
+
+        .input-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mic-button {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: #6c757d;
+            padding: 8px;
+        }
+
+        .send-button {
             background: #007bff;
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
             font-size: 16px;
         }
-        button:hover {
-            background: #0056b3;
-        }
-        button:disabled {
-            background: #ccc;
+
+        .send-button:disabled {
+            background: #6c757d;
             cursor: not-allowed;
         }
-        .examples {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 6px;
+
+        /* Loading Animation */
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #6c757d;
+            font-size: 14px;
         }
-        .examples h3 {
-            margin-top: 0;
-            color: #495057;
+
+        .loading-dots {
+            display: flex;
+            gap: 4px;
         }
-        .example {
-            margin: 5px 0;
-            padding: 5px 10px;
-            background: white;
-            border-radius: 4px;
-            cursor: pointer;
-            border: 1px solid #dee2e6;
+
+        .loading-dot {
+            width: 6px;
+            height: 6px;
+            background: #6c757d;
+            border-radius: 50%;
+            animation: loading 1.4s infinite ease-in-out;
         }
-        .example:hover {
-            background: #e9ecef;
+
+        .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes loading {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
         }
-        .status {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 20px;
+
+        /* Responsive Design */
+        @media (max-width: 480px) {
+            .chat-container {
+                max-width: 100%;
+            }
+            
+            .venue-actions {
+                flex-direction: column;
+            }
+            
+            .email-actions {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🤖 Shade AI Agent - Real LangGraph Agent</h1>
-        
-        <div class="status">
-            <strong>✅ Status:</strong> Real LangGraph agent with intelligent reasoning, tool selection, and comprehensive event planning!
+    <div class="chat-container">
+        <!-- Header -->
+        <div class="chat-header">
+            <button class="back-button">←</button>
+            <div class="profile-section">
+                <div class="profile-avatar">🎉</div>
+                <div class="profile-info">
+                    <h2>Shade</h2>
+                    <p>Your AI Event Planner</p>
+                </div>
+            </div>
+            <button class="theme-toggle">🌙</button>
         </div>
-        
-        <div class="chat-container" id="chatContainer">
+
+        <!-- Messages Container -->
+        <div class="messages-container" id="messagesContainer">
             <div class="message assistant">
-                <div>Hello! I'm Shade, your AI event planning agent! 🎉</div>
-                <div>I can help you with comprehensive event planning:</div>
-                <div>• <strong>Create & Manage Events</strong> - Full event lifecycle</div>
-                <div>• <strong>Find & Book Venues</strong> - Search with detailed results</div>
-                <div>• <strong>Coordinate Vendors</strong> - Find caterers, photographers, etc.</div>
-                <div>• <strong>Manage Budgets</strong> - Track expenses and create budgets</div>
-                <div>• <strong>Handle Guest Lists</strong> - Manage attendees and RSVPs</div>
-                <div>• <strong>Create Timelines</strong> - Build detailed event schedules</div>
-                <div>• <strong>Assess Risks</strong> - Weather, capacity, and other risks</div>
-                <div>• <strong>Complex Planning</strong> - Multi-step event coordination</div>
-                <div>Now powered by real LangGraph agent with intelligent reasoning! 🧠</div>
+                <div class="message-avatar">🎉</div>
+                <div class="message-content">
+                    <div>Hey there! 👋 I'm Shade, and I'm so excited to help you plan something special! Whether it's a dreamy wedding, an unforgettable birthday bash, or a professional corporate event, I've got you covered from start to finish. 🎉</div>
+                    <div class="message-time">12:18 AM</div>
+                </div>
             </div>
         </div>
-        
+
+        <!-- Input Container -->
         <div class="input-container">
-            <input type="text" id="messageInput" placeholder="Try: 'Plan my wedding for 200 people'..." />
-            <button id="sendButton">Send</button>
-            <button id="resetButton" style="background: #dc3545;">Reset</button>
-        </div>
-        
-        <div class="examples">
-            <h3>Try these examples (now with real AI reasoning!):</h3>
-            <div class="example" onclick="sendExample('Plan my wedding for 200 people in June with $50k budget')">
-                💒 Plan my wedding for 200 people in June with $50k budget
+            <div class="chips-input" id="chipsInput">
+                <!-- Chips will be dynamically added here -->
             </div>
-            <div class="example" onclick="sendExample('Create a tech conference event')">
-                🏢 Create a tech conference event
-            </div>
-            <div class="example" onclick="sendExample('Find venues for my birthday party')">
-                🎂 Find venues for my birthday party
-            </div>
-            <div class="example" onclick="sendExample('Search for catering vendors')">
-                🍽️ Search for catering vendors
-            </div>
-            <div class="example" onclick="sendExample('Check the weather for my outdoor event')">
-                🌤️ Check the weather for my outdoor event
-            </div>
-            <div class="example" onclick="sendExample('Create a budget for my event')">
-                💰 Create a budget for my event
-            </div>
-            <div class="example" onclick="sendExample('Manage my guest list')">
-                👥 Manage my guest list
-            </div>
-            <div class="example" onclick="sendExample('Create a timeline for my event')">
-                📅 Create a timeline for my event
-            </div>
-            <div class="example" onclick="sendExample('Assess risks for my event')">
-                ⚠️ Assess risks for my event
+            <div class="input-wrapper">
+                <input type="text" class="message-input" id="messageInput" placeholder="Tell me about your event..." />
+                <div class="input-actions">
+                    <button class="mic-button">🎤</button>
+                    <button class="send-button" id="sendButton">✈</button>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        let chatContainer, messageInput, sendButton, resetButton;
-
-        function initializeApp() {
-            chatContainer = document.getElementById('chatContainer');
-            messageInput = document.getElementById('messageInput');
-            sendButton = document.getElementById('sendButton');
-            resetButton = document.getElementById('resetButton');
-
-            function addMessage(content, isUser = false) {
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
-                messageDiv.innerHTML = content.replace(/\\n/g, '<br>');
-                chatContainer.appendChild(messageDiv);
-                chatContainer.scrollTop = chatContainer.scrollHeight;
+        class ShadeChat {
+            constructor() {
+                this.messagesContainer = document.getElementById('messagesContainer');
+                this.messageInput = document.getElementById('messageInput');
+                this.sendButton = document.getElementById('sendButton');
+                this.chipsInput = document.getElementById('chipsInput');
+                this.isLoading = false;
+                
+                this.initializeEventListeners();
             }
 
-            async function sendMessage() {
-                const message = messageInput.value.trim();
-                if (!message) return;
+            initializeEventListeners() {
+                this.sendButton.addEventListener('click', () => this.sendMessage());
+                this.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+            }
 
-                addMessage(message, true);
-                messageInput.value = '';
-                sendButton.disabled = true;
-                sendButton.textContent = 'Sending...';
+            async sendMessage() {
+                const message = this.messageInput.value.trim();
+                if (!message || this.isLoading) return;
+
+                // Add user message
+                this.addMessage(message, true);
+                this.messageInput.value = '';
+                this.setLoading(true);
 
                 try {
                     const response = await fetch('/chat', {
@@ -205,28 +567,246 @@
                     });
 
                     const data = await response.json();
-                    addMessage(data.reply, false);
+                    
+                    // Handle structured response first
+                    if (data.structured_response) {
+                        this.handleStructuredResponse(data.structured_response);
+                    }
+
+                    // Only add assistant text message if there is a non-empty reply and no visual components
+                    const hasVisual = data.structured_response && (
+                        (data.structured_response.venue_cards && data.structured_response.venue_cards.length > 0) ||
+                        (data.structured_response.email_template) ||
+                        (data.structured_response.chips && data.structured_response.chips.length > 0) ||
+                        (data.structured_response.action_buttons && data.structured_response.action_buttons.length > 0)
+                    );
+
+                    if (data.reply && !hasVisual) {
+                        this.addMessage(data.reply, false);
+                    }
+                    
                 } catch (error) {
-                    addMessage('Error: ' + error.message, false);
+                    this.addMessage('Error: ' + error.message, false);
                 } finally {
-                    sendButton.disabled = false;
-                    sendButton.textContent = 'Send';
+                    this.setLoading(false);
                 }
             }
 
-            sendButton.onclick = sendMessage;
-            messageInput.onkeypress = (e) => {
-                if (e.key === 'Enter') sendMessage();
-            };
-            resetButton.onclick = () => {
-                chatContainer.innerHTML = '<div class="message assistant"><div>Chat reset! Ready for new messages.</div></div>';
-            };
+            addMessage(content, isUser = false) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+                
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar';
+                avatar.textContent = isUser ? '👤' : '🎉';
+                
+                const messageContent = document.createElement('div');
+                messageContent.className = 'message-content';
+                messageContent.innerHTML = content.replace(/\n/g, '<br>');
+                
+                const messageTime = document.createElement('div');
+                messageTime.className = 'message-time';
+                messageTime.textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                
+                messageContent.appendChild(messageTime);
+                messageDiv.appendChild(avatar);
+                messageDiv.appendChild(messageContent);
+                
+                this.messagesContainer.appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            handleStructuredResponse(structuredResponse) {
+                // Handle venue cards
+                if (structuredResponse.venue_cards && structuredResponse.venue_cards.length > 0) {
+                    structuredResponse.venue_cards.forEach(venue => {
+                        this.addVenueCard(venue);
+                    });
+                }
+
+                // Handle email template
+                if (structuredResponse.email_template) {
+                    this.addEmailTemplate(structuredResponse.email_template);
+                }
+
+                // Handle chips
+                if (structuredResponse.chips && structuredResponse.chips.length > 0) {
+                    this.addChips(structuredResponse.chips);
+                }
+
+                // Handle action buttons
+                if (structuredResponse.action_buttons && structuredResponse.action_buttons.length > 0) {
+                    this.addActionButtons(structuredResponse.action_buttons);
+                }
+            }
+
+            addVenueCard(venue) {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'venue-card';
+                cardDiv.innerHTML = `
+                    <img src="${venue.image_url || 'https://images.unsplash.com/photo-1519167758481-83f1426e4b3e?w=400'}" alt="${venue.name}" class="venue-image">
+                    <div class="venue-rating">
+                        ⭐ ${venue.rating} (${venue.review_count})
+                    </div>
+                    <div class="venue-details">
+                        <h3 class="venue-name">${venue.name}</h3>
+                        <div class="venue-info">
+                            <div class="venue-info-item">
+                                📍 ${venue.location}
+                            </div>
+                            <div class="venue-info-item">
+                                👥 ${venue.guest_capacity}
+                            </div>
+                        </div>
+                        <div class="venue-price">${venue.price_range}</div>
+                        <div class="venue-actions">
+                            <button class="action-button secondary" onclick="shadeChat.selectVenue('${venue.id}')">
+                                ❤️ Select Venue
+                            </button>
+                            <button class="action-button primary" onclick="shadeChat.sendInquiry('${venue.id}')">
+                                📧 Send Inquiry
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                this.messagesContainer.appendChild(cardDiv);
+                this.scrollToBottom();
+            }
+
+            addEmailTemplate(email) {
+                const emailDiv = document.createElement('div');
+                emailDiv.className = 'email-template';
+                emailDiv.innerHTML = `
+                    <div class="email-header">
+                        <h3>Review Email</h3>
+                        <button class="email-close" onclick="this.parentElement.parentElement.remove()">×</button>
+                    </div>
+                    <div class="email-field">
+                        <label>To</label>
+                        <input type="text" value="${email.to_name} <${email.to_email}>" readonly>
+                    </div>
+                    <div class="email-field">
+                        <label>Subject</label>
+                        <input type="text" value="${email.subject}" readonly>
+                    </div>
+                    <div class="email-field">
+                        <label>Message</label>
+                        <textarea readonly>${email.message}</textarea>
+                    </div>
+                    <div class="email-actions">
+                        <button class="email-send-button" onclick="shadeChat.sendEmail('${email.id}')">
+                            📧 Send Email
+                        </button>
+                    </div>
+                    <div class="email-disclaimer">
+                        This will be sent on your behalf to the venue.
+                    </div>
+                `;
+                
+                this.messagesContainer.appendChild(emailDiv);
+                this.scrollToBottom();
+            }
+
+            addChips(chips) {
+                this.chipsInput.innerHTML = '';
+                chips.forEach(chip => {
+                    const chipDiv = document.createElement('div');
+                    chipDiv.className = `chip ${chip.selected ? 'selected' : ''}`;
+                    chipDiv.innerHTML = `
+                        ${chip.icon ? `<span>${chip.icon}</span>` : ''}
+                        <span>${chip.label}</span>
+                    `;
+                    chipDiv.addEventListener('click', () => {
+                        this.selectChip(chip);
+                    });
+                    this.chipsInput.appendChild(chipDiv);
+                });
+            }
+
+            addActionButtons(buttons) {
+                const buttonContainer = document.createElement('div');
+                buttonContainer.className = 'venue-actions';
+                buttonContainer.style.marginTop = '12px';
+                
+                buttons.forEach(button => {
+                    const buttonEl = document.createElement('button');
+                    buttonEl.className = `action-button ${button.style}`;
+                    buttonEl.innerHTML = `
+                        ${button.icon ? `<span>${button.icon}</span>` : ''}
+                        <span>${button.label}</span>
+                    `;
+                    buttonEl.addEventListener('click', () => {
+                        this.handleAction(button.action);
+                    });
+                    buttonContainer.appendChild(buttonEl);
+                });
+                
+                this.messagesContainer.appendChild(buttonContainer);
+                this.scrollToBottom();
+            }
+
+            selectChip(chip) {
+                // Remove selected class from all chips
+                document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+                // Add selected class to clicked chip
+                event.target.closest('.chip').classList.add('selected');
+                
+                // Send message based on chip selection
+                this.messageInput.value = `Plan a ${chip.label.toLowerCase()}`;
+                this.sendMessage();
+            }
+
+            selectVenue(venueId) {
+                this.addMessage(`I've selected this venue for you! 🎉`, false);
+                // Here you would typically save the selection or trigger further actions
+            }
+
+            sendInquiry(venueId) {
+                this.addMessage(`I'll help you send an inquiry to this venue! 📧`, false);
+                // Here you would trigger the email template creation
+                this.messageInput.value = 'contact venue';
+                this.sendMessage();
+            }
+
+            sendEmail(emailId) {
+                this.addMessage(`Email sent successfully! ✅`, false);
+                // Here you would actually send the email
+            }
+
+            handleAction(action) {
+                switch(action) {
+                    case 'search_venues':
+                        this.messageInput.value = 'find venues';
+                        this.sendMessage();
+                        break;
+                    case 'filter_venues':
+                        this.addMessage('Filter options coming soon! 🔍', false);
+                        break;
+                    default:
+                        console.log('Action:', action);
+                }
+            }
+
+            setLoading(loading) {
+                this.isLoading = loading;
+                this.sendButton.disabled = loading;
+                this.sendButton.textContent = loading ? '⏳' : '✈';
+            }
+
+            scrollToBottom() {
+                this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+            }
         }
 
+        // Initialize the chat when the page loads
+        let shadeChat;
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initializeApp);
+            document.addEventListener('DOMContentLoaded', () => {
+                shadeChat = new ShadeChat();
+            });
         } else {
-            initializeApp();
+            shadeChat = new ShadeChat();
         }
     </script>
 </body>

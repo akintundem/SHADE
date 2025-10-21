@@ -184,6 +184,7 @@ class FlowManager:
             final_response = result.get("final_response", "I've processed your request.")
             domain_responses = result.get("domain_responses", {})
             metadata = result.get("metadata", {})
+            ui_payload = result.get("ui")
             
             # Determine which agents were used
             agents_used = list(domain_responses.keys())
@@ -197,6 +198,7 @@ class FlowManager:
                     "metadata": metadata,
                     "flow_complete": True
                 },
+                "ui": ui_payload,
                 "multi_agent": len(agents_used) > 1
             }
             

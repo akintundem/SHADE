@@ -39,10 +39,12 @@ class AggregatorNode:
                 domain = list(domain_responses.keys())[0]
                 response = domain_responses[domain]
                 final_response = self._extract_response_content(response)
+                ui_payload = self._extract_ui_payload(response)
                 
                 return {
                     **state,
                     "final_response": final_response,
+                    "ui": ui_payload,
                     "metadata": {
                         **state.get("metadata", {}),
                         "aggregation_method": "single_domain",
@@ -58,6 +60,7 @@ class AggregatorNode:
                 return {
                     **state,
                     "final_response": final_response,
+                    "ui": None,
                     "metadata": {
                         **state.get("metadata", {}),
                         "aggregation_method": "multi_domain",
@@ -139,6 +142,22 @@ class AggregatorNode:
             return response.content
         else:
             return str(response)
+
+    def _extract_ui_payload(self, response: Any) -> Any:
+        """Extract a structured UI payload from the domain response if present."""
+        # Direct UI on the response
+        if isinstance(response, dict) and "ui" in response:
+            return response["ui"]
+        # Search tool results for a ui field
+        if isinstance(response, dict) and "tool_results" in response:
+            try:
+                for tr in reversed(response["tool_results"]):
+                    res = tr.get("result") if isinstance(tr, dict) else None
+                    if isinstance(res, dict) and "ui" in res:
+                        return res["ui"]
+            except Exception:
+                pass
+        return None
     
     async def _prioritize_responses(self, domain_responses: Dict[str, Any]) -> List[tuple]:
         """Prioritize domain responses by importance."""

@@ -217,3 +217,39 @@ class JavaSpringAPIClient:
                 "message": f"Java Spring API is unreachable: {str(e)}"
             }
 
+    # ==================== ATTENDEE QUERIES ====================
+    async def list_attendees_by_event(self, event_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        List attendees for a given event.
+        """
+        try:
+            session = await self.get_session()
+            headers = {}
+            if user_id:
+                try:
+                    uuid.UUID(user_id)
+                    headers["X-User-Id"] = user_id
+                except ValueError:
+                    chatbot_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"chatbot-{user_id}"))
+                    headers["X-User-Id"] = chatbot_uuid
+            else:
+                headers["X-User-Id"] = "550e8400-e29b-41d4-a716-446655440000"
+
+            async with session.get(
+                f"{self.base_url.replace('/api/v1','')}/api/v1/attendees/event/{event_id}",
+                headers=headers
+            ) as response:
+                if response.status == 200:
+                    attendees = await response.json()
+                    logger.info(f"✅ Retrieved {len(attendees)} attendees for event {event_id}")
+                    return {"success": True, "attendees": attendees}
+                elif response.status == 404:
+                    return {"success": True, "attendees": []}
+                else:
+                    error_text = await response.text()
+                    logger.error(f"❌ Failed to fetch attendees: {response.status} - {error_text}")
+                    return {"success": False, "error": f"Failed to fetch attendees: {error_text}"}
+        except Exception as e:
+            logger.error(f"❌ Error listing attendees: {e}")
+            return {"success": False, "error": str(e)}
+

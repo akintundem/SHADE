@@ -6,7 +6,9 @@ from tools.enhanced_event_tools import (
     start_event_creation,
     enhance_event_details,
     get_event_info,
-    get_current_event_status
+    get_current_event_status,
+    check_event_weather,
+    search_venues_google
 )
 from .rag.event_rag import EventRAGSystem
 
@@ -70,7 +72,9 @@ class EnhancedEventAgent(BaseAgent):
             start_event_creation,
             enhance_event_details,
             get_event_info,
-            get_current_event_status
+            get_current_event_status,
+            check_event_weather,
+            search_venues_google
         ]
     
     def get_rag_system(self):

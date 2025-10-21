@@ -7,12 +7,49 @@ import json
 from datetime import datetime, timedelta
 sys.path.append('/Users/mayokun/Desktop/Event Planner Monolith/shade')
 from external.java_spring_api import JavaSpringAPIClient
+from external.weather_api import WeatherAPIService
+from external.google_apis import GoogleAPIService
+from knowledge.rag_gateway import RAGGateway
+from knowledge.vector_store import VectorStore
+from knowledge.embedding_pipeline import EmbeddingPipeline
 
 # Global client instance
 _java_client = None
 # Global event data storage for context passing
 _pending_event_data = None
 _current_event_id = None
+
+# Lightweight RAG for event facts
+_vector_store = VectorStore()
+_embedding = EmbeddingPipeline()
+_rag = RAGGateway(_vector_store, _embedding)
+_rag_initialized = False
+
+async def _ensure_rag_initialized():
+    global _rag_initialized
+    if not _rag_initialized:
+        await _vector_store.initialize()
+        await _embedding.initialize()
+        await _rag.initialize()
+        _rag_initialized = True
+
+async def _write_event_fact(event: Dict[str, Any], summary: str):
+    await _ensure_rag_initialized()
+    content = f"Event Fact: {summary}\nData: {json.dumps(event, default=str)}"
+    metadata = {"event_id": event.get("id"), "type": "event_fact"}
+    await _rag.add_document("event", content, metadata)
+
+# External service singletons
+_weather_api = WeatherAPIService()
+_google_api = GoogleAPIService()
+_ext_initialized = False
+
+async def _ensure_ext_initialized():
+    global _ext_initialized
+    if not _ext_initialized:
+        await _weather_api.initialize()
+        await _google_api.initialize()
+        _ext_initialized = True
 
 def get_java_client() -> JavaSpringAPIClient:
     """Get or create the Java Spring API client."""
@@ -41,6 +78,116 @@ def format_datetime_for_api(dt_str: str) -> str:
         return dt_str
 
 @tool
+async def check_event_weather(
+    event_id: Optional[str] = None,
+    location: Optional[str] = None,
+    date: Optional[str] = None,
+    time: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Check weather viability for the event date/time and return a UI insight.
+    Provide either an event_id or location+date(+time).
+    """
+    await _ensure_ext_initialized()
+    global _current_event_id
+    target_event_id = event_id or _current_event_id
+
+    # Resolve from event if needed
+    if target_event_id and (not date or not location):
+        client = get_java_client()
+        ev = await client.get_event(target_event_id)
+        if ev.get("success"):
+            e = ev["event"]
+            date = date or (e.get("startDateTime", "T").split("T")[0])
+            time = time or (e.get("startDateTime", "T").split("T")[1][:5] if "T" in e.get("startDateTime", "") else "14:00")
+            location = location or e.get("venueRequirements", "Winnipeg, MB")
+
+    date = date or datetime.utcnow().date().isoformat()
+    time = time or "14:00"
+    location = location or "Winnipeg, MB"
+
+    wx = await _weather_api.check_outdoor_event_viability(location=location, event_date=date, event_time=time)
+    if not wx.get("success"):
+        return {"success": False, "message": "Weather service unavailable"}
+
+    fc = wx["weather_forecast"]
+    sev = "info"
+    if wx["viability_score"] < 40:
+        sev = "critical"
+    elif wx["viability_score"] < 75:
+        sev = "warn"
+
+    reply = f"Weather check for {date} at {time}: {fc['condition']}, precip {fc['precipitation_chance']}%."
+    if wx["concerns"]:
+        reply += " " + "; ".join(wx["concerns"]) + "."
+
+    return {
+        "success": True,
+        "message": reply,
+        "ui": {
+            "insights": [
+                {
+                    "type": "weather",
+                    "severity": sev,
+                    "message": reply,
+                    "confidence": 0.8
+                }
+            ],
+            "nextStep": {
+                "prompt": "Shall I add an indoor backup or adjust time?",
+                "suggestedActions": ["Add backup venue", "Adjust time"]
+            }
+        }
+    }
+
+@tool
+async def search_venues_google(
+    area: str,
+    min_capacity: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Search venues (mock/Google) and return venue cards shaped for UI.
+    """
+    await _ensure_ext_initialized()
+
+    # Mocked venue results shaped for UI; integrate real Places later
+    venues = [
+        {
+            "type": "venue",
+            "title": "Grand Ballroom Estate",
+            "subtitle": f"{area} • 200–300 guests",
+            "rating": 4.8,
+            "imageUrl": "https://picsum.photos/seed/ballroom/800/400",
+            "pill": "$8,000 – $12,000",
+            "meta": {"placeId": "mock:grand_ballroom", "driveTimeMin": 15},
+            "actions": [
+                {"type": "primary", "label": "Select Venue", "action": "select_venue", "payload": {"placeId": "mock:grand_ballroom"}},
+                {"type": "secondary", "label": "Send Inquiry", "action": "open_email_draft", "payload": {"placeId": "mock:grand_ballroom"}}
+            ]
+        },
+        {
+            "type": "venue",
+            "title": "Enchanted Garden Estate",
+            "subtitle": f"Countryside • 150–250 guests",
+            "rating": 4.9,
+            "imageUrl": "https://picsum.photos/seed/garden/800/400",
+            "pill": "$6,500 – $10,000",
+            "meta": {"placeId": "mock:garden_estate", "driveTimeMin": 22},
+            "actions": [
+                {"type": "primary", "label": "Select Venue", "action": "select_venue", "payload": {"placeId": "mock:garden_estate"}},
+                {"type": "secondary", "label": "Send Inquiry", "action": "open_email_draft", "payload": {"placeId": "mock:garden_estate"}}
+            ]
+        }
+    ]
+
+    if min_capacity:
+        venues = [v for v in venues if ("200" in v["subtitle"] or "150" in v["subtitle"]) and min_capacity <= 300]
+
+    return {
+        "success": True,
+        "message": f"Here are venues around {area} that fit your event.",
+        "ui": {"cards": venues, "nextStep": {"prompt": "Select a venue or send an inquiry.", "suggestedActions": ["Select Venue", "Send Inquiry"]}}
+    }
 async def start_event_creation(
     name: str,
     event_type: str,
@@ -108,10 +255,21 @@ Would you like to add:
 Just let me know what you'd like to focus on next! 😊
 """
             
+            # Store fact in RAG
+            await _write_event_fact(event, f"Created event '{name}' on {human_date} ({event_type}).")
+
             return {
                 "success": True,
                 "event_id": event.get("id"),
                 "message": confirmation,
+                "ui": {
+                    "chips": [
+                        {"label": "Add capacity", "action": "open_capacity"},
+                        {"label": "Pick a theme", "action": "open_theme"},
+                        {"label": "Choose venue", "action": "open_venue_search"}
+                    ],
+                    "nextStep": {"prompt": "Want me to check weather for that day?", "suggestedActions": ["Check weather", "Suggest venues"]}
+                },
                 "event": event,
                 "next_phase": "enhancement"
             }
@@ -245,10 +403,17 @@ Is there anything else you'd like to add or modify? I can help with:
 Just let me know what's on your mind! 😊
 """
             
+            # Store fact in RAG
+            await _write_event_fact(event, f"Updated event details: {', '.join(updates_made)}")
+
             return {
                 "success": True,
                 "event_id": _current_event_id,
                 "message": confirmation,
+                "ui": {
+                    "insights": [{"type": "update", "severity": "info", "message": ", ".join(updates_made)}],
+                    "nextStep": {"prompt": "Anything else to add?", "suggestedActions": ["Set end time", "Invite guests"]}
+                },
                 "event": event,
                 "updates_made": updates_made
             }
@@ -294,13 +459,19 @@ async def get_event_info(
         }
     
     try:
+        # 1) Try vector facts first
+        await _ensure_rag_initialized()
+        facts = await _rag.retrieve_context(question, domain="event", max_results=3)
+        fact_snippets = [f["content"] for f in facts]
+
+        # 2) Fetch latest DB snapshot
         client = get_java_client()
-        result = await client.get_event(target_event_id, "550e8400-e29b-41d4-a716-446655440000")
+        result = await client.get_event(target_event_id)
         
         if result.get("success"):
             event = result.get("event", {})
             
-            # Analyze the question and provide intelligent answers
+            # Analyze the question and provide intelligent answers (prefer RAG if directly answers)
             question_lower = question.lower()
             
             # Date-related questions
@@ -323,8 +494,15 @@ async def get_event_info(
                 capacity = event.get('capacity')
                 current_count = event.get('currentAttendeeCount', 0)
                 
+                # Compute discrepancy with attendee list
+                attendees_resp = await client.list_attendees_by_event(target_event_id)
+                attendee_count = len(attendees_resp.get("attendees", [])) if attendees_resp.get("success") else current_count
+
                 if capacity:
-                    answer = f"Your event can accommodate **{capacity} guests**. Currently, {current_count} people are registered."
+                    note = ""
+                    if attendee_count is not None and capacity is not None and attendee_count != capacity:
+                        note = f" Also, you set capacity to {capacity} but we currently have {attendee_count} attendee(s) on the list."
+                    answer = f"Your event can accommodate **{capacity} guests**. Currently, {attendee_count} people are registered.{note}"
                 else:
                     answer = "I don't have a capacity limit set for your event yet. How many guests are you expecting?"
             
@@ -364,8 +542,12 @@ async def get_event_info(
             return {
                 "success": True,
                 "answer": answer,
+                "ui": {
+                    "insights": fact_snippets and [{"type": "facts", "severity": "info", "message": fact_snippets[0]}] or []
+                },
                 "event": event,
-                "question": question
+                "question": question,
+                "supporting_facts": fact_snippets
             }
         else:
             return {

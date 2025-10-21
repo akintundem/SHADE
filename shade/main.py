@@ -8,6 +8,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from structured_responses import (
+    StructuredResponse, VenueCard, EmailTemplate, Chip, ActionButton,
+    EventTypeChips, VenueCardBuilder, EmailTemplateBuilder, StructuredResponseBuilder
+)
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -39,6 +43,8 @@ class ChatResponse(BaseModel):
     chat_id: str
     user_id: str
     event_id: Optional[str] = None
+    ui: Optional[dict] = None
+    structured_response: Optional[StructuredResponse] = None
 
 # LangGraph Flow Manager processor
 class ShadeAgentProcessor:
@@ -99,6 +105,9 @@ class ShadeAgentProcessor:
         try:
             print(f"🔄 LangGraph Flow processing: '{message}'")
             
+            # Check for structured response patterns
+            structured_response = await self._create_structured_response(message, user_id, chat_id, event_id)
+            
             # Process with LangGraph Flow Manager
             result = await self.flow_manager.process_request(message, user_id, chat_id, event_id)
             
@@ -116,9 +125,11 @@ class ShadeAgentProcessor:
             print(f"✅ LangGraph Flow completed processing")
             
             return {
-                "reply": result["reply"],
+                "reply": "" if structured_response is not None else result["reply"],
                 "tool_used": result.get("agent_used", "langgraph_flow"),
-                "data": result.get("data", {})
+                "data": result.get("data", {}),
+                "ui": result.get("ui"),
+                "structured_response": structured_response
             }
             
         except Exception as e:
@@ -128,6 +139,57 @@ class ShadeAgentProcessor:
                 "tool_used": "error",
                 "data": {"error": str(e)}
             }
+    
+    async def _create_structured_response(self, message: str, user_id: str, chat_id: str, event_id: str = None) -> Optional[StructuredResponse]:
+        """Create structured response based on message content."""
+        message_lower = message.lower()
+        
+        # Check for venue search patterns
+        if any(keyword in message_lower for keyword in ['venue', 'venues', 'find venue', 'search venue', 'wedding venue']):
+            # Check if they specifically want Greek venues
+            if any(keyword in message_lower for keyword in ['greece', 'greek', 'santorini', 'mykonos', 'athens', 'crete', 'rhodes']):
+                venues = VenueCardBuilder.create_greek_venues()
+                return StructuredResponseBuilder.create_venue_search_response(
+                    venues, 
+                    "I found 5 STUNNING wedding venues in Greece! 🇬🇷💍✨ Perfect for your destination wedding with Toyin! 🎉"
+                )
+            else:
+                venues = VenueCardBuilder.create_sample_venues()
+                return StructuredResponseBuilder.create_venue_search_response(
+                    venues, 
+                    "Here are some amazing venues I found for your event! 🏰✨"
+                )
+        
+        # Check for email inquiry patterns
+        elif any(keyword in message_lower for keyword in ['contact venue', 'send email', 'inquiry', 'email venue']):
+            venues = VenueCardBuilder.create_sample_venues()
+            if venues:
+                event_details = {
+                    'date': 'June 2024',
+                    'guest_count': '200',
+                    'budget': '$50,000',
+                    'planner_name': 'Sarah Johnson'
+                }
+                email = EmailTemplateBuilder.create_venue_inquiry(venues[0], event_details)
+                return StructuredResponseBuilder.create_email_review_response(email)
+        
+        # Check for event type selection
+        elif any(keyword in message_lower for keyword in ['plan event', 'what event', 'type of event', 'event type']):
+            chips = EventTypeChips.get_default_chips()
+            return StructuredResponseBuilder.create_chips_response(
+                chips,
+                "What type of event are you planning? Choose from the options below: 🎉"
+            )
+        
+        # Check for initial greeting
+        elif any(keyword in message_lower for keyword in ['hello', 'hi', 'hey', 'start', 'begin']):
+            chips = EventTypeChips.get_default_chips()
+            return StructuredResponseBuilder.create_mixed_response(
+                "Hey there! 👋 I'm Shade, and I'm so excited to help you plan something special! Whether it's a dreamy wedding, an unforgettable birthday bash, or a professional corporate event, I've got you covered from start to finish. 🎉",
+                chips=chips
+            )
+        
+        return None
 
 # Initialize the LangGraph Flow Manager
 shade_agent = ShadeAgentProcessor()
@@ -148,10 +210,12 @@ async def chat(request: ChatRequest):
             reply=result["reply"],
             tool_used=result["tool_used"],
             data=result.get("data"),
-            show_chips=False,
+            show_chips=bool(result.get("structured_response") and result.get("structured_response").chips),
             chat_id=request.chat_id or "temp_chat",
             user_id=request.user_id,
-            event_id=request.event_id
+            event_id=request.event_id,
+            ui=result.get("ui"),
+            structured_response=result.get("structured_response")
         )
     except Exception as e:
         print(f"❌ Error processing message: {e}")
