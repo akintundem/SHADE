@@ -136,23 +136,39 @@ class JavaSpringAPIClient:
                 "error": str(e)
             }
     
-    async def update_event(self, event_id: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_event(self, event_id: str, event_data: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Update event in Java Spring backend.
+        Update an existing event in the Java Spring backend.
         
         Args:
-            event_id: UUID of the event
-            event_data: Updated event data
+            event_id: UUID of the event to update
+            event_data: Update data matching UpdateEventRequest DTO
+            user_id: Optional user ID for authorization
             
         Returns:
-            Updated event or error
+            Updated event response
         """
         try:
             session = await self.get_session()
+            headers = {}
+            if user_id:
+                # Ensure user_id is a valid UUID, generate one if not
+                try:
+                    # Try to parse as UUID to validate
+                    uuid.UUID(user_id)
+                    headers["X-User-Id"] = user_id
+                except ValueError:
+                    # If not a valid UUID, generate a deterministic one for the chatbot
+                    chatbot_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"chatbot-{user_id}"))
+                    headers["X-User-Id"] = chatbot_uuid
+            else:
+                # Default chatbot UUID
+                headers["X-User-Id"] = "550e8400-e29b-41d4-a716-446655440000"
             
             async with session.put(
                 f"{self.base_url}/events/{event_id}",
-                json=event_data
+                json=event_data,
+                headers=headers
             ) as response:
                 if response.status == 200:
                     result = await response.json()

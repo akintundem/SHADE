@@ -176,6 +176,108 @@ public class EventService {
     }
 
     /**
+     * Update an existing event
+     * @param id The event ID
+     * @param request The update request
+     * @return Updated event
+     */
+    public Event update(UUID id, UpdateEventRequest request) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + id));
+        
+        // Update only the fields that are provided (not null)
+        if (request.getName() != null) {
+            event.setName(request.getName());
+        }
+        if (request.getDescription() != null) {
+            event.setDescription(request.getDescription());
+        }
+        if (request.getEventType() != null) {
+            event.setEventType(request.getEventType());
+        }
+        if (request.getEventStatus() != null) {
+            event.setEventStatus(request.getEventStatus());
+        }
+        if (request.getStartDateTime() != null) {
+            event.setStartDateTime(request.getStartDateTime());
+        }
+        if (request.getEndDateTime() != null) {
+            event.setEndDateTime(request.getEndDateTime());
+        }
+        if (request.getRegistrationDeadline() != null) {
+            event.setRegistrationDeadline(request.getRegistrationDeadline());
+        }
+        if (request.getCapacity() != null) {
+            event.setCapacity(request.getCapacity());
+        }
+        if (request.getCurrentAttendeeCount() != null) {
+            event.setCurrentAttendeeCount(request.getCurrentAttendeeCount());
+        }
+        if (request.getIsPublic() != null) {
+            event.setIsPublic(request.getIsPublic());
+        }
+        if (request.getRequiresApproval() != null) {
+            event.setRequiresApproval(request.getRequiresApproval());
+        }
+        if (request.getQrCodeEnabled() != null) {
+            event.setQrCodeEnabled(request.getQrCodeEnabled());
+        }
+        if (request.getQrCode() != null) {
+            event.setQrCode(request.getQrCode());
+        }
+        if (request.getCoverImageUrl() != null) {
+            event.setCoverImageUrl(request.getCoverImageUrl());
+        }
+        if (request.getEventWebsiteUrl() != null) {
+            event.setEventWebsiteUrl(request.getEventWebsiteUrl());
+        }
+        if (request.getHashtag() != null) {
+            event.setHashtag(request.getHashtag());
+        }
+        if (request.getTheme() != null) {
+            event.setTheme(request.getTheme());
+        }
+        if (request.getObjectives() != null) {
+            event.setObjectives(request.getObjectives());
+        }
+        if (request.getTargetAudience() != null) {
+            event.setTargetAudience(request.getTargetAudience());
+        }
+        if (request.getSuccessMetrics() != null) {
+            event.setSuccessMetrics(request.getSuccessMetrics());
+        }
+        if (request.getBrandingGuidelines() != null) {
+            event.setBrandingGuidelines(request.getBrandingGuidelines());
+        }
+        if (request.getVenueRequirements() != null) {
+            event.setVenueRequirements(request.getVenueRequirements());
+        }
+        if (request.getTechnicalRequirements() != null) {
+            event.setTechnicalRequirements(request.getTechnicalRequirements());
+        }
+        if (request.getAccessibilityFeatures() != null) {
+            event.setAccessibilityFeatures(request.getAccessibilityFeatures());
+        }
+        if (request.getEmergencyPlan() != null) {
+            event.setEmergencyPlan(request.getEmergencyPlan());
+        }
+        if (request.getBackupPlan() != null) {
+            event.setBackupPlan(request.getBackupPlan());
+        }
+        if (request.getPostEventTasks() != null) {
+            event.setPostEventTasks(request.getPostEventTasks());
+        }
+        if (request.getMetadata() != null) {
+            event.setMetadata(request.getMetadata());
+        }
+        if (request.getVenueId() != null) {
+            event.setVenueId(request.getVenueId());
+        }
+        
+        return eventRepository.save(event);
+    }
+
+    /**
      * Create event from CreateEventRequest
      * @param request The create event request
      * @param ownerId The owner ID

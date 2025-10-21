@@ -7,7 +7,7 @@ import asyncio
 import logging
 from .base_agent import BaseAgent
 from .communication import MessageBus
-from .event_agent import EventAgent
+from .enhanced_event_agent import EnhancedEventAgent
 from .budget_agent import BudgetAgent
 from .venue_agent import VenueAgent
 from .vendor_agent import VendorAgent
@@ -38,7 +38,7 @@ class MasterOrchestrator:
     def _initialize_agents(self):
         """Initialize all specialized agents."""
         self.agents = {
-            "event": EventAgent(message_bus=self.message_bus),
+            "event": EnhancedEventAgent(message_bus=self.message_bus),
             "budget": BudgetAgent(message_bus=self.message_bus),
             "venue": VenueAgent(message_bus=self.message_bus),
             "vendor": VendorAgent(message_bus=self.message_bus),

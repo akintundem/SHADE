@@ -2,6 +2,7 @@
 
 from .orchestrator import MasterOrchestrator
 from .event_agent import EventAgent
+from .enhanced_event_agent import EnhancedEventAgent
 from .budget_agent import BudgetAgent
 from .venue_agent import VenueAgent
 from .vendor_agent import VendorAgent
@@ -13,6 +14,7 @@ from .communication_agent import CommunicationAgent
 __all__ = [
     "MasterOrchestrator",
     "EventAgent",
+    "EnhancedEventAgent",
     "BudgetAgent", 
     "VenueAgent",
     "VendorAgent",

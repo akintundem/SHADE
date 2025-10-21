@@ -1,6 +1,7 @@
 package ai.eventplanner.event.controller;
 
 import ai.eventplanner.event.dto.request.CreateEventRequest;
+import ai.eventplanner.event.dto.request.UpdateEventRequest;
 import ai.eventplanner.event.dto.response.EventResponse;
 import ai.eventplanner.event.entity.Event;
 import ai.eventplanner.event.service.EventService;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,6 +42,7 @@ public class EventCrudController {
     public EventCrudController(EventService eventService) {
         this.eventService = eventService;
     }
+
 
     @GetMapping("/{id}")
     @Operation(summary = "Get event by ID", description = "Retrieve a specific event by its unique identifier")
@@ -75,6 +78,32 @@ public class EventCrudController {
             Event created = eventService.create(request, ownerId);
             EventResponse response = eventService.toResponse(created);
             return ResponseEntity.created(URI.create("/api/v1/events/" + response.getId())).body(response);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Update event", description = "Update an existing event with new details")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Event updated successfully",
+                content = @Content(schema = @Schema(implementation = EventResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Event not found"),
+        @ApiResponse(responseCode = "400", description = "Invalid request data"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token")
+    })
+    public ResponseEntity<EventResponse> update(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @Valid @RequestBody UpdateEventRequest request) {
+        try {
+            Optional<Event> existingEvent = eventService.getById(id);
+            if (existingEvent.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            Event updated = eventService.update(id, request);
+            EventResponse response = eventService.toResponse(updated);
+            return ResponseEntity.ok(response);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
