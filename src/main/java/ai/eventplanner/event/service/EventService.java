@@ -185,7 +185,8 @@ public class EventService {
         Event event = new Event();
         event.setName(request.getName());
         event.setDescription(request.getDescription());
-        event.setOwnerId(ownerId);
+        // Use provided ownerId or generate a default one if null
+        event.setOwnerId(ownerId != null ? ownerId : UUID.randomUUID());
         event.setEventType(request.getEventType());
         event.setEventStatus(request.getEventStatus());
         event.setStartDateTime(request.getStartDateTime());

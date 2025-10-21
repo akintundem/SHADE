@@ -1,191 +1,270 @@
-"""Event management tools for the Shade agent."""
+"""Event management tools for the Shade agent - Integrated with Java Spring API."""
 
 from langchain.tools import tool
 from typing import Dict, Any, Optional
-from .base import java_client
+import sys
+sys.path.append('/Users/mayokun/Desktop/Event Planner Monolith/shade')
+from external.java_spring_api import JavaSpringAPIClient
+
+# Global client instance
+_java_client = None
+# Global event data storage for context passing
+_pending_event_data = None
+
+def get_java_client() -> JavaSpringAPIClient:
+    """Get or create the Java Spring API client."""
+    global _java_client
+    if _java_client is None:
+        _java_client = JavaSpringAPIClient()
+    return _java_client
 
 
 @tool
-async def create_event(
+async def prepare_event_for_creation(
     name: str,
     event_type: str,
     start_datetime: str,
     description: Optional[str] = None,
     capacity: Optional[int] = None,
-    location: Optional[str] = None,
-    end_datetime: Optional[str] = None
+    end_datetime: Optional[str] = None,
+    theme: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Create a new event. Use this when user wants to plan or create an event.
+    """
+    Prepare event data for creation. This validates all required fields are present
+    before asking for user confirmation.
     
     Args:
         name: Event name (required)
-        event_type: Type of event (CONFERENCE, WEDDING, PARTY, MEETING, WORKSHOP, etc.)
-        start_datetime: ISO format datetime (YYYY-MM-DDTHH:MM:SS)
-        description: Optional event description
-        capacity: Maximum number of attendees
-        location: Event location/venue
-        end_datetime: Optional end datetime
+        event_type: CONFERENCE, WEDDING, PARTY, BIRTHDAY, MEETING, WORKSHOP (required)
+        start_datetime: ISO format like 2026-11-24T18:00:00 (required)
+        description: Event description (optional)
+        capacity: Number of guests (optional)
+        end_datetime: End time in ISO format (optional)
+        theme: Event theme (optional)
     
     Returns:
-        Dict with event_id, success status, and event details
+        Dict with validation status and formatted summary for user confirmation
     """
+    # Build event data
     event_data = {
         "name": name,
         "eventType": event_type,
-        "startDateTime": start_datetime,
-        "description": description,
-        "capacity": capacity,
-        "location": location,
-        "endDateTime": end_datetime
+        "startDateTime": start_datetime
     }
     
-    # For now, return mock response - will be replaced with actual API call
+    if description:
+        event_data["description"] = description
+    if capacity:
+        event_data["capacity"] = capacity
+    if end_datetime:
+        event_data["endDateTime"] = end_datetime
+    if theme:
+        event_data["theme"] = theme
+    
+    # Store event data globally for the create_event_confirmed tool
+    global _pending_event_data
+    _pending_event_data = event_data
+    
+    # Format a human-readable summary
+    summary = f"""
+📅 **Event Summary**
+
+**Name:** {name}
+**Type:** {event_type}
+**Date & Time:** {start_datetime}
+"""
+    
+    if description:
+        summary += f"**Description:** {description}\n"
+    if capacity:
+        summary += f"**Capacity:** {capacity} guests\n"
+    if end_datetime:
+        summary += f"**End Time:** {end_datetime}\n"
+    if theme:
+        summary += f"**Theme:** {theme}\n"
+    
     return {
         "success": True,
-        "event_id": "evt_123456789",
-        "message": f"Successfully created event '{name}'",
-        "event": {
-            "id": "evt_123456789",
-            "name": name,
-            "eventType": event_type,
-            "startDateTime": start_datetime,
-            "description": description,
-            "capacity": capacity,
-            "location": location,
-            "endDateTime": end_datetime,
-            "status": "PLANNING"
-        }
+        "ready_for_creation": True,
+        "event_data": event_data,
+        "summary": summary,
+        "message": "Event is ready for creation! Please confirm to proceed."
     }
 
 
 @tool
-async def update_event(
-    event_id: str,
-    name: Optional[str] = None,
-    description: Optional[str] = None,
-    capacity: Optional[int] = None,
-    location: Optional[str] = None,
-    start_datetime: Optional[str] = None,
-    end_datetime: Optional[str] = None
+async def create_event_confirmed(
+    user_id: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Update an existing event with new information.
+    """
+    Create event in Java Spring backend after user confirmation.
+    This should ONLY be called after user explicitly approves the creation.
+    The event data is retrieved from the shared context.
     
     Args:
-        event_id: ID of the event to update
-        name: New event name
-        description: New event description
-        capacity: New capacity
-        location: New location
-        start_datetime: New start datetime
-        end_datetime: New end datetime
+        user_id: Optional user ID (defaults to test user for now)
     
     Returns:
-        Dict with success status and updated event details
+        Dict with creation result
     """
-    update_data = {}
-    if name is not None:
-        update_data["name"] = name
-    if description is not None:
-        update_data["description"] = description
-    if capacity is not None:
-        update_data["capacity"] = capacity
-    if location is not None:
-        update_data["location"] = location
-    if start_datetime is not None:
-        update_data["startDateTime"] = start_datetime
-    if end_datetime is not None:
-        update_data["endDateTime"] = end_datetime
+    # For testing, use a default user_id if none provided
+    if user_id is None:
+        user_id = "550e8400-e29b-41d4-a716-446655440000"  # Valid UUID format
     
-    # For now, return mock response
-    return {
-        "success": True,
-        "message": f"Successfully updated event {event_id}",
-        "event": {
-            "id": event_id,
-            **update_data
+    # Get the event data from the stored pending event data
+    global _pending_event_data
+    if _pending_event_data is None:
+        return {
+            "success": False,
+            "error": "No event data found. Please prepare an event first.",
+            "message": "Please use prepare_event_for_creation first."
         }
-    }
+    
+    event_data = _pending_event_data
+    
+    client = get_java_client()
+    result = await client.create_event(event_data, user_id)
+    
+    if result.get("success"):
+        event = result.get("event", {})
+        # Clear the pending event data after successful creation
+        _pending_event_data = None
+        return {
+            "success": True,
+            "event_id": event.get("id"),
+            "message": f"🎉 Successfully created event '{event.get('name')}'!",
+            "event": event
+        }
+    else:
+        return {
+            "success": False,
+            "error": result.get("error", "Unknown error"),
+            "message": "Failed to create event. Please try again."
+        }
 
 
 @tool
-async def get_event(event_id: str) -> Dict[str, Any]:
-    """Get details of a specific event by ID.
+async def get_event_details(event_id: str) -> Dict[str, Any]:
+    """
+    Get event details from Java Spring backend.
+    Use this when user asks about an event they created.
     
     Args:
-        event_id: ID of the event to retrieve
+        event_id: UUID of the event
     
     Returns:
         Dict with event details
     """
-    # For now, return mock response
-    return {
-        "success": True,
-        "event": {
-            "id": event_id,
-            "name": "Sample Event",
-            "eventType": "CONFERENCE",
-            "startDateTime": "2024-06-15T09:00:00",
-            "description": "A sample event for demonstration",
-            "capacity": 100,
-            "location": "Conference Center",
-            "status": "PLANNING"
+    client = get_java_client()
+    result = await client.get_event(event_id)
+    
+    if result.get("success"):
+        event = result.get("event", {})
+        # Format response in a friendly way
+        response = f"""
+Found your event! 🎉
+
+**{event.get('name')}**
+- Type: {event.get('eventType')}
+- Date: {event.get('startDateTime')}
+- Status: {event.get('eventStatus')}
+"""
+        if event.get('capacity'):
+            response += f"- Capacity: {event.get('capacity')} guests\n"
+        if event.get('description'):
+            response += f"- Description: {event.get('description')}\n"
+        
+        return {
+            "success": True,
+            "event": event,
+            "formatted_response": response
         }
-    }
+    else:
+        return {
+            "success": False,
+            "error": result.get("error"),
+            "message": "Couldn't find that event. Do you have the event ID?"
+        }
 
 
 @tool
-async def list_events(
-    user_id: Optional[str] = None,
-    event_type: Optional[str] = None,
-    status: Optional[str] = None
+async def prepare_event_update(
+    event_id: str,
+    updates: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """List events with optional filtering.
+    """
+    Prepare event updates for confirmation before applying.
     
     Args:
-        user_id: Filter by user ID
-        event_type: Filter by event type
-        status: Filter by event status
+        event_id: Event ID to update
+        updates: Dictionary of fields to update
     
     Returns:
-        Dict with list of events
+        Dict with update summary for confirmation
     """
-    # For now, return mock response
-    mock_events = [
-        {
-            "id": "evt_123456789",
-            "name": "Tech Conference 2024",
-            "eventType": "CONFERENCE",
-            "startDateTime": "2024-06-15T09:00:00",
-            "status": "PLANNING"
-        },
-        {
-            "id": "evt_987654321",
-            "name": "Wedding Reception",
-            "eventType": "WEDDING",
-            "startDateTime": "2024-07-20T18:00:00",
-            "status": "CONFIRMED"
-        }
-    ]
+    # Format update summary
+    summary = f"""
+📝 **Proposed Updates for Event**
+
+**Event ID:** {event_id}
+
+**Changes:**
+"""
+    for key, value in updates.items():
+        summary += f"- {key}: {value}\n"
     
     return {
         "success": True,
-        "events": mock_events,
-        "count": len(mock_events)
+        "ready_for_update": True,
+        "event_id": event_id,
+        "updates": updates,
+        "summary": summary,
+        "message": "Ready to update! Please confirm to proceed."
     }
 
 
 @tool
-async def delete_event(event_id: str) -> Dict[str, Any]:
-    """Delete an event permanently.
+async def update_event_confirmed(
+    event_id: str,
+    updates: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Update event in Java Spring backend after user confirmation.
+    Only call after user explicitly approves the update.
     
     Args:
-        event_id: ID of the event to delete
+        event_id: Event ID to update
+        updates: Fields to update
     
     Returns:
-        Dict with success status
+        Dict with update result
     """
-    # For now, return mock response
-    return {
-        "success": True,
-        "message": f"Successfully deleted event {event_id}"
-    }
+    client = get_java_client()
+    result = await client.update_event(event_id, updates)
+    
+    if result.get("success"):
+        return {
+            "success": True,
+            "message": f"✅ Successfully updated event!",
+            "event": result.get("event")
+        }
+    else:
+        return {
+            "success": False,
+            "error": result.get("error"),
+            "message": "Failed to update event. Please try again."
+        }
+
+
+@tool
+async def check_java_api_health() -> Dict[str, Any]:
+    """
+    Check if Java Spring API is reachable.
+    Use this to verify backend connectivity.
+    
+    Returns:
+        Dict with health status
+    """
+    client = get_java_client()
+    result = await client.health_check()
+    return result

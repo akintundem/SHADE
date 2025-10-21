@@ -8,5 +8,6 @@ python-dotenv
 pymongo
 motor
 httpx
+aiohttp
 redis
 asyncio
