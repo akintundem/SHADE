@@ -90,20 +90,17 @@ jwt:
   refresh-expiration: 604800000 # 7 days in milliseconds
 
 # External API Keys
-external:
-  stripe:
-    api-key: ${STRIPE_API_KEY:your-stripe-api-key}
-    webhook-secret: ${STRIPE_WEBHOOK_SECRET:your-stripe-webhook-secret}
-  twilio:
-    account-sid: ${TWILIO_ACCOUNT_SID:your-twilio-account-sid}
-    auth-token: ${TWILIO_AUTH_TOKEN:your-twilio-auth-token}
-    phone-number: ${TWILIO_PHONE_NUMBER:your-twilio-phone-number}
-  sendgrid:
-    api-key: ${SENDGRID_API_KEY:your-sendgrid-api-key}
-  google:
-    maps-api-key: ${GOOGLE_MAPS_API_KEY:your-google-maps-api-key}
-  openweather:
-    api-key: ${OPENWEATHER_API_KEY:your-openweather-api-key}
+  external:
+    stripe:
+      api-key: ${STRIPE_API_KEY:your-stripe-api-key}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET:your-stripe-webhook-secret}
+    sendgrid:
+      api-key: ${SENDGRID_API_KEY:your-sendgrid-api-key}
+      from-email: ${SENDGRID_FROM_EMAIL:noreply@eventplanner.com}
+    google:
+      maps-api-key: ${GOOGLE_MAPS_API_KEY:your-google-maps-api-key}
+    openweather:
+      api-key: ${OPENWEATHER_API_KEY:your-openweather-api-key}
 
 # Logging
 logging:

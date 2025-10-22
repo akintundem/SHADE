@@ -147,7 +147,6 @@ PINECONE_API_KEY=your-pinecone-key
 
 # External APIs
 STRIPE_API_KEY=your-stripe-key
-TWILIO_ACCOUNT_SID=your-twilio-sid
 SENDGRID_API_KEY=your-sendgrid-key
 GOOGLE_MAPS_API_KEY=your-google-maps-key
 ```

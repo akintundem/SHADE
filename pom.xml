@@ -75,10 +75,11 @@
             <version>9.2.0</version>
         </dependency>
         
-        <!-- Mail -->
+        <!-- SendGrid Email Service -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-mail</artifactId>
+            <groupId>com.sendgrid</groupId>
+            <artifactId>sendgrid-java</artifactId>
+            <version>4.9.3</version>
         </dependency>
 
         <!-- Database -->

@@ -1,38 +1,142 @@
 package ai.eventplanner.comms.service;
 
+import ai.eventplanner.comms.model.CommunicationLogEntity;
+import ai.eventplanner.comms.repository.CommunicationLogRepository;
+import ai.eventplanner.sendgrid.dto.EmailResponse;
+import ai.eventplanner.sendgrid.service.SendGridService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.Map;
+
+/**
+ * Template email service using SendGrid with optional logging
+ * Focused on sending beautifully designed template emails
+ */
 @Service
 public class EmailService {
 
     private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
 
-    private final JavaMailSender mailSender;
+    private final SendGridService sendGridService;
+    private final CommunicationLogRepository logRepository;
+    private final String defaultFromEmail;
 
-    public EmailService(ObjectProvider<JavaMailSender> mailSenderProvider) {
-        this.mailSender = mailSenderProvider.getIfAvailable();
+    public EmailService(SendGridService sendGridService, 
+                       CommunicationLogRepository logRepository,
+                       @Value("${external.sendgrid.from-email:noreply@eventplanner.com}") String defaultFromEmail) {
+        this.sendGridService = sendGridService;
+        this.logRepository = logRepository;
+        this.defaultFromEmail = defaultFromEmail;
     }
 
-    public void send(String to, String subject, String body) {
-        if (mailSender == null) {
-            logger.info("JavaMailSender unavailable; email to {} queued but not sent.", to);
-            return;
-        }
+    /**
+     * Send email using template (with logging)
+     */
+    public EmailResponse sendTemplate(String to, String templateId, java.util.Map<String, Object> templateData) {
+        return sendTemplate(to, defaultFromEmail, templateId, templateData, true);
+    }
+
+    /**
+     * Send email using template with custom from address
+     */
+    public EmailResponse sendTemplate(String to, String from, String templateId, java.util.Map<String, Object> templateData) {
+        return sendTemplate(to, from, templateId, templateData, true);
+    }
+
+    /**
+     * Send email using template with optional logging
+     */
+    public EmailResponse sendTemplate(String to, String from, String templateId, java.util.Map<String, Object> templateData, boolean logToDatabase) {
         if (!StringUtils.hasText(to)) {
-            logger.warn("Skipping email send: recipient address is blank.");
-            return;
+            logger.warn("Skipping template email send: recipient address is blank.");
+            return EmailResponse.builder()
+                    .success(false)
+                    .statusMessage("Recipient address is blank")
+                    .build();
         }
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(to);
-        message.setSubject(subject);
-        message.setText(body);
-        mailSender.send(message);
+
+        if (!StringUtils.hasText(templateId)) {
+            logger.warn("Skipping template email send: template ID is blank.");
+            return EmailResponse.builder()
+                    .success(false)
+                    .statusMessage("Template ID is blank")
+                    .build();
+        }
+
+        logger.info("Sending template email to: {} using template: {}", to, templateId);
+        
+        // Send template email via SendGrid
+        EmailResponse response = sendGridService.sendTemplateEmail(to, from, templateId, templateData);
+        
+        // Log to database if requested
+        if (logToDatabase) {
+            logEmail(to, from, "Template: " + templateId, "Template email", response);
+        }
+        
+        return response;
+    }
+
+    /**
+     * Validate email address
+     */
+    public boolean isValidEmail(String email) {
+        return sendGridService.isValidEmail(email);
+    }
+
+    /**
+     * Log email to database
+     */
+    private void logEmail(String to, String from, String subject, String content, EmailResponse response) {
+        try {
+            CommunicationLogEntity entity = new CommunicationLogEntity();
+            entity.setChannel("email");
+            entity.setRecipient(to);
+            entity.setSubject(subject);
+            entity.setContent(content);
+            entity.setStatus(response.isSuccess() ? "sent" : "failed");
+            entity.setMetadata(serializeMetadata(Map.of(
+                "from", from,
+                "sendGridResponse", response.getStatusMessage(),
+                "messageId", response.getMessageId() != null ? response.getMessageId() : ""
+            )));
+            
+            logRepository.save(entity);
+            logger.debug("Email logged to database for recipient: {}", to);
+        } catch (Exception ex) {
+            logger.warn("Failed to log email to database: {}", ex.getMessage());
+        }
+    }
+
+    /**
+     * Simple JSON serialization for metadata
+     */
+    private String serializeMetadata(Map<String, Object> payload) {
+        if (payload == null || payload.isEmpty()) {
+            return "{}";
+        }
+        try {
+            StringBuilder builder = new StringBuilder("{");
+            payload.forEach((key, value) -> {
+                if (builder.length() > 1) {
+                    builder.append(',');
+                }
+                builder.append('"').append(sanitize(key)).append('"').append(':');
+                builder.append('"').append(sanitize(String.valueOf(value))).append('"');
+            });
+            builder.append('}');
+            return builder.toString();
+        } catch (Exception ex) {
+            logger.warn("Failed to serialize email metadata: {}", ex.getMessage());
+            return payload.toString();
+        }
+    }
+
+    private String sanitize(String input) {
+        return input.replace("\"", "\\\"");
     }
 }
 

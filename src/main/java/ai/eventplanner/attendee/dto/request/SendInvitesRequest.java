@@ -33,9 +33,6 @@ public class SendInvitesRequest {
     @Schema(description = "Send via email", example = "true")
     private Boolean sendEmail = true;
 
-    @Schema(description = "Send via SMS", example = "false")
-    private Boolean sendSms = false;
-
     @Schema(description = "Send via push notification", example = "false")
     private Boolean sendPush = false;
 }
