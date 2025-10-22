@@ -346,6 +346,16 @@ public class AuthService {
                                            String deviceId,
                                            String ipAddress,
                                            String message) {
+        // Check concurrent session limits
+        long activeSessionCount = sessionRepository.countByUserAndRevokedFalse(user);
+        if (activeSessionCount >= 5) { // Max 5 concurrent sessions
+            // Revoke oldest sessions to make room
+            sessionRepository.findByUserAndRevokedFalseOrderByLastSeenAtAsc(user)
+                    .stream()
+                    .limit(activeSessionCount - 4) // Keep 4, revoke the rest
+                    .forEach(session -> session.revoke());
+        }
+        
         String accessToken = tokenService.generateAccessToken(user, clientId);
         String refreshToken = tokenService.generateRefreshToken();
 

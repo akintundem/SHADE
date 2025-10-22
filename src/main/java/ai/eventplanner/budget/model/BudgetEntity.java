@@ -1,15 +1,12 @@
 package ai.eventplanner.budget.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -30,6 +27,9 @@ public class BudgetEntity {
 
     @Column(name = "currency", length = 3)
     private String currency;
+
+    @OneToMany(mappedBy = "budgetId", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<BudgetLineItemEntity> lineItems;
 
     @PrePersist
     public void prePersist() {

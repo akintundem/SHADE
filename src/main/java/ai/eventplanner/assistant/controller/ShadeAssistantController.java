@@ -2,6 +2,8 @@ package ai.eventplanner.assistant.controller;
 
 import ai.eventplanner.event.service.EventService;
 import ai.eventplanner.event.dto.response.EventResponse;
+import ai.eventplanner.event.dto.request.EventCreationRequest;
+import ai.eventplanner.event.dto.request.EventUpdateRequest;
 import ai.eventplanner.assistant.service.ShadeAssistantService;
 import ai.eventplanner.assistant.dto.ChatRequest;
 import ai.eventplanner.assistant.dto.AssistantChatResponse;
@@ -89,10 +91,10 @@ public class ShadeAssistantController {
             Map<String, Object> data = response.getData();
             @SuppressWarnings("unchecked")
             Map<String, Object> validatedData = (Map<String, Object>) data.get("validated_data");
-            String chatId = response.getChatId();
             
-            // Call EventService to create the event
-            EventResponse eventResponse = eventService.createEvent(validatedData, chatId);
+            // Convert Map to DTO and create the event
+            EventCreationRequest creationRequest = eventService.convertMapToEventCreationRequest(validatedData);
+            EventResponse eventResponse = eventService.createEvent(creationRequest);
             
             // Prepare response data
             Map<String, Object> responseData = new HashMap<>();
@@ -141,8 +143,9 @@ public class ShadeAssistantController {
                 throw new RuntimeException("Event ID not provided for update");
             }
             
-            // Call EventService to update the event
-            EventResponse eventResponse = eventService.updateEvent(eventId, validatedData);
+            // Convert Map to DTO and update the event
+            EventUpdateRequest updateRequest = eventService.convertMapToEventUpdateRequest(validatedData);
+            EventResponse eventResponse = eventService.updateEvent(eventId, updateRequest);
             
             // Update response with event details
             response.setEventId(eventResponse.getId().toString());
@@ -209,11 +212,13 @@ public class ShadeAssistantController {
     public ResponseEntity<?> selectVenue(@PathVariable String eventId, @RequestBody Map<String, Object> venueData) {
         try {
             // Update event with selected venue
-            EventResponse eventResponse = eventService.updateEvent(eventId, Map.of(
-                "venue", venueData.get("name"),
-                "location", venueData.get("address"),
-                "venueDetails", venueData
-            ));
+            EventUpdateRequest updateRequest = new EventUpdateRequest();
+            // Note: The EventUpdateRequest doesn't have venue fields, so we'll update description
+            String venueInfo = String.format("Selected Venue: %s, Address: %s", 
+                venueData.get("name"), venueData.get("address"));
+            updateRequest.setDescription(venueInfo);
+            
+            EventResponse eventResponse = eventService.updateEvent(eventId, updateRequest);
             
             return ResponseEntity.ok(Map.of(
                 "success", true,

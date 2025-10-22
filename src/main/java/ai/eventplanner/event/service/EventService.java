@@ -2,6 +2,8 @@ package ai.eventplanner.event.service;
 
 import ai.eventplanner.event.dto.request.CreateEventRequest;
 import ai.eventplanner.event.dto.request.UpdateEventRequest;
+import ai.eventplanner.event.dto.request.EventCreationRequest;
+import ai.eventplanner.event.dto.request.EventUpdateRequest;
 import ai.eventplanner.event.dto.response.EventResponse;
 import ai.eventplanner.event.entity.Event;
 import ai.eventplanner.event.repo.EventRepository;
@@ -10,10 +12,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.ArrayList;
 
 @Service
 @Transactional
@@ -23,99 +26,57 @@ public class EventService {
     private EventRepository eventRepository;
 
     /**
-     * Create a new event from validated data
-     * @param validatedData The validated event data from Python AI service
-     * @param chatId The chat ID for tracking
+     * Create a new event from structured DTO
+     * @param request The validated event creation request
      * @return EventResponse with created event details
      */
-    public EventResponse createEvent(Map<String, Object> validatedData, String chatId) {
+    public EventResponse createEvent(EventCreationRequest request) {
         try {
             // Create new event entity
             Event event = new Event();
             
             // Set basic fields
-            event.setName((String) validatedData.get("name"));
-            event.setDescription((String) validatedData.get("description"));
-            // Owner ID should come from authenticated user context, not random generation
-            String ownerIdStr = (String) validatedData.get("ownerId");
-            if (ownerIdStr != null && !ownerIdStr.trim().isEmpty()) {
-                try {
-                    event.setOwnerId(UUID.fromString(ownerIdStr));
-                } catch (IllegalArgumentException e) {
-                    throw new IllegalArgumentException("Invalid owner ID format: " + ownerIdStr);
-                }
-            } else {
-                throw new IllegalArgumentException("Owner ID is required for event creation");
-            } 
+            event.setName(request.getName());
+            event.setDescription(request.getDescription());
             
-            // Parse event type
-            String eventTypeStr = (String) validatedData.get("eventType");
-            if (eventTypeStr != null) {
+            // Validate and set owner ID
+            UUID ownerId = UUID.fromString(request.getOwnerId());
+            event.setOwnerId(ownerId);
+            
+            // Set event type
+            if (request.getEventType() != null) {
                 try {
-                    event.setEventType(ai.eventplanner.common.domain.enums.EventType.valueOf(eventTypeStr));
+                    event.setEventType(ai.eventplanner.common.domain.enums.EventType.valueOf(request.getEventType()));
                 } catch (IllegalArgumentException e) {
                     event.setEventType(ai.eventplanner.common.domain.enums.EventType.MEETING);
                 }
             }
             
-            // Parse dates
-            String startDateTimeStr = (String) validatedData.get("startDateTime");
-            if (startDateTimeStr != null) {
-                event.setStartDateTime(parseDateTime(startDateTimeStr));
+            // Set dates
+            event.setStartDateTime(request.getStartDateTime());
+            if (request.getEndDateTime() != null) {
+                event.setEndDateTime(request.getEndDateTime());
             }
             
-            String endDateTimeStr = (String) validatedData.get("endDateTime");
-            if (endDateTimeStr != null) {
-                event.setEndDateTime(parseDateTime(endDateTimeStr));
-            }
-            
-            // Set capacity with proper validation
-            Object capacityObj = validatedData.get("capacity");
-            if (capacityObj != null) {
-                int capacity;
-                if (capacityObj instanceof Integer) {
-                    capacity = (Integer) capacityObj;
-                } else if (capacityObj instanceof String) {
-                    try {
-                        capacity = Integer.parseInt((String) capacityObj);
-                    } catch (NumberFormatException e) {
-                        throw new IllegalArgumentException("Invalid capacity format: " + capacityObj);
-                    }
-                } else {
-                    throw new IllegalArgumentException("Invalid capacity type: " + capacityObj.getClass().getSimpleName());
-                }
-                
-                // Validate capacity range
-                if (capacity < 0) {
-                    throw new IllegalArgumentException("Capacity cannot be negative");
-                }
-                if (capacity > 100000) {
-                    throw new IllegalArgumentException("Capacity too large (max 100,000)");
-                }
-                
-                event.setCapacity(capacity);
+            // Set capacity
+            if (request.getCapacity() != null) {
+                event.setCapacity(request.getCapacity());
             }
             
             // Set boolean fields
-            event.setIsPublic((Boolean) validatedData.getOrDefault("isPublic", true));
-            event.setRequiresApproval((Boolean) validatedData.getOrDefault("requiresApproval", false));
-            event.setQrCodeEnabled((Boolean) validatedData.getOrDefault("qrCodeEnabled", false));
+            event.setIsPublic(request.getIsPublic() != null ? request.getIsPublic() : true);
+            event.setRequiresApproval(request.getRequiresApproval() != null ? request.getRequiresApproval() : false);
+            event.setQrCodeEnabled(request.getQrCodeEnabled() != null ? request.getQrCodeEnabled() : false);
             
             // Handle venue data if provided
-            if (validatedData.containsKey("venues") && validatedData.get("venues") != null) {
-                @SuppressWarnings("unchecked")
-                java.util.List<Map<String, Object>> venues = (java.util.List<Map<String, Object>>) validatedData.get("venues");
-                if (!venues.isEmpty()) {
-                    // Store the first venue as the selected venue
-                    Map<String, Object> selectedVenue = venues.get(0);
-                    // Note: The Event entity doesn't have venue fields, so we'll store in description for now
-                    String venueInfo = String.format("Venue: %s, Address: %s", 
-                        selectedVenue.get("name"), selectedVenue.get("address"));
-                    if (event.getDescription() != null) {
-                        event.setDescription(event.getDescription() + "\n\n" + venueInfo);
-                    } else {
-                        event.setDescription(venueInfo);
-                    }
+            if (request.getVenues() != null && !request.getVenues().isEmpty()) {
+                EventCreationRequest.VenueRequest selectedVenue = request.getVenues().get(0);
+                String venueInfo = String.format("Venue: %s, Address: %s", 
+                    selectedVenue.getName(), selectedVenue.getAddress());
+                if (event.getDescription() != null) {
+                    event.setDescription(event.getDescription() + "\n\n" + venueInfo);
+                } else {
+                    event.setDescription(venueInfo);
                 }
             }
             
@@ -133,10 +94,10 @@ public class EventService {
     /**
      * Update an existing event
      * @param eventId The ID of the event to update
-     * @param validatedData The validated update data
+     * @param request The validated update request
      * @return EventResponse with updated event details
      */
-    public EventResponse updateEvent(String eventId, Map<String, Object> validatedData) {
+    public EventResponse updateEvent(String eventId, EventUpdateRequest request) {
         try {
             UUID uuid = UUID.fromString(eventId);
             Optional<Event> eventOpt = eventRepository.findById(uuid);
@@ -148,23 +109,29 @@ public class EventService {
             Event event = eventOpt.get();
             
             // Update fields if provided
-            if (validatedData.containsKey("name")) {
-                event.setName((String) validatedData.get("name"));
+            if (request.getName() != null) {
+                event.setName(request.getName());
             }
-            if (validatedData.containsKey("description")) {
-                event.setDescription((String) validatedData.get("description"));
+            if (request.getDescription() != null) {
+                event.setDescription(request.getDescription());
             }
-            if (validatedData.containsKey("capacity")) {
-                Object capacityObj = validatedData.get("capacity");
-                if (capacityObj instanceof Integer) {
-                    event.setCapacity((Integer) capacityObj);
-                } else if (capacityObj instanceof String) {
-                    try {
-                        event.setCapacity(Integer.parseInt((String) capacityObj));
-                    } catch (NumberFormatException e) {
-                        // Ignore invalid capacity
-                    }
-                }
+            if (request.getCapacity() != null) {
+                event.setCapacity(request.getCapacity());
+            }
+            if (request.getStartDateTime() != null) {
+                event.setStartDateTime(request.getStartDateTime());
+            }
+            if (request.getEndDateTime() != null) {
+                event.setEndDateTime(request.getEndDateTime());
+            }
+            if (request.getIsPublic() != null) {
+                event.setIsPublic(request.getIsPublic());
+            }
+            if (request.getRequiresApproval() != null) {
+                event.setRequiresApproval(request.getRequiresApproval());
+            }
+            if (request.getQrCodeEnabled() != null) {
+                event.setQrCodeEnabled(request.getQrCodeEnabled());
             }
             
             // Save updated event
@@ -358,45 +325,120 @@ public class EventService {
     }
 
     /**
-     * Parse date time string to LocalDateTime with validation
+     * Convert Map data to EventCreationRequest DTO
+     * This method is used for backward compatibility with existing Map-based data
      */
-    private LocalDateTime parseDateTime(String dateTimeStr) {
-        if (dateTimeStr == null || dateTimeStr.trim().isEmpty()) {
-            throw new IllegalArgumentException("Date time cannot be empty");
+    public EventCreationRequest convertMapToEventCreationRequest(Map<String, Object> validatedData) {
+        EventCreationRequest request = new EventCreationRequest();
+        
+        request.setName((String) validatedData.get("name"));
+        request.setDescription((String) validatedData.get("description"));
+        request.setOwnerId((String) validatedData.get("ownerId"));
+        request.setEventType((String) validatedData.get("eventType"));
+        
+        // Parse dates
+        String startDateTimeStr = (String) validatedData.get("startDateTime");
+        if (startDateTimeStr != null) {
+            request.setStartDateTime(LocalDateTime.parse(startDateTimeStr));
         }
         
-        try {
-            // Try ISO format first
-            LocalDateTime dateTime = LocalDateTime.parse(dateTimeStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-            
-            // Validate date is not in the past (for start date)
-            if (dateTime.isBefore(LocalDateTime.now().minusHours(1))) {
-                throw new IllegalArgumentException("Event date cannot be more than 1 hour in the past");
-            }
-            
-            // Validate date is not too far in the future (max 10 years)
-            if (dateTime.isAfter(LocalDateTime.now().plusYears(10))) {
-                throw new IllegalArgumentException("Event date cannot be more than 10 years in the future");
-            }
-            
-            return dateTime;
-        } catch (Exception e) {
+        String endDateTimeStr = (String) validatedData.get("endDateTime");
+        if (endDateTimeStr != null) {
+            request.setEndDateTime(LocalDateTime.parse(endDateTimeStr));
+        }
+        
+        // Parse capacity
+        Object capacityObj = validatedData.get("capacity");
+        if (capacityObj instanceof Integer) {
+            request.setCapacity((Integer) capacityObj);
+        } else if (capacityObj instanceof String) {
             try {
-                // Try with 'T' separator
-                LocalDateTime dateTime = LocalDateTime.parse(dateTimeStr.replace(" ", "T"));
-                
-                // Apply same validations
-                if (dateTime.isBefore(LocalDateTime.now().minusHours(1))) {
-                    throw new IllegalArgumentException("Event date cannot be more than 1 hour in the past");
-                }
-                if (dateTime.isAfter(LocalDateTime.now().plusYears(10))) {
-                    throw new IllegalArgumentException("Event date cannot be more than 10 years in the future");
-                }
-                
-                return dateTime;
-            } catch (Exception e2) {
-                throw new IllegalArgumentException("Invalid date format: " + dateTimeStr + ". Expected ISO format (YYYY-MM-DDTHH:mm:ss)");
+                request.setCapacity(Integer.parseInt((String) capacityObj));
+            } catch (NumberFormatException e) {
+                // Ignore invalid capacity
             }
         }
+        
+        // Set boolean fields
+        request.setIsPublic((Boolean) validatedData.getOrDefault("isPublic", true));
+        request.setRequiresApproval((Boolean) validatedData.getOrDefault("requiresApproval", false));
+        request.setQrCodeEnabled((Boolean) validatedData.getOrDefault("qrCodeEnabled", false));
+        
+        // Handle venues
+        if (validatedData.containsKey("venues") && validatedData.get("venues") != null) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> venues = (List<Map<String, Object>>) validatedData.get("venues");
+            List<EventCreationRequest.VenueRequest> venueRequests = new ArrayList<>();
+            
+            for (Map<String, Object> venue : venues) {
+                EventCreationRequest.VenueRequest venueRequest = new EventCreationRequest.VenueRequest();
+                venueRequest.setName((String) venue.get("name"));
+                venueRequest.setAddress((String) venue.get("address"));
+                venueRequest.setDescription((String) venue.get("description"));
+                venueRequest.setContactEmail((String) venue.get("contactEmail"));
+                venueRequest.setContactPhone((String) venue.get("contactPhone"));
+                venueRequest.setWebsite((String) venue.get("website"));
+                venueRequests.add(venueRequest);
+            }
+            request.setVenues(venueRequests);
+        }
+        
+        return request;
     }
+    
+    /**
+     * Convert Map data to EventUpdateRequest DTO
+     * This method is used for backward compatibility with existing Map-based data
+     */
+    public EventUpdateRequest convertMapToEventUpdateRequest(Map<String, Object> validatedData) {
+        EventUpdateRequest request = new EventUpdateRequest();
+        
+        if (validatedData.containsKey("name")) {
+            request.setName((String) validatedData.get("name"));
+        }
+        if (validatedData.containsKey("description")) {
+            request.setDescription((String) validatedData.get("description"));
+        }
+        if (validatedData.containsKey("eventType")) {
+            request.setEventType((String) validatedData.get("eventType"));
+        }
+        
+        // Parse dates
+        String startDateTimeStr = (String) validatedData.get("startDateTime");
+        if (startDateTimeStr != null) {
+            request.setStartDateTime(LocalDateTime.parse(startDateTimeStr));
+        }
+        
+        String endDateTimeStr = (String) validatedData.get("endDateTime");
+        if (endDateTimeStr != null) {
+            request.setEndDateTime(LocalDateTime.parse(endDateTimeStr));
+        }
+        
+        // Parse capacity
+        Object capacityObj = validatedData.get("capacity");
+        if (capacityObj instanceof Integer) {
+            request.setCapacity((Integer) capacityObj);
+        } else if (capacityObj instanceof String) {
+            try {
+                request.setCapacity(Integer.parseInt((String) capacityObj));
+            } catch (NumberFormatException e) {
+                // Ignore invalid capacity
+            }
+        }
+        
+        // Set boolean fields
+        if (validatedData.containsKey("isPublic")) {
+            request.setIsPublic((Boolean) validatedData.get("isPublic"));
+        }
+        if (validatedData.containsKey("requiresApproval")) {
+            request.setRequiresApproval((Boolean) validatedData.get("requiresApproval"));
+        }
+        if (validatedData.containsKey("qrCodeEnabled")) {
+            request.setQrCodeEnabled((Boolean) validatedData.get("qrCodeEnabled"));
+        }
+        
+        return request;
+    }
+
 }
+

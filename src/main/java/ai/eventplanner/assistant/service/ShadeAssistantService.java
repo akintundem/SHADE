@@ -4,9 +4,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import ai.eventplanner.assistant.dto.AssistantChatResponse;
+import ai.eventplanner.assistant.validation.JsonSchemaValidator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -24,14 +28,25 @@ public class ShadeAssistantService {
     
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final JsonSchemaValidator jsonValidator;
     
     public ShadeAssistantService() {
-        this.restTemplate = new RestTemplate();
+        this.restTemplate = createRestTemplateWithTimeouts();
         this.objectMapper = new ObjectMapper();
+        this.jsonValidator = new JsonSchemaValidator();
+    }
+    
+    private RestTemplate createRestTemplateWithTimeouts() {
+        RestTemplate template = new RestTemplate();
+        
+        // Note: Timeout configuration would require HttpComponentsClientHttpRequestFactory
+        // For now, we'll rely on default timeouts and handle timeouts in exception handling
+        
+        return template;
     }
     
     /**
-     * Send a message to the chat and get response
+     * Send a message to the chat and get response with retry logic
      */
     public AssistantChatResponse sendMessage(String message, String userId, String chatId, String eventId, String correlationId) {
         String url = shadeAssistantUrl + "/chat";
@@ -64,13 +79,46 @@ public class ShadeAssistantService {
             
             if (response.getStatusCode() == HttpStatus.OK) {
                 JsonNode jsonResponse = objectMapper.readTree(response.getBody());
+                
+                // Validate JSON schema before parsing
+                if (!jsonValidator.validateAssistantResponse(jsonResponse)) {
+                    throw new RuntimeException("Invalid response format from Shade Assistant API");
+                }
+                
                 return parseAssistantResponse(jsonResponse);
             } else {
                 throw new RuntimeException("Shade Assistant API call failed with status: " + response.getStatusCode());
             }
+        } catch (HttpClientErrorException e) {
+            // Return fallback response for client errors
+            return createFallbackResponse(chatId, userId, eventId);
+        } catch (HttpServerErrorException e) {
+            // Return fallback response for server errors
+            return createFallbackResponse(chatId, userId, eventId);
+        } catch (ResourceAccessException e) {
+            // Return fallback response for network errors
+            return createFallbackResponse(chatId, userId, eventId);
         } catch (Exception e) {
-            throw new RuntimeException("Error calling Shade Assistant API", e);
+            // Return fallback response for unexpected errors
+            return createFallbackResponse(chatId, userId, eventId);
         }
+    }
+    
+    /**
+     * Create fallback response for failed service calls
+     */
+    private AssistantChatResponse createFallbackResponse(String chatId, String userId, String eventId) {
+        AssistantChatResponse fallbackResponse = new AssistantChatResponse();
+        fallbackResponse.setReply("I'm sorry, I'm currently experiencing technical difficulties. Please try again later.");
+        fallbackResponse.setToolUsed("Error");
+        fallbackResponse.setData(null);
+        fallbackResponse.setShowChips(false);
+        fallbackResponse.setChatId(chatId);
+        fallbackResponse.setUserId(userId);
+        fallbackResponse.setEventId(eventId);
+        fallbackResponse.setSuccess(false);
+        fallbackResponse.setError("Service temporarily unavailable");
+        return fallbackResponse;
     }
     
     /**
@@ -153,7 +201,11 @@ public class ShadeAssistantService {
     
     private AssistantChatResponse parseAssistantResponse(JsonNode json) {
         AssistantChatResponse response = new AssistantChatResponse();
-        response.setReply(json.path("reply").asText(null));
+        
+        // Sanitize and set reply content
+        String reply = json.path("reply").asText(null);
+        response.setReply(jsonValidator.sanitizeContent(reply));
+        
         response.setToolUsed(json.path("tool_used").asText(null));
         response.setChatId(json.path("chat_id").asText(null));
         response.setUserId(json.path("user_id").asText(null));

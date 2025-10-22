@@ -56,4 +56,32 @@ public class UserSession extends BaseEntity {
             lastSeenAt = LocalDateTime.now();
         }
     }
+    
+    /**
+     * Check if session is expired
+     */
+    public boolean isExpired() {
+        return LocalDateTime.now().isAfter(expiresAt);
+    }
+    
+    /**
+     * Check if session is valid (not revoked and not expired)
+     */
+    public boolean isValid() {
+        return !revoked && !isExpired();
+    }
+    
+    /**
+     * Update last seen timestamp
+     */
+    public void updateLastSeen() {
+        this.lastSeenAt = LocalDateTime.now();
+    }
+    
+    /**
+     * Revoke the session
+     */
+    public void revoke() {
+        this.revoked = true;
+    }
 }
