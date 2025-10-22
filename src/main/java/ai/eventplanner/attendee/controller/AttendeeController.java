@@ -28,6 +28,16 @@ public class AttendeeController {
     @PostMapping
     @Operation(summary = "Add attendees")
     public ResponseEntity<List<AttendeeEntity>> add(@Valid @RequestBody List<AttendeeCreateRequest> attendees) {
+        // Validate input list
+        if (attendees == null || attendees.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        
+        // Validate list size to prevent abuse
+        if (attendees.size() > 100) {
+            return ResponseEntity.badRequest().build();
+        }
+        
         List<AttendeeEntity> toSave = attendees.stream().map(req -> {
             AttendeeEntity e = new AttendeeEntity();
             e.setEventId(req.getEventId());
@@ -53,23 +63,42 @@ public class AttendeeController {
 	@GetMapping("/event/{eventId}")
 	@Operation(summary = "List attendees by event")
 	public ResponseEntity<List<AttendeeEntity>> listByEvent(@PathVariable String eventId) {
-		return ResponseEntity.ok(attendeeService.listByEvent(java.util.UUID.fromString(eventId)));
+		try {
+			java.util.UUID uuid = java.util.UUID.fromString(eventId);
+			return ResponseEntity.ok(attendeeService.listByEvent(uuid));
+		} catch (IllegalArgumentException e) {
+			return ResponseEntity.badRequest().build();
+		}
 	}
 
 	@PatchMapping("/{attendeeId}/rsvp")
 	@Operation(summary = "Update RSVP status")
 	public ResponseEntity<AttendeeEntity> updateRsvp(@PathVariable String attendeeId, @RequestParam String status) {
-		return attendeeService.updateRsvp(java.util.UUID.fromString(attendeeId), status)
-			.map(ResponseEntity::ok)
-			.orElseGet(() -> ResponseEntity.notFound().build());
+		try {
+			java.util.UUID uuid = java.util.UUID.fromString(attendeeId);
+			// Validate status parameter
+			if (status == null || status.trim().isEmpty()) {
+				return ResponseEntity.badRequest().build();
+			}
+			return attendeeService.updateRsvp(uuid, status)
+				.map(ResponseEntity::ok)
+				.orElseGet(() -> ResponseEntity.notFound().build());
+		} catch (IllegalArgumentException e) {
+			return ResponseEntity.badRequest().build();
+		}
 	}
 
 	@PostMapping("/{attendeeId}/check-in")
 	@Operation(summary = "Check-in attendee")
 	public ResponseEntity<AttendeeEntity> checkIn(@PathVariable String attendeeId) {
-		return attendeeService.checkIn(java.util.UUID.fromString(attendeeId))
-			.map(ResponseEntity::ok)
-			.orElseGet(() -> ResponseEntity.notFound().build());
+		try {
+			java.util.UUID uuid = java.util.UUID.fromString(attendeeId);
+			return attendeeService.checkIn(uuid)
+				.map(ResponseEntity::ok)
+				.orElseGet(() -> ResponseEntity.notFound().build());
+		} catch (IllegalArgumentException e) {
+			return ResponseEntity.badRequest().build();
+		}
 	}
 }
 

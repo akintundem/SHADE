@@ -57,7 +57,13 @@ public class RateLimitingFilter implements Filter {
         // Extract client ID
         String clientId = httpRequest.getHeader("X-Client-ID");
         if (clientId == null || clientId.trim().isEmpty()) {
-            // If no client ID, skip rate limiting (will be caught by client validation filter)
+            // Apply default rate limiting even without client ID
+            String defaultClientId = "anonymous";
+            if (!rateLimitingService.isWithinRateLimit(defaultClientId, requestPath)) {
+                log.warn("Rate limit exceeded for anonymous client on {} {}", method, requestPath);
+                sendRateLimitExceededResponse(httpResponse, defaultClientId, requestPath);
+                return;
+            }
             chain.doFilter(request, response);
             return;
         }

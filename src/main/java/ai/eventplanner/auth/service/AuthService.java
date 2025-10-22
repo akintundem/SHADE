@@ -29,14 +29,18 @@ import ai.eventplanner.common.domain.enums.OrganizationType;
 import ai.eventplanner.common.exception.ForbiddenException;
 import ai.eventplanner.common.exception.ResourceNotFoundException;
 import ai.eventplanner.common.exception.UnauthorizedException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -44,6 +48,7 @@ import java.util.stream.Collectors;
 
 @Service
 @Transactional
+@Slf4j
 public class AuthService {
 
     private final UserAccountRepository userAccountRepository;
@@ -53,6 +58,9 @@ public class AuthService {
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
+    
+    @Value("${auth.session.max-concurrent:5}")
+    private int maxConcurrentSessions;
 
     public AuthService(UserAccountRepository userAccountRepository,
                        OrganizationProfileRepository organizationRepository,
@@ -99,24 +107,37 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request, String clientIp) {
+        log.info("Login attempt for email: {}", request.getEmail());
+        
         UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizeEmail(request.getEmail()))
-                .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+                .orElseThrow(() -> {
+                    log.warn("Login failed - user not found for email: {}", request.getEmail());
+                    return new UnauthorizedException("Invalid credentials");
+                });
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            log.warn("Login failed - invalid password for email: {}", request.getEmail());
             throw new UnauthorizedException("Invalid credentials");
         }
 
         user.setLastLoginAt(LocalDateTime.now(ZoneOffset.UTC));
+        log.info("Login successful for user: {}", user.getId());
 
         return issueAuthResponse(user, request.isRememberMe(), request.getClientId(), request.getDeviceId(), clientIp, "Login successful");
     }
 
     public AuthResponse refreshToken(RefreshTokenRequest request) {
+        log.debug("Token refresh attempt");
+        
         UserSession session = sessionRepository.findByRefreshTokenAndRevokedFalse(request.getRefreshToken())
-                .orElseThrow(() -> new UnauthorizedException("Invalid refresh token"));
+                .orElseThrow(() -> {
+                    log.warn("Token refresh failed - invalid refresh token");
+                    return new UnauthorizedException("Invalid refresh token");
+                });
 
         if (session.getExpiresAt().isBefore(LocalDateTime.now(ZoneOffset.UTC))) {
             session.setRevoked(true);
+            log.warn("Token refresh failed - refresh token expired for user: {}", session.getUser().getId());
             throw new UnauthorizedException("Refresh token expired");
         }
 
@@ -126,6 +147,8 @@ public class AuthService {
 
         UserAccount user = session.getUser();
         String accessToken = tokenService.generateAccessToken(user, session.getClientId());
+        
+        log.info("Token refresh successful for user: {}", user.getId());
 
         return AuthResponse.builder()
                 .message("Token refreshed successfully")
@@ -137,6 +160,7 @@ public class AuthService {
     }
 
     public void logout(UserAccount user) {
+        log.info("Logout for user: {}", user.getId());
         sessionRepository.findByUser(user).forEach(session -> session.setRevoked(true));
     }
 
@@ -205,7 +229,7 @@ public class AuthService {
                 .map(user -> {
                     PasswordResetToken token = PasswordResetToken.builder()
                             .user(user)
-                            .token("prt_" + UUID.randomUUID())
+                            .token(generateSecureToken())
                             .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plusHours(1))
                             .consumed(false)
                             .build();
@@ -236,7 +260,7 @@ public class AuthService {
                 .map(user -> {
                     EmailVerificationToken token = EmailVerificationToken.builder()
                             .user(user)
-                            .token("evt_" + UUID.randomUUID())
+                            .token(generateSecureToken())
                             .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plusDays(1))
                             .consumed(false)
                             .build();
@@ -348,11 +372,12 @@ public class AuthService {
                                            String message) {
         // Check concurrent session limits
         long activeSessionCount = sessionRepository.countByUserAndRevokedFalse(user);
-        if (activeSessionCount >= 5) { // Max 5 concurrent sessions
+        if (activeSessionCount >= maxConcurrentSessions) {
             // Revoke oldest sessions to make room
+            int sessionsToRevoke = (int) (activeSessionCount - maxConcurrentSessions + 1);
             sessionRepository.findByUserAndRevokedFalseOrderByLastSeenAtAsc(user)
                     .stream()
-                    .limit(activeSessionCount - 4) // Keep 4, revoke the rest
+                    .limit(sessionsToRevoke)
                     .forEach(session -> session.revoke());
         }
         
@@ -453,5 +478,15 @@ public class AuthService {
         address.setZipCode(request.getZipCode());
         address.setCountry(request.getCountry());
         return address;
+    }
+    
+    /**
+     * Generate cryptographically secure token
+     */
+    private String generateSecureToken() {
+        SecureRandom random = new SecureRandom();
+        byte[] bytes = new byte[32]; // 256 bits
+        random.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 }

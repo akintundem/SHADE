@@ -22,7 +22,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/assistant/shade")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "${app.cors.allowed-origins}")
 public class ShadeController {
 
     private final ShadeConversationService shadeConversationService;

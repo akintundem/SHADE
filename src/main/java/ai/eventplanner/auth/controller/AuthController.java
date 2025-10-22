@@ -79,18 +79,27 @@ public class AuthController {
 
     @PostMapping("/validate-token")
     public ResponseEntity<Map<String, Object>> validateToken(@RequestParam("token") String token) {
-        boolean valid = jwtValidationUtil.validateToken(token);
-        if (!valid) {
-            return ResponseEntity.ok(Map.of("isValid", false));
+        try {
+            if (token == null || token.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("isValid", false, "error", "Token is required"));
+            }
+            
+            boolean valid = jwtValidationUtil.validateToken(token);
+            if (!valid) {
+                return ResponseEntity.ok(Map.of("isValid", false));
+            }
+            
+            Claims claims = jwtValidationUtil.getClaimsFromToken(token);
+            UUID userId = UUID.fromString(claims.getSubject());
+            UserAccount user = userAccountRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+            return ResponseEntity.ok(Map.of(
+                    "isValid", true,
+                    "user", AuthMapper.toUserResponse(user)
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("isValid", false, "error", "Invalid token format"));
         }
-        Claims claims = jwtValidationUtil.getClaimsFromToken(token);
-        UUID userId = UUID.fromString(claims.getSubject());
-        UserAccount user = userAccountRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        return ResponseEntity.ok(Map.of(
-                "isValid", true,
-                "user", AuthMapper.toUserResponse(user)
-        ));
     }
 
     @PostMapping("/logout")

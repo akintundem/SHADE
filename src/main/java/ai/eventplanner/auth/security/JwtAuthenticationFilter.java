@@ -48,6 +48,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
         try {
             if (!jwtValidationUtil.validateToken(token)) {
+                logger.debug("JWT token validation failed");
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -55,6 +56,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Claims claims = jwtValidationUtil.getClaimsFromToken(token);
             String subject = claims.getSubject();
             if (!StringUtils.hasText(subject)) {
+                logger.debug("JWT token missing subject");
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -62,11 +64,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             UUID userId = UUID.fromString(subject);
             Optional<UserAccount> userOpt = userAccountRepository.findById(userId);
             if (userOpt.isEmpty()) {
+                logger.debug("User not found for JWT subject: {}", subject);
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            UserPrincipal principal = new UserPrincipal(userOpt.get());
+            UserAccount user = userOpt.get();
+            // Check if user is still active
+            if (!"ACTIVE".equals(user.getStatus())) {
+                logger.debug("User account is not active: {}", user.getId());
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            UserPrincipal principal = new UserPrincipal(user);
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                     principal,
                     null,
@@ -74,8 +85,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             );
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authentication);
+            logger.debug("Successfully authenticated user: {}", user.getId());
+        } catch (IllegalArgumentException ex) {
+            logger.warn("Invalid JWT token format: {}", ex.getMessage());
         } catch (Exception ex) {
-            logger.debug("Failed to authenticate request");
+            logger.warn("Failed to authenticate request: {}", ex.getMessage());
+            // Don't expose internal error details to client
         }
 
         filterChain.doFilter(request, response);

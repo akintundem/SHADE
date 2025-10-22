@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import ai.eventplanner.assistant.dto.AssistantChatResponse;
 import ai.eventplanner.assistant.validation.JsonSchemaValidator;
+import lombok.extern.slf4j.Slf4j;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -21,9 +22,10 @@ import java.util.ArrayList;
  * This service handles all communication with the Python FastAPI service
  */
 @Service
+@Slf4j
 public class ShadeAssistantService {
     
-    @Value("${shade.assistant.url:http://localhost:8000}")
+    @Value("${shade.assistant.url}")
     private String shadeAssistantUrl;
     
     private final RestTemplate restTemplate;
@@ -90,24 +92,24 @@ public class ShadeAssistantService {
                 throw new RuntimeException("Shade Assistant API call failed with status: " + response.getStatusCode());
             }
         } catch (HttpClientErrorException e) {
-            // Return fallback response for client errors
-            return createFallbackResponse(chatId, userId, eventId);
+            log.error("Client error calling Shade Assistant API: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            return createFallbackResponse(chatId, userId, eventId, "Service temporarily unavailable");
         } catch (HttpServerErrorException e) {
-            // Return fallback response for server errors
-            return createFallbackResponse(chatId, userId, eventId);
+            log.error("Server error calling Shade Assistant API: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            return createFallbackResponse(chatId, userId, eventId, "Service temporarily unavailable");
         } catch (ResourceAccessException e) {
-            // Return fallback response for network errors
-            return createFallbackResponse(chatId, userId, eventId);
+            log.error("Network error calling Shade Assistant API: {}", e.getMessage());
+            return createFallbackResponse(chatId, userId, eventId, "Network connection failed");
         } catch (Exception e) {
-            // Return fallback response for unexpected errors
-            return createFallbackResponse(chatId, userId, eventId);
+            log.error("Unexpected error calling Shade Assistant API: {}", e.getMessage(), e);
+            return createFallbackResponse(chatId, userId, eventId, "Internal service error");
         }
     }
     
     /**
      * Create fallback response for failed service calls
      */
-    private AssistantChatResponse createFallbackResponse(String chatId, String userId, String eventId) {
+    private AssistantChatResponse createFallbackResponse(String chatId, String userId, String eventId, String errorMessage) {
         AssistantChatResponse fallbackResponse = new AssistantChatResponse();
         fallbackResponse.setReply("I'm sorry, I'm currently experiencing technical difficulties. Please try again later.");
         fallbackResponse.setToolUsed("Error");
@@ -117,7 +119,7 @@ public class ShadeAssistantService {
         fallbackResponse.setUserId(userId);
         fallbackResponse.setEventId(eventId);
         fallbackResponse.setSuccess(false);
-        fallbackResponse.setError("Service temporarily unavailable");
+        fallbackResponse.setError(errorMessage);
         return fallbackResponse;
     }
     

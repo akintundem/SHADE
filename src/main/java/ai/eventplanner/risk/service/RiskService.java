@@ -20,7 +20,7 @@ public class RiskService {
 
     private final WebClient weatherClient;
 
-    public RiskService(@Value("${WEATHER_BASE_URL:http://localhost:8089}") String weatherBaseUrl) {
+    public RiskService(@Value("${WEATHER_BASE_URL}") String weatherBaseUrl) {
         this.weatherClient = WebClient.builder().baseUrl(weatherBaseUrl).build();
     }
 

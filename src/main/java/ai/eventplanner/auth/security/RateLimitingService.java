@@ -31,6 +31,10 @@ public class RateLimitingService {
         try {
             ClientApplication client = clientValidationService.getClientById(clientId).orElse(null);
             if (client == null) {
+                // For anonymous clients, use default rate limits
+                if ("anonymous".equals(clientId)) {
+                    return checkAnonymousRateLimit(clientId, endpoint);
+                }
                 return false;
             }
 
@@ -85,6 +89,45 @@ public class RateLimitingService {
      */
     private String getCurrentHour() {
         return String.valueOf(Instant.now().getEpochSecond() / 3600);
+    }
+    
+    /**
+     * Check rate limit for anonymous clients with default limits
+     */
+    private boolean checkAnonymousRateLimit(String clientId, String endpoint) {
+        String minuteKey = RATE_LIMIT_MINUTE_PREFIX + clientId + ":" + endpoint + ":" + getCurrentMinute();
+        String hourKey = RATE_LIMIT_HOUR_PREFIX + clientId + ":" + endpoint + ":" + getCurrentHour();
+        
+        // Default limits for anonymous clients (more restrictive)
+        int minuteLimit = 10;  // 10 requests per minute
+        int hourLimit = 100;   // 100 requests per hour
+        
+        // Check minute rate limit
+        String minuteCount = redisTemplate.opsForValue().get(minuteKey);
+        int currentMinuteCount = minuteCount != null ? Integer.parseInt(minuteCount) : 0;
+        
+        if (currentMinuteCount >= minuteLimit) {
+            log.warn("Anonymous rate limit exceeded on endpoint {} (minute limit: {})", endpoint, minuteLimit);
+            return false;
+        }
+        
+        // Check hour rate limit
+        String hourCount = redisTemplate.opsForValue().get(hourKey);
+        int currentHourCount = hourCount != null ? Integer.parseInt(hourCount) : 0;
+        
+        if (currentHourCount >= hourLimit) {
+            log.warn("Anonymous rate limit exceeded on endpoint {} (hour limit: {})", endpoint, hourLimit);
+            return false;
+        }
+        
+        // Increment counters atomically
+        redisTemplate.opsForValue().increment(minuteKey);
+        redisTemplate.expire(minuteKey, Duration.ofMinutes(1));
+        
+        redisTemplate.opsForValue().increment(hourKey);
+        redisTemplate.expire(hourKey, Duration.ofHours(1));
+        
+        return true;
     }
 
     /**

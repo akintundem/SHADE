@@ -23,9 +23,9 @@ public class TokenService {
     private final long refreshTokenValidityMillis;
 
     public TokenService(
-            @Value("${jwt.secret:}") String secret,
-            @Value("${jwt.expiration:3600000}") long accessTokenValidityMillis,
-            @Value("${jwt.refresh-expiration:604800000}") long refreshTokenValidityMillis
+            @Value("${jwt.secret}") String secret,
+            @Value("${jwt.expiration}") long accessTokenValidityMillis,
+            @Value("${jwt.refresh-expiration}") long refreshTokenValidityMillis
     ) {
         if (secret == null || secret.trim().isEmpty()) {
             throw new IllegalStateException("JWT secret must be configured via JWT_SECRET environment variable");

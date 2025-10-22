@@ -12,7 +12,7 @@ public class AssistantClientConfig {
     @Bean
     public WebClient shadeAssistantClient(
             WebClient.Builder builder,
-            @Value("${assistant.service.base-url:http://localhost:9000}") String baseUrl) {
+            @Value("${assistant.service.base-url}") String baseUrl) {
         return builder
                 .baseUrl(baseUrl)
                 .exchangeStrategies(ExchangeStrategies.builder()

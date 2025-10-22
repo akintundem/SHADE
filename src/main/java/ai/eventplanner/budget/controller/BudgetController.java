@@ -25,27 +25,49 @@ public class BudgetController {
 	@GetMapping("/{eventId}")
 	@Operation(summary = "Get event budget")
 	public ResponseEntity<BudgetEntity> getBudget(@PathVariable String eventId) {
-		return budgetService.getByEventId(java.util.UUID.fromString(eventId))
-			.map(ResponseEntity::ok)
-			.orElseGet(() -> ResponseEntity.notFound().build());
+		try {
+			java.util.UUID uuid = java.util.UUID.fromString(eventId);
+			return budgetService.getByEventId(uuid)
+				.map(ResponseEntity::ok)
+				.orElseGet(() -> ResponseEntity.notFound().build());
+		} catch (IllegalArgumentException e) {
+			return ResponseEntity.badRequest().build();
+		}
 	}
 
     @PostMapping("/{eventId}/line-items")
     @Operation(summary = "Add budget line item")
     public ResponseEntity<BudgetLineItemEntity> addLineItem(@PathVariable String eventId, @Valid @RequestBody BudgetLineItemCreateRequest payload) {
-        BudgetLineItemEntity item = new BudgetLineItemEntity();
-        item.setBudgetId(payload.getBudgetId());
-        item.setCategory(payload.getCategory());
-        item.setDescription(payload.getDescription());
-        item.setEstimatedCost(payload.getEstimatedCost());
-        item.setActualCost(payload.getActualCost());
-        item.setVendorId(payload.getVendorId());
-        return ResponseEntity.ok(budgetService.addLineItem(item));
+        try {
+            // Validate eventId format
+            java.util.UUID.fromString(eventId);
+            
+            // Validate payload
+            if (payload == null) {
+                return ResponseEntity.badRequest().build();
+            }
+            
+            BudgetLineItemEntity item = new BudgetLineItemEntity();
+            item.setBudgetId(payload.getBudgetId());
+            item.setCategory(payload.getCategory());
+            item.setDescription(payload.getDescription());
+            item.setEstimatedCost(payload.getEstimatedCost());
+            item.setActualCost(payload.getActualCost());
+            item.setVendorId(payload.getVendorId());
+            return ResponseEntity.ok(budgetService.addLineItem(item));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     @PostMapping
     @Operation(summary = "Create or update budget")
     public ResponseEntity<BudgetEntity> upsert(@Valid @RequestBody BudgetUpsertRequest budget) {
+        // Validate payload
+        if (budget == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        
         BudgetEntity entity = new BudgetEntity();
         entity.setEventId(budget.getEventId());
         entity.setTotalBudget(budget.getTotalBudget());
@@ -56,7 +78,12 @@ public class BudgetController {
 	@GetMapping("/{budgetId}/rollup")
 	@Operation(summary = "Compute rollup total for a budget")
 	public ResponseEntity<java.math.BigDecimal> rollup(@PathVariable String budgetId) {
-		return ResponseEntity.ok(budgetService.computeRollup(java.util.UUID.fromString(budgetId)));
+		try {
+			java.util.UUID uuid = java.util.UUID.fromString(budgetId);
+			return ResponseEntity.ok(budgetService.computeRollup(uuid));
+		} catch (IllegalArgumentException e) {
+			return ResponseEntity.badRequest().build();
+		}
 	}
 }
 
