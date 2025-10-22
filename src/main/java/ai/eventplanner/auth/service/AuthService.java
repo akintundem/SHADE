@@ -169,7 +169,22 @@ public class AuthService {
     }
 
     public Page<UserResponse> searchUsers(String term, Pageable pageable) {
-        String sanitized = term == null ? "" : term.trim();
+        // Validate and sanitize search term
+        if (term == null || term.trim().isEmpty()) {
+            throw new IllegalArgumentException("Search term cannot be empty");
+        }
+        
+        // Additional validation to prevent injection attempts
+        String sanitized = term.trim();
+        if (sanitized.length() > 100) {
+            throw new IllegalArgumentException("Search term too long");
+        }
+        
+        // Check for potentially malicious patterns
+        if (sanitized.matches(".*[;'\"\\\\].*")) {
+            throw new IllegalArgumentException("Invalid characters in search term");
+        }
+        
         return userAccountRepository
                 .findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(sanitized, sanitized, pageable)
                 .map(AuthMapper::toUserResponse);
@@ -294,7 +309,22 @@ public class AuthService {
     }
 
     public Page<OrganizationResponse> searchOrganizations(String term, Pageable pageable) {
-        String sanitized = term == null ? "" : term.trim();
+        // Validate and sanitize search term
+        if (term == null || term.trim().isEmpty()) {
+            throw new IllegalArgumentException("Search term cannot be empty");
+        }
+        
+        // Additional validation to prevent injection attempts
+        String sanitized = term.trim();
+        if (sanitized.length() > 100) {
+            throw new IllegalArgumentException("Search term too long");
+        }
+        
+        // Check for potentially malicious patterns
+        if (sanitized.matches(".*[;'\"\\\\].*")) {
+            throw new IllegalArgumentException("Invalid characters in search term");
+        }
+        
         return organizationRepository
                 .findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(sanitized, sanitized, pageable)
                 .map(AuthMapper::toOrganizationResponse);
@@ -343,10 +373,59 @@ public class AuthService {
         if (password == null || confirmPassword == null || !password.equals(confirmPassword)) {
             throw new IllegalArgumentException("Passwords do not match");
         }
+        
+        // Validate password strength
+        validatePasswordStrength(password);
+    }
+    
+    private void validatePasswordStrength(String password) {
+        if (password == null || password.length() < 8) {
+            throw new IllegalArgumentException("Password must be at least 8 characters long");
+        }
+        
+        if (password.length() > 128) {
+            throw new IllegalArgumentException("Password too long (max 128 characters)");
+        }
+        
+        // Check for at least one uppercase letter
+        if (!password.matches(".*[A-Z].*")) {
+            throw new IllegalArgumentException("Password must contain at least one uppercase letter");
+        }
+        
+        // Check for at least one lowercase letter
+        if (!password.matches(".*[a-z].*")) {
+            throw new IllegalArgumentException("Password must contain at least one lowercase letter");
+        }
+        
+        // Check for at least one digit
+        if (!password.matches(".*\\d.*")) {
+            throw new IllegalArgumentException("Password must contain at least one digit");
+        }
+        
+        // Check for at least one special character
+        if (!password.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?].*")) {
+            throw new IllegalArgumentException("Password must contain at least one special character");
+        }
     }
 
     private String normalizeEmail(String email) {
-        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
+        if (email == null || email.trim().isEmpty()) {
+            return null;
+        }
+        
+        String normalized = email.trim().toLowerCase(Locale.ROOT);
+        
+        // Basic email validation
+        if (!normalized.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")) {
+            throw new IllegalArgumentException("Invalid email format");
+        }
+        
+        // Check email length
+        if (normalized.length() > 254) {
+            throw new IllegalArgumentException("Email address too long");
+        }
+        
+        return normalized;
     }
 
     private String safeTrim(String value) {

@@ -85,15 +85,12 @@ assistant:
 
 # JWT Configuration
 jwt:
-  secret: ${JWT_SECRET:myVerySecureSecretKeyThatIsAtLeast32CharactersLongForJWT}
-  expiration: 86400000 # 24 hours in milliseconds
-  refresh-expiration: 604800000 # 7 days in milliseconds
+  secret: ${JWT_SECRET:} 
+  expiration: 86400000 
+  refresh-expiration: 604800000 
 
 # External API Keys
   external:
-    stripe:
-      api-key: ${STRIPE_API_KEY:your-stripe-api-key}
-      webhook-secret: ${STRIPE_WEBHOOK_SECRET:your-stripe-webhook-secret}
     sendgrid:
       api-key: ${SENDGRID_API_KEY:your-sendgrid-api-key}
       from-email: ${SENDGRID_FROM_EMAIL:noreply@eventplanner.com}

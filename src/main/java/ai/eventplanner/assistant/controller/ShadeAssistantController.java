@@ -15,7 +15,7 @@ import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/assistant")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "${app.cors.allowed-origins:http://localhost:3000,http://localhost:8080}")
 @ConditionalOnProperty(name = "assistant.legacy.enabled", havingValue = "true", matchIfMissing = false)
 public class ShadeAssistantController {
 
@@ -65,7 +65,7 @@ public class ShadeAssistantController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            // Handle errors gracefully
+            // Handle errors gracefully without exposing internal details
             AssistantChatResponse errorResponse = new AssistantChatResponse();
             errorResponse.setReply("I'm sorry, I encountered an error. Please try again.");
             errorResponse.setToolUsed("Error");
@@ -75,7 +75,8 @@ public class ShadeAssistantController {
             errorResponse.setUserId(request.getUserId());
             errorResponse.setEventId(request.getEventId());
             errorResponse.setSuccess(false);
-            errorResponse.setError(e.getMessage());
+            // Don't expose internal error details
+            errorResponse.setError("Internal server error");
             return ResponseEntity.ok(errorResponse);
         }
     }

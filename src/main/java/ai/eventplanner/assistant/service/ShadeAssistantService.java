@@ -49,7 +49,10 @@ public class ShadeAssistantService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         // Internal service auth header (shared secret or JWT); secret should be provided via env/config
-        String internalSecret = System.getenv().getOrDefault("INTERNAL_ASSISTANT_SECRET", "dev-internal-secret");
+        String internalSecret = System.getenv().getOrDefault("INTERNAL_ASSISTANT_SECRET", "");
+        if (internalSecret.isEmpty()) {
+            throw new IllegalStateException("INTERNAL_ASSISTANT_SECRET environment variable must be set");
+        }
         headers.add("X-Internal-Service-Auth", internalSecret);
         if (correlationId != null && !correlationId.isBlank()) {
             headers.add("X-Correlation-Id", correlationId);

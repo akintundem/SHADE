@@ -17,10 +17,16 @@ public class JwtValidationUtil {
     
     private static final Logger logger = LoggerFactory.getLogger(JwtValidationUtil.class);
     
-    @Value("${jwt.secret:defaultSecretKeyForDevelopmentOnlyChangeInProduction}")
+    @Value("${jwt.secret:}")
     private String jwtSecret;
     
     private SecretKey getSigningKey() {
+        if (jwtSecret == null || jwtSecret.trim().isEmpty()) {
+            throw new IllegalStateException("JWT secret must be configured via JWT_SECRET environment variable");
+        }
+        if (jwtSecret.length() < 32) {
+            throw new IllegalStateException("JWT secret must be at least 32 characters long");
+        }
         byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);
     }

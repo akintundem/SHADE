@@ -58,21 +58,6 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/verify-email/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/validate-token").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/organizations/**").permitAll()
-                .requestMatchers("/api/v1/assistant/shade/**").permitAll()
-                .requestMatchers(
-                        "/api/v1/events/**",
-                        "/api/v1/simple-events/**",
-                        "/api/v1/ai/events/**",
-                        "/api/v1/attendees/**",
-                        "/api/v1/budgets/**",
-                        "/api/v1/timeline/**",
-                        "/api/v1/comms/**",
-                        "/api/v1/risks/**",
-                        "/api/v1/payments/**",
-                        "/api/v1/vendors/**",
-                        "/api/v1/event-types/**",
-                        "/api/v1/weather/**"
-                ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/ai/**").permitAll()
                 .anyRequest().authenticated()
             )

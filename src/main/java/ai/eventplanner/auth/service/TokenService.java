@@ -23,10 +23,16 @@ public class TokenService {
     private final long refreshTokenValidityMillis;
 
     public TokenService(
-            @Value("${jwt.secret}") String secret,
+            @Value("${jwt.secret:}") String secret,
             @Value("${jwt.expiration:3600000}") long accessTokenValidityMillis,
             @Value("${jwt.refresh-expiration:604800000}") long refreshTokenValidityMillis
     ) {
+        if (secret == null || secret.trim().isEmpty()) {
+            throw new IllegalStateException("JWT secret must be configured via JWT_SECRET environment variable");
+        }
+        if (secret.length() < 32) {
+            throw new IllegalStateException("JWT secret must be at least 32 characters long");
+        }
         this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTokenValidityMillis = accessTokenValidityMillis;
         this.refreshTokenValidityMillis = refreshTokenValidityMillis;

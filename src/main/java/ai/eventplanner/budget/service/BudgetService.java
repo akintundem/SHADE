@@ -5,6 +5,7 @@ import ai.eventplanner.budget.model.BudgetLineItemEntity;
 import ai.eventplanner.budget.repo.BudgetLineItemRepository;
 import ai.eventplanner.budget.repo.BudgetRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
+@Transactional
 public class BudgetService {
     private final BudgetRepository budgetRepository;
     private final BudgetLineItemRepository lineItemRepository;

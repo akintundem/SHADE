@@ -36,7 +36,17 @@ public class EventService {
             // Set basic fields
             event.setName((String) validatedData.get("name"));
             event.setDescription((String) validatedData.get("description"));
-            event.setOwnerId(UUID.randomUUID()); 
+            // Owner ID should come from authenticated user context, not random generation
+            String ownerIdStr = (String) validatedData.get("ownerId");
+            if (ownerIdStr != null && !ownerIdStr.trim().isEmpty()) {
+                try {
+                    event.setOwnerId(UUID.fromString(ownerIdStr));
+                } catch (IllegalArgumentException e) {
+                    throw new IllegalArgumentException("Invalid owner ID format: " + ownerIdStr);
+                }
+            } else {
+                throw new IllegalArgumentException("Owner ID is required for event creation");
+            } 
             
             // Parse event type
             String eventTypeStr = (String) validatedData.get("eventType");
@@ -59,18 +69,31 @@ public class EventService {
                 event.setEndDateTime(parseDateTime(endDateTimeStr));
             }
             
-            // Set capacity
+            // Set capacity with proper validation
             Object capacityObj = validatedData.get("capacity");
             if (capacityObj != null) {
+                int capacity;
                 if (capacityObj instanceof Integer) {
-                    event.setCapacity((Integer) capacityObj);
+                    capacity = (Integer) capacityObj;
                 } else if (capacityObj instanceof String) {
                     try {
-                        event.setCapacity(Integer.parseInt((String) capacityObj));
+                        capacity = Integer.parseInt((String) capacityObj);
                     } catch (NumberFormatException e) {
-                        // Ignore invalid capacity
+                        throw new IllegalArgumentException("Invalid capacity format: " + capacityObj);
                     }
+                } else {
+                    throw new IllegalArgumentException("Invalid capacity type: " + capacityObj.getClass().getSimpleName());
                 }
+                
+                // Validate capacity range
+                if (capacity < 0) {
+                    throw new IllegalArgumentException("Capacity cannot be negative");
+                }
+                if (capacity > 100000) {
+                    throw new IllegalArgumentException("Capacity too large (max 100,000)");
+                }
+                
+                event.setCapacity(capacity);
             }
             
             // Set boolean fields
@@ -284,11 +307,14 @@ public class EventService {
      * @return Created event
      */
     public Event create(CreateEventRequest request, UUID ownerId) {
+        if (ownerId == null) {
+            throw new IllegalArgumentException("Owner ID is required for event creation");
+        }
+        
         Event event = new Event();
         event.setName(request.getName());
         event.setDescription(request.getDescription());
-        // Use provided ownerId or generate a default one if null
-        event.setOwnerId(ownerId != null ? ownerId : UUID.randomUUID());
+        event.setOwnerId(ownerId);
         event.setEventType(request.getEventType());
         event.setEventStatus(request.getEventStatus());
         event.setStartDateTime(request.getStartDateTime());
@@ -332,18 +358,44 @@ public class EventService {
     }
 
     /**
-     * Parse date time string to LocalDateTime
+     * Parse date time string to LocalDateTime with validation
      */
     private LocalDateTime parseDateTime(String dateTimeStr) {
+        if (dateTimeStr == null || dateTimeStr.trim().isEmpty()) {
+            throw new IllegalArgumentException("Date time cannot be empty");
+        }
+        
         try {
             // Try ISO format first
-            return LocalDateTime.parse(dateTimeStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            LocalDateTime dateTime = LocalDateTime.parse(dateTimeStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            
+            // Validate date is not in the past (for start date)
+            if (dateTime.isBefore(LocalDateTime.now().minusHours(1))) {
+                throw new IllegalArgumentException("Event date cannot be more than 1 hour in the past");
+            }
+            
+            // Validate date is not too far in the future (max 10 years)
+            if (dateTime.isAfter(LocalDateTime.now().plusYears(10))) {
+                throw new IllegalArgumentException("Event date cannot be more than 10 years in the future");
+            }
+            
+            return dateTime;
         } catch (Exception e) {
             try {
                 // Try with 'T' separator
-                return LocalDateTime.parse(dateTimeStr.replace(" ", "T"));
+                LocalDateTime dateTime = LocalDateTime.parse(dateTimeStr.replace(" ", "T"));
+                
+                // Apply same validations
+                if (dateTime.isBefore(LocalDateTime.now().minusHours(1))) {
+                    throw new IllegalArgumentException("Event date cannot be more than 1 hour in the past");
+                }
+                if (dateTime.isAfter(LocalDateTime.now().plusYears(10))) {
+                    throw new IllegalArgumentException("Event date cannot be more than 10 years in the future");
+                }
+                
+                return dateTime;
             } catch (Exception e2) {
-                throw new RuntimeException("Invalid date format: " + dateTimeStr);
+                throw new IllegalArgumentException("Invalid date format: " + dateTimeStr + ". Expected ISO format (YYYY-MM-DDTHH:mm:ss)");
             }
         }
     }

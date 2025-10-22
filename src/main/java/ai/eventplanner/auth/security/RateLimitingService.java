@@ -57,7 +57,7 @@ public class RateLimitingService {
                 return false;
             }
 
-            // Increment counters
+            // Increment counters atomically
             redisTemplate.opsForValue().increment(minuteKey);
             redisTemplate.expire(minuteKey, Duration.ofMinutes(1));
             
