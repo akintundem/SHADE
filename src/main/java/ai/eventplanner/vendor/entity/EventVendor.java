@@ -48,6 +48,7 @@ public class EventVendor {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "vendor_status")
+    @Builder.Default
     private VendorStatus vendorStatus = VendorStatus.INQUIRY;
 
     @Column(name = "service_category")
@@ -75,6 +76,7 @@ public class EventVendor {
     private String contractUrl;
 
     @Column(name = "contract_signed")
+    @Builder.Default
     private Boolean contractSigned = false;
 
     @Column(name = "contract_signed_date")

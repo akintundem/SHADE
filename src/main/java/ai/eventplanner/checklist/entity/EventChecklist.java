@@ -53,9 +53,11 @@ public class EventChecklist {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
+    @Builder.Default
     private Status status = Status.PENDING;
 
     @Column(name = "priority")
+    @Builder.Default
     private String priority = "MEDIUM";
 
     @Column(name = "due_date")
@@ -71,6 +73,7 @@ public class EventChecklist {
     private String notes;
 
     @Column(name = "is_essential")
+    @Builder.Default
     private Boolean isEssential = false;
 
     @Column(name = "metadata", columnDefinition = "TEXT")

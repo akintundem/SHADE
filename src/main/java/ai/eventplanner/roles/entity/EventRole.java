@@ -63,12 +63,14 @@ public class EventRole {
     private String permissions;
 
     @Column(name = "is_lead")
+    @Builder.Default
     private Boolean isLead = false;
 
     @Column(name = "assigned_date")
     private LocalDateTime assignedDate;
 
     @Column(name = "status")
+    @Builder.Default
     private String status = "ACTIVE";
 
     @Column(name = "metadata", columnDefinition = "TEXT")

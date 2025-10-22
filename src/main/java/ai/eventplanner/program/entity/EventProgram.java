@@ -100,15 +100,18 @@ public class EventProgram {
     private String notes;
 
     @Column(name = "is_keynote")
+    @Builder.Default
     private Boolean isKeynote = false;
 
     @Column(name = "is_breakout")
+    @Builder.Default
     private Boolean isBreakout = false;
 
     @Column(name = "max_attendees")
     private Integer maxAttendees;
 
     @Column(name = "current_attendees")
+    @Builder.Default
     private Integer currentAttendees = 0;
 
     @Column(name = "metadata", columnDefinition = "TEXT")

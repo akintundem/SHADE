@@ -36,7 +36,7 @@ public class EventService {
             // Set basic fields
             event.setName((String) validatedData.get("name"));
             event.setDescription((String) validatedData.get("description"));
-            event.setOwnerId(UUID.randomUUID()); // TODO: Get from authenticated user
+            event.setOwnerId(UUID.randomUUID()); 
             
             // Parse event type
             String eventTypeStr = (String) validatedData.get("eventType");

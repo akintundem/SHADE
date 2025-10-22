@@ -46,6 +46,7 @@ public class ClientApplication extends BaseEntity {
     private String clientType; // WEB, MOBILE, API, DESKTOP
 
     @Column(name = "active", nullable = false)
+    @Builder.Default
     private boolean active = true;
 
     @Column(name = "allowed_origins", columnDefinition = "TEXT")
@@ -58,12 +59,15 @@ public class ClientApplication extends BaseEntity {
     private LocalDateTime lastUsed;
 
     @Column(name = "rate_limit_per_minute")
+    @Builder.Default
     private Integer rateLimitPerMinute = 100;
 
     @Column(name = "rate_limit_per_hour")
+    @Builder.Default
     private Integer rateLimitPerHour = 1000;
 
     @Column(name = "max_concurrent_sessions")
+    @Builder.Default
     private Integer maxConcurrentSessions = 5;
 
     @PrePersist

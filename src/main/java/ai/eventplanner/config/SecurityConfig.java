@@ -4,7 +4,7 @@ import ai.eventplanner.auth.security.JwtAuthenticationEntryPoint;
 import ai.eventplanner.auth.security.JwtAuthenticationFilter;
 import ai.eventplanner.auth.security.ClientValidationFilter;
 import ai.eventplanner.auth.security.RateLimitingFilter;
-import ai.eventplanner.config.SecurityHeadersConfig.SecurityHeadersFilter;
+import ai.eventplanner.auth.security.SecurityHeadersFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;

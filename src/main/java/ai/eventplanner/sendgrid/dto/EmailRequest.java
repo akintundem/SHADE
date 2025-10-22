@@ -33,6 +33,7 @@ public class EmailRequest {
     @NotBlank(message = "Content is required")
     private String content;
 
+    @Builder.Default
     private String contentType = "text/plain"; // text/plain or text/html
 
     private List<EmailAttachment> attachments;
@@ -70,6 +71,7 @@ public class EmailRequest {
 
         private String type;
 
+        @Builder.Default
         private String disposition = "attachment";
     }
 }

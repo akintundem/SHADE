@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Service for implementing rate limiting per client
@@ -22,7 +21,6 @@ public class RateLimitingService {
     private final RedisTemplate<String, String> redisTemplate;
     private final ClientValidationService clientValidationService;
 
-    private static final String RATE_LIMIT_PREFIX = "rate_limit:";
     private static final String RATE_LIMIT_MINUTE_PREFIX = "rate_limit_minute:";
     private static final String RATE_LIMIT_HOUR_PREFIX = "rate_limit_hour:";
 
