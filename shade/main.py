@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -194,10 +194,21 @@ class ShadeAgentProcessor:
 # Initialize the LangGraph Flow Manager
 shade_agent = ShadeAgentProcessor()
 
+INTERNAL_SECRET = os.getenv("INTERNAL_ASSISTANT_SECRET", "dev-internal-secret")
+
+
+def _is_internal_request(req: Request) -> bool:
+    provided = req.headers.get("X-Internal-Service-Auth")
+    return provided is not None and provided == INTERNAL_SECRET
+
+
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, http_request: Request):
     """Chat endpoint with LangGraph Flow functionality."""
     try:
+        # Require internal header for access
+        if not _is_internal_request(http_request):
+            raise HTTPException(status_code=401, detail="Unauthorized")
         # Process with the LangGraph Flow Manager
         result = await shade_agent.process(
             message=request.message,
@@ -206,6 +217,17 @@ async def chat(request: ChatRequest):
             event_id=request.event_id
         )
         
+        # Determine UI type for mobile routing
+        ui_type = None
+        sr = result.get("structured_response")
+        if sr is not None:
+            try:
+                ui_type = sr.response_type  # pydantic object
+            except Exception:
+                pass
+        if ui_type is None:
+            ui_type = "chat"
+
         return ChatResponse(
             reply=result["reply"],
             tool_used=result["tool_used"],
@@ -215,8 +237,11 @@ async def chat(request: ChatRequest):
             user_id=request.user_id,
             event_id=request.event_id,
             ui=result.get("ui"),
-            structured_response=result.get("structured_response")
+            structured_response=result.get("structured_response"),
+            uitype=ui_type
         )
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Error processing message: {e}")
         return ChatResponse(

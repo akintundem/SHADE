@@ -6,7 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
-import ai.eventplanner.assistant.dto.ChatResponse;
+import ai.eventplanner.assistant.dto.AssistantChatResponse;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -33,7 +33,7 @@ public class ShadeAssistantService {
     /**
      * Send a message to the chat and get response
      */
-    public ChatResponse sendMessage(String message, String userId, String chatId, String eventId) {
+    public AssistantChatResponse sendMessage(String message, String userId, String chatId, String eventId, String correlationId) {
         String url = shadeAssistantUrl + "/chat";
         
         Map<String, Object> requestBody = new HashMap<>();
@@ -48,6 +48,12 @@ public class ShadeAssistantService {
         
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        // Internal service auth header (shared secret or JWT); secret should be provided via env/config
+        String internalSecret = System.getenv().getOrDefault("INTERNAL_ASSISTANT_SECRET", "dev-internal-secret");
+        headers.add("X-Internal-Service-Auth", internalSecret);
+        if (correlationId != null && !correlationId.isBlank()) {
+            headers.add("X-Correlation-Id", correlationId);
+        }
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
         
         try {
@@ -55,7 +61,7 @@ public class ShadeAssistantService {
             
             if (response.getStatusCode() == HttpStatus.OK) {
                 JsonNode jsonResponse = objectMapper.readTree(response.getBody());
-                return parseChatResponse(jsonResponse);
+                return parseAssistantResponse(jsonResponse);
             } else {
                 throw new RuntimeException("Shade Assistant API call failed with status: " + response.getStatusCode());
             }
@@ -142,28 +148,87 @@ public class ShadeAssistantService {
     
     // Helper methods for parsing JSON responses
     
-    private ChatResponse parseChatResponse(JsonNode json) {
-        ChatResponse response = new ChatResponse();
-        response.setReply(json.get("reply").asText());
-        response.setToolUsed(json.get("tool_used").asText());
-        response.setChatId(json.get("chat_id").asText());
-        response.setUserId(json.get("user_id").asText());
-        
-        if (json.has("event_id") && !json.get("event_id").isNull()) {
-            response.setEventId(json.get("event_id").asText());
-        }
-        
+    private AssistantChatResponse parseAssistantResponse(JsonNode json) {
+        AssistantChatResponse response = new AssistantChatResponse();
+        response.setReply(json.path("reply").asText(null));
+        response.setToolUsed(json.path("tool_used").asText(null));
+        response.setChatId(json.path("chat_id").asText(null));
+        response.setUserId(json.path("user_id").asText(null));
+        response.setEventId(json.path("event_id").asText(null));
+        response.setUitype(json.path("uitype").asText(null));
+        response.setShowChips(json.path("show_chips").asBoolean(false));
         if (json.has("data") && !json.get("data").isNull()) {
-            // Convert JsonNode to Map<String, Object>
             @SuppressWarnings("unchecked")
             Map<String, Object> dataMap = (Map<String, Object>) objectMapper.convertValue(json.get("data"), Map.class);
             response.setData(dataMap);
         }
-        
-        if (json.has("show_chips")) {
-            response.setShowChips(json.get("show_chips").asBoolean());
+        if (json.has("ui") && !json.get("ui").isNull()) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> uiMap = (Map<String, Object>) objectMapper.convertValue(json.get("ui"), Map.class);
+            response.setUi(uiMap);
         }
-        
+        if (json.has("structured_response") && !json.get("structured_response").isNull()) {
+            var sr = new ai.eventplanner.assistant.dto.StructuredResponseDTO();
+            var srNode = json.get("structured_response");
+            sr.setResponseType(srNode.path("response_type").asText(null));
+            sr.setText(srNode.path("text").asText(null));
+            // venue_cards
+            if (srNode.has("venue_cards")) {
+                var list = new java.util.ArrayList<ai.eventplanner.assistant.dto.VenueCardDTO>();
+                for (JsonNode v : srNode.get("venue_cards")) {
+                    var vc = new ai.eventplanner.assistant.dto.VenueCardDTO();
+                    vc.setId(v.path("id").asText(null));
+                    vc.setName(v.path("name").asText(null));
+                    vc.setLocation(v.path("location").asText(null));
+                    vc.setImageUrl(v.path("image_url").asText(null));
+                    if (v.has("rating") && v.get("rating").isNumber()) vc.setRating(v.get("rating").asDouble());
+                    if (v.has("review_count") && v.get("review_count").isNumber()) vc.setReviewCount(v.get("review_count").asInt());
+                    vc.setGuestCapacity(v.path("guest_capacity").asText(null));
+                    vc.setPriceRange(v.path("price_range").asText(null));
+                    vc.setDescription(v.path("description").asText(null));
+                    if (v.has("amenities")) {
+                        java.util.List<String> am = new java.util.ArrayList<>();
+                        v.get("amenities").forEach(n -> am.add(n.asText()));
+                        vc.setAmenities(am);
+                    }
+                    vc.setContactEmail(v.path("contact_email").asText(null));
+                    vc.setContactPhone(v.path("contact_phone").asText(null));
+                    vc.setWebsite(v.path("website").asText(null));
+                    list.add(vc);
+                }
+                sr.setVenueCards(list);
+            }
+            // chips
+            if (srNode.has("chips")) {
+                var list = new java.util.ArrayList<ai.eventplanner.assistant.dto.ChipDTO>();
+                for (JsonNode c : srNode.get("chips")) {
+                    var chip = new ai.eventplanner.assistant.dto.ChipDTO();
+                    chip.setId(c.path("id").asText(null));
+                    chip.setLabel(c.path("label").asText(null));
+                    chip.setIcon(c.path("icon").asText(null));
+                    chip.setSelected(c.path("selected").asBoolean(false));
+                    chip.setAction(c.path("action").asText(null));
+                    list.add(chip);
+                }
+                sr.setChips(list);
+            }
+            // action buttons
+            if (srNode.has("action_buttons")) {
+                var list = new java.util.ArrayList<ai.eventplanner.assistant.dto.ActionButtonDTO>();
+                for (JsonNode b : srNode.get("action_buttons")) {
+                    var ab = new ai.eventplanner.assistant.dto.ActionButtonDTO();
+                    ab.setId(b.path("id").asText(null));
+                    ab.setLabel(b.path("label").asText(null));
+                    ab.setIcon(b.path("icon").asText(null));
+                    ab.setAction(b.path("action").asText(null));
+                    ab.setStyle(b.path("style").asText(null));
+                    ab.setDisabled(b.path("disabled").asBoolean(false));
+                    list.add(ab);
+                }
+                sr.setActionButtons(list);
+            }
+            response.setStructuredResponse(sr);
+        }
         return response;
     }
     

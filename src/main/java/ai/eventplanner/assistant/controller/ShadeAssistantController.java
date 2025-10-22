@@ -4,8 +4,9 @@ import ai.eventplanner.event.service.EventService;
 import ai.eventplanner.event.dto.response.EventResponse;
 import ai.eventplanner.assistant.service.ShadeAssistantService;
 import ai.eventplanner.assistant.dto.ChatRequest;
-import ai.eventplanner.assistant.dto.ChatResponse;
+import ai.eventplanner.assistant.dto.AssistantChatResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,6 +16,7 @@ import java.util.HashMap;
 @RestController
 @RequestMapping("/api/assistant")
 @CrossOrigin(origins = "*")
+@ConditionalOnProperty(name = "assistant.legacy.enabled", havingValue = "true", matchIfMissing = false)
 public class ShadeAssistantController {
 
     @Autowired
@@ -28,14 +30,15 @@ public class ShadeAssistantController {
      * Handles tool calls and delegates to appropriate services
      */
     @PostMapping("/chat")
-    public ResponseEntity<ChatResponse> processMessage(@RequestBody ChatRequest request) {
+    public ResponseEntity<AssistantChatResponse> processMessage(@RequestBody ChatRequest request) {
         try {
             // Send message to Python AI service
-            ChatResponse response = shadeAssistantService.sendMessage(
+            AssistantChatResponse response = shadeAssistantService.sendMessage(
                 request.getMessage(), 
                 request.getUserId(), 
                 request.getChatId(), 
-                request.getEventId()
+                request.getEventId(),
+                null
             );
             
             // Check if tool call is required
@@ -63,7 +66,7 @@ public class ShadeAssistantController {
             
         } catch (Exception e) {
             // Handle errors gracefully
-            ChatResponse errorResponse = new ChatResponse();
+            AssistantChatResponse errorResponse = new AssistantChatResponse();
             errorResponse.setReply("I'm sorry, I encountered an error. Please try again.");
             errorResponse.setToolUsed("Error");
             errorResponse.setData(null);
@@ -71,7 +74,8 @@ public class ShadeAssistantController {
             errorResponse.setChatId(request.getChatId());
             errorResponse.setUserId(request.getUserId());
             errorResponse.setEventId(request.getEventId());
-            
+            errorResponse.setSuccess(false);
+            errorResponse.setError(e.getMessage());
             return ResponseEntity.ok(errorResponse);
         }
     }
@@ -79,7 +83,7 @@ public class ShadeAssistantController {
     /**
      * Handle CreateEvent tool call
      */
-    private void handleCreateEventTool(ChatResponse response) {
+    private void handleCreateEventTool(AssistantChatResponse response) {
         try {
             Map<String, Object> data = response.getData();
             @SuppressWarnings("unchecked")
@@ -120,7 +124,7 @@ public class ShadeAssistantController {
     /**
      * Handle UpdateEvent tool call
      */
-    private void handleUpdateEventTool(ChatResponse response) {
+    private void handleUpdateEventTool(AssistantChatResponse response) {
         try {
             Map<String, Object> data = response.getData();
             @SuppressWarnings("unchecked")
