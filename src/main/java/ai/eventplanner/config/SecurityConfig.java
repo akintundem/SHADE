@@ -2,6 +2,8 @@ package ai.eventplanner.config;
 
 import ai.eventplanner.auth.security.JwtAuthenticationEntryPoint;
 import ai.eventplanner.auth.security.JwtAuthenticationFilter;
+import ai.eventplanner.auth.security.ClientValidationFilter;
+import ai.eventplanner.auth.security.RateLimitingFilter;
 import ai.eventplanner.config.SecurityHeadersConfig.SecurityHeadersFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,13 +23,19 @@ public class SecurityConfig {
     private final SecurityHeadersFilter securityHeadersFilter;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+    private final ClientValidationFilter clientValidationFilter;
+    private final RateLimitingFilter rateLimitingFilter;
 
     public SecurityConfig(SecurityHeadersFilter securityHeadersFilter,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
-                          JwtAuthenticationEntryPoint authenticationEntryPoint) {
+                          JwtAuthenticationEntryPoint authenticationEntryPoint,
+                          ClientValidationFilter clientValidationFilter,
+                          RateLimitingFilter rateLimitingFilter) {
         this.securityHeadersFilter = securityHeadersFilter;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
+        this.clientValidationFilter = clientValidationFilter;
+        this.rateLimitingFilter = rateLimitingFilter;
     }
 
     @Bean
@@ -72,6 +80,8 @@ public class SecurityConfig {
             .formLogin(formLogin -> formLogin.disable())
             .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationEntryPoint))
             .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(clientValidationFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

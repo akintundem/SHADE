@@ -125,7 +125,7 @@ public class AuthService {
         session.setClientId(request.getClientId());
 
         UserAccount user = session.getUser();
-        String accessToken = tokenService.generateAccessToken(user);
+        String accessToken = tokenService.generateAccessToken(user, session.getClientId());
 
         return AuthResponse.builder()
                 .message("Token refreshed successfully")
@@ -316,7 +316,7 @@ public class AuthService {
                                            String deviceId,
                                            String ipAddress,
                                            String message) {
-        String accessToken = tokenService.generateAccessToken(user);
+        String accessToken = tokenService.generateAccessToken(user, clientId);
         String refreshToken = tokenService.generateRefreshToken();
 
         UserSession session = UserSession.builder()

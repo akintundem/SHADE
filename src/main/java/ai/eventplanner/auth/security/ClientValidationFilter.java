@@ -1,0 +1,120 @@
+package ai.eventplanner.auth.security;
+
+import ai.eventplanner.auth.service.ClientValidationService;
+import ai.eventplanner.common.exception.UnauthorizedException;
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+
+/**
+ * Filter to validate client ID on all requests
+ * This provides an extra layer of security and debugging capability
+ */
+@Component
+@Order(1)
+@RequiredArgsConstructor
+@Slf4j
+public class ClientValidationFilter implements Filter {
+
+    private final ClientValidationService clientValidationService;
+
+    // Endpoints that don't require client ID validation
+    private static final List<String> EXCLUDED_PATHS = Arrays.asList(
+            "/actuator/health",
+            "/actuator/info",
+            "/swagger-ui",
+            "/v3/api-docs",
+            "/error",
+            "/favicon.ico"
+    );
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        
+        HttpServletRequest httpRequest = (HttpServletRequest) request;
+        HttpServletResponse httpResponse = (HttpServletResponse) response;
+        
+        String requestPath = httpRequest.getRequestURI();
+        String method = httpRequest.getMethod();
+        
+        // Skip validation for excluded paths
+        if (isExcludedPath(requestPath)) {
+            chain.doFilter(request, response);
+            return;
+        }
+
+        try {
+            // Extract client ID from header
+            String clientId = httpRequest.getHeader("X-Client-ID");
+            
+            if (clientId == null || clientId.trim().isEmpty()) {
+                log.warn("Missing X-Client-ID header for {} {}", method, requestPath);
+                sendErrorResponse(httpResponse, "X-Client-ID header is required", HttpStatus.BAD_REQUEST);
+                return;
+            }
+
+            // Validate client ID
+            try {
+                clientValidationService.validateClientId(clientId);
+                
+                // Add client context to MDC for logging
+                MDC.put("clientId", clientId);
+                MDC.put("requestPath", requestPath);
+                MDC.put("requestMethod", method);
+                
+                log.info("Request: {} {} | Client: {} | IP: {}", 
+                        method, requestPath, clientId, getClientIpAddress(httpRequest));
+                
+            } catch (UnauthorizedException e) {
+                log.warn("Invalid client ID: {} for {} {}", clientId, method, requestPath);
+                sendErrorResponse(httpResponse, "Invalid client ID", HttpStatus.UNAUTHORIZED);
+                return;
+            }
+
+            chain.doFilter(request, response);
+            
+        } finally {
+            // Clean up MDC
+            MDC.remove("clientId");
+            MDC.remove("requestPath");
+            MDC.remove("requestMethod");
+        }
+    }
+
+    private boolean isExcludedPath(String path) {
+        return EXCLUDED_PATHS.stream().anyMatch(path::startsWith);
+    }
+
+    private void sendErrorResponse(HttpServletResponse response, String message, HttpStatus status) 
+            throws IOException {
+        response.setStatus(status.value());
+        response.setContentType("application/json");
+        response.getWriter().write(String.format(
+            "{\"error\":\"%s\",\"message\":\"%s\",\"status\":%d,\"timestamp\":\"%s\"}",
+            status.getReasonPhrase(), message, status.value(), java.time.Instant.now()
+        ));
+    }
+
+    private String getClientIpAddress(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+}
