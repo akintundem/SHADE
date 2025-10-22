@@ -3,8 +3,6 @@ package ai.eventplanner.common.security;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +13,6 @@ import java.util.List;
 @Component
 public class JwtValidationUtil {
     
-    private static final Logger logger = LoggerFactory.getLogger(JwtValidationUtil.class);
     
     @Value("${jwt.secret:}")
     private String jwtSecret;
@@ -36,7 +33,6 @@ public class JwtValidationUtil {
             Claims claims = getClaimsFromToken(token);
             return claims != null && !isTokenExpired(claims);
         } catch (Exception e) {
-            logger.error("Token validation failed: {}", e.getMessage());
             return false;
         }
     }
@@ -54,7 +50,6 @@ public class JwtValidationUtil {
             Claims claims = getClaimsFromToken(token);
             return claims.getSubject();
         } catch (Exception e) {
-            logger.error("Error extracting user ID from token: {}", e.getMessage());
             return null;
         }
     }
@@ -64,7 +59,6 @@ public class JwtValidationUtil {
             Claims claims = getClaimsFromToken(token);
             return claims.get("email", String.class);
         } catch (Exception e) {
-            logger.error("Error extracting email from token: {}", e.getMessage());
             return null;
         }
     }
@@ -75,7 +69,6 @@ public class JwtValidationUtil {
             Claims claims = getClaimsFromToken(token);
             return claims.get("roles", List.class);
         } catch (Exception e) {
-            logger.error("Error extracting roles from token: {}", e.getMessage());
             return List.of();
         }
     }
@@ -85,7 +78,6 @@ public class JwtValidationUtil {
             Claims claims = getClaimsFromToken(token);
             return claims.get("organizationId", String.class);
         } catch (Exception e) {
-            logger.error("Error extracting organization ID from token: {}", e.getMessage());
             return null;
         }
     }

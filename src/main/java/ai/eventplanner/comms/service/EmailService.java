@@ -4,8 +4,6 @@ import ai.eventplanner.comms.model.CommunicationLogEntity;
 import ai.eventplanner.comms.repository.CommunicationLogRepository;
 import ai.eventplanner.sendgrid.dto.EmailResponse;
 import ai.eventplanner.sendgrid.service.SendGridService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -19,7 +17,6 @@ import java.util.Map;
 @Service
 public class EmailService {
 
-    private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
 
     private final SendGridService sendGridService;
     private final CommunicationLogRepository logRepository;
@@ -52,7 +49,6 @@ public class EmailService {
      */
     public EmailResponse sendTemplate(String to, String from, String templateId, java.util.Map<String, Object> templateData, boolean logToDatabase) {
         if (!StringUtils.hasText(to)) {
-            logger.warn("Skipping template email send: recipient address is blank.");
             return EmailResponse.builder()
                     .success(false)
                     .statusMessage("Recipient address is blank")
@@ -60,14 +56,12 @@ public class EmailService {
         }
 
         if (!StringUtils.hasText(templateId)) {
-            logger.warn("Skipping template email send: template ID is blank.");
             return EmailResponse.builder()
                     .success(false)
                     .statusMessage("Template ID is blank")
                     .build();
         }
 
-        logger.info("Sending template email to: {} using template: {}", to, templateId);
         
         // Send template email via SendGrid
         EmailResponse response = sendGridService.sendTemplateEmail(to, from, templateId, templateData);
@@ -105,9 +99,7 @@ public class EmailService {
             )));
             
             logRepository.save(entity);
-            logger.debug("Email logged to database for recipient: {}", to);
         } catch (Exception ex) {
-            logger.warn("Failed to log email to database: {}", ex.getMessage());
         }
     }
 
@@ -130,7 +122,6 @@ public class EmailService {
             builder.append('}');
             return builder.toString();
         } catch (Exception ex) {
-            logger.warn("Failed to serialize email metadata: {}", ex.getMessage());
             return payload.toString();
         }
     }

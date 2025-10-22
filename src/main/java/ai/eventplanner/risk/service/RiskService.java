@@ -1,7 +1,5 @@
 package ai.eventplanner.risk.service;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -16,7 +14,6 @@ import java.util.UUID;
 @Service
 public class RiskService {
 
-    private static final Logger logger = LoggerFactory.getLogger(RiskService.class);
 
     private final WebClient weatherClient;
 
@@ -34,8 +31,6 @@ public class RiskService {
                 .bodyToMono(String.class)
                 .map(body -> buildRisksFromForecast(eventId, lat, lon, body))
                 .onErrorResume(ex -> {
-                    logger.warn("Forecast lookup failed for event {} (lat={}, lon={}). Falling back to heuristics. Cause: {}",
-                            eventId, lat, lon, ex.getMessage());
                     return Mono.just(buildFallbackRisks(eventId, lat, lon));
                 });
     }

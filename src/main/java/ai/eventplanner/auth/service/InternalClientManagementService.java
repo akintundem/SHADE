@@ -2,7 +2,6 @@ package ai.eventplanner.auth.service;
 
 import ai.eventplanner.auth.entity.ClientApplication;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Service;
 
@@ -17,7 +16,6 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class InternalClientManagementService implements CommandLineRunner {
 
     private final ClientValidationService clientValidationService;
@@ -36,7 +34,6 @@ public class InternalClientManagementService implements CommandLineRunner {
      * This method creates the standard clients that the system needs
      */
     private void initializeDefaultClients() {
-        log.info("Initializing default client applications...");
 
         List<ClientInfo> defaultClients = List.of(
             new ClientInfo("web-app", "Web Application", "WEB", "Main web application client"),
@@ -54,16 +51,12 @@ public class InternalClientManagementService implements CommandLineRunner {
                         clientInfo.clientType,
                         clientInfo.description
                     );
-                    log.info("Created default client: {}", clientInfo.clientId);
                 } else {
-                    log.debug("Client already exists: {}", clientInfo.clientId);
                 }
             } catch (Exception e) {
-                log.error("Failed to create default client {}: {}", clientInfo.clientId, e.getMessage());
             }
         }
 
-        log.info("Default client initialization completed");
     }
 
     /**
@@ -71,7 +64,6 @@ public class InternalClientManagementService implements CommandLineRunner {
      * This method should only be called by system administrators
      */
     public ClientApplication createClient(String clientId, String clientName, String clientType, String description) {
-        log.info("Creating new client application: {} ({})", clientId, clientType);
         return clientValidationService.createClientInternal(clientId, clientName, clientType, description);
     }
 
@@ -79,16 +71,13 @@ public class InternalClientManagementService implements CommandLineRunner {
      * Deactivate a client application (ADMIN ONLY)
      */
     public void deactivateClient(String clientId) {
-        log.info("Deactivating client: {}", clientId);
-        // Implementation would go here - for now just log
-        log.warn("Client deactivation not yet implemented for: {}", clientId);
+        // Implementation would go here
     }
 
     /**
      * Get all client applications (ADMIN ONLY)
      */
     public List<ClientApplication> getAllClients() {
-        log.info("Retrieving all client applications");
         // Implementation would go here - for now just return empty list
         return List.of();
     }

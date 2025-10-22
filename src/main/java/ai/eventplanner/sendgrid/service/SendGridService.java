@@ -11,8 +11,6 @@ import com.sendgrid.helpers.mail.objects.Attachments;
 import com.sendgrid.helpers.mail.objects.Content;
 import com.sendgrid.helpers.mail.objects.Email;
 import com.sendgrid.helpers.mail.objects.Personalization;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -26,7 +24,6 @@ import java.util.Map;
 @Service
 public class SendGridService {
 
-    private static final Logger logger = LoggerFactory.getLogger(SendGridService.class);
 
     private final SendGrid sendGrid;
 
@@ -81,7 +78,6 @@ public class SendGridService {
                     .build();
 
         } catch (IOException e) {
-            logger.error("Failed to send email via SendGrid", e);
             return EmailResponse.builder()
                     .success(false)
                     .statusCode(500)
@@ -189,7 +185,6 @@ public class SendGridService {
             Response response = sendGrid.api(request);
             return response.getBody();
         } catch (IOException e) {
-            logger.error("Failed to get SendGrid account info", e);
             return "Unable to retrieve account information";
         }
     }

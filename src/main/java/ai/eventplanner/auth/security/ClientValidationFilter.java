@@ -10,8 +10,6 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -27,7 +25,6 @@ import java.util.List;
 @Component
 @Order(1)
 @RequiredArgsConstructor
-@Slf4j
 public class ClientValidationFilter implements Filter {
 
     private final ClientValidationService clientValidationService;
@@ -63,7 +60,6 @@ public class ClientValidationFilter implements Filter {
             String clientId = httpRequest.getHeader("X-Client-ID");
             
             if (clientId == null || clientId.trim().isEmpty()) {
-                log.warn("Missing X-Client-ID header for {} {}", method, requestPath);
                 sendErrorResponse(httpResponse, "X-Client-ID header is required", HttpStatus.BAD_REQUEST);
                 return;
             }
@@ -72,27 +68,15 @@ public class ClientValidationFilter implements Filter {
             try {
                 clientValidationService.validateClientId(clientId);
                 
-                // Add client context to MDC for logging
-                MDC.put("clientId", clientId);
-                MDC.put("requestPath", requestPath);
-                MDC.put("requestMethod", method);
                 
-                log.info("Request: {} {} | Client: {} | IP: {}", 
-                        method, requestPath, clientId, getClientIpAddress(httpRequest));
                 
             } catch (UnauthorizedException e) {
-                log.warn("Invalid client ID: {} for {} {}", clientId, method, requestPath);
                 sendErrorResponse(httpResponse, "Invalid client ID", HttpStatus.UNAUTHORIZED);
                 return;
             }
 
             chain.doFilter(request, response);
             
-        } finally {
-            // Clean up MDC
-            MDC.remove("clientId");
-            MDC.remove("requestPath");
-            MDC.remove("requestMethod");
         }
     }
 

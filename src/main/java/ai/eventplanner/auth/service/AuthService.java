@@ -35,7 +35,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import lombok.extern.slf4j.Slf4j;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -48,7 +47,6 @@ import java.util.stream.Collectors;
 
 @Service
 @Transactional
-@Slf4j
 public class AuthService {
 
     private final UserAccountRepository userAccountRepository;
@@ -107,37 +105,30 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request, String clientIp) {
-        log.info("Login attempt for email: {}", request.getEmail());
         
         UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizeEmail(request.getEmail()))
                 .orElseThrow(() -> {
-                    log.warn("Login failed - user not found for email: {}", request.getEmail());
                     return new UnauthorizedException("Invalid credentials");
                 });
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            log.warn("Login failed - invalid password for email: {}", request.getEmail());
             throw new UnauthorizedException("Invalid credentials");
         }
 
         user.setLastLoginAt(LocalDateTime.now(ZoneOffset.UTC));
-        log.info("Login successful for user: {}", user.getId());
 
         return issueAuthResponse(user, request.isRememberMe(), request.getClientId(), request.getDeviceId(), clientIp, "Login successful");
     }
 
     public AuthResponse refreshToken(RefreshTokenRequest request) {
-        log.debug("Token refresh attempt");
         
         UserSession session = sessionRepository.findByRefreshTokenAndRevokedFalse(request.getRefreshToken())
                 .orElseThrow(() -> {
-                    log.warn("Token refresh failed - invalid refresh token");
                     return new UnauthorizedException("Invalid refresh token");
                 });
 
         if (session.getExpiresAt().isBefore(LocalDateTime.now(ZoneOffset.UTC))) {
             session.setRevoked(true);
-            log.warn("Token refresh failed - refresh token expired for user: {}", session.getUser().getId());
             throw new UnauthorizedException("Refresh token expired");
         }
 
@@ -148,7 +139,6 @@ public class AuthService {
         UserAccount user = session.getUser();
         String accessToken = tokenService.generateAccessToken(user, session.getClientId());
         
-        log.info("Token refresh successful for user: {}", user.getId());
 
         return AuthResponse.builder()
                 .message("Token refreshed successfully")
@@ -160,7 +150,6 @@ public class AuthService {
     }
 
     public void logout(UserAccount user) {
-        log.info("Logout for user: {}", user.getId());
         sessionRepository.findByUser(user).forEach(session -> session.setRevoked(true));
     }
 

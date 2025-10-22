@@ -11,7 +11,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import ai.eventplanner.assistant.dto.AssistantChatResponse;
 import ai.eventplanner.assistant.validation.JsonSchemaValidator;
-import lombok.extern.slf4j.Slf4j;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -22,7 +21,6 @@ import java.util.ArrayList;
  * This service handles all communication with the Python FastAPI service
  */
 @Service
-@Slf4j
 public class ShadeAssistantService {
     
     @Value("${shade.assistant.url}")
@@ -92,16 +90,12 @@ public class ShadeAssistantService {
                 throw new RuntimeException("Shade Assistant API call failed with status: " + response.getStatusCode());
             }
         } catch (HttpClientErrorException e) {
-            log.error("Client error calling Shade Assistant API: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
             return createFallbackResponse(chatId, userId, eventId, "Service temporarily unavailable");
         } catch (HttpServerErrorException e) {
-            log.error("Server error calling Shade Assistant API: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
             return createFallbackResponse(chatId, userId, eventId, "Service temporarily unavailable");
         } catch (ResourceAccessException e) {
-            log.error("Network error calling Shade Assistant API: {}", e.getMessage());
             return createFallbackResponse(chatId, userId, eventId, "Network connection failed");
         } catch (Exception e) {
-            log.error("Unexpected error calling Shade Assistant API: {}", e.getMessage(), e);
             return createFallbackResponse(chatId, userId, eventId, "Internal service error");
         }
     }

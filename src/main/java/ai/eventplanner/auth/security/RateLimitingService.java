@@ -3,7 +3,6 @@ package ai.eventplanner.auth.security;
 import ai.eventplanner.auth.entity.ClientApplication;
 import ai.eventplanner.auth.service.ClientValidationService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +14,6 @@ import java.time.Instant;
  */
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class RateLimitingService {
 
     private final RedisTemplate<String, String> redisTemplate;
@@ -46,8 +44,6 @@ public class RateLimitingService {
             int currentMinuteCount = minuteCount != null ? Integer.parseInt(minuteCount) : 0;
             
             if (currentMinuteCount >= client.getRateLimitPerMinute()) {
-                log.warn("Rate limit exceeded for client {} on endpoint {} (minute limit: {})", 
-                        clientId, endpoint, client.getRateLimitPerMinute());
                 return false;
             }
 
@@ -56,8 +52,6 @@ public class RateLimitingService {
             int currentHourCount = hourCount != null ? Integer.parseInt(hourCount) : 0;
             
             if (currentHourCount >= client.getRateLimitPerHour()) {
-                log.warn("Rate limit exceeded for client {} on endpoint {} (hour limit: {})", 
-                        clientId, endpoint, client.getRateLimitPerHour());
                 return false;
             }
 
@@ -71,7 +65,6 @@ public class RateLimitingService {
             return true;
 
         } catch (Exception e) {
-            log.error("Error checking rate limit for client {}: {}", clientId, e.getMessage());
             // In case of error, allow the request but log it
             return true;
         }
@@ -107,7 +100,6 @@ public class RateLimitingService {
         int currentMinuteCount = minuteCount != null ? Integer.parseInt(minuteCount) : 0;
         
         if (currentMinuteCount >= minuteLimit) {
-            log.warn("Anonymous rate limit exceeded on endpoint {} (minute limit: {})", endpoint, minuteLimit);
             return false;
         }
         
@@ -116,7 +108,6 @@ public class RateLimitingService {
         int currentHourCount = hourCount != null ? Integer.parseInt(hourCount) : 0;
         
         if (currentHourCount >= hourLimit) {
-            log.warn("Anonymous rate limit exceeded on endpoint {} (hour limit: {})", endpoint, hourLimit);
             return false;
         }
         
@@ -157,7 +148,6 @@ public class RateLimitingService {
             );
 
         } catch (Exception e) {
-            log.error("Error getting rate limit info for client {}: {}", clientId, e.getMessage());
             return new RateLimitInfo(0, 0, 0, 0);
         }
     }

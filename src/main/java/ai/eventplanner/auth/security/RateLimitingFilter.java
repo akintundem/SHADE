@@ -8,7 +8,6 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -23,7 +22,6 @@ import java.util.List;
 @Component
 @Order(3)
 @RequiredArgsConstructor
-@Slf4j
 public class RateLimitingFilter implements Filter {
 
     private final RateLimitingService rateLimitingService;
@@ -60,7 +58,6 @@ public class RateLimitingFilter implements Filter {
             // Apply default rate limiting even without client ID
             String defaultClientId = "anonymous";
             if (!rateLimitingService.isWithinRateLimit(defaultClientId, requestPath)) {
-                log.warn("Rate limit exceeded for anonymous client on {} {}", method, requestPath);
                 sendRateLimitExceededResponse(httpResponse, defaultClientId, requestPath);
                 return;
             }
@@ -70,7 +67,6 @@ public class RateLimitingFilter implements Filter {
 
         // Check rate limit
         if (!rateLimitingService.isWithinRateLimit(clientId, requestPath)) {
-            log.warn("Rate limit exceeded for client {} on {} {}", clientId, method, requestPath);
             sendRateLimitExceededResponse(httpResponse, clientId, requestPath);
             return;
         }

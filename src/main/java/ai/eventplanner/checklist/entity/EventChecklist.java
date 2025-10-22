@@ -1,116 +1,47 @@
 package ai.eventplanner.checklist.entity;
 
-import ai.eventplanner.event.entity.Event;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import ai.eventplanner.common.domain.entity.BaseEntity;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Event checklist and task management.
- */
 @Entity
 @Table(name = "event_checklists")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class EventChecklist {
+@EqualsAndHashCode(callSuper = true)
+public class EventChecklist extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "event_id", nullable = false)
-    private Event event;
+    @Column(name = "event_id", nullable = false)
+    private UUID eventId;
 
-    @Column(name = "title")
+    @Column(name = "title", nullable = false)
     private String title;
 
-    @Column(name = "description", columnDefinition = "TEXT")
+    @Column(name = "description")
     private String description;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "category")
-    private Category category;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status")
-    @Builder.Default
-    private Status status = Status.PENDING;
-
-    @Column(name = "priority")
-    @Builder.Default
-    private String priority = "MEDIUM";
+    @Column(name = "is_completed", nullable = false)
+    private Boolean isCompleted = false;
 
     @Column(name = "due_date")
-    private LocalDateTime dueDate;
+    private java.time.LocalDateTime dueDate;
 
-    @Column(name = "completed_at")
-    private LocalDateTime completedAt;
+    @Column(name = "priority")
+    private String priority; // HIGH, MEDIUM, LOW
 
     @Column(name = "assigned_to")
-    private String assignedTo;
+    private UUID assignedTo;
 
-    @Column(name = "notes", columnDefinition = "TEXT")
-    private String notes;
-
-    @Column(name = "is_essential")
-    @Builder.Default
-    private Boolean isEssential = false;
-
-    @Column(name = "metadata", columnDefinition = "TEXT")
-    private String metadata;
-
-    @CreationTimestamp
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
-
-    @UpdateTimestamp
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-
-    public enum Category {
-        PLANNING,
-        VENUE,
-        VENDORS,
-        BUDGET,
-        MARKETING,
-        REGISTRATION,
-        LOGISTICS,
-        TECHNICAL,
-        SECURITY,
-        CATERING,
-        DECORATIONS,
-        ENTERTAINMENT,
-        COMMUNICATIONS,
-        RISK_MANAGEMENT,
-        POST_EVENT,
-        OTHER
-    }
-
-    public enum Status {
-        PENDING,
-        IN_PROGRESS,
-        COMPLETED,
-        CANCELLED,
-        ON_HOLD
-    }
+    @Column(name = "category")
+    private String category;
 }

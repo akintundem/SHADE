@@ -9,8 +9,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -25,7 +23,6 @@ import java.util.UUID;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final JwtValidationUtil jwtValidationUtil;
     private final UserAccountRepository userAccountRepository;
@@ -48,7 +45,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
         try {
             if (!jwtValidationUtil.validateToken(token)) {
-                logger.debug("JWT token validation failed");
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -56,7 +52,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Claims claims = jwtValidationUtil.getClaimsFromToken(token);
             String subject = claims.getSubject();
             if (!StringUtils.hasText(subject)) {
-                logger.debug("JWT token missing subject");
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -64,7 +59,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             UUID userId = UUID.fromString(subject);
             Optional<UserAccount> userOpt = userAccountRepository.findById(userId);
             if (userOpt.isEmpty()) {
-                logger.debug("User not found for JWT subject: {}", subject);
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -72,7 +66,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             UserAccount user = userOpt.get();
             // Check if user is still active
             if (!"ACTIVE".equals(user.getStatus())) {
-                logger.debug("User account is not active: {}", user.getId());
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -85,11 +78,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             );
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authentication);
-            logger.debug("Successfully authenticated user: {}", user.getId());
         } catch (IllegalArgumentException ex) {
-            logger.warn("Invalid JWT token format: {}", ex.getMessage());
         } catch (Exception ex) {
-            logger.warn("Failed to authenticate request: {}", ex.getMessage());
             // Don't expose internal error details to client
         }
 

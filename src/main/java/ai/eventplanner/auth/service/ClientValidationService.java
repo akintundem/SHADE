@@ -4,7 +4,6 @@ import ai.eventplanner.auth.entity.ClientApplication;
 import ai.eventplanner.auth.repo.ClientApplicationRepository;
 import ai.eventplanner.common.exception.UnauthorizedException;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -12,7 +11,6 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class ClientValidationService {
 
     private final ClientApplicationRepository clientApplicationRepository;
@@ -22,13 +20,11 @@ public class ClientValidationService {
      */
     public ClientApplication validateClientId(String clientId) {
         if (clientId == null || clientId.trim().isEmpty()) {
-            log.warn("Client ID is null or empty");
             throw new UnauthorizedException("Client ID is required");
         }
 
         Optional<ClientApplication> clientOpt = clientApplicationRepository.findActiveByClientId(clientId);
         if (clientOpt.isEmpty()) {
-            log.warn("Invalid or inactive client ID: {}", clientId);
             throw new UnauthorizedException("Invalid client ID");
         }
 
@@ -36,10 +32,6 @@ public class ClientValidationService {
         
         // Update last used timestamp
         client.updateLastUsed();
-        // Don't save here to avoid version conflicts, just log the access
-        log.debug("Client access logged for: {}", clientId);
-        
-        log.debug("Client validation successful for: {}", clientId);
         return client;
     }
 
