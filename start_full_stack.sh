@@ -123,21 +123,21 @@ echo "   - Chat Interface: http://localhost:8000"
 # Change to shade directory and start Python app
 cd shade
 
-# Check if virtual environment exists
-if [ ! -d "venv" ]; then
-    echo -e "${YELLOW}⚠️  Virtual environment not found. Creating one...${NC}"
-    python3 -m venv venv
+# Remove and recreate virtual environment for correct architecture
+if [ -d "venv" ]; then
+    echo -e "${YELLOW}⚠️  Removing old virtual environment for architecture compatibility...${NC}"
+    rm -rf venv
 fi
+python3 -m venv venv
 
 # Activate virtual environment
 source venv/bin/activate
 
-# Install dependencies if needed
-if [ ! -f "venv/.deps_installed" ]; then
-    echo -e "${YELLOW}📦 Installing Python dependencies...${NC}"
-    pip install -r requirements.txt
-    touch venv/.deps_installed
-fi
+# Upgrade pip and install dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+
+touch venv/.deps_installed
 
 # Start Python app in background
 python main.py > ../python_app.log 2>&1 &
