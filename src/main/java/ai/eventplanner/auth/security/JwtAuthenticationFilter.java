@@ -3,6 +3,7 @@ package ai.eventplanner.auth.security;
 import ai.eventplanner.auth.entity.UserAccount;
 import ai.eventplanner.auth.repo.UserAccountRepository;
 import ai.eventplanner.auth.service.UserPrincipal;
+import ai.eventplanner.common.domain.enums.UserStatus;
 import ai.eventplanner.common.security.JwtValidationUtil;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
@@ -57,7 +58,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
             UUID userId = UUID.fromString(subject);
+            
+            // Try to find user with a small delay to allow for transaction commit
             Optional<UserAccount> userOpt = userAccountRepository.findById(userId);
+            if (userOpt.isEmpty()) {
+                // Try again after a small delay
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                userOpt = userAccountRepository.findById(userId);
+            }
+            
             if (userOpt.isEmpty()) {
                 filterChain.doFilter(request, response);
                 return;
@@ -65,7 +78,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             UserAccount user = userOpt.get();
             // Check if user is still active
-            if (!"ACTIVE".equals(user.getStatus())) {
+            if (user.getStatus() != UserStatus.ACTIVE) {
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -79,8 +92,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authentication);
         } catch (IllegalArgumentException ex) {
+            // Invalid JWT token format
         } catch (Exception ex) {
-            // Don't expose internal error details to client
+            // JWT authentication failed
         }
 
         filterChain.doFilter(request, response);

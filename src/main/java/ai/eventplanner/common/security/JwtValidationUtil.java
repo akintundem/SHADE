@@ -31,7 +31,8 @@ public class JwtValidationUtil {
     public boolean validateToken(String token) {
         try {
             Claims claims = getClaimsFromToken(token);
-            return claims != null && !isTokenExpired(claims);
+            boolean isValid = claims != null && !isTokenExpired(claims);
+            return isValid;
         } catch (Exception e) {
             return false;
         }
