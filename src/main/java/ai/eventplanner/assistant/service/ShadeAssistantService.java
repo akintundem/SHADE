@@ -23,7 +23,7 @@ import java.util.ArrayList;
 @Service
 public class ShadeAssistantService {
     
-    @Value("${shade.assistant.url}")
+    @Value("${assistant.service.base-url}")
     private String shadeAssistantUrl;
     
     private final RestTemplate restTemplate;
