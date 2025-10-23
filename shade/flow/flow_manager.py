@@ -93,7 +93,17 @@ class FlowManager:
                         state["messages"][-1].content,
                         state.get("shared_context", {})
                     )
-                    domain_responses[domain] = response
+                    if response is not None:
+                        domain_responses[domain] = response
+                    else:
+                        logger.error(f"Agent {domain} returned None response")
+                        domain_responses[domain] = {
+                            "agent_name": domain,
+                            "response": "I'm processing your request.",
+                            "tool_calls": [],
+                            "tool_results": [],
+                            "context": {}
+                        }
                     
             elif routing_decision == "multi_domain":
                 # Process with multiple domain agents
@@ -168,8 +178,16 @@ class FlowManager:
     async def process_request(self, message: str, user_id: str, chat_id: str, event_id: Optional[str] = None) -> Dict[str, Any]:
         """Process a request through the LangGraph flow."""
         try:
+            print(f"DEBUG: Starting process_request for message: {message}")
             # Check if this is a workflow request
-            workflow_context = await self._check_workflow_request(message, user_id, chat_id)
+            try:
+                workflow_context = await self._check_workflow_request(message, user_id, chat_id)
+                print(f"DEBUG: Workflow context: {workflow_context}")
+            except Exception as e:
+                print(f"DEBUG ERROR in workflow check: {e}")
+                import traceback
+                print(f"DEBUG TRACEBACK: {traceback.format_exc()}")
+                workflow_context = None
             
             # Create initial state
             initial_state: FlowState = {
@@ -192,9 +210,23 @@ class FlowManager:
             }
             
             # Execute the graph
+            print(f"DEBUG: About to invoke graph")
             result = await self.graph.ainvoke(initial_state)
+            print(f"DEBUG: Graph result type: {type(result)}")
+            print(f"DEBUG: Graph result: {result}")
+            
+            # Handle None result
+            if result is None:
+                logger.error("Graph returned None result")
+                return {
+                    "reply": "I'm experiencing technical difficulties. Please try again.",
+                    "agent_used": "LangGraph Flow (Error)",
+                    "data": {"error": "Graph returned None"},
+                    "multi_agent": False
+                }
             
             # Extract response
+            print(f"DEBUG: Extracting response from result")
             final_response = result.get("final_response", "I've processed your request.")
             domain_responses = result.get("domain_responses", {})
             metadata = result.get("metadata", {})
@@ -217,7 +249,11 @@ class FlowManager:
             }
             
         except Exception as e:
+            import traceback
             logger.error(f"Error in flow processing: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            print(f"ERROR: {e}")
+            print(f"TRACEBACK: {traceback.format_exc()}")
             return {
                 "reply": f"I encountered an error while processing your request: {str(e)}",
                 "agent_used": "LangGraph Flow (Error)",

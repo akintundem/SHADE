@@ -136,8 +136,29 @@ public class AssistantSessionController {
      * Extract organizer ID from authentication
      */
     private UUID getOrganizerIdFromAuthentication(Authentication authentication) {
-        // This would need to be implemented based on your authentication setup
-        // For now, returning a placeholder
-        return UUID.randomUUID();
+        if (authentication == null || authentication.getPrincipal() == null) {
+            throw new IllegalArgumentException("Authentication is required");
+        }
+        
+        // Extract user ID from authentication principal
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof ai.eventplanner.auth.service.UserPrincipal) {
+            ai.eventplanner.auth.service.UserPrincipal userPrincipal = (ai.eventplanner.auth.service.UserPrincipal) principal;
+            return userPrincipal.getUser().getId();
+        }
+        
+        // Fallback: try to get from name (for basic auth or other auth types)
+        String name = authentication.getName();
+        if (name != null && !name.isEmpty()) {
+            try {
+                return UUID.fromString(name);
+            } catch (IllegalArgumentException e) {
+                // If name is not a UUID, we need to look up the user
+                // For now, throw an exception to indicate this needs proper implementation
+                throw new IllegalArgumentException("Unable to extract user ID from authentication");
+            }
+        }
+        
+        throw new IllegalArgumentException("Unable to extract user ID from authentication");
     }
 }

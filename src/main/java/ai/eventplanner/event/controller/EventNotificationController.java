@@ -5,7 +5,6 @@ import ai.eventplanner.event.dto.request.EventReminderRequest;
 import ai.eventplanner.event.dto.response.EventNotificationResponse;
 import ai.eventplanner.event.dto.response.EventNotificationSettingsResponse;
 import ai.eventplanner.event.dto.response.EventReminderResponse;
-import ai.eventplanner.event.service.EventService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -31,10 +30,7 @@ import java.util.*;
 @SecurityRequirement(name = "bearerAuth")
 public class EventNotificationController {
 
-    private final EventService eventService;
-
-    public EventNotificationController(EventService eventService) {
-        this.eventService = eventService;
+    public EventNotificationController() {
     }
 
     // ==================== EVENT NOTIFICATION ENDPOINTS ====================

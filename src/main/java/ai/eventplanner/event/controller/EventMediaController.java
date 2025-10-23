@@ -2,7 +2,6 @@ package ai.eventplanner.event.controller;
 
 import ai.eventplanner.event.dto.request.EventMediaRequest;
 import ai.eventplanner.event.dto.response.EventMediaResponse;
-import ai.eventplanner.event.service.EventService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -29,10 +28,7 @@ import java.util.*;
 @SecurityRequirement(name = "bearerAuth")
 public class EventMediaController {
 
-    private final EventService eventService;
-
-    public EventMediaController(EventService eventService) {
-        this.eventService = eventService;
+    public EventMediaController() {
     }
 
     // ==================== EVENT MEDIA ENDPOINTS ====================

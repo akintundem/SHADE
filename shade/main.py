@@ -109,7 +109,16 @@ class ShadeAgentProcessor:
             structured_response = await self._create_structured_response(message, user_id, chat_id, event_id)
             
             # Process with LangGraph Flow Manager
-            result = await self.flow_manager.process_request(message, user_id, chat_id, event_id)
+            # TEMPORARY: Skip flow manager if there's a structured response
+            if structured_response is not None:
+                result = {
+                    "reply": "",
+                    "agent_used": "Structured Response",
+                    "data": {},
+                    "ui": None
+                }
+            else:
+                result = await self.flow_manager.process_request(message, user_id, chat_id, event_id)
             
             # Save conversation to data layer (disabled for now to focus on tool issues)
             # if self.data_manager:
@@ -133,7 +142,9 @@ class ShadeAgentProcessor:
             }
             
         except Exception as e:
+            import traceback
             print(f"❌ Error in LangGraph Flow processing: {e}")
+            print(f"❌ Traceback: {traceback.format_exc()}")
             return {
                 "reply": f"I encountered an error while processing your request: {str(e)}. Please try again!",
                 "tool_used": "error",

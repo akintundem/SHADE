@@ -596,9 +596,9 @@ public class EventManagementController {
             response.setUniqueVisitors((Long) analytics.getOrDefault("uniqueVisitors", 0L));
             response.setRegistrationRate((Double) analytics.getOrDefault("registrationRate", 0.0));
             response.setAttendanceRate((Double) analytics.getOrDefault("attendanceRate", 0.0));
-            response.setEngagementMetrics((Map<String, Object>) analytics.getOrDefault("engagementMetrics", Map.<String, Object>of()));
-            response.setSocialMetrics((Map<String, Object>) analytics.getOrDefault("socialMetrics", Map.<String, Object>of()));
-            response.setGeographicDistribution((Map<String, Object>) analytics.getOrDefault("geographicDistribution", Map.<String, Object>of()));
+            response.setEngagementMetrics(safeCastToMap(analytics.getOrDefault("engagementMetrics", Map.<String, Object>of())));
+            response.setSocialMetrics(safeCastToMap(analytics.getOrDefault("socialMetrics", Map.<String, Object>of())));
+            response.setGeographicDistribution(safeCastToMap(analytics.getOrDefault("geographicDistribution", Map.<String, Object>of())));
             response.setAnalyticsPeriod("30d");
             
             return ResponseEntity.ok(response);
@@ -647,9 +647,9 @@ public class EventManagementController {
             response.setEventId(id);
             response.setIsValid((Boolean) validation.getOrDefault("isValid", false));
             response.setValidationScore((Integer) validation.getOrDefault("score", 0));
-            response.setErrors((List<String>) validation.getOrDefault("errors", List.<String>of()));
-            response.setWarnings((List<String>) validation.getOrDefault("warnings", List.<String>of()));
-            response.setValidationDetails((Map<String, Object>) validation.getOrDefault("details", Map.<String, Object>of()));
+            response.setErrors(safeCastToList(validation.getOrDefault("errors", List.<String>of())));
+            response.setWarnings(safeCastToList(validation.getOrDefault("warnings", List.<String>of())));
+            response.setValidationDetails(safeCastToMap(validation.getOrDefault("details", Map.<String, Object>of())));
             response.setValidatedAt(java.time.LocalDateTime.now().toString());
             
             return ResponseEntity.ok(response);
@@ -669,9 +669,9 @@ public class EventManagementController {
             response.setEventId(id);
             response.setHealthStatus((String) healthCheck.getOrDefault("status", "unknown"));
             response.setHealthScore((Integer) healthCheck.getOrDefault("score", 0));
-            response.setIssues((List<String>) healthCheck.getOrDefault("issues", List.<String>of()));
-            response.setRecommendations((List<String>) healthCheck.getOrDefault("recommendations", List.<String>of()));
-            response.setComponentHealth((Map<String, Object>) healthCheck.getOrDefault("components", Map.<String, Object>of()));
+            response.setIssues(safeCastToList(healthCheck.getOrDefault("issues", List.<String>of())));
+            response.setRecommendations(safeCastToList(healthCheck.getOrDefault("recommendations", List.<String>of())));
+            response.setComponentHealth(safeCastToMap(healthCheck.getOrDefault("components", Map.<String, Object>of())));
             response.setCheckedAt(java.time.LocalDateTime.now().toString());
             
             return ResponseEntity.ok(response);
@@ -720,5 +720,21 @@ public class EventManagementController {
             return 0.0;
         }
         return (double) (currentAttendeeCount * 100) / capacity;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> safeCastToMap(Object obj) {
+        if (obj instanceof Map) {
+            return (Map<String, Object>) obj;
+        }
+        return Map.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> safeCastToList(Object obj) {
+        if (obj instanceof List) {
+            return (List<String>) obj;
+        }
+        return List.of();
     }
 }

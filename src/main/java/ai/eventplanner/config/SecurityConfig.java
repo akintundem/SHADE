@@ -59,6 +59,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/validate-token").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/organizations/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/ai/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/ai/**").permitAll()
                 .anyRequest().authenticated()
             )
             .httpBasic(httpBasic -> httpBasic.disable())
