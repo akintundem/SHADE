@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database
   postgres:
     image: postgres:15
     environment:
@@ -8,7 +9,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "5436:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,6 +18,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis Cache
   redis:
     image: redis:7-alpine
     ports:
@@ -27,6 +29,26 @@ services:
       timeout: 5s
       retries: 5
 
+  # MongoDB for AI Assistant
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: event_planner
+
+  # Pinecone Local Vector Database
+  pinecone-local:
+    image: ghcr.io/pinecone-io/pinecone-local:latest
+    ports:
+      - "5081:5081"
+    environment:
+      - PORT=5081
+      - PINECONE_HOST=localhost
+    platform: linux/amd64
 
 volumes:
   pgdata:
+  mongodata:

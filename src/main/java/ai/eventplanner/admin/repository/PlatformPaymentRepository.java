@@ -69,12 +69,14 @@ public interface PlatformPaymentRepository extends JpaRepository<PlatformPayment
     /**
      * Count payments by date range
      */
+    @Query("SELECT COUNT(p) FROM PlatformPayment p WHERE p.createdAt BETWEEN :startDate AND :endDate")
     Long countByDateRange(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
     
     /**
      * Count payments by status and date range
      */
-    Long countByStatusAndDateRange(PlatformPaymentStatus status, @Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+    @Query("SELECT COUNT(p) FROM PlatformPayment p WHERE p.status = :status AND p.createdAt BETWEEN :startDate AND :endDate")
+    Long countByStatusAndDateRange(@Param("status") PlatformPaymentStatus status, @Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
     
     /**
      * Count payments by status

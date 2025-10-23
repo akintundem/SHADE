@@ -2,6 +2,7 @@ package ai.eventplanner.pushnotification.service;
 
 import ai.eventplanner.pushnotification.dto.PushNotificationRequest;
 import ai.eventplanner.pushnotification.dto.PushNotificationResponse;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.UUID;
  * Integration service for easy push notification sending from anywhere in the application
  */
 @Service
+@ConditionalOnProperty(name = "firebase.enabled", havingValue = "true", matchIfMissing = false)
 public class PushNotificationIntegrationService {
     
     private final FirebasePushNotificationService pushNotificationService;

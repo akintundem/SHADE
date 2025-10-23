@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Full Stack Event Planner Stop Script
-# This script stops both the Java Spring Boot application and the Python Shade Assistant
+# Full Stack Event Planner Stop Script - Hybrid Mode
+# This script stops Java/Python locally and optionally databases in Docker
 
-echo "🛑 Stopping Event Planner Full Stack Application"
-echo "=============================================="
+echo "🛑 Stopping Event Planner Full Stack Application - Hybrid Mode"
+echo "=============================================================="
 
 # Colors for output
 RED='\033[0;31m'
@@ -66,12 +66,31 @@ else
     echo -e "${GREEN}✅ Port 8000 is free${NC}"
 fi
 
+# Ask if user wants to stop databases too
 echo ""
-echo -e "${GREEN}🎉 All services stopped successfully!${NC}"
+echo -e "${YELLOW}🗄️  Databases are still running in Docker${NC}"
+echo -e "${BLUE}Do you want to stop the databases too? (y/N): ${NC}"
+read -r response
+
+if [[ "$response" =~ ^[Yy]$ ]]; then
+    echo -e "${BLUE}🐳 Stopping databases in Docker...${NC}"
+    docker-compose down
+    echo -e "${GREEN}✅ Databases stopped${NC}"
+else
+    echo -e "${BLUE}ℹ️  Databases are still running. To stop them later: docker-compose down${NC}"
+fi
+
+echo ""
+echo -e "${GREEN}🎉 Local services stopped successfully!${NC}"
 echo "=============================================="
 echo ""
 echo -e "${BLUE}📝 Log files are preserved:${NC}"
 echo "   • java_app.log"
 echo "   • python_app.log"
+echo ""
+echo -e "${BLUE}📝 Database management:${NC}"
+echo "   • Stop databases: docker-compose down"
+echo "   • Start databases: docker-compose up -d"
+echo "   • View database logs: docker-compose logs -f"
 echo ""
 echo -e "${YELLOW}💡 To start again, run: ./start_full_stack.sh${NC}"
