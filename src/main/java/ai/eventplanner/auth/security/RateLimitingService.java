@@ -92,8 +92,8 @@ public class RateLimitingService {
         String hourKey = RATE_LIMIT_HOUR_PREFIX + clientId + ":" + endpoint + ":" + getCurrentHour();
         
         // Default limits for anonymous clients (more restrictive)
-        int minuteLimit = 10;  // 10 requests per minute
-        int hourLimit = 100;   // 100 requests per hour
+        int minuteLimit = 50;  // 10 requests per minute
+        int hourLimit = 1000;   // 100 requests per hour
         
         // Check minute rate limit
         String minuteCount = redisTemplate.opsForValue().get(minuteKey);
