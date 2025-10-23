@@ -1,6 +1,7 @@
 package ai.eventplanner.roles.entity;
 
 import ai.eventplanner.common.domain.entity.BaseEntity;
+import ai.eventplanner.common.domain.enums.RoleName;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -27,8 +28,9 @@ public class EventRole extends BaseEntity {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "role_name", nullable = false)
-    private String roleName; // ORGANIZER, COORDINATOR, VOLUNTEER, etc.
+    private RoleName roleName;
 
     @Column(name = "permissions")
     private String permissions; // JSON string of permissions

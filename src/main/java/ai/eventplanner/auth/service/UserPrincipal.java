@@ -1,6 +1,7 @@
 package ai.eventplanner.auth.service;
 
 import ai.eventplanner.auth.entity.UserAccount;
+import ai.eventplanner.common.domain.enums.UserStatus;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -38,7 +39,7 @@ public class UserPrincipal implements UserDetails {
 
     @Override
     public boolean isAccountNonLocked() {
-        return !"LOCKED".equalsIgnoreCase(user.getStatus());
+        return user.getStatus() != UserStatus.SUSPENDED;
     }
 
     @Override
@@ -48,7 +49,7 @@ public class UserPrincipal implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return !"DISABLED".equalsIgnoreCase(user.getStatus());
+        return user.getStatus() == UserStatus.ACTIVE;
     }
 
     public UserAccount getUser() {

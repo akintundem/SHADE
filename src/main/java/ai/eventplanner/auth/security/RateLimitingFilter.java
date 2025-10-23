@@ -44,7 +44,6 @@ public class RateLimitingFilter implements Filter {
         HttpServletResponse httpResponse = (HttpServletResponse) response;
         
         String requestPath = httpRequest.getRequestURI();
-        String method = httpRequest.getMethod();
         
         // Skip rate limiting for excluded paths
         if (isExcludedPath(requestPath)) {

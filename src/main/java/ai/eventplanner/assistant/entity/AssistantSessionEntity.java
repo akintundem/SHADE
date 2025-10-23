@@ -1,15 +1,20 @@
 package ai.eventplanner.assistant.entity;
 
+import ai.eventplanner.common.domain.enums.SessionType;
+import ai.eventplanner.common.domain.enums.SessionStatus;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Lob;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -22,7 +27,8 @@ import java.util.UUID;
 @Getter
 @Setter
 @Entity
-@Table(name = "assistant_sessions")
+@Table(name = "assistant_sessions", 
+       uniqueConstraints = @UniqueConstraint(columnNames = "event_id"))
 public class AssistantSessionEntity {
 
     @Id
@@ -32,14 +38,18 @@ public class AssistantSessionEntity {
     @Column(name = "domain", nullable = false, length = 64)
     private String domain;
 
+    @Column(name = "event_id", nullable = false, unique = true)
+    private UUID eventId;
+    
     @Column(name = "organizer_id")
     private UUID organizerId;
 
     @Column(name = "name", length = 255)
     private String name;
 
-    @Column(name = "session_type", length = 100)
-    private String type;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "session_type")
+    private SessionType type;
 
     @Column(name = "session_date")
     private OffsetDateTime date;
@@ -64,8 +74,9 @@ public class AssistantSessionEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
-    @Column(name = "status", length = 50)
-    private String status;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private SessionStatus status;
 
     @Column(name = "ai_generated", nullable = false)
     private boolean aiGenerated;

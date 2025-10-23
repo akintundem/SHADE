@@ -119,6 +119,19 @@ public class Event extends BaseEntity {
 
     @Column(name = "venue_id")
     private UUID venueId;
+    
+    // Platform payment tracking
+    @Column(name = "platform_payment_id")
+    private UUID platformPaymentId;
+    
+    @Column(name = "creation_fee_paid")
+    private Boolean creationFeePaid = false;
+    
+    @Column(name = "creation_fee_amount", precision = 10, scale = 2)
+    private java.math.BigDecimal creationFeeAmount;
+    
+    @Column(name = "payment_date")
+    private LocalDateTime paymentDate;
 
     public Event(String name, EventType eventType, UUID ownerId) {
         this.name = name;

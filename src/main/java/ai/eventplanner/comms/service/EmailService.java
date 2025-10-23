@@ -2,6 +2,7 @@ package ai.eventplanner.comms.service;
 
 import ai.eventplanner.comms.model.CommunicationLogEntity;
 import ai.eventplanner.comms.repository.CommunicationLogRepository;
+import ai.eventplanner.common.domain.enums.CommunicationStatus;
 import ai.eventplanner.sendgrid.dto.EmailResponse;
 import ai.eventplanner.sendgrid.service.SendGridService;
 import org.springframework.beans.factory.annotation.Value;
@@ -91,7 +92,7 @@ public class EmailService {
             entity.setRecipient(to);
             entity.setSubject(subject);
             entity.setContent(content);
-            entity.setStatus(response.isSuccess() ? "sent" : "failed");
+            entity.setStatus(response.isSuccess() ? CommunicationStatus.SENT : CommunicationStatus.FAILED);
             entity.setMetadata(serializeMetadata(Map.of(
                 "from", from,
                 "sendGridResponse", response.getStatusMessage(),

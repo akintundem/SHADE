@@ -1,7 +1,10 @@
 package ai.eventplanner.comms.model;
 
+import ai.eventplanner.common.domain.enums.CommunicationStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
@@ -35,8 +38,9 @@ public class CommunicationLogEntity {
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    private String status;
+    private CommunicationStatus status;
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
@@ -53,7 +57,7 @@ public class CommunicationLogEntity {
             createdAt = OffsetDateTime.now();
         }
         if (status == null) {
-            status = "queued";
+            status = CommunicationStatus.PENDING;
         }
     }
 }

@@ -5,10 +5,11 @@ package ai.eventplanner.common.domain.enums;
  */
 public enum CommunicationStatus {
     PENDING,
-    QUEUED,
     SENT,
     DELIVERED,
-    READ,
     FAILED,
-    CANCELLED
+    BOUNCED,
+    OPENED,
+    CLICKED,
+    REPLIED
 }

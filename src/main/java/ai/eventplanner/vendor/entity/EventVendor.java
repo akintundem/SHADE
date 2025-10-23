@@ -1,6 +1,9 @@
 package ai.eventplanner.vendor.entity;
 
 import ai.eventplanner.event.entity.Event;
+import ai.eventplanner.common.domain.enums.ContractStatus;
+import ai.eventplanner.common.domain.enums.QuoteStatus;
+import ai.eventplanner.common.domain.enums.OrganizationType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,7 +27,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Event vendor relationships and contracts.
+ * Event vendor with complete organization information and planning coordination.
  */
 @Entity
 @Table(name = "event_vendors")
@@ -42,10 +45,87 @@ public class EventVendor {
     @JoinColumn(name = "event_id", nullable = false)
     private Event event;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "organization_id", nullable = false)
-    private Organization organization;
+    // Organization Information
+    @Column(name = "vendor_name", nullable = false)
+    private String vendorName;
+    
+    @Column(name = "legal_name")
+    private String legalName;
+    
+    @Column(name = "vendor_email")
+    private String vendorEmail;
+    
+    @Column(name = "vendor_phone")
+    private String vendorPhone;
+    
+    @Column(name = "website_url")
+    private String websiteUrl;
+    
+    @Column(name = "logo_url")
+    private String logoUrl;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "organization_type")
+    private OrganizationType organizationType;
+    
+    @Column(name = "vendor_description", columnDefinition = "TEXT")
+    private String vendorDescription;
+    
+    @Column(name = "vendor_address", columnDefinition = "TEXT")
+    private String vendorAddress;
+    
+    @Column(name = "vendor_city")
+    private String vendorCity;
+    
+    @Column(name = "vendor_state")
+    private String vendorState;
+    
+    @Column(name = "vendor_country")
+    private String vendorCountry;
+    
+    @Column(name = "vendor_postal_code")
+    private String vendorPostalCode;
+    
+    @Column(name = "vendor_latitude")
+    private Double vendorLatitude;
+    
+    @Column(name = "vendor_longitude")
+    private Double vendorLongitude;
+    
+    @Column(name = "google_place_id")
+    private String googlePlaceId;
+    
+    @Column(name = "business_license")
+    private String businessLicense;
+    
+    @Column(name = "tax_id")
+    private String taxId;
+    
+    @Column(name = "insurance_info", columnDefinition = "TEXT")
+    private String insuranceInfo;
+    
+    @Column(name = "certifications", columnDefinition = "TEXT")
+    private String certifications;
+    
+    @Column(name = "vendor_rating")
+    private Double vendorRating;
+    
+    @Column(name = "review_count")
+    @Builder.Default
+    private Integer reviewCount = 0;
+    
+    @Column(name = "price_tier")
+    private String priceTier; // $, $$, $$$, $$$$
+    
+    @Column(name = "is_verified")
+    @Builder.Default
+    private Boolean isVerified = false;
+    
+    @Column(name = "is_active")
+    @Builder.Default
+    private Boolean isActive = true;
 
+    // Vendor Status and Planning
     @Enumerated(EnumType.STRING)
     @Column(name = "vendor_status")
     @Builder.Default
@@ -63,21 +143,27 @@ public class EventVendor {
     @Column(name = "final_amount", precision = 10, scale = 2)
     private BigDecimal finalAmount;
 
-    @Column(name = "deposit_amount", precision = 10, scale = 2)
-    private BigDecimal depositAmount;
+    @Column(name = "estimated_deposit", precision = 10, scale = 2)
+    private BigDecimal estimatedDeposit;
 
-    @Column(name = "deposit_paid", precision = 10, scale = 2)
-    private BigDecimal depositPaid;
+    @Column(name = "contract_amount", precision = 10, scale = 2)
+    private BigDecimal contractAmount;
 
-    @Column(name = "balance_due", precision = 10, scale = 2)
-    private BigDecimal balanceDue;
+    @Column(name = "total_estimated_cost", precision = 10, scale = 2)
+    private BigDecimal totalEstimatedCost;
 
     @Column(name = "contract_url")
     private String contractUrl;
 
-    @Column(name = "contract_signed")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "contract_status")
     @Builder.Default
-    private Boolean contractSigned = false;
+    private ContractStatus contractStatus = ContractStatus.DRAFT;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "quote_status")
+    @Builder.Default
+    private QuoteStatus quoteStatus = QuoteStatus.REQUESTED;
 
     @Column(name = "contract_signed_date")
     private LocalDateTime contractSignedDate;
@@ -127,13 +213,23 @@ public class EventVendor {
     private LocalDateTime updatedAt;
 
     public enum VendorStatus {
-        INQUIRY,
-        RFP_SENT,
-        QUOTE_RECEIVED,
-        NEGOTIATION,
-        CONFIRMED,
-        CONTRACT_SIGNED,
-        CANCELLED,
-        COMPLETED
+        INQUIRY,        // Initial inquiry sent
+        RFP_SENT,       // Request for proposal sent
+        QUOTED,         // Quote received
+        NEGOTIATING,    // Negotiating terms
+        BOOKED,         // Confirmed booking
+        IN_PROGRESS,    // Service in progress
+        COMPLETED,      // Service completed
+        CANCELLED,      // Booking cancelled
+        NO_RESPONSE     // No response from vendor
+    }
+    
+    // Constructor for creating a new vendor
+    public EventVendor(Event event, String vendorName, OrganizationType organizationType, String serviceCategory) {
+        this.event = event;
+        this.vendorName = vendorName;
+        this.organizationType = organizationType;
+        this.serviceCategory = serviceCategory;
+        this.vendorStatus = VendorStatus.INQUIRY;
     }
 }

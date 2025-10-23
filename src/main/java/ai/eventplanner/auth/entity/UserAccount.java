@@ -2,6 +2,7 @@ package ai.eventplanner.auth.entity;
 
 import ai.eventplanner.common.domain.entity.BaseEntity;
 import ai.eventplanner.common.domain.enums.UserType;
+import ai.eventplanner.common.domain.enums.UserStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -74,8 +75,9 @@ public class UserAccount extends BaseEntity {
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
-    @Column(name = "status", length = 30)
-    private String status;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private UserStatus status;
 
     @PrePersist
     public void onCreate() {
@@ -83,14 +85,14 @@ public class UserAccount extends BaseEntity {
             userType = UserType.INDIVIDUAL;
         }
         if (status == null) {
-            status = "ACTIVE";
+            status = UserStatus.ACTIVE;
         }
     }
 
     @PreUpdate
     public void onUpdate() {
         if (status == null) {
-            status = "ACTIVE";
+            status = UserStatus.ACTIVE;
         }
     }
 }

@@ -1,7 +1,10 @@
 package ai.eventplanner.timeline.model;
 
+import ai.eventplanner.common.domain.enums.TimelineStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
@@ -43,13 +46,14 @@ public class TimelineItemEntity {
     @Column(name = "dependencies")
     private UUID[] dependencies;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status")
-    private String status;
+    private TimelineStatus status;
 
     @PrePersist
     public void prePersist() {
         if (id == null) id = UUID.randomUUID();
-        if (status == null) status = "pending";
+        if (status == null) status = TimelineStatus.PENDING;
     }
 
 }

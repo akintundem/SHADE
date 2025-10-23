@@ -1,6 +1,8 @@
 package ai.eventplanner.budget.entity;
 
 import ai.eventplanner.common.domain.entity.BaseEntity;
+import ai.eventplanner.common.domain.enums.RevenueType;
+import ai.eventplanner.common.domain.enums.RevenueStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -25,8 +27,9 @@ public class BudgetRevenue extends BaseEntity {
     @JoinColumn(name = "budget_id", nullable = false)
     private Budget budget;
     
+    @Enumerated(EnumType.STRING)
     @Column(name = "revenue_type")
-    private String revenueType;
+    private RevenueType revenueType;
     
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
@@ -46,8 +49,9 @@ public class BudgetRevenue extends BaseEntity {
     @Column(name = "currency", length = 3)
     private String currency = "USD";
     
+    @Enumerated(EnumType.STRING)
     @Column(name = "status")
-    private String status = "PENDING";
+    private RevenueStatus status = RevenueStatus.PENDING;
     
     @Column(name = "received_date")
     private LocalDateTime receivedDate;
@@ -58,7 +62,7 @@ public class BudgetRevenue extends BaseEntity {
     @Column(name = "metadata", columnDefinition = "TEXT")
     private String metadata;
     
-    public BudgetRevenue(Budget budget, String revenueType, String description, BigDecimal estimatedAmount) {
+    public BudgetRevenue(Budget budget, RevenueType revenueType, String description, BigDecimal estimatedAmount) {
         this.budget = budget;
         this.revenueType = revenueType;
         this.description = description;

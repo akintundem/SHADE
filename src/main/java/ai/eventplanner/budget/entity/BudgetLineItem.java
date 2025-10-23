@@ -1,6 +1,7 @@
 package ai.eventplanner.budget.entity;
 
 import ai.eventplanner.common.domain.entity.BaseEntity;
+import ai.eventplanner.common.domain.enums.PlanningStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -12,7 +13,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Budget line items for detailed expense tracking
+ * Budget line items for detailed planning and cost estimation
  */
 @Entity
 @Table(name = "budget_line_items")
@@ -56,17 +57,18 @@ public class BudgetLineItem extends BaseEntity {
     @Column(name = "unit_cost", precision = 10, scale = 2)
     private BigDecimal unitCost;
     
-    @Column(name = "payment_status")
-    private String paymentStatus = "PENDING";
+    @Enumerated(EnumType.STRING)
+    @Column(name = "planning_status")
+    private PlanningStatus planningStatus = PlanningStatus.PLANNED;
     
-    @Column(name = "payment_date")
-    private LocalDateTime paymentDate;
+    @Column(name = "booking_date")
+    private LocalDateTime bookingDate;
     
-    @Column(name = "invoice_number")
-    private String invoiceNumber;
+    @Column(name = "contract_reference")
+    private String contractReference;
     
-    @Column(name = "invoice_url")
-    private String invoiceUrl;
+    @Column(name = "quote_reference")
+    private String quoteReference;
     
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;

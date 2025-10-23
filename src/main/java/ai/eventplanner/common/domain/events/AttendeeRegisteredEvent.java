@@ -19,6 +19,6 @@ public class AttendeeRegisteredEvent {
     private UUID attendanceId;
     private String ticketType;
     private Double ticketPrice;
-    private String paymentStatus;
+    private String registrationStatus;
     private LocalDateTime registrationDate;
 }

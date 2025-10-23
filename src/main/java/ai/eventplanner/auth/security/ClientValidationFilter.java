@@ -47,7 +47,6 @@ public class ClientValidationFilter implements Filter {
         HttpServletResponse httpResponse = (HttpServletResponse) response;
         
         String requestPath = httpRequest.getRequestURI();
-        String method = httpRequest.getMethod();
         
         // Skip validation for excluded paths
         if (isExcludedPath(requestPath)) {
@@ -55,29 +54,23 @@ public class ClientValidationFilter implements Filter {
             return;
         }
 
-        try {
-            // Extract client ID from header
-            String clientId = httpRequest.getHeader("X-Client-ID");
-            
-            if (clientId == null || clientId.trim().isEmpty()) {
-                sendErrorResponse(httpResponse, "X-Client-ID header is required", HttpStatus.BAD_REQUEST);
-                return;
-            }
-
-            // Validate client ID
-            try {
-                clientValidationService.validateClientId(clientId);
-                
-                
-                
-            } catch (UnauthorizedException e) {
-                sendErrorResponse(httpResponse, "Invalid client ID", HttpStatus.UNAUTHORIZED);
-                return;
-            }
-
-            chain.doFilter(request, response);
-            
+        // Extract client ID from header
+        String clientId = httpRequest.getHeader("X-Client-ID");
+        
+        if (clientId == null || clientId.trim().isEmpty()) {
+            sendErrorResponse(httpResponse, "X-Client-ID header is required", HttpStatus.BAD_REQUEST);
+            return;
         }
+
+        // Validate client ID
+        try {
+            clientValidationService.validateClientId(clientId);
+        } catch (UnauthorizedException e) {
+            sendErrorResponse(httpResponse, "Invalid client ID", HttpStatus.UNAUTHORIZED);
+            return;
+        }
+
+        chain.doFilter(request, response);
     }
 
     private boolean isExcludedPath(String path) {
@@ -94,11 +87,4 @@ public class ClientValidationFilter implements Filter {
         ));
     }
 
-    private String getClientIpAddress(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
-    }
 }

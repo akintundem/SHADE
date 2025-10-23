@@ -1,9 +1,12 @@
 package ai.eventplanner.assistant.entity;
 
+import ai.eventplanner.common.domain.enums.MessageRole;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.PrePersist;
@@ -30,8 +33,9 @@ public class AssistantMessageEntity {
     @Column(name = "session_id", nullable = false)
     private UUID sessionId;
 
-    @Column(name = "role", nullable = false, length = 50)
-    private String role;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false)
+    private MessageRole role;
 
     @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
@@ -52,7 +56,7 @@ public class AssistantMessageEntity {
         AssistantMessageEntity message = new AssistantMessageEntity();
         message.id = UUID.randomUUID();
         message.sessionId = sessionId;
-        message.role = "user";
+        message.role = MessageRole.USER;
         message.content = content;
         message.createdAt = OffsetDateTime.now();
         return message;
@@ -65,7 +69,7 @@ public class AssistantMessageEntity {
         AssistantMessageEntity message = new AssistantMessageEntity();
         message.id = UUID.randomUUID();
         message.sessionId = sessionId;
-        message.role = "assistant";
+        message.role = MessageRole.ASSISTANT;
         message.content = content;
         if (followUps != null) {
             message.followUpQuestions = new ArrayList<>(followUps);

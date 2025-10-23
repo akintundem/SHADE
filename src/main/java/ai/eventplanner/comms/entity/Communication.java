@@ -52,7 +52,7 @@ public class Communication extends BaseEntity {
     
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
-    private CommunicationStatus status = CommunicationStatus.QUEUED;
+    private CommunicationStatus status = CommunicationStatus.PENDING;
     
     @Column(name = "scheduled_at")
     private LocalDateTime scheduledAt;

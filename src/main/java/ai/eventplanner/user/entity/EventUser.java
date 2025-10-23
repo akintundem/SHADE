@@ -1,6 +1,8 @@
 package ai.eventplanner.user.entity;
 
 import ai.eventplanner.common.domain.entity.BaseEntity;
+import ai.eventplanner.common.domain.enums.EventUserType;
+import ai.eventplanner.common.domain.enums.RegistrationStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -27,11 +29,13 @@ public class EventUser extends BaseEntity {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "user_type", nullable = false)
-    private String userType; // ORGANIZER, ATTENDEE, VOLUNTEER, VENDOR, etc.
+    private EventUserType userType;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "registration_status")
-    private String registrationStatus; // PENDING, CONFIRMED, CANCELLED, etc.
+    private RegistrationStatus registrationStatus;
 
     @Column(name = "registration_date")
     private java.time.LocalDateTime registrationDate;

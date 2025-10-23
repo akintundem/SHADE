@@ -56,8 +56,8 @@ public class EventAttendance extends BaseEntity {
     @Column(name = "ticket_price")
     private Double ticketPrice;
     
-    @Column(name = "payment_status")
-    private String paymentStatus;
+    @Column(name = "registration_fee")
+    private Double registrationFee;
     
     @Column(name = "dietary_restrictions", columnDefinition = "TEXT")
     private String dietaryRestrictions;
