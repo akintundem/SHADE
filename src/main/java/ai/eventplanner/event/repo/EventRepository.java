@@ -14,9 +14,46 @@ import java.util.UUID;
 
 public interface EventRepository extends JpaRepository<Event, UUID> {
     
+    // Basic queries
     Page<Event> findByEventStatus(String status, Pageable pageable);
     Page<Event> findByOwnerId(UUID ownerId, Pageable pageable);
     
+    // Event type and status queries
+    List<Event> findByEventType(String eventType);
+    List<Event> findByEventStatus(String eventStatus);
+    List<Event> findByEventTypeAndEventStatus(String eventType, String eventStatus);
+    
+    // Public events
+    List<Event> findByIsPublicTrue();
+    List<Event> findByIsPublicTrueAndEventStatus(String eventStatus);
+    
+    // Date-based queries
+    List<Event> findByStartDateTimeAfter(LocalDateTime dateTime);
+    List<Event> findByStartDateTimeBefore(LocalDateTime dateTime);
+    List<Event> findByStartDateTimeBetween(LocalDateTime startDate, LocalDateTime endDate);
+    List<Event> findByStartDateTimeAfterAndIsPublicTrue(LocalDateTime dateTime);
+    
+    // Capacity queries
+    List<Event> findByCapacityGreaterThan(Integer capacity);
+    List<Event> findByCurrentAttendeeCountLessThan(Integer count);
+    
+    // Search queries
+    @Query("SELECT e FROM Event e WHERE " +
+           "LOWER(e.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(e.description) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(e.theme) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(e.hashtag) LIKE LOWER(CONCAT('%', :searchTerm, '%'))")
+    List<Event> searchEvents(@Param("searchTerm") String searchTerm);
+    
+    @Query("SELECT e FROM Event e WHERE " +
+           "LOWER(e.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(e.description) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(e.theme) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(e.hashtag) LIKE LOWER(CONCAT('%', :searchTerm, '%')) " +
+           "AND e.isPublic = true")
+    List<Event> searchPublicEvents(@Param("searchTerm") String searchTerm);
+    
+    // Analytics queries
     @Query("SELECT COUNT(e) FROM Event e WHERE e.createdAt BETWEEN :startDate AND :endDate")
     Long countByDateRange(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
     
@@ -27,5 +64,22 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     List<Map<String, Object>> getEventsByMonth(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
     
     Long countByEventStatus(String status);
+    
+    // User relationship queries (these would need to be implemented with proper joins to EventUser/EventAttendance tables)
+    @Query("SELECT e FROM Event e WHERE e.ownerId = :userId")
+    List<Event> findEventsByOwner(@Param("userId") UUID userId);
+    
+    @Query("SELECT e FROM Event e WHERE e.ownerId = :userId AND e.startDateTime > :now")
+    List<Event> findUpcomingEventsByOwner(@Param("userId") UUID userId, @Param("now") LocalDateTime now);
+    
+    @Query("SELECT e FROM Event e WHERE e.ownerId = :userId AND e.startDateTime < :now")
+    List<Event> findPastEventsByOwner(@Param("userId") UUID userId, @Param("now") LocalDateTime now);
+    
+    // Featured and trending events (placeholder queries - would need more complex logic)
+    @Query("SELECT e FROM Event e WHERE e.isPublic = true AND e.eventStatus = 'PUBLISHED' ORDER BY e.createdAt DESC")
+    List<Event> findFeaturedEvents(Pageable pageable);
+    
+    @Query("SELECT e FROM Event e WHERE e.isPublic = true AND e.eventStatus = 'PUBLISHED' ORDER BY e.currentAttendeeCount DESC")
+    List<Event> findTrendingEvents(Pageable pageable);
 }
 

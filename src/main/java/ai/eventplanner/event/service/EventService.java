@@ -5,9 +5,14 @@ import ai.eventplanner.event.dto.request.UpdateEventRequest;
 import ai.eventplanner.event.dto.request.EventCreationRequest;
 import ai.eventplanner.event.dto.request.EventUpdateRequest;
 import ai.eventplanner.event.dto.response.EventResponse;
+import ai.eventplanner.event.dto.response.UserEventRelationshipResponse;
+import ai.eventplanner.event.dto.response.UserEventsSummaryResponse;
 import ai.eventplanner.event.entity.Event;
 import ai.eventplanner.event.repo.EventRepository;
+import ai.eventplanner.common.domain.enums.EventStatus;
+import ai.eventplanner.common.domain.enums.EventUserType;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -438,6 +444,512 @@ public class EventService {
         }
         
         return request;
+    }
+
+    // ==================== USER-EVENT RELATIONSHIP METHODS ====================
+
+    /**
+     * Get all events for a specific user
+     */
+    public List<Event> getEventsByUser(UUID userId) {
+        return eventRepository.findEventsByOwner(userId);
+    }
+
+    /**
+     * Get events owned by a user
+     */
+    public List<Event> getEventsOwnedByUser(UUID userId) {
+        return eventRepository.findEventsByOwner(userId);
+    }
+
+    /**
+     * Get upcoming events for a user
+     */
+    public List<Event> getUpcomingEventsByUser(UUID userId) {
+        return eventRepository.findUpcomingEventsByOwner(userId, LocalDateTime.now());
+    }
+
+    /**
+     * Get past events for a user
+     */
+    public List<Event> getPastEventsByUser(UUID userId) {
+        return eventRepository.findPastEventsByOwner(userId, LocalDateTime.now());
+    }
+
+    /**
+     * Get user's events summary
+     */
+    public UserEventsSummaryResponse getUserEventsSummary(UUID userId) {
+        UserEventsSummaryResponse summary = new UserEventsSummaryResponse();
+        
+        List<Event> ownedEvents = getEventsOwnedByUser(userId);
+        List<Event> upcomingEvents = getUpcomingEventsByUser(userId);
+        List<Event> pastEvents = getPastEventsByUser(userId);
+        
+        summary.setOwnedEvents(convertToUserEventRelationship(ownedEvents, EventUserType.ORGANIZER));
+        summary.setUpcomingEvents(convertToUserEventRelationship(upcomingEvents, EventUserType.ORGANIZER));
+        summary.setPastEvents(convertToUserEventRelationship(pastEvents, EventUserType.ORGANIZER));
+        
+        // For now, we'll set empty lists for other relationship types
+        // These would be populated by joining with EventUser/EventAttendance tables
+        summary.setAttendingEvents(new ArrayList<>());
+        summary.setOrganizingEvents(new ArrayList<>());
+        summary.setCoordinatingEvents(new ArrayList<>());
+        summary.setVolunteeringEvents(new ArrayList<>());
+        summary.setSpeakingEvents(new ArrayList<>());
+        summary.setSponsoringEvents(new ArrayList<>());
+        
+        // Set counts
+        summary.setTotalCount(ownedEvents.size());
+        summary.setOwnedCount(ownedEvents.size());
+        summary.setAttendingCount(0);
+        summary.setOrganizingCount(0);
+        summary.setCoordinatingCount(0);
+        summary.setVolunteeringCount(0);
+        summary.setSpeakingCount(0);
+        summary.setSponsoringCount(0);
+        
+        return summary;
+    }
+
+    // ==================== EVENT STATUS & LIFECYCLE METHODS ====================
+
+    /**
+     * Update event status
+     */
+    public Event updateEventStatus(UUID eventId, EventStatus newStatus) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        event.setEventStatus(newStatus);
+        return eventRepository.save(event);
+    }
+
+    /**
+     * Publish event
+     */
+    public Event publishEvent(UUID eventId) {
+        return updateEventStatus(eventId, EventStatus.PUBLISHED);
+    }
+
+    /**
+     * Cancel event
+     */
+    public Event cancelEvent(UUID eventId) {
+        return updateEventStatus(eventId, EventStatus.CANCELLED);
+    }
+
+    /**
+     * Complete event
+     */
+    public Event completeEvent(UUID eventId) {
+        return updateEventStatus(eventId, EventStatus.COMPLETED);
+    }
+
+    /**
+     * Open registration
+     */
+    public Event openRegistration(UUID eventId) {
+        return updateEventStatus(eventId, EventStatus.REGISTRATION_OPEN);
+    }
+
+    /**
+     * Close registration
+     */
+    public Event closeRegistration(UUID eventId) {
+        return updateEventStatus(eventId, EventStatus.REGISTRATION_CLOSED);
+    }
+
+    // ==================== EVENT DISCOVERY & SEARCH METHODS ====================
+
+    /**
+     * Search events
+     */
+    public List<Event> searchEvents(String searchTerm) {
+        if (searchTerm == null || searchTerm.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+        return eventRepository.searchEvents(searchTerm.trim());
+    }
+
+    /**
+     * Search public events
+     */
+    public List<Event> searchPublicEvents(String searchTerm) {
+        if (searchTerm == null || searchTerm.trim().isEmpty()) {
+            return eventRepository.findByIsPublicTrue();
+        }
+        return eventRepository.searchPublicEvents(searchTerm.trim());
+    }
+
+    /**
+     * Get public events
+     */
+    public List<Event> getPublicEvents() {
+        return eventRepository.findByIsPublicTrue();
+    }
+
+    /**
+     * Get featured events
+     */
+    public List<Event> getFeaturedEvents(Pageable pageable) {
+        return eventRepository.findFeaturedEvents(pageable);
+    }
+
+    /**
+     * Get trending events
+     */
+    public List<Event> getTrendingEvents(Pageable pageable) {
+        return eventRepository.findTrendingEvents(pageable);
+    }
+
+    /**
+     * Get upcoming events
+     */
+    public List<Event> getUpcomingEvents() {
+        return eventRepository.findByStartDateTimeAfterAndIsPublicTrue(LocalDateTime.now());
+    }
+
+    /**
+     * Get events by type
+     */
+    public List<Event> getEventsByType(String eventType) {
+        return eventRepository.findByEventType(eventType);
+    }
+
+    /**
+     * Get events by status
+     */
+    public List<Event> getEventsByStatus(String eventStatus) {
+        return eventRepository.findByEventStatus(eventStatus);
+    }
+
+    /**
+     * Get events by date range
+     */
+    public List<Event> getEventsByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
+        return eventRepository.findByStartDateTimeBetween(startDate, endDate);
+    }
+
+    // ==================== EVENT CAPACITY & REGISTRATION METHODS ====================
+
+    /**
+     * Update event capacity
+     */
+    public Event updateCapacity(UUID eventId, Integer newCapacity) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        event.setCapacity(newCapacity);
+        return eventRepository.save(event);
+    }
+
+    /**
+     * Get available capacity
+     */
+    public Integer getAvailableCapacity(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        if (event.getCapacity() == null) {
+            return null;
+        }
+        
+        int currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
+        return Math.max(0, event.getCapacity() - currentCount);
+    }
+
+    /**
+     * Update registration deadline
+     */
+    public Event updateRegistrationDeadline(UUID eventId, LocalDateTime deadline) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        event.setRegistrationDeadline(deadline);
+        return eventRepository.save(event);
+    }
+
+    // ==================== EVENT QR CODE METHODS ====================
+
+    /**
+     * Generate QR code for event
+     */
+    public Event generateQRCode(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        // Generate a simple QR code string (in real implementation, this would use a QR code library)
+        String qrCode = "EVENT_" + eventId.toString().replace("-", "").substring(0, 16);
+        event.setQrCode(qrCode);
+        event.setQrCodeEnabled(true);
+        
+        return eventRepository.save(event);
+    }
+
+    /**
+     * Regenerate QR code for event
+     */
+    public Event regenerateQRCode(UUID eventId) {
+        return generateQRCode(eventId);
+    }
+
+    /**
+     * Disable QR code for event
+     */
+    public Event disableQRCode(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        event.setQrCodeEnabled(false);
+        event.setQrCode(null);
+        
+        return eventRepository.save(event);
+    }
+
+    // ==================== EVENT VISIBILITY & ACCESS CONTROL METHODS ====================
+
+    /**
+     * Make event public
+     */
+    public Event makeEventPublic(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        event.setIsPublic(true);
+        return eventRepository.save(event);
+    }
+
+    /**
+     * Make event private
+     */
+    public Event makeEventPrivate(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        event.setIsPublic(false);
+        return eventRepository.save(event);
+    }
+
+    /**
+     * Update event visibility
+     */
+    public Event updateVisibility(UUID eventId, Boolean isPublic) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        event.setIsPublic(isPublic);
+        return eventRepository.save(event);
+    }
+
+    // ==================== EVENT ANALYTICS METHODS ====================
+
+    /**
+     * Get event analytics overview
+     */
+    public Map<String, Object> getEventAnalytics(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        Map<String, Object> analytics = new java.util.HashMap<>();
+        analytics.put("eventId", eventId);
+        analytics.put("eventName", event.getName());
+        analytics.put("currentAttendeeCount", event.getCurrentAttendeeCount());
+        analytics.put("capacity", event.getCapacity());
+        analytics.put("capacityUtilization", calculateCapacityUtilization(event));
+        analytics.put("eventStatus", event.getEventStatus());
+        analytics.put("isPublic", event.getIsPublic());
+        analytics.put("qrCodeEnabled", event.getQrCodeEnabled());
+        analytics.put("createdAt", event.getCreatedAt());
+        analytics.put("updatedAt", event.getUpdatedAt());
+        
+        return analytics;
+    }
+
+    /**
+     * Get attendance analytics
+     */
+    public Map<String, Object> getAttendanceAnalytics(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        Map<String, Object> analytics = new java.util.HashMap<>();
+        analytics.put("eventId", eventId);
+        analytics.put("currentAttendeeCount", event.getCurrentAttendeeCount());
+        analytics.put("capacity", event.getCapacity());
+        analytics.put("availableSpots", getAvailableCapacity(eventId));
+        analytics.put("capacityUtilization", calculateCapacityUtilization(event));
+        analytics.put("registrationDeadline", event.getRegistrationDeadline());
+        analytics.put("isRegistrationOpen", isRegistrationOpen(event));
+        
+        return analytics;
+    }
+
+    // ==================== EVENT DUPLICATION & TEMPLATES METHODS ====================
+
+    /**
+     * Duplicate event
+     */
+    public Event duplicateEvent(UUID eventId, String newEventName) {
+        Event originalEvent = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        Event duplicatedEvent = new Event();
+        duplicatedEvent.setName(newEventName != null ? newEventName : originalEvent.getName() + " (Copy)");
+        duplicatedEvent.setDescription(originalEvent.getDescription());
+        duplicatedEvent.setOwnerId(originalEvent.getOwnerId());
+        duplicatedEvent.setEventType(originalEvent.getEventType());
+        duplicatedEvent.setEventStatus(EventStatus.DRAFT); // Start as draft
+        duplicatedEvent.setCapacity(originalEvent.getCapacity());
+        duplicatedEvent.setIsPublic(false); // Start as private
+        duplicatedEvent.setRequiresApproval(originalEvent.getRequiresApproval());
+        duplicatedEvent.setQrCodeEnabled(false); // Disable QR code initially
+        duplicatedEvent.setTheme(originalEvent.getTheme());
+        duplicatedEvent.setObjectives(originalEvent.getObjectives());
+        duplicatedEvent.setTargetAudience(originalEvent.getTargetAudience());
+        duplicatedEvent.setSuccessMetrics(originalEvent.getSuccessMetrics());
+        duplicatedEvent.setBrandingGuidelines(originalEvent.getBrandingGuidelines());
+        duplicatedEvent.setVenueRequirements(originalEvent.getVenueRequirements());
+        duplicatedEvent.setTechnicalRequirements(originalEvent.getTechnicalRequirements());
+        duplicatedEvent.setAccessibilityFeatures(originalEvent.getAccessibilityFeatures());
+        duplicatedEvent.setEmergencyPlan(originalEvent.getEmergencyPlan());
+        duplicatedEvent.setBackupPlan(originalEvent.getBackupPlan());
+        duplicatedEvent.setPostEventTasks(originalEvent.getPostEventTasks());
+        
+        return eventRepository.save(duplicatedEvent);
+    }
+
+    // ==================== EVENT VALIDATION & HEALTH CHECK METHODS ====================
+
+    /**
+     * Validate event data
+     */
+    public Map<String, Object> validateEvent(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        Map<String, Object> validation = new java.util.HashMap<>();
+        List<String> errors = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        
+        // Required field validations
+        if (event.getName() == null || event.getName().trim().isEmpty()) {
+            errors.add("Event name is required");
+        }
+        
+        if (event.getStartDateTime() == null) {
+            errors.add("Start date and time is required");
+        }
+        
+        if (event.getEventType() == null) {
+            errors.add("Event type is required");
+        }
+        
+        // Warning validations
+        if (event.getDescription() == null || event.getDescription().trim().isEmpty()) {
+            warnings.add("Event description is recommended");
+        }
+        
+        if (event.getCapacity() == null || event.getCapacity() <= 0) {
+            warnings.add("Event capacity should be set");
+        }
+        
+        if (event.getStartDateTime() != null && event.getStartDateTime().isBefore(LocalDateTime.now())) {
+            warnings.add("Event start time is in the past");
+        }
+        
+        validation.put("isValid", errors.isEmpty());
+        validation.put("errors", errors);
+        validation.put("warnings", warnings);
+        validation.put("eventId", eventId);
+        validation.put("eventName", event.getName());
+        
+        return validation;
+    }
+
+    /**
+     * Get event health check
+     */
+    public Map<String, Object> getEventHealthCheck(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        Map<String, Object> healthCheck = new java.util.HashMap<>();
+        healthCheck.put("eventId", eventId);
+        healthCheck.put("eventName", event.getName());
+        healthCheck.put("status", "healthy");
+        healthCheck.put("eventStatus", event.getEventStatus());
+        healthCheck.put("isPublic", event.getIsPublic());
+        healthCheck.put("hasQRCode", event.getQrCodeEnabled() && event.getQrCode() != null);
+        healthCheck.put("hasCapacity", event.getCapacity() != null && event.getCapacity() > 0);
+        healthCheck.put("hasDescription", event.getDescription() != null && !event.getDescription().trim().isEmpty());
+        healthCheck.put("hasStartTime", event.getStartDateTime() != null);
+        healthCheck.put("isUpcoming", event.getStartDateTime() != null && event.getStartDateTime().isAfter(LocalDateTime.now()));
+        healthCheck.put("lastUpdated", event.getUpdatedAt());
+        
+        return healthCheck;
+    }
+
+    // ==================== HELPER METHODS ====================
+
+    /**
+     * Convert events to user event relationship responses
+     */
+    private List<UserEventRelationshipResponse> convertToUserEventRelationship(List<Event> events, EventUserType userRole) {
+        return events.stream()
+                .map(event -> convertToUserEventRelationship(event, userRole))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Convert single event to user event relationship response
+     */
+    private UserEventRelationshipResponse convertToUserEventRelationship(Event event, EventUserType userRole) {
+        UserEventRelationshipResponse response = new UserEventRelationshipResponse();
+        response.setEventId(event.getId());
+        response.setEventName(event.getName());
+        response.setEventDescription(event.getDescription());
+        response.setEventType(event.getEventType());
+        response.setEventStatus(event.getEventStatus());
+        response.setStartDateTime(event.getStartDateTime());
+        response.setEndDateTime(event.getEndDateTime());
+        response.setUserRole(userRole);
+        response.setIsOwner(userRole == EventUserType.ORGANIZER);
+        response.setCapacity(event.getCapacity());
+        response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
+        response.setIsPublic(event.getIsPublic());
+        response.setCoverImageUrl(event.getCoverImageUrl());
+        response.setEventWebsiteUrl(event.getEventWebsiteUrl());
+        response.setHashtag(event.getHashtag());
+        
+        return response;
+    }
+
+    /**
+     * Calculate capacity utilization percentage
+     */
+    private Double calculateCapacityUtilization(Event event) {
+        if (event.getCapacity() == null || event.getCapacity() == 0) {
+            return null;
+        }
+        
+        int currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
+        return (double) currentCount / event.getCapacity() * 100;
+    }
+
+    /**
+     * Check if registration is open
+     */
+    private Boolean isRegistrationOpen(Event event) {
+        if (event.getEventStatus() != EventStatus.REGISTRATION_OPEN) {
+            return false;
+        }
+        
+        if (event.getRegistrationDeadline() != null) {
+            return LocalDateTime.now().isBefore(event.getRegistrationDeadline());
+        }
+        
+        return true;
     }
 
 }
