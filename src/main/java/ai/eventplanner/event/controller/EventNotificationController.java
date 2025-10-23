@@ -3,6 +3,7 @@ package ai.eventplanner.event.controller;
 import ai.eventplanner.event.dto.request.EventNotificationRequest;
 import ai.eventplanner.event.dto.request.EventReminderRequest;
 import ai.eventplanner.event.dto.response.EventNotificationResponse;
+import ai.eventplanner.event.dto.response.EventNotificationSettingsResponse;
 import ai.eventplanner.event.dto.response.EventReminderResponse;
 import ai.eventplanner.event.service.EventService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -45,20 +46,21 @@ public class EventNotificationController {
         @ApiResponse(responseCode = "404", description = "Event not found"),
         @ApiResponse(responseCode = "401", description = "Unauthorized")
     })
-    public ResponseEntity<Map<String, Object>> getNotificationSettings(
+    public ResponseEntity<EventNotificationSettingsResponse> getNotificationSettings(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
         try {
-            Map<String, Object> settings = Map.of(
-                    "eventId", id,
-                    "emailNotifications", true,
-                    "smsNotifications", false,
-                    "pushNotifications", true,
-                    "reminderEnabled", true,
-                    "defaultReminderTime", "24h",
-                    "availableChannels", Arrays.asList("email", "sms", "push"),
-                    "availableTemplates", Arrays.asList("event_reminder", "event_update", "event_cancelled")
-            );
-            return ResponseEntity.ok(settings);
+            EventNotificationSettingsResponse response = new EventNotificationSettingsResponse();
+            response.setEventId(id);
+            response.setEmailNotifications(true);
+            response.setSmsNotifications(false);
+            response.setPushNotifications(true);
+            response.setReminderEnabled(true);
+            response.setDefaultReminderTime("24h");
+            response.setAvailableChannels(Arrays.asList("email", "sms", "push"));
+            response.setAvailableTemplates(Arrays.asList("event_reminder", "event_update", "event_cancelled"));
+            response.setUpdatedAt(LocalDateTime.now().toString());
+            
+            return ResponseEntity.ok(response);
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }

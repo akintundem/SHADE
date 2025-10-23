@@ -4,6 +4,7 @@ import ai.eventplanner.event.dto.request.EventCollaboratorRequest;
 import ai.eventplanner.event.dto.request.EventShareRequest;
 import ai.eventplanner.event.dto.response.EventCollaboratorResponse;
 import ai.eventplanner.event.dto.response.EventShareResponse;
+import ai.eventplanner.event.dto.response.EventSharingOptionsResponse;
 import ai.eventplanner.event.service.EventService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -45,21 +46,23 @@ public class EventCollaborationController {
         @ApiResponse(responseCode = "404", description = "Event not found"),
         @ApiResponse(responseCode = "401", description = "Unauthorized")
     })
-    public ResponseEntity<Map<String, Object>> getSharingOptions(
+    public ResponseEntity<EventSharingOptionsResponse> getSharingOptions(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
         try {
-            Map<String, Object> options = Map.of(
-                    "eventId", id,
-                    "availableChannels", Arrays.asList("email", "sms", "social", "link"),
-                    "shareLink", generateShareLink(id),
-                    "qrCodeAvailable", eventService.getById(id)
-                            .map(event -> event.getQrCodeEnabled() && event.getQrCode() != null)
-                            .orElse(false),
-                    "isPublic", eventService.getById(id)
-                            .map(event -> event.getIsPublic())
-                            .orElse(false)
-            );
-            return ResponseEntity.ok(options);
+            EventSharingOptionsResponse response = new EventSharingOptionsResponse();
+            response.setEventId(id);
+            response.setAvailableChannels(Arrays.asList("email", "sms", "social", "link"));
+            response.setShareLink(generateShareLink(id));
+            response.setQrCodeAvailable(eventService.getById(id)
+                    .map(event -> event.getQrCodeEnabled() && event.getQrCode() != null)
+                    .orElse(false));
+            response.setIsPublic(eventService.getById(id)
+                    .map(event -> event.getIsPublic())
+                    .orElse(false));
+            response.setSocialMediaOptions(Arrays.asList("facebook", "twitter", "linkedin", "instagram"));
+            response.setEmailOptions(Arrays.asList("invite", "reminder", "update"));
+            
+            return ResponseEntity.ok(response);
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }

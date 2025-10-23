@@ -50,3 +50,7 @@ MANIFEST
 # Temporary files
 /tmp-*.json
 /test-environment-with-auth.json
+
+# Test reports (exclude from Git)
+test/reports/
+*.md

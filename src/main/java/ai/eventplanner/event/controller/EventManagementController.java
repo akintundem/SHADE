@@ -1,6 +1,18 @@
 package ai.eventplanner.event.controller;
 
+import ai.eventplanner.event.dto.request.EventCapacityUpdateRequest;
+import ai.eventplanner.event.dto.request.EventDuplicateRequest;
+import ai.eventplanner.event.dto.request.EventRegistrationDeadlineRequest;
+import ai.eventplanner.event.dto.request.EventStatusUpdateRequest;
+import ai.eventplanner.event.dto.request.EventVisibilityUpdateRequest;
+import jakarta.validation.Valid;
+import ai.eventplanner.event.dto.response.EventAnalyticsResponse;
+import ai.eventplanner.event.dto.response.EventCapacityResponse;
+import ai.eventplanner.event.dto.response.EventHealthCheckResponse;
+import ai.eventplanner.event.dto.response.EventQRCodeResponse;
 import ai.eventplanner.event.dto.response.EventResponse;
+import ai.eventplanner.event.dto.response.EventValidationResponse;
+import ai.eventplanner.event.dto.response.EventVisibilityResponse;
 import ai.eventplanner.event.dto.response.UserEventRelationshipResponse;
 import ai.eventplanner.event.dto.response.UserEventsSummaryResponse;
 import ai.eventplanner.event.entity.Event;
@@ -193,11 +205,9 @@ public class EventManagementController {
     @Operation(summary = "Update event status", description = "Update the status of an event")
     public ResponseEntity<EventResponse> updateEventStatus(
             @Parameter(description = "Event ID") @PathVariable UUID id,
-            @RequestBody Map<String, String> request) {
+            @Valid @RequestBody EventStatusUpdateRequest request) {
         try {
-            String statusStr = request.get("eventStatus");
-            EventStatus newStatus = EventStatus.valueOf(statusStr);
-            Event updatedEvent = eventService.updateEventStatus(id, newStatus);
+            Event updatedEvent = eventService.updateEventStatus(id, request.getEventStatus());
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
@@ -393,19 +403,22 @@ public class EventManagementController {
 
     @GetMapping("/{id}/capacity")
     @Operation(summary = "Get event capacity", description = "Retrieve capacity information for an event")
-    public ResponseEntity<Map<String, Object>> getEventCapacity(
+    public ResponseEntity<EventCapacityResponse> getEventCapacity(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
         try {
             Event event = eventService.getById(id)
                     .orElseThrow(() -> new IllegalArgumentException("Event not found"));
             
-            Map<String, Object> capacityInfo = Map.of(
-                    "eventId", id,
-                    "capacity", event.getCapacity(),
-                    "currentAttendeeCount", event.getCurrentAttendeeCount(),
-                    "availableSpots", eventService.getAvailableCapacity(id)
-            );
-            return ResponseEntity.ok(capacityInfo);
+            EventCapacityResponse response = new EventCapacityResponse();
+            response.setEventId(id);
+            response.setCapacity(event.getCapacity());
+            response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
+            response.setAvailableSpots(eventService.getAvailableCapacity(id));
+            response.setUtilizationPercentage(calculateUtilizationPercentage(event.getCapacity(), event.getCurrentAttendeeCount()));
+            response.setIsRegistrationOpen(event.getEventStatus() == EventStatus.REGISTRATION_OPEN && 
+                (event.getRegistrationDeadline() == null || LocalDateTime.now().isBefore(event.getRegistrationDeadline())));
+            
+            return ResponseEntity.ok(response);
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
@@ -415,10 +428,9 @@ public class EventManagementController {
     @Operation(summary = "Update event capacity", description = "Update the capacity of an event")
     public ResponseEntity<EventResponse> updateCapacity(
             @Parameter(description = "Event ID") @PathVariable UUID id,
-            @RequestBody Map<String, Integer> request) {
+            @Valid @RequestBody EventCapacityUpdateRequest request) {
         try {
-            Integer newCapacity = request.get("capacity");
-            Event updatedEvent = eventService.updateCapacity(id, newCapacity);
+            Event updatedEvent = eventService.updateCapacity(id, request.getCapacity());
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
@@ -441,11 +453,9 @@ public class EventManagementController {
     @Operation(summary = "Update registration deadline", description = "Update the registration deadline for an event")
     public ResponseEntity<EventResponse> updateRegistrationDeadline(
             @Parameter(description = "Event ID") @PathVariable UUID id,
-            @RequestBody Map<String, String> request) {
+            @Valid @RequestBody EventRegistrationDeadlineRequest request) {
         try {
-            String deadlineStr = request.get("deadline");
-            LocalDateTime deadline = LocalDateTime.parse(deadlineStr);
-            Event updatedEvent = eventService.updateRegistrationDeadline(id, deadline);
+            Event updatedEvent = eventService.updateRegistrationDeadline(id, request.getDeadline());
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
@@ -456,18 +466,20 @@ public class EventManagementController {
 
     @GetMapping("/{id}/qr-code")
     @Operation(summary = "Get event QR code", description = "Retrieve the QR code for an event")
-    public ResponseEntity<Map<String, Object>> getQRCode(
+    public ResponseEntity<EventQRCodeResponse> getQRCode(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
         try {
             Event event = eventService.getById(id)
                     .orElseThrow(() -> new IllegalArgumentException("Event not found"));
             
-            Map<String, Object> qrInfo = Map.of(
-                    "eventId", id,
-                    "qrCode", event.getQrCode(),
-                    "qrCodeEnabled", event.getQrCodeEnabled()
-            );
-            return ResponseEntity.ok(qrInfo);
+            EventQRCodeResponse response = new EventQRCodeResponse();
+            response.setEventId(id);
+            response.setQrCode(event.getQrCode());
+            response.setQrCodeEnabled(event.getQrCodeEnabled());
+            response.setQrCodeImageUrl(event.getQrCode() != null ? "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + event.getQrCode() : null);
+            response.setGeneratedAt(event.getUpdatedAt() != null ? event.getUpdatedAt().toString() : null);
+            
+            return ResponseEntity.ok(response);
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
@@ -513,18 +525,20 @@ public class EventManagementController {
 
     @GetMapping("/{id}/visibility")
     @Operation(summary = "Get event visibility", description = "Get the visibility settings for an event")
-    public ResponseEntity<Map<String, Object>> getVisibility(
+    public ResponseEntity<EventVisibilityResponse> getVisibility(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
         try {
             Event event = eventService.getById(id)
                     .orElseThrow(() -> new IllegalArgumentException("Event not found"));
             
-            Map<String, Object> visibility = Map.of(
-                    "eventId", id,
-                    "isPublic", event.getIsPublic(),
-                    "requiresApproval", event.getRequiresApproval()
-            );
-            return ResponseEntity.ok(visibility);
+            EventVisibilityResponse response = new EventVisibilityResponse();
+            response.setEventId(id);
+            response.setIsPublic(event.getIsPublic());
+            response.setRequiresApproval(event.getRequiresApproval());
+            response.setAccessLevel(event.getIsPublic() ? "public" : "private");
+            response.setUpdatedAt(event.getUpdatedAt() != null ? event.getUpdatedAt().toString() : null);
+            
+            return ResponseEntity.ok(response);
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
@@ -534,10 +548,9 @@ public class EventManagementController {
     @Operation(summary = "Update event visibility", description = "Update the visibility settings for an event")
     public ResponseEntity<EventResponse> updateVisibility(
             @Parameter(description = "Event ID") @PathVariable UUID id,
-            @RequestBody Map<String, Boolean> request) {
+            @Valid @RequestBody EventVisibilityUpdateRequest request) {
         try {
-            Boolean isPublic = request.get("isPublic");
-            Event updatedEvent = eventService.updateVisibility(id, isPublic);
+            Event updatedEvent = eventService.updateVisibility(id, request.getIsPublic());
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
@@ -572,11 +585,23 @@ public class EventManagementController {
 
     @GetMapping("/{id}/analytics")
     @Operation(summary = "Get event analytics", description = "Get comprehensive analytics for an event")
-    public ResponseEntity<Map<String, Object>> getEventAnalytics(
+    public ResponseEntity<EventAnalyticsResponse> getEventAnalytics(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
         try {
             Map<String, Object> analytics = eventService.getEventAnalytics(id);
-            return ResponseEntity.ok(analytics);
+            
+            EventAnalyticsResponse response = new EventAnalyticsResponse();
+            response.setEventId(id);
+            response.setTotalViews((Long) analytics.getOrDefault("totalViews", 0L));
+            response.setUniqueVisitors((Long) analytics.getOrDefault("uniqueVisitors", 0L));
+            response.setRegistrationRate((Double) analytics.getOrDefault("registrationRate", 0.0));
+            response.setAttendanceRate((Double) analytics.getOrDefault("attendanceRate", 0.0));
+            response.setEngagementMetrics((Map<String, Object>) analytics.getOrDefault("engagementMetrics", Map.<String, Object>of()));
+            response.setSocialMetrics((Map<String, Object>) analytics.getOrDefault("socialMetrics", Map.<String, Object>of()));
+            response.setGeographicDistribution((Map<String, Object>) analytics.getOrDefault("geographicDistribution", Map.<String, Object>of()));
+            response.setAnalyticsPeriod("30d");
+            
+            return ResponseEntity.ok(response);
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
@@ -600,10 +625,9 @@ public class EventManagementController {
     @Operation(summary = "Duplicate event", description = "Create a duplicate of an existing event")
     public ResponseEntity<EventResponse> duplicateEvent(
             @Parameter(description = "Event ID") @PathVariable UUID id,
-            @RequestBody Map<String, String> request) {
+            @Valid @RequestBody EventDuplicateRequest request) {
         try {
-            String newEventName = request.get("newEventName");
-            Event duplicatedEvent = eventService.duplicateEvent(id, newEventName);
+            Event duplicatedEvent = eventService.duplicateEvent(id, request.getNewEventName());
             return ResponseEntity.ok(eventService.toResponse(duplicatedEvent));
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
@@ -614,11 +638,21 @@ public class EventManagementController {
 
     @GetMapping("/{id}/validation")
     @Operation(summary = "Validate event", description = "Validate event data and return validation results")
-    public ResponseEntity<Map<String, Object>> validateEvent(
+    public ResponseEntity<EventValidationResponse> validateEvent(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
         try {
             Map<String, Object> validation = eventService.validateEvent(id);
-            return ResponseEntity.ok(validation);
+            
+            EventValidationResponse response = new EventValidationResponse();
+            response.setEventId(id);
+            response.setIsValid((Boolean) validation.getOrDefault("isValid", false));
+            response.setValidationScore((Integer) validation.getOrDefault("score", 0));
+            response.setErrors((List<String>) validation.getOrDefault("errors", List.<String>of()));
+            response.setWarnings((List<String>) validation.getOrDefault("warnings", List.<String>of()));
+            response.setValidationDetails((Map<String, Object>) validation.getOrDefault("details", Map.<String, Object>of()));
+            response.setValidatedAt(java.time.LocalDateTime.now().toString());
+            
+            return ResponseEntity.ok(response);
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
@@ -626,11 +660,21 @@ public class EventManagementController {
 
     @GetMapping("/{id}/health")
     @Operation(summary = "Event health check", description = "Perform a health check on an event")
-    public ResponseEntity<Map<String, Object>> getEventHealthCheck(
+    public ResponseEntity<EventHealthCheckResponse> getEventHealthCheck(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
         try {
             Map<String, Object> healthCheck = eventService.getEventHealthCheck(id);
-            return ResponseEntity.ok(healthCheck);
+            
+            EventHealthCheckResponse response = new EventHealthCheckResponse();
+            response.setEventId(id);
+            response.setHealthStatus((String) healthCheck.getOrDefault("status", "unknown"));
+            response.setHealthScore((Integer) healthCheck.getOrDefault("score", 0));
+            response.setIssues((List<String>) healthCheck.getOrDefault("issues", List.<String>of()));
+            response.setRecommendations((List<String>) healthCheck.getOrDefault("recommendations", List.<String>of()));
+            response.setComponentHealth((Map<String, Object>) healthCheck.getOrDefault("components", Map.<String, Object>of()));
+            response.setCheckedAt(java.time.LocalDateTime.now().toString());
+            
+            return ResponseEntity.ok(response);
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
@@ -666,5 +710,15 @@ public class EventManagementController {
         response.setEventWebsiteUrl(event.getEventWebsiteUrl());
         response.setHashtag(event.getHashtag());
         return response;
+    }
+
+    private Double calculateUtilizationPercentage(Integer capacity, Integer currentAttendeeCount) {
+        if (capacity == null || capacity == 0) {
+            return 0.0;
+        }
+        if (currentAttendeeCount == null) {
+            return 0.0;
+        }
+        return (double) (currentAttendeeCount * 100) / capacity;
     }
 }
