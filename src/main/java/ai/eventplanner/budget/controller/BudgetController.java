@@ -126,14 +126,14 @@ public class BudgetController {
 			@Valid @RequestBody BudgetLineItemCreateRequest payload) {
 		try {
 			UUID budgetUuid = UUID.fromString(budgetId);
-			
-			BudgetLineItemEntity item = new BudgetLineItemEntity();
+            
+            BudgetLineItemEntity item = new BudgetLineItemEntity();
 			item.setBudgetId(budgetUuid);
-			item.setCategory(payload.getCategory());
-			item.setDescription(payload.getDescription());
-			item.setEstimatedCost(payload.getEstimatedCost());
-			item.setActualCost(payload.getActualCost());
-			item.setVendorId(payload.getVendorId());
+            item.setCategory(payload.getCategory());
+            item.setDescription(payload.getDescription());
+            item.setEstimatedCost(payload.getEstimatedCost());
+            item.setActualCost(payload.getActualCost());
+            item.setVendorId(payload.getVendorId());
 			
 			BudgetLineItemEntity saved = budgetService.addLineItem(item);
 			return ResponseEntity.ok(convertToLineItemResponse(saved));
@@ -335,7 +335,7 @@ public class BudgetController {
 			UUID uuid = UUID.fromString(budgetId);
 			BudgetEntity updated = budgetService.submitForApproval(uuid);
 			return ResponseEntity.ok(convertToDetailResponse(updated));
-		} catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format", e);
 		} catch (RuntimeException e) {
 			if (e.getMessage().contains("not found")) {

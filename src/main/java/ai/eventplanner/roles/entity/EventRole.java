@@ -43,4 +43,7 @@ public class EventRole extends BaseEntity {
 
     @Column(name = "assigned_at", nullable = false)
     private java.time.LocalDateTime assignedAt;
+    
+    @Column(name = "notes", columnDefinition = "TEXT")
+    private String notes;
 }

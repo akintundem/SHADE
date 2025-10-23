@@ -68,6 +68,21 @@ public class EventAttendance extends BaseEntity {
     @Column(name = "emergency_contact", columnDefinition = "TEXT")
     private String emergencyContact;
     
+    @Column(name = "emergency_phone")
+    private String emergencyPhone;
+    
+    @Column(name = "name")
+    private String name;
+    
+    @Column(name = "email")
+    private String email;
+    
+    @Column(name = "phone")
+    private String phone;
+    
+    @Column(name = "notes", columnDefinition = "TEXT")
+    private String notes;
+    
     @Column(name = "special_requests", columnDefinition = "TEXT")
     private String specialRequests;
     

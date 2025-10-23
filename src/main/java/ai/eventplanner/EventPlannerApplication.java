@@ -26,8 +26,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "ai.eventplanner.risk.repository",
     "ai.eventplanner.checklist.repository",
     "ai.eventplanner.program.repository",
-    "ai.eventplanner.roles.repository",
-    "ai.eventplanner.user.repository",
+    "ai.eventplanner.roles.repo",
+    "ai.eventplanner.user.repo",
     "ai.eventplanner.vendor.repository"
 })
 @EntityScan(basePackages = {
