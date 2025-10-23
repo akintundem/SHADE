@@ -90,6 +90,11 @@ assistant:
   service:
     base-url: ${SHADE_ASSISTANT_URL}
 
+# Firebase Configuration
+firebase:
+  service-account-key: ${FIREBASE_SERVICE_ACCOUNT_KEY}
+  project-id: ${FIREBASE_PROJECT_ID}
+
 # JWT Configuration
 jwt:
   secret: ${JWT_SECRET} 
