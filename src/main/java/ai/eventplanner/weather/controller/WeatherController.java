@@ -32,6 +32,25 @@ public class WeatherController {
             @Parameter(description = "Latitude") @RequestParam("lat") String lat,
             @Parameter(description = "Longitude") @RequestParam("lon") String lon) {
         
+        // Validate coordinates
+        try {
+            double latitude = Double.parseDouble(lat);
+            double longitude = Double.parseDouble(lon);
+            
+            if (latitude < -90 || latitude > 90) {
+                WeatherForecastResponse errorResponse = new WeatherForecastResponse(false, "Invalid latitude. Must be between -90 and 90");
+                return Mono.just(ResponseEntity.badRequest().body(errorResponse));
+            }
+            
+            if (longitude < -180 || longitude > 180) {
+                WeatherForecastResponse errorResponse = new WeatherForecastResponse(false, "Invalid longitude. Must be between -180 and 180");
+                return Mono.just(ResponseEntity.badRequest().body(errorResponse));
+            }
+        } catch (NumberFormatException e) {
+            WeatherForecastResponse errorResponse = new WeatherForecastResponse(false, "Invalid coordinate format. Must be valid numbers");
+            return Mono.just(ResponseEntity.badRequest().body(errorResponse));
+        }
+        
         return openMeteoClient.getWeatherForecast(lat, lon)
                 .map(weatherData -> {
                     WeatherForecastResponse response = new WeatherForecastResponse();
@@ -152,6 +171,45 @@ public class WeatherController {
             @Parameter(description = "Longitude") @RequestParam("lon") String lon,
             @Parameter(description = "Event date (YYYY-MM-DD)") @RequestParam("eventDate") String eventDate) {
         
+        // Validate coordinates
+        try {
+            double latitude = Double.parseDouble(lat);
+            double longitude = Double.parseDouble(lon);
+            
+            if (latitude < -90 || latitude > 90) {
+                EventViabilityResponse errorResponse = new EventViabilityResponse(false, "Invalid latitude. Must be between -90 and 90");
+                return Mono.just(ResponseEntity.badRequest().body(errorResponse));
+            }
+            
+            if (longitude < -180 || longitude > 180) {
+                EventViabilityResponse errorResponse = new EventViabilityResponse(false, "Invalid longitude. Must be between -180 and 180");
+                return Mono.just(ResponseEntity.badRequest().body(errorResponse));
+            }
+        } catch (NumberFormatException e) {
+            EventViabilityResponse errorResponse = new EventViabilityResponse(false, "Invalid coordinate format. Must be valid numbers");
+            return Mono.just(ResponseEntity.badRequest().body(errorResponse));
+        }
+        
+        // Validate date format
+        try {
+            java.time.LocalDate.parse(eventDate);
+        } catch (java.time.format.DateTimeParseException e) {
+            EventViabilityResponse errorResponse = new EventViabilityResponse(false, "Invalid date format. Must be YYYY-MM-DD");
+            return Mono.just(ResponseEntity.badRequest().body(errorResponse));
+        }
+        
+        // Check if date is in the past
+        try {
+            java.time.LocalDate eventLocalDate = java.time.LocalDate.parse(eventDate);
+            if (eventLocalDate.isBefore(java.time.LocalDate.now())) {
+                EventViabilityResponse errorResponse = new EventViabilityResponse(false, "Event date cannot be in the past");
+                return Mono.just(ResponseEntity.badRequest().body(errorResponse));
+            }
+        } catch (Exception e) {
+            EventViabilityResponse errorResponse = new EventViabilityResponse(false, "Invalid date format. Must be YYYY-MM-DD");
+            return Mono.just(ResponseEntity.badRequest().body(errorResponse));
+        }
+        
         return openMeteoClient.checkOutdoorEventViability(lat, lon, eventDate)
                 .map(viabilityData -> {
                     EventViabilityResponse response = new EventViabilityResponse();
@@ -181,8 +239,11 @@ public class WeatherController {
     public Mono<ResponseEntity<Map<String, Object>>> geocodeLocation(
             @Parameter(description = "Location name") @RequestParam("location") String location) {
         
+        System.out.println("Geocoding request received for location: " + location);
         return openMeteoClient.geocodeLocation(location)
-                .map(ResponseEntity::ok);
+                .doOnNext(result -> System.out.println("Geocoding result: " + result))
+                .map(ResponseEntity::ok)
+                .doOnError(error -> System.out.println("Geocoding controller error: " + error.getMessage()));
     }
 }
 

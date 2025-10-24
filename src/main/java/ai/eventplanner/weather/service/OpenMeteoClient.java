@@ -24,6 +24,12 @@ public class OpenMeteoClient {
         this.objectMapper = new ObjectMapper();
     }
     
+    private WebClient getGeocodingClient() {
+        return WebClient.builder()
+                .baseUrl("https://geocoding-api.open-meteo.com/v1")
+                .build();
+    }
+    
     /**
      * Get current weather and forecast for a location
      */
@@ -65,8 +71,9 @@ public class OpenMeteoClient {
      * Geocode a location name to coordinates
      */
     public Mono<Map<String, Object>> geocodeLocation(String location) {
-        return webClient.get()
-                .uri(uri -> uri.path("/geocoding")
+        System.out.println("Geocoding location: " + location);
+        return getGeocodingClient().get()
+                .uri(uri -> uri.path("/search")
                         .queryParam("name", location)
                         .queryParam("count", "1")
                         .queryParam("language", "en")
@@ -74,7 +81,9 @@ public class OpenMeteoClient {
                         .build())
                 .retrieve()
                 .bodyToMono(String.class)
+                .doOnNext(response -> System.out.println("Geocoding response: " + response))
                 .map(this::parseGeocodeResponse)
+                .doOnError(error -> System.out.println("Geocoding error: " + error.getMessage()))
                 .onErrorReturn(createErrorResponse("Failed to geocode location"));
     }
     

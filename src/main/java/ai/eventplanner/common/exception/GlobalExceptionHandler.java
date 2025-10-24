@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -63,6 +64,26 @@ public class GlobalExceptionHandler {
         String message = "Malformed request payload";
         if (ex.getMostSpecificCause() != null && ex.getMostSpecificCause().getMessage() != null) {
             message = "Malformed request payload: " + ex.getMostSpecificCause().getMessage();
+        }
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .error("Bad Request")
+                .message(message)
+                .path(request.getDescription(false).replace("uri=", ""))
+                .build();
+
+        return ResponseEntity.badRequest().body(errorResponse);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingServletRequestParameter(
+            MissingServletRequestParameterException ex, WebRequest request) {
+
+        String message = "Required parameter '" + ex.getParameterName() + "' is missing";
+        if (ex.getParameterType() != null) {
+            message += " (expected type: " + ex.getParameterType() + ")";
         }
 
         ErrorResponse errorResponse = ErrorResponse.builder()

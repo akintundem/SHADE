@@ -234,15 +234,15 @@ main() {
     # Step 4: Forecast by Location Name Tests
     echo -e "${CYAN}🏙️  Step 4: Forecast by Location Name Tests${NC}"
     echo "============================================="
-    run_test "New York by Name" "GET" "/api/v1/weather/forecast/location?location=New York, NY" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for New York by name"
+    run_test "New York by Name" "GET" "/api/v1/weather/forecast/location?location=New%20York" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for New York by name"
     
-    run_test "London by Name" "GET" "/api/v1/weather/forecast/location?location=London, UK" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for London by name"
+    run_test "London by Name" "GET" "/api/v1/weather/forecast/location?location=London" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for London by name"
     
-    run_test "Miami by Name" "GET" "/api/v1/weather/forecast/location?location=Miami, FL" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for Miami by name"
+    run_test "Miami by Name" "GET" "/api/v1/weather/forecast/location?location=Miami" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for Miami by name"
     
-    run_test "Seattle by Name" "GET" "/api/v1/weather/forecast/location?location=Seattle, WA" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for Seattle by name"
+    run_test "Seattle by Name" "GET" "/api/v1/weather/forecast/location?location=Seattle" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for Seattle by name"
     
-    run_test "Toronto by Name" "GET" "/api/v1/weather/forecast/location?location=Toronto, ON" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for Toronto by name"
+    run_test "Toronto by Name" "GET" "/api/v1/weather/forecast/location?location=Toronto" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for Toronto by name"
     echo ""
     
     # Step 5: Event Viability Tests
@@ -262,15 +262,15 @@ main() {
     # Step 6: Geocoding Tests
     echo -e "${CYAN}🗺️  Step 6: Geocoding Tests${NC}"
     echo "============================="
-    run_test "Geocode New York" "GET" "/api/v1/weather/geocode?location=New York, NY" "-H 'Content-Type: application/json'" "" "200" "Geocode New York location"
+    run_test "Geocode New York" "GET" "/api/v1/weather/geocode?location=New%20York" "-H 'Content-Type: application/json'" "" "200" "Geocode New York location"
     
-    run_test "Geocode London" "GET" "/api/v1/weather/geocode?location=London, UK" "-H 'Content-Type: application/json'" "" "200" "Geocode London location"
+    run_test "Geocode London" "GET" "/api/v1/weather/geocode?location=London" "-H 'Content-Type: application/json'" "" "200" "Geocode London location"
     
-    run_test "Geocode Tokyo" "GET" "/api/v1/weather/geocode?location=Tokyo, Japan" "-H 'Content-Type: application/json'" "" "200" "Geocode Tokyo location"
+    run_test "Geocode Tokyo" "GET" "/api/v1/weather/geocode?location=Tokyo" "-H 'Content-Type: application/json'" "" "200" "Geocode Tokyo location"
     
-    run_test "Geocode Sydney" "GET" "/api/v1/weather/geocode?location=Sydney, Australia" "-H 'Content-Type: application/json'" "" "200" "Geocode Sydney location"
+    run_test "Geocode Sydney" "GET" "/api/v1/weather/geocode?location=Sydney" "-H 'Content-Type: application/json'" "" "200" "Geocode Sydney location"
     
-    run_test "Geocode Paris" "GET" "/api/v1/weather/geocode?location=Paris, France" "-H 'Content-Type: application/json'" "" "200" "Geocode Paris location"
+    run_test "Geocode Paris" "GET" "/api/v1/weather/geocode?location=Paris" "-H 'Content-Type: application/json'" "" "200" "Geocode Paris location"
     echo ""
     
     # Step 7: Error Handling Tests
