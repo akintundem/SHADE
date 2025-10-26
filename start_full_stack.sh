@@ -77,7 +77,7 @@ lsof -ti:8000 | xargs kill -9 2>/dev/null || true
 
 # Start databases in Docker
 echo -e "${BLUE}🐳 Starting databases in Docker...${NC}"
-echo "   - PostgreSQL: localhost:5436"
+echo "   - PostgreSQL: localhost:5432"
 echo "   - Redis: localhost:6379"
 echo "   - MongoDB: localhost:27017"
 echo "   - Pinecone Local: localhost:5081"
@@ -91,12 +91,12 @@ sleep 10
 # Start Java Spring Boot Application locally
 echo -e "${BLUE}☕ Starting Java Spring Boot Application locally...${NC}"
 echo "   - Port: 8080"
-echo "   - Database: PostgreSQL (localhost:5436)"
+echo "   - Database: PostgreSQL (localhost:5432)"
 echo "   - API Documentation: http://localhost:8080/swagger-ui"
 
 # Start Java app in background
 mvn spring-boot:run \
-    -Dspring-boot.run.arguments="--spring.datasource.url=jdbc:postgresql://localhost:5436/eventplanner --spring.datasource.username=postgres --spring.datasource.password=postgres --spring.jpa.hibernate.ddl-auto=create-drop" \
+    -Dspring-boot.run.arguments="--spring.datasource.url=jdbc:postgresql://localhost:5432/eventplanner --spring.datasource.username=postgres --spring.datasource.password=postgres --spring.jpa.hibernate.ddl-auto=create-drop" \
     > java_app.log 2>&1 &
 
 JAVA_PID=$!
@@ -165,7 +165,7 @@ echo ""
 echo -e "${GREEN}🎉 Hybrid Setup Started Successfully!${NC}"
 echo "================================================"
 echo -e "${BLUE}📊 Services Status:${NC}"
-echo "   🐳 PostgreSQL (Docker): localhost:5436"
+echo "   🐳 PostgreSQL (Docker): localhost:5432"
 echo "   🐳 Redis (Docker): localhost:6379"
 echo "   🐳 MongoDB (Docker): localhost:27017"
 echo "   🐳 Pinecone Local (Docker): localhost:5081"

@@ -1,5 +1,6 @@
 package ai.eventplanner.common.exception;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -18,8 +19,12 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @Value("${spring.profiles.active:prod}")
+    private String activeProfile;
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
+    private boolean isDevelopmentEnvironment() {
+        return "dev".equals(activeProfile) || "development".equals(activeProfile);
+    }
     public ResponseEntity<ErrorResponse> handleValidationExceptions(
             MethodArgumentNotValidException ex, WebRequest request) {
         
@@ -62,7 +67,7 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException ex, WebRequest request) {
 
         String message = "Malformed request payload";
-        if (ex.getMostSpecificCause() != null && ex.getMostSpecificCause().getMessage() != null) {
+        if (isDevelopmentEnvironment() && ex.getMostSpecificCause() != null && ex.getMostSpecificCause().getMessage() != null) {
             message = "Malformed request payload: " + ex.getMostSpecificCause().getMessage();
         }
 

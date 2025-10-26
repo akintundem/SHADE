@@ -44,8 +44,8 @@ public class ShadeController {
     }
     private boolean isAcceptableToken(String authorization) {
         String token = extractToken(authorization);
-        if (token == null || token.isBlank() || token.equalsIgnoreCase("undefined") || token.equalsIgnoreCase("null") || token.contains("{{")) {
-            return true;
+        if (token == null || token.isBlank()) {
+            return false; // Require valid token
         }
         return jwtValidationUtil.validateToken(token);
     }
