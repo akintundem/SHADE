@@ -14,7 +14,9 @@ import java.io.IOException;
 
 /**
  * Filter to add security headers to all responses
- * This provides additional security for production deployment
+ * Automatically detects web browsers vs mobile apps and applies appropriate headers
+ * - Universal headers: Applied to all requests (web + mobile)
+ * - Web-specific headers: Only applied to web browser requests
  */
 @Component
 @Order(2)
@@ -27,15 +29,78 @@ public class SecurityHeadersFilter implements Filter {
         HttpServletResponse httpResponse = (HttpServletResponse) response;
         HttpServletRequest httpRequest = (HttpServletRequest) request;
 
-        // Security Headers
+        // Universal security headers (work for both web and mobile)
         httpResponse.setHeader("X-Content-Type-Options", "nosniff");
-        httpResponse.setHeader("X-Frame-Options", "DENY");
-        httpResponse.setHeader("X-XSS-Protection", "1; mode=block");
         httpResponse.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-        httpResponse.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
         
-        // Content Security Policy
-        httpResponse.setHeader("Content-Security-Policy", 
+        // Remove server information
+        httpResponse.setHeader("Server", "");
+        
+        // Cache control for sensitive endpoints (important for mobile apps)
+        String requestPath = httpRequest.getRequestURI();
+        if (requestPath.contains("/auth/") || requestPath.contains("/api/")) {
+            httpResponse.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+            httpResponse.setHeader("Pragma", "no-cache");
+            httpResponse.setHeader("Expires", "0");
+        }
+
+        // Web-specific headers (only apply to web browsers)
+        if (isWebBrowserRequest(httpRequest)) {
+            addWebSpecificHeaders(httpResponse);
+        }
+        
+        // HSTS (only for HTTPS)
+        if (httpRequest.isSecure()) {
+            httpResponse.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+        }
+
+        chain.doFilter(request, response);
+    }
+    
+    /**
+     * Check if request is from a web browser (not mobile app)
+     */
+    private boolean isWebBrowserRequest(HttpServletRequest request) {
+        String userAgent = request.getHeader("User-Agent");
+        if (userAgent == null) {
+            return false;
+        }
+        
+        // Mobile app user agents typically contain app-specific identifiers
+        String lowerUserAgent = userAgent.toLowerCase();
+        
+        // Common mobile app patterns
+        boolean isMobileApp = lowerUserAgent.contains("okhttp") ||  // Android HTTP client
+                             lowerUserAgent.contains("alamofire") || // iOS HTTP client
+                             lowerUserAgent.contains("cfnetwork") || // iOS networking
+                             lowerUserAgent.contains("mobile app") ||
+                             lowerUserAgent.contains("android app") ||
+                             lowerUserAgent.contains("ios app");
+        
+        // If it's clearly a mobile app, don't apply web headers
+        if (isMobileApp) {
+            return false;
+        }
+        
+        // If it's a web browser, apply web headers
+        return lowerUserAgent.contains("mozilla") || 
+               lowerUserAgent.contains("chrome") || 
+               lowerUserAgent.contains("safari") || 
+               lowerUserAgent.contains("firefox") ||
+               lowerUserAgent.contains("edge");
+    }
+    
+    /**
+     * Add web-specific security headers
+     */
+    private void addWebSpecificHeaders(HttpServletResponse response) {
+        // Web-only security headers
+        response.setHeader("X-Frame-Options", "DENY");
+        response.setHeader("X-XSS-Protection", "1; mode=block");
+        response.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+        
+        // Content Security Policy (web-only)
+        response.setHeader("Content-Security-Policy", 
             "default-src 'self'; " +
             "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
             "style-src 'self' 'unsafe-inline'; " +
@@ -45,23 +110,5 @@ public class SecurityHeadersFilter implements Filter {
             "frame-ancestors 'none'; " +
             "base-uri 'self'; " +
             "form-action 'self'");
-        
-        // HSTS (only for HTTPS)
-        if (httpRequest.isSecure()) {
-            httpResponse.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
-        }
-        
-        // Remove server information
-        httpResponse.setHeader("Server", "");
-        
-        // Cache control for sensitive endpoints
-        String requestPath = httpRequest.getRequestURI();
-        if (requestPath.contains("/auth/") || requestPath.contains("/api/")) {
-            httpResponse.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-            httpResponse.setHeader("Pragma", "no-cache");
-            httpResponse.setHeader("Expires", "0");
-        }
-
-        chain.doFilter(request, response);
     }
 }
