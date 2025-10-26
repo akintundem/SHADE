@@ -1,6 +1,6 @@
 package ai.eventplanner.config;
 
-import ai.eventplanner.auth.security.JwtAuthenticationEntryPoint;
+import ai.eventplanner.auth.security.JwtAuthenticationErrorHandler;
 import ai.eventplanner.auth.security.JwtAuthenticationFilter;
 import ai.eventplanner.auth.security.ClientValidationFilter;
 import ai.eventplanner.auth.security.RateLimitingFilter;
@@ -33,20 +33,20 @@ public class SecurityConfig {
 
     private final SecurityHeadersFilter securityHeadersFilter;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+    private final JwtAuthenticationErrorHandler authenticationErrorHandler;
     private final ClientValidationFilter clientValidationFilter;
     private final RateLimitingFilter rateLimitingFilter;
     private final RbacAuthorizationFilter rbacAuthorizationFilter;
 
     public SecurityConfig(SecurityHeadersFilter securityHeadersFilter,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
-                          JwtAuthenticationEntryPoint authenticationEntryPoint,
+                          JwtAuthenticationErrorHandler authenticationErrorHandler,
                           ClientValidationFilter clientValidationFilter,
                           RateLimitingFilter rateLimitingFilter,
                           RbacAuthorizationFilter rbacAuthorizationFilter) {
         this.securityHeadersFilter = securityHeadersFilter;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-        this.authenticationEntryPoint = authenticationEntryPoint;
+        this.authenticationErrorHandler = authenticationErrorHandler;
         this.clientValidationFilter = clientValidationFilter;
         this.rateLimitingFilter = rateLimitingFilter;
         this.rbacAuthorizationFilter = rbacAuthorizationFilter;
@@ -102,7 +102,7 @@ public class SecurityConfig {
             )
             .httpBasic(httpBasic -> httpBasic.disable())
             .formLogin(formLogin -> formLogin.disable())
-            .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationEntryPoint))
+            .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationErrorHandler))
             .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(clientValidationFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

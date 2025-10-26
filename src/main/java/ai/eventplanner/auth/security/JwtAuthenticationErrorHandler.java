@@ -12,12 +12,17 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.util.Map;
 
+/**
+ * Handles authentication errors by returning JSON error responses
+ * This replaces Spring Security's default behavior of redirecting to login page
+ * with proper REST API error responses
+ */
 @Component
-public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
+public class JwtAuthenticationErrorHandler implements AuthenticationEntryPoint {
 
     private final ObjectMapper objectMapper;
 
-    public JwtAuthenticationEntryPoint(ObjectMapper objectMapper) {
+    public JwtAuthenticationErrorHandler(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
