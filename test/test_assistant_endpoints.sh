@@ -515,15 +515,15 @@ main() {
     CHAT_ID="test-chat-$(date +%s)"
     
     # Test basic greeting
-    run_chat_test "Basic Greeting" "Hello! I need help planning my wedding in Greece." "200" "Test basic greeting and introduction" "/api/v1/ai/chat"
+    run_chat_test "Basic Greeting" "Hello! I need help planning my wedding in Greece." "200" "Test basic greeting and introduction" "/api/v1/assistant/chat"
     sleep 3
     
     # Test event planning initiation
-    run_chat_test "Event Planning Start" "I want to plan a dream wedding in Greece with my partner Toyin. We're thinking of Santorini or Mykonos." "200" "Test event planning initiation" "/api/v1/ai/chat"
+    run_chat_test "Event Planning Start" "I want to plan a dream wedding in Greece with my partner Toyin. We're thinking of Santorini or Mykonos." "200" "Test event planning initiation" "/api/v1/assistant/chat"
     sleep 3
     
     # Test event details gathering
-    run_chat_test "Event Details" "We're planning for June 2024, expecting around 150 guests, and our budget is around $50,000." "200" "Test event details gathering" "/api/v1/ai/chat"
+    run_chat_test "Event Details" "We're planning for June 2024, expecting around 150 guests, and our budget is around $50,000." "200" "Test event details gathering" "/api/v1/assistant/chat"
     sleep 3
     echo ""
     
@@ -532,30 +532,30 @@ main() {
     echo "====================================================="
     
     # Venue search and selection
-    run_chat_test "Venue Search" "Can you help me find beautiful wedding venues in Greece? I'm looking for something with sea views and traditional Greek architecture." "200" "Test venue search capabilities" "/api/v1/ai/chat"
+    run_chat_test "Venue Search" "Can you help me find beautiful wedding venues in Greece? I'm looking for something with sea views and traditional Greek architecture." "200" "Test venue search capabilities" "/api/v1/assistant/chat"
     sleep 3
     
     # Budget planning
-    run_chat_test "Budget Planning" "Let's create a budget for this wedding. I need to track expenses for venue, catering, photography, flowers, and decorations." "200" "Test budget planning and management" "/api/v1/ai/chat"
+    run_chat_test "Budget Planning" "Let's create a budget for this wedding. I need to track expenses for venue, catering, photography, flowers, and decorations." "200" "Test budget planning and management" "/api/v1/assistant/chat"
     sleep 3
     
     # Timeline creation
-    run_chat_test "Timeline Creation" "I need help creating a timeline for the wedding planning. What should I do first and when should I book vendors?" "200" "Test timeline creation and planning" "/api/v1/ai/chat"
+    run_chat_test "Timeline Creation" "I need help creating a timeline for the wedding planning. What should I do first and when should I book vendors?" "200" "Test timeline creation and planning" "/api/v1/assistant/chat"
     
     # Vendor coordination
-    run_chat_test "Vendor Search" "I need to find photographers, caterers, and florists in Greece. Can you help me search for vendors?" "200" "Test vendor search and coordination" "/api/v1/ai/chat"
+    run_chat_test "Vendor Search" "I need to find photographers, caterers, and florists in Greece. Can you help me search for vendors?" "200" "Test vendor search and coordination" "/api/v1/assistant/chat"
     
     # Weather considerations
-    run_chat_test "Weather Check" "What's the weather like in Greece in June? Should I plan for outdoor or indoor ceremonies?" "200" "Test weather information and planning" "/api/v1/ai/chat"
+    run_chat_test "Weather Check" "What's the weather like in Greece in June? Should I plan for outdoor or indoor ceremonies?" "200" "Test weather information and planning" "/api/v1/assistant/chat"
     
     # Guest management
-    run_chat_test "Guest Management" "I need help managing my guest list. How should I organize RSVPs and track attendance?" "200" "Test guest and attendee management" "/api/v1/ai/chat"
+    run_chat_test "Guest Management" "I need help managing my guest list. How should I organize RSVPs and track attendance?" "200" "Test guest and attendee management" "/api/v1/assistant/chat"
     
     # Risk management
-    run_chat_test "Risk Management" "What are some potential risks for a destination wedding in Greece? How can I prepare for them?" "200" "Test risk assessment and contingency planning" "/api/v1/ai/chat"
+    run_chat_test "Risk Management" "What are some potential risks for a destination wedding in Greece? How can I prepare for them?" "200" "Test risk assessment and contingency planning" "/api/v1/assistant/chat"
     
     # Communication planning
-    run_chat_test "Communication Planning" "I need to send invitations and updates to guests. Can you help me create email templates?" "200" "Test communication and invitation management" "/api/v1/ai/chat"
+    run_chat_test "Communication Planning" "I need to send invitations and updates to guests. Can you help me create email templates?" "200" "Test communication and invitation management" "/api/v1/assistant/chat"
     echo ""
     
     # Step 8: Venue Search and Recommendations
@@ -563,13 +563,13 @@ main() {
     echo "============================================="
     
     # Specific venue search
-    run_chat_test "Santorini Venues" "Show me wedding venues specifically in Santorini with sunset views." "200" "Test specific location venue search" "/api/v1/ai/chat"
+    run_chat_test "Santorini Venues" "Show me wedding venues specifically in Santorini with sunset views." "200" "Test specific location venue search" "/api/v1/assistant/chat"
     
     # Venue comparison
-    run_chat_test "Venue Comparison" "Compare the venues you found. What are the pros and cons of each?" "200" "Test venue comparison and analysis" "/api/v1/ai/chat"
+    run_chat_test "Venue Comparison" "Compare the venues you found. What are the pros and cons of each?" "200" "Test venue comparison and analysis" "/api/v1/assistant/chat"
     
     # Venue booking inquiry
-    run_chat_test "Venue Inquiry" "I want to send an inquiry to the first venue. Can you help me draft an email?" "200" "Test venue inquiry and communication" "/api/v1/ai/chat"
+    run_chat_test "Venue Inquiry" "I want to send an inquiry to the first venue. Can you help me draft an email?" "200" "Test venue inquiry and communication" "/api/v1/assistant/chat"
     echo ""
     
     # Step 9: Budget Planning and Management
@@ -577,13 +577,13 @@ main() {
     echo "============================================="
     
     # Budget breakdown
-    run_chat_test "Budget Breakdown" "Break down my $50,000 budget across different categories like venue, catering, photography, etc." "200" "Test budget breakdown and allocation" "/api/v1/ai/chat"
+    run_chat_test "Budget Breakdown" "Break down my $50,000 budget across different categories like venue, catering, photography, etc." "200" "Test budget breakdown and allocation" "/api/v1/assistant/chat"
     
     # Cost tracking
-    run_chat_test "Cost Tracking" "I just got a quote for $8,000 for photography. Add this to my budget tracker." "200" "Test cost tracking and budget updates" "/api/v1/ai/chat"
+    run_chat_test "Cost Tracking" "I just got a quote for $8,000 for photography. Add this to my budget tracker." "200" "Test cost tracking and budget updates" "/api/v1/assistant/chat"
     
     # Budget analysis
-    run_chat_test "Budget Analysis" "How am I doing with my budget? Am I on track to stay within $50,000?" "200" "Test budget analysis and monitoring" "/api/v1/ai/chat"
+    run_chat_test "Budget Analysis" "How am I doing with my budget? Am I on track to stay within $50,000?" "200" "Test budget analysis and monitoring" "/api/v1/assistant/chat"
     echo ""
     
     # Step 10: Weather and Vendor Coordination
@@ -591,13 +591,13 @@ main() {
     echo "============================================="
     
     # Weather forecast
-    run_chat_test "Weather Forecast" "What's the weather forecast for Santorini in June 2024?" "200" "Test weather forecasting" "/api/v1/ai/chat"
+    run_chat_test "Weather Forecast" "What's the weather forecast for Santorini in June 2024?" "200" "Test weather forecasting" "/api/v1/assistant/chat"
     
     # Vendor search
-    run_chat_test "Photographer Search" "Find me wedding photographers in Santorini who specialize in destination weddings." "200" "Test vendor search capabilities" "/api/v1/ai/chat"
+    run_chat_test "Photographer Search" "Find me wedding photographers in Santorini who specialize in destination weddings." "200" "Test vendor search capabilities" "/api/v1/assistant/chat"
     
     # Vendor coordination
-    run_chat_test "Vendor Coordination" "Help me coordinate with multiple vendors. I need to schedule meetings with photographers, caterers, and florists." "200" "Test vendor coordination and scheduling" "/api/v1/ai/chat"
+    run_chat_test "Vendor Coordination" "Help me coordinate with multiple vendors. I need to schedule meetings with photographers, caterers, and florists." "200" "Test vendor coordination and scheduling" "/api/v1/assistant/chat"
     echo ""
     
     # Step 11: Error Handling and Edge Cases
@@ -605,10 +605,10 @@ main() {
     echo "============================================="
     
     # Invalid chat request
-    run_test "Invalid Chat Request" "POST" "/api/v1/ai/chat" "-H 'Content-Type: application/json'" '{"message": ""}' "400" "Test empty message handling"
+    run_test "Invalid Chat Request" "POST" "/api/v1/assistant/chat" "-H 'Content-Type: application/json'" '{"message": ""}' "400" "Test empty message handling"
     
     # Unauthorized access
-    run_test "Unauthorized Chat" "POST" "/api/v1/ai/chat" "-H 'Content-Type: application/json'" '{"message": "Hello"}' "200" "Test unauthenticated access (should work now)"
+    run_test "Unauthorized Chat" "POST" "/api/v1/assistant/chat" "-H 'Content-Type: application/json'" '{"message": "Hello"}' "200" "Test unauthenticated access (should work now)"
     
     # Invalid session
     run_test "Invalid Session" "GET" "/api/assistant/sessions/event/00000000-0000-0000-0000-000000000000" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "404" "Test invalid session handling"
@@ -622,16 +622,16 @@ main() {
     echo "============================================="
     
     # Multi-agent coordination
-    run_chat_test "Multi-Agent Coordination" "I need help with venue selection, budget planning, and vendor coordination all at once." "200" "Test multi-agent coordination" "/api/v1/ai/chat"
+    run_chat_test "Multi-Agent Coordination" "I need help with venue selection, budget planning, and vendor coordination all at once." "200" "Test multi-agent coordination" "/api/v1/assistant/chat"
     
     # Complex planning scenario
-    run_chat_test "Complex Planning" "Plan a 3-day wedding celebration in Greece with welcome party, main ceremony, and farewell brunch." "200" "Test complex multi-day event planning" "/api/v1/ai/chat"
+    run_chat_test "Complex Planning" "Plan a 3-day wedding celebration in Greece with welcome party, main ceremony, and farewell brunch." "200" "Test complex multi-day event planning" "/api/v1/assistant/chat"
     
     # Emergency planning
-    run_chat_test "Emergency Planning" "I need to change my wedding date from June to August. How will this affect my venue and vendor bookings?" "200" "Test emergency planning and date changes" "/api/v1/ai/chat"
+    run_chat_test "Emergency Planning" "I need to change my wedding date from June to August. How will this affect my venue and vendor bookings?" "200" "Test emergency planning and date changes" "/api/v1/assistant/chat"
     
     # Final recommendations
-    run_chat_test "Final Recommendations" "Give me a final checklist and recommendations for my Greek wedding planning." "200" "Test final recommendations and checklist" "/api/v1/ai/chat"
+    run_chat_test "Final Recommendations" "Give me a final checklist and recommendations for my Greek wedding planning." "200" "Test final recommendations and checklist" "/api/v1/assistant/chat"
     echo ""
     
     # Step 13: Shade Controller Tests

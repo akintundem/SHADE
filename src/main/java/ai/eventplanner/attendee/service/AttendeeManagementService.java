@@ -11,7 +11,6 @@ import ai.eventplanner.roles.repo.EventRoleRepository;
 import ai.eventplanner.common.domain.enums.AttendanceStatus;
 import ai.eventplanner.common.domain.enums.EventUserType;
 import ai.eventplanner.common.domain.enums.RegistrationStatus;
-import ai.eventplanner.common.domain.enums.RoleName;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -200,7 +199,6 @@ public class AttendeeManagementService {
         role.setIsActive(true);
         role.setAssignedAt(LocalDateTime.now());
         
-        EventRole saved = eventRoleRepository.save(role);
         
         // Update EventUser if needed
         EventUser eventUser = eventUserRepository.findByEventIdAndUserId(eventId, request.getUserId())

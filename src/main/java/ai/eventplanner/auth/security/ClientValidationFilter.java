@@ -37,7 +37,6 @@ public class ClientValidationFilter implements Filter {
             "/v3/api-docs",
             "/error",
             "/favicon.ico",
-            "/api/v1/ai",
             "/api/v1/weather"
     );
 

@@ -1,6 +1,5 @@
 package ai.eventplanner.budget.service;
 
-import ai.eventplanner.budget.dto.BudgetLineItemCreateRequest;
 import ai.eventplanner.budget.dto.request.UpdateBudgetRequest;
 import ai.eventplanner.budget.dto.request.UpdateBudgetLineItemRequest;
 import ai.eventplanner.budget.dto.request.BudgetApprovalRequest;
@@ -10,7 +9,6 @@ import ai.eventplanner.budget.model.BudgetEntity;
 import ai.eventplanner.budget.model.BudgetLineItemEntity;
 import ai.eventplanner.budget.repo.BudgetLineItemRepository;
 import ai.eventplanner.budget.repo.BudgetRepository;
-import ai.eventplanner.common.domain.enums.PlanningStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
