@@ -26,7 +26,6 @@ import ai.eventplanner.auth.repo.PasswordResetTokenRepository;
 import ai.eventplanner.auth.repo.UserAccountRepository;
 import ai.eventplanner.auth.repo.UserSessionRepository;
 import ai.eventplanner.common.domain.enums.OrganizationType;
-import ai.eventplanner.common.exception.ForbiddenException;
 import ai.eventplanner.common.exception.ResourceNotFoundException;
 import ai.eventplanner.common.exception.UnauthorizedException;
 import org.springframework.beans.factory.annotation.Value;

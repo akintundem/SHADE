@@ -1,12 +1,9 @@
 package ai.eventplanner.auth.service;
 
 import ai.eventplanner.auth.entity.OrganizationRole;
-import ai.eventplanner.auth.entity.Permission;
 import ai.eventplanner.auth.entity.RolePermission;
 import ai.eventplanner.auth.repo.OrganizationRoleRepository;
-import ai.eventplanner.auth.repo.PermissionRepository;
 import ai.eventplanner.auth.repo.RolePermissionRepository;
-import ai.eventplanner.auth.service.UserPrincipal;
 import ai.eventplanner.roles.entity.EventRole;
 import ai.eventplanner.roles.repo.EventRoleRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +22,6 @@ import java.util.UUID;
 @Slf4j
 public class AuthorizationService {
     
-    private final PermissionRepository permissionRepository;
     private final RolePermissionRepository rolePermissionRepository;
     private final OrganizationRoleRepository organizationRoleRepository;
     private final EventRoleRepository eventRoleRepository;
