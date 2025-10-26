@@ -25,7 +25,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "ai.eventplanner.admin.repository",
     "ai.eventplanner.risk.repository",
     "ai.eventplanner.checklist.repository",
-    "ai.eventplanner.program.repository",
     "ai.eventplanner.roles.repo",
     "ai.eventplanner.user.repo",
     "ai.eventplanner.vendor.repository"
@@ -45,7 +44,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "ai.eventplanner.assistant.entity",
     "ai.eventplanner.vendor.entity",
     "ai.eventplanner.checklist.entity",
-    "ai.eventplanner.program.entity",
     "ai.eventplanner.roles.entity",
     "ai.eventplanner.user.entity",
     "ai.eventplanner.admin.entity",
