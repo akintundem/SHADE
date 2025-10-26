@@ -1,8 +1,8 @@
 package ai.eventplanner.auth.controller;
 
-import ai.eventplanner.auth.dto.OrganizationRegisterRequest;
-import ai.eventplanner.auth.dto.OrganizationResponse;
-import ai.eventplanner.auth.dto.OrganizationUpdateRequest;
+import ai.eventplanner.auth.dto.req.OrganizationRegisterRequest;
+import ai.eventplanner.auth.dto.res.OrganizationResponse;
+import ai.eventplanner.auth.dto.req.OrganizationUpdateRequest;
 import ai.eventplanner.auth.service.AuthService;
 import ai.eventplanner.auth.service.UserPrincipal;
 import jakarta.validation.Valid;

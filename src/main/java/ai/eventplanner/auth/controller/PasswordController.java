@@ -1,9 +1,9 @@
 package ai.eventplanner.auth.controller;
 
-import ai.eventplanner.auth.dto.ChangePasswordRequest;
-import ai.eventplanner.auth.dto.ForgotPasswordRequest;
-import ai.eventplanner.auth.dto.PasswordResponse;
-import ai.eventplanner.auth.dto.ResetPasswordRequest;
+import ai.eventplanner.auth.dto.req.ChangePasswordRequest;
+import ai.eventplanner.auth.dto.req.ForgotPasswordRequest;
+import ai.eventplanner.auth.dto.res.PasswordResponse;
+import ai.eventplanner.auth.dto.req.ResetPasswordRequest;
 import ai.eventplanner.auth.service.AuthService;
 import ai.eventplanner.auth.service.UserPrincipal;
 import ai.eventplanner.common.exception.UnauthorizedException;

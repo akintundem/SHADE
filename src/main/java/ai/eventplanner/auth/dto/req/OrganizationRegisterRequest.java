@@ -1,4 +1,4 @@
-package ai.eventplanner.auth.dto;
+package ai.eventplanner.auth.dto.req;
 
 import ai.eventplanner.common.domain.enums.OrganizationType;
 import jakarta.validation.Valid;

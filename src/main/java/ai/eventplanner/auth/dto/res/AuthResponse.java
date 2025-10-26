@@ -1,14 +1,11 @@
-package ai.eventplanner.auth.dto;
+package ai.eventplanner.auth.dto.res;
 
 import lombok.Builder;
 import lombok.Value;
 
-/**
- * Secure Auth Response DTO that excludes sensitive user identifiers
- */
 @Value
 @Builder
-public class SecureAuthResponse {
+public class AuthResponse {
     String message;
     SecureUserResponse user;
     String accessToken;

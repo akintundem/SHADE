@@ -1,4 +1,4 @@
-package ai.eventplanner.auth.dto;
+package ai.eventplanner.auth.dto.res;
 
 import lombok.Builder;
 import lombok.Value;

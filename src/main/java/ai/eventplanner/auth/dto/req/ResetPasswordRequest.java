@@ -1,4 +1,4 @@
-package ai.eventplanner.auth.dto;
+package ai.eventplanner.auth.dto.req;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -6,10 +6,10 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
-public class ChangePasswordRequest {
+public class ResetPasswordRequest {
 
-    @NotBlank(message = "Current password is required")
-    private String currentPassword;
+    @NotBlank(message = "Reset token is required")
+    private String token;
 
     @NotBlank(message = "New password is required")
     @Size(min = 8, max = 128, message = "New password must be between 8 and 128 characters")
@@ -19,10 +19,4 @@ public class ChangePasswordRequest {
 
     @NotBlank(message = "Confirm password is required")
     private String confirmPassword;
-
-    @Size(max = 120)
-    private String deviceId;
-
-    @Size(max = 120)
-    private String clientId;
 }

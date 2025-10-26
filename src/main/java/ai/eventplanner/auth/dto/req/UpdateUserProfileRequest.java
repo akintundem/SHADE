@@ -1,4 +1,4 @@
-package ai.eventplanner.auth.dto;
+package ai.eventplanner.auth.dto.req;
 
 import ai.eventplanner.common.domain.enums.UserType;
 import jakarta.validation.constraints.NotBlank;

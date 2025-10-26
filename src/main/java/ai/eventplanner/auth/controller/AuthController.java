@@ -1,11 +1,11 @@
 package ai.eventplanner.auth.controller;
 
-import ai.eventplanner.auth.dto.LoginRequest;
-import ai.eventplanner.auth.dto.LogoutResponse;
-import ai.eventplanner.auth.dto.RefreshTokenRequest;
-import ai.eventplanner.auth.dto.RegisterRequest;
-import ai.eventplanner.auth.dto.SecureAuthResponse;
-import ai.eventplanner.auth.dto.SecureUserResponse;
+import ai.eventplanner.auth.dto.req.LoginRequest;
+import ai.eventplanner.auth.dto.res.LogoutResponse;
+import ai.eventplanner.auth.dto.req.RefreshTokenRequest;
+import ai.eventplanner.auth.dto.req.RegisterRequest;
+import ai.eventplanner.auth.dto.res.SecureAuthResponse;
+import ai.eventplanner.auth.dto.res.SecureUserResponse;
 import ai.eventplanner.auth.entity.UserAccount;
 import ai.eventplanner.auth.repo.UserAccountRepository;
 import ai.eventplanner.auth.service.AuthMapper;

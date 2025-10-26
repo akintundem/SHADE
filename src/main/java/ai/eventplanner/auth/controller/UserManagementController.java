@@ -1,7 +1,7 @@
 package ai.eventplanner.auth.controller;
 
-import ai.eventplanner.auth.dto.SecureUserResponse;
-import ai.eventplanner.auth.dto.UpdateUserProfileRequest;
+import ai.eventplanner.auth.dto.res.SecureUserResponse;
+import ai.eventplanner.auth.dto.req.UpdateUserProfileRequest;
 import ai.eventplanner.auth.service.AuthService;
 import ai.eventplanner.auth.service.UserPrincipal;
 import jakarta.validation.Valid;

@@ -1,7 +1,7 @@
 package ai.eventplanner.auth.controller;
 
-import ai.eventplanner.auth.dto.SessionResponse;
-import ai.eventplanner.auth.dto.UserSessionResponse;
+import ai.eventplanner.auth.dto.res.SessionResponse;
+import ai.eventplanner.auth.dto.res.UserSessionResponse;
 import ai.eventplanner.auth.service.AuthService;
 import ai.eventplanner.auth.service.UserPrincipal;
 import ai.eventplanner.common.exception.UnauthorizedException;

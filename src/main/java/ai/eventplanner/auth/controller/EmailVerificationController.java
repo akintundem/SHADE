@@ -1,6 +1,6 @@
 package ai.eventplanner.auth.controller;
 
-import ai.eventplanner.auth.dto.ForgotPasswordRequest;
+import ai.eventplanner.auth.dto.req.ForgotPasswordRequest;
 import ai.eventplanner.auth.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;

@@ -1,8 +1,8 @@
 package ai.eventplanner.auth.service;
 
-import ai.eventplanner.auth.dto.OrganizationResponse;
-import ai.eventplanner.auth.dto.SecureUserResponse;
-import ai.eventplanner.auth.dto.UserSessionResponse;
+import ai.eventplanner.auth.dto.res.OrganizationResponse;
+import ai.eventplanner.auth.dto.res.SecureUserResponse;
+import ai.eventplanner.auth.dto.res.UserSessionResponse;
 import ai.eventplanner.auth.entity.OrganizationAddress;
 import ai.eventplanner.auth.entity.OrganizationProfile;
 import ai.eventplanner.auth.entity.UserAccount;

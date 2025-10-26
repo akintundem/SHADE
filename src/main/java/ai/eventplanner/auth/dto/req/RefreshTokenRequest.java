@@ -1,4 +1,4 @@
-package ai.eventplanner.auth.dto;
+package ai.eventplanner.auth.dto.req;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
