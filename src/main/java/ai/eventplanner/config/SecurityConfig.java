@@ -5,6 +5,7 @@ import ai.eventplanner.auth.security.JwtAuthenticationFilter;
 import ai.eventplanner.auth.security.ClientValidationFilter;
 import ai.eventplanner.auth.security.RateLimitingFilter;
 import ai.eventplanner.auth.security.SecurityHeadersFilter;
+import ai.eventplanner.auth.security.RbacAuthorizationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -26,17 +27,20 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final ClientValidationFilter clientValidationFilter;
     private final RateLimitingFilter rateLimitingFilter;
+    private final RbacAuthorizationFilter rbacAuthorizationFilter;
 
     public SecurityConfig(SecurityHeadersFilter securityHeadersFilter,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
                           JwtAuthenticationEntryPoint authenticationEntryPoint,
                           ClientValidationFilter clientValidationFilter,
-                          RateLimitingFilter rateLimitingFilter) {
+                          RateLimitingFilter rateLimitingFilter,
+                          RbacAuthorizationFilter rbacAuthorizationFilter) {
         this.securityHeadersFilter = securityHeadersFilter;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.clientValidationFilter = clientValidationFilter;
         this.rateLimitingFilter = rateLimitingFilter;
+        this.rbacAuthorizationFilter = rbacAuthorizationFilter;
     }
 
     @Bean
@@ -72,7 +76,8 @@ public class SecurityConfig {
             .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(clientValidationFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(rbacAuthorizationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

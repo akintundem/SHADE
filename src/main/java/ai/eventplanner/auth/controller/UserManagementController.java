@@ -4,7 +4,6 @@ import ai.eventplanner.auth.dto.UpdateUserProfileRequest;
 import ai.eventplanner.auth.dto.UserResponse;
 import ai.eventplanner.auth.service.AuthService;
 import ai.eventplanner.auth.service.UserPrincipal;
-import ai.eventplanner.common.exception.ForbiddenException;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -20,6 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+/**
+ * User Management Controller - Authorization handled by RBAC filter
+ */
 @RestController
 @RequestMapping("/api/v1/auth/users")
 public class UserManagementController {
@@ -33,7 +35,6 @@ public class UserManagementController {
     @GetMapping("/{userId}")
     public UserResponse getUser(@AuthenticationPrincipal UserPrincipal principal,
                                 @PathVariable UUID userId) {
-        ensureSameUser(principal, userId);
         return authService.getUser(userId);
     }
 
@@ -41,7 +42,6 @@ public class UserManagementController {
     public UserResponse updateUser(@AuthenticationPrincipal UserPrincipal principal,
                                    @PathVariable UUID userId,
                                    @Valid @RequestBody UpdateUserProfileRequest request) {
-        ensureSameUser(principal, userId);
         return authService.updateUser(userId, principal.getUser(), request);
     }
 
@@ -49,15 +49,6 @@ public class UserManagementController {
     public Page<UserResponse> searchUsers(@AuthenticationPrincipal UserPrincipal principal,
                                           @RequestParam(defaultValue = "") String searchTerm,
                                           @PageableDefault(size = 10) Pageable pageable) {
-        if (principal == null) {
-            throw new ForbiddenException("Unauthorized");
-        }
-        throw new ForbiddenException("User search is restricted to administrators only");
-    }
-
-    private void ensureSameUser(UserPrincipal principal, UUID userId) {
-        if (principal == null || !principal.getUser().getId().equals(userId)) {
-            throw new ForbiddenException("You are not allowed to access this resource");
-        }
+        return authService.searchUsers(searchTerm, pageable);
     }
 }

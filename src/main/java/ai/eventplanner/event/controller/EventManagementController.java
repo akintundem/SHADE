@@ -38,7 +38,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Comprehensive Event Management Controller
+ * Comprehensive Event Management Controller with RBAC
  * Implements all 12 categories of event management endpoints
  */
 @RestController

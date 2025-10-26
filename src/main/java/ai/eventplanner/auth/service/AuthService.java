@@ -164,10 +164,6 @@ public class AuthService {
     }
 
     public UserResponse updateUser(UUID userId, UserAccount requester, UpdateUserProfileRequest request) {
-        if (!requester.getId().equals(userId)) {
-            throw new ForbiddenException("You can only update your own profile");
-        }
-
         UserAccount user = userAccountRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -293,10 +289,6 @@ public class AuthService {
     public OrganizationResponse updateOrganization(UUID organizationId, UserAccount owner, OrganizationUpdateRequest request) {
         OrganizationProfile organization = organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found"));
-
-        if (organization.getOwner() != null && !organization.getOwner().getId().equals(owner.getId())) {
-            throw new ForbiddenException("You are not allowed to update this organization");
-        }
 
         organization.setName(request.getName().trim());
         organization.setDescription(request.getDescription());

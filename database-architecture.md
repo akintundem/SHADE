@@ -8,9 +8,35 @@ erDiagram
     UserAccount {
         UUID id PK
         String email UK
-        String password
+        String passwordHash
         String name
+        String phoneNumber
+        LocalDate dateOfBirth
+        UserType userType
+        Boolean emailVerified
+        Boolean acceptTerms
+        Boolean acceptPrivacy
+        Boolean marketingOptIn
+        String profileImageUrl
+        String preferences
+        LocalDateTime lastLoginAt
         UserStatus status
+        LocalDateTime createdAt
+        LocalDateTime updatedAt
+    }
+    
+    OrganizationProfile {
+        UUID id PK
+        String name
+        String description
+        OrganizationType type
+        String website
+        String phoneNumber
+        String contactEmail
+        String taxId
+        String registrationNumber
+        OrganizationAddress address
+        UUID ownerId FK
         LocalDateTime createdAt
         LocalDateTime updatedAt
     }
@@ -208,8 +234,16 @@ erDiagram
         EventUserType userType
         RegistrationStatus registrationStatus
         LocalDateTime registrationDate
+        LocalDateTime checkInTime
+        LocalDateTime checkOutTime
+        String specialRequirements
+        String dietaryRestrictions
+        String emergencyContact
+        String name
+        String email
         String notes
-        String metadata
+        Boolean isVolunteer
+        Integer volunteerHours
         LocalDateTime createdAt
         LocalDateTime updatedAt
     }
@@ -221,9 +255,9 @@ erDiagram
         RoleName roleName
         String permissions
         Boolean isActive
-        LocalDateTime assignedDate
+        UUID assignedBy
+        LocalDateTime assignedAt
         String notes
-        String metadata
         LocalDateTime createdAt
         LocalDateTime updatedAt
     }
@@ -256,10 +290,8 @@ erDiagram
         MessageRole role
         String content
         List followUpQuestions
-        Map suggestions
-        String metadata
-        LocalDateTime createdAt
-        LocalDateTime updatedAt
+        List suggestions
+        OffsetDateTime createdAt
     }
     
     %% Timeline Management
@@ -282,6 +314,8 @@ erDiagram
         Integer teardownTimeMinutes
         String resourcesRequired
         String notes
+        LocalDateTime completedAt
+        String metadata
         LocalDateTime createdAt
         LocalDateTime updatedAt
     }
@@ -297,24 +331,6 @@ erDiagram
         String priority
         UUID assignedTo
         String category
-        LocalDateTime createdAt
-        LocalDateTime updatedAt
-    }
-    
-    %% Program Management
-    EventProgram {
-        UUID id PK
-        UUID eventId FK
-        String title
-        String description
-        LocalDateTime startTime
-        LocalDateTime endTime
-        String location
-        String speaker
-        String sessionType
-        Integer capacity
-        Boolean isRequired
-        Integer orderIndex
         LocalDateTime createdAt
         LocalDateTime updatedAt
     }
@@ -349,13 +365,24 @@ erDiagram
     Communication {
         UUID id PK
         UUID eventId FK
-        String channel
-        String recipient
+        CommunicationType communicationType
+        RecipientType recipientType
+        UUID recipientId
+        String recipientEmail
+        String recipientPhone
         String subject
         String content
         CommunicationStatus status
         LocalDateTime scheduledAt
         LocalDateTime sentAt
+        LocalDateTime deliveredAt
+        LocalDateTime openedAt
+        LocalDateTime clickedAt
+        LocalDateTime failedAt
+        String failureReason
+        String externalId
+        String templateId
+        String campaignId
         String metadata
         LocalDateTime createdAt
         LocalDateTime updatedAt
@@ -368,7 +395,7 @@ erDiagram
         String subject
         String content
         CommunicationStatus status
-        LocalDateTime createdAt
+        OffsetDateTime createdAt
         String metadata
     }
     
@@ -426,12 +453,15 @@ erDiagram
         UUID id PK
         String clientId UK
         String clientName
-        String clientSecret
-        String description
-        String redirectUri
+        String clientSecretHash
+        String clientType
+        Boolean active
         String allowedOrigins
+        String description
+        LocalDateTime lastUsed
+        Integer rateLimitPerMinute
         Integer rateLimitPerHour
-        Boolean isActive
+        Integer maxConcurrentSessions
         LocalDateTime createdAt
         LocalDateTime updatedAt
     }
@@ -439,17 +469,20 @@ erDiagram
     UserSession {
         UUID id PK
         UUID userId FK
-        String sessionToken
-        LocalDateTime expiresAt
+        String refreshToken UK
+        String clientId
+        String deviceId
         String ipAddress
-        String userAgent
-        Boolean isActive
+        LocalDateTime lastSeenAt
+        LocalDateTime expiresAt
+        Boolean revoked
         LocalDateTime createdAt
         LocalDateTime updatedAt
     }
     
     %% Relationships
     UserAccount ||--o{ Event : "owns"
+    UserAccount ||--o{ OrganizationProfile : "owns"
     Event ||--o{ Budget : "has"
     Event ||--o{ EventVendor : "uses"
     Event ||--o{ EventAttendance : "has"
@@ -458,7 +491,6 @@ erDiagram
     Event ||--|| AssistantSessionEntity : "has"
     Event ||--o{ TimelineItem : "has"
     Event ||--o{ EventChecklist : "has"
-    Event ||--o{ EventProgram : "has"
     Event ||--o{ EventRisk : "has"
     Event ||--o{ Communication : "sends"
     Event ||--o{ PlatformPayment : "requires"
@@ -481,52 +513,60 @@ erDiagram
 ## Key Features
 
 ### 🎯 **Core Event Management**
-- **Event**: Central entity with comprehensive event details
-- **UserAccount**: User management with status tracking
-- **EventAttendance**: Attendee management with QR codes
-- **EventUser**: Event-specific user roles
-- **EventRole**: Role-based permissions
+- **Event**: Central entity with comprehensive event details and platform payment tracking
+- **UserAccount**: Enhanced user management with security fields, preferences, and status tracking
+- **OrganizationProfile**: Organizations that use the platform (separate from vendors)
+- **EventAttendance**: Attendee management with QR codes and check-in/out tracking
+- **EventUser**: Event-specific user participation with volunteer tracking
+- **EventRole**: Role-based permissions within events (ORGANIZER, COORDINATOR, etc.)
 
 ### 💰 **Financial Management**
-- **Budget**: Event budget planning
-- **BudgetLineItem**: Detailed expense tracking (planning-focused)
-- **BudgetRevenue**: Revenue source tracking
-- **PlatformPayment**: Event creation fees and premium features
+- **Budget**: Event budget planning with contingency management
+- **BudgetLineItem**: Detailed expense tracking with planning status
+- **BudgetRevenue**: Revenue source tracking (ticket sales, sponsorships, etc.)
+- **PlatformPayment**: Event creation fees and premium features for platform revenue
 
 ### 🏢 **Vendor Management**
 - **EventVendor**: Complete vendor information and event relationships
-- **Consolidated**: All vendor data in one entity for simplicity
-- **Planning-focused**: No payment processing, just coordination
+- **Service Providers**: Vendors provide services to events (catering, entertainment, etc.)
+- **Planning-focused**: No payment processing, just coordination and contract management
+- **Status Tracking**: From inquiry to completion with detailed workflow
 
 ### 🤖 **AI Assistant Integration**
-- **AssistantSessionEntity**: AI conversation sessions (ONE per event)
-- **AssistantMessageEntity**: Individual messages in conversations
-- **Constraint**: Each event has exactly one chat session
+- **AssistantSessionEntity**: AI conversation sessions (ONE per event constraint)
+- **AssistantMessageEntity**: Individual messages with suggestions and follow-ups
+- **Constraint**: Each event has exactly one chat session for continuity
+- **Context-aware**: Maintains conversation context throughout event planning
 
 ### 📅 **Timeline & Communication**
-- **TimelineItem**: Event timeline and run-of-show management
-- **Communication**: Scheduled communications
-- **CommunicationLogEntity**: Communication history
+- **TimelineItem**: Event timeline and run-of-show management with dependencies
+- **Communication**: Multi-channel communication tracking with delivery status
+- **CommunicationLogEntity**: Communication history and analytics
 
-### ✅ **Checklist & Program Management**
+### ✅ **Checklist & Risk Management**
 - **EventChecklist**: Task management and completion tracking
-- **EventProgram**: Event agenda and session management
-- **EventRisk**: Risk assessment and mitigation planning
+- **EventRisk**: Risk assessment and mitigation planning with impact scoring
+- **Risk Types**: Weather, venue, vendor, technical, financial, security, health, transportation
 
 ### 👑 **Admin Platform Management**
 - **AdminDashboard**: Platform metrics and analytics
-- **PlatformPayment**: Revenue tracking for platform
-- **ClientApplication**: API client management
+- **PlatformPayment**: Revenue tracking for platform sustainability
+- **ClientApplication**: API client management with rate limiting
+- **UserSession**: Enhanced session management with device tracking
 
 ### 🔒 **Security & Authentication**
-- **UserSession**: User session management
-- **ClientApplication**: API client validation
+- **ClientApplication**: API client validation and rate limiting
+- **UserSession**: Secure session management with refresh tokens
+- **Enhanced Security**: Password hashing, email verification, terms acceptance
+- **Rate Limiting**: Per-client and per-endpoint rate limiting
 
 ## ENUMs Used
 
 - **UserStatus**: ACTIVE, INACTIVE, SUSPENDED, PENDING_VERIFICATION, DELETED
+- **UserType**: INDIVIDUAL, ORGANIZATION, ADMIN
 - **EventStatus**: PLANNING, ACTIVE, COMPLETED, CANCELLED, POSTPONED
 - **EventType**: CONFERENCE, WORKSHOP, MEETING, SEMINAR, etc.
+- **OrganizationType**: CORPORATE, VENUE, CATERING, ENTERTAINMENT, etc.
 - **PlanningStatus**: PLANNED, QUOTED, BOOKED, IN_PROGRESS, COMPLETED, CANCELLED, ON_HOLD
 - **RevenueType**: TICKET_SALES, SPONSORSHIP, DONATION, GRANT, etc.
 - **RevenueStatus**: PENDING, CONFIRMED, RECEIVED, PARTIALLY_RECEIVED, OVERDUE, CANCELLED, REFUNDED
@@ -536,24 +576,31 @@ erDiagram
 - **AttendanceStatus**: REGISTERED, CHECKED_IN, CHECKED_OUT, NO_SHOW, CANCELLED
 - **EventUserType**: ORGANIZER, COORDINATOR, ATTENDEE, VOLUNTEER, VENDOR, SPEAKER, SPONSOR, MEDIA, STAFF
 - **RegistrationStatus**: PENDING, CONFIRMED, CANCELLED, WAITLISTED, REJECTED, TRANSFERRED
-- **RoleName**: ORGANIZER, COORDINATOR, VOLUNTEER, VENDOR, SPEAKER, SPONSOR, MEDIA, STAFF
+- **RoleName**: ORGANIZER, COORDINATOR, VOLUNTEER, STAFF, SECURITY, TECHNICAL, CATERING, CLEANUP, REGISTRATION, PHOTOGRAPHER, VIDEOGRAPHER, DJ, MC, SPEAKER, MODERATOR, SPONSOR, VENDOR, MEDIA, GUEST
 - **SessionType**: EVENT_PLANNING, BUDGET_PLANNING, VENDOR_MANAGEMENT, ATTENDEE_MANAGEMENT, etc.
 - **SessionStatus**: ACTIVE, PAUSED, COMPLETED, ARCHIVED, CANCELLED
 - **MessageRole**: USER, ASSISTANT, SYSTEM, ADMIN
-- **TimelineStatus**: PENDING, IN_PROGRESS, COMPLETED, CANCELLED, POSTPONED, OVERDUE
+- **ItemType**: SETUP, REGISTRATION, WELCOME, PRESENTATION, BREAK, NETWORKING, MEAL, ENTERTAINMENT, AWARDS, CLOSING, TEARDOWN, OTHER
 - **CommunicationStatus**: PENDING, SENT, DELIVERED, FAILED, BOUNCED, OPENED, CLICKED, REPLIED
+- **CommunicationType**: EMAIL, SMS, PUSH_NOTIFICATION, etc.
+- **RecipientType**: USER, ATTENDEE, VENDOR, ORGANIZER, etc.
 - **PlatformPaymentStatus**: PENDING, PROCESSING, COMPLETED, FAILED, REFUNDED, PARTIALLY_REFUNDED, CANCELLED, EXPIRED
 - **PlatformPaymentType**: EVENT_CREATION_FEE, PREMIUM_FEATURES, ADDITIONAL_STORAGE, PRIORITY_SUPPORT, MARKETING_BOOST, ANALYTICS_UPGRADE
-- **ItemType**: SESSION, BREAK, MEAL, NETWORKING, KEYNOTE, WORKSHOP, PANEL, Q_AND_A, CLOSING
-- **RiskType**: WEATHER, VENUE, VENDOR, ATTENDEE, TECHNICAL, FINANCIAL, SECURITY, HEALTH, TRANSPORTATION, OTHER
+- **RiskType**: WEATHER, VENUE, VENDOR, ATTENDANCE, TECHNICAL, SECURITY, FINANCIAL, LEGAL, HEALTH_SAFETY, TRANSPORTATION, OTHER
 - **Severity**: LOW, MEDIUM, HIGH, CRITICAL
 - **Status**: PENDING, IN_PROGRESS, COMPLETED, CANCELLED, POSTPONED, OVERDUE
 
 ## Architecture Highlights
 
-✅ **Planning-Focused**: No payment processing, just event planning assistance
-✅ **Admin Platform**: Complete revenue tracking and user management
-✅ **Type Safety**: Comprehensive ENUM usage throughout
-✅ **Scalable**: Proper relationships and indexing
-✅ **Secure**: Role-based access and session management
-✅ **AI-Ready**: Assistant integration for conversational planning
+✅ **Planning-Focused**: Event planning assistance with vendor coordination (no payment processing)
+✅ **Admin Platform**: Complete revenue tracking and user management for platform sustainability
+✅ **Enhanced Security**: Comprehensive security measures with client validation and rate limiting
+✅ **Type Safety**: Comprehensive ENUM usage throughout with strict validation
+✅ **Scalable**: Proper relationships and indexing for performance
+✅ **Secure**: Role-based access control with enhanced authentication
+✅ **AI-Ready**: Assistant integration for conversational planning with context persistence
+✅ **Organization vs Vendor Distinction**: Clear separation between platform users (organizations) and service providers (vendors)
+✅ **One-Chat-Per-Event**: AI assistant constraint ensures conversation continuity
+✅ **Multi-Channel Communication**: Comprehensive communication tracking across all channels
+✅ **Risk Management**: Proactive risk assessment with mitigation planning
+✅ **Platform Revenue Model**: Event creation fees and premium features for sustainability

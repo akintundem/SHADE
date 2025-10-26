@@ -5,7 +5,6 @@ import ai.eventplanner.auth.dto.OrganizationResponse;
 import ai.eventplanner.auth.dto.OrganizationUpdateRequest;
 import ai.eventplanner.auth.service.AuthService;
 import ai.eventplanner.auth.service.UserPrincipal;
-import ai.eventplanner.common.exception.UnauthorizedException;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,9 +34,6 @@ public class OrganizationController {
     @PostMapping("/register")
     public org.springframework.http.ResponseEntity<OrganizationResponse> registerOrganization(@AuthenticationPrincipal UserPrincipal principal,
                                                       @Valid @RequestBody OrganizationRegisterRequest request) {
-        if (principal == null) {
-            throw new UnauthorizedException("Unauthorized");
-        }
         OrganizationResponse response = authService.registerOrganization(principal.getUser(), request);
         return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(response);
     }
@@ -51,9 +47,6 @@ public class OrganizationController {
     public OrganizationResponse updateOrganization(@AuthenticationPrincipal UserPrincipal principal,
                                                     @PathVariable UUID organizationId,
                                                     @Valid @RequestBody OrganizationUpdateRequest request) {
-        if (principal == null) {
-            throw new UnauthorizedException("Unauthorized");
-        }
         return authService.updateOrganization(organizationId, principal.getUser(), request);
     }
 

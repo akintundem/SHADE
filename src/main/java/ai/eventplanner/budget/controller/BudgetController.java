@@ -22,6 +22,9 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Budget Controller with filter-based RBAC authorization
+ */
 @RestController
 @RequestMapping("/api/v1/budgets")
 @Tag(name = "Budget Management", description = "Comprehensive budget management operations")
@@ -507,4 +510,3 @@ public class BudgetController {
 		return response;
 	}
 }
-
