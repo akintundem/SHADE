@@ -36,8 +36,7 @@ public class ClientValidationFilter implements Filter {
             "/swagger-ui",
             "/v3/api-docs",
             "/error",
-            "/favicon.ico",
-            "/api/v1/weather"
+            "/favicon.ico"
     );
 
     @Override

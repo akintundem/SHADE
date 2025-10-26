@@ -19,10 +19,6 @@ public class ClientValidationService {
      * Validate client ID and return client application if valid
      */
     public ClientApplication validateClientId(String clientId) {
-        if (clientId == null || clientId.trim().isEmpty()) {
-            throw new UnauthorizedException("Client ID is required");
-        }
-
         Optional<ClientApplication> clientOpt = clientApplicationRepository.findActiveByClientId(clientId);
         if (clientOpt.isEmpty()) {
             throw new UnauthorizedException("Invalid client ID");
@@ -64,7 +60,7 @@ public class ClientValidationService {
         ClientApplication client = ClientApplication.builder()
                 .clientId(clientId)
                 .clientName(clientName)
-                .clientSecretHash("") // No secret for now, can be added later
+                .clientSecretHash("")
                 .clientType(clientType)
                 .active(true)
                 .description(description)
