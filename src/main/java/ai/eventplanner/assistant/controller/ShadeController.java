@@ -6,7 +6,6 @@ import ai.eventplanner.assistant.service.ShadeConversationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/assistant/shade")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "${app.cors.allowed-origins}")
 public class ShadeController {
 
     private final ShadeConversationService shadeConversationService;

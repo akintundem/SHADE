@@ -17,6 +17,194 @@ The monolith includes all the functionality from the original microservices:
 - **Payments Service** - Stripe integration, payment processing
 - **Weather Service** - Weather forecasts, alerts
 
+## Request-to-Response Flow
+
+The application follows a comprehensive security and processing pipeline for every incoming request:
+
+### 🔄 Complete Request Flow
+
+```
+1. Client Request
+   ↓
+2. Endpoint Validation
+   ↓
+3. Security Headers Filter
+   ↓
+4. Client Validation Filter
+   ↓
+5. Rate Limiting Filter
+   ↓
+6. JWT Authentication Filter
+   ↓
+7. RBAC Authorization Filter
+   ↓
+8. Controller Layer
+   ↓
+9. Service Layer
+   ↓
+10. Repository Layer
+    ↓
+11. Database Operations
+    ↓
+12. Response Processing
+    ↓
+13. Client Response
+```
+
+### 📋 Detailed Flow Breakdown
+
+#### **1. Client Request**
+- **Web Client**: Browser sends HTTP request with CORS headers
+- **Mobile Client**: Mobile app sends HTTP request with JWT token
+- **API Client**: External service sends authenticated request
+
+#### **2. Endpoint Validation**
+- **Spring Security** validates the request matches configured endpoints
+- **Public Endpoints**: `/api/v1/auth/login`, `/api/v1/auth/register`, `/health`
+- **Protected Endpoints**: All other `/api/**` endpoints require authentication
+
+#### **3. Security Headers Filter** (`SecurityHeadersFilter`)
+- **Adds Security Headers**:
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `X-XSS-Protection: 1; mode=block`
+  - `Strict-Transport-Security: max-age=31536000`
+  - `Content-Security-Policy: default-src 'self'`
+
+#### **4. Client Validation Filter** (`ClientValidationFilter`)
+- **Validates Client ID** from `X-Client-ID` header
+- **Checks Client Registration** in database
+- **Anonymous Clients**: Uses default "anonymous" client for public endpoints
+- **Registered Clients**: Validates against `ClientApplication` entity
+
+#### **5. Rate Limiting Filter** (`RateLimitingFilter`)
+- **Redis-based Rate Limiting**:
+  - **Per-minute limits**: Based on client configuration
+  - **Per-hour limits**: Based on client configuration
+  - **Stricter limits** for authentication endpoints
+- **Anonymous Limits**: 5/min, 20/hour for auth; 10/min, 100/hour for others
+- **Registered Client Limits**: Configurable per client
+
+#### **6. JWT Authentication Filter** (`JwtAuthenticationFilter`)
+- **Extracts JWT Token** from `Authorization: Bearer <token>` header
+- **Validates Token Signature** using configured secret
+- **Checks Token Expiration** and refresh token validity
+- **Loads User Details** including roles and permissions
+- **Sets Security Context** with authenticated user
+
+#### **7. RBAC Authorization Filter** (`RbacAuthorizationFilter`)
+- **URL Pattern Matching**: Maps request URL to required permissions
+- **HTTP Method Validation**: Checks if method is allowed for the endpoint
+- **Permission Checking**: Validates user has required permissions
+- **Context-Aware Authorization**: Considers organization and event context
+- **Multi-Level RBAC**: System, Organization, and Event-specific roles
+
+#### **8. Controller Layer**
+- **Spring MVC Controllers** handle HTTP requests
+- **Request Mapping**: Routes to appropriate controller method
+- **Input Validation**: Validates request body and parameters
+- **Response Mapping**: Converts service responses to HTTP responses
+
+#### **9. Service Layer**
+- **Business Logic**: Implements core application functionality
+- **Transaction Management**: Handles database transactions
+- **External API Integration**: Calls third-party services
+- **Data Transformation**: Converts between DTOs and entities
+
+#### **10. Repository Layer**
+- **JPA Repositories**: Database access layer
+- **Query Execution**: Runs SQL queries against PostgreSQL
+- **Entity Management**: Handles entity lifecycle
+- **Caching**: Redis caching for frequently accessed data
+
+#### **11. Database Operations**
+- **PostgreSQL Database**: Primary data storage
+- **ACID Transactions**: Ensures data consistency
+- **Connection Pooling**: Manages database connections
+- **Query Optimization**: Optimized queries for performance
+
+#### **12. Response Processing**
+- **JSON Serialization**: Converts objects to JSON
+- **CORS Headers**: Adds CORS headers for web clients
+- **Security Headers**: Adds security headers to response
+- **Error Handling**: Formats error responses
+
+#### **13. Client Response**
+- **HTTP Response**: Returns processed response to client
+- **Status Codes**: Appropriate HTTP status codes
+- **Response Headers**: Security and CORS headers
+- **Response Body**: JSON data or error messages
+
+### 🔐 Security Layers
+
+#### **Authentication Flow**
+```
+1. Client sends credentials → /api/v1/auth/login
+2. AuthService validates credentials
+3. JWT token generated with user roles
+4. Token returned to client
+5. Client includes token in subsequent requests
+```
+
+#### **Authorization Flow**
+```
+1. Request includes JWT token
+2. JWT Authentication Filter validates token
+3. UserPrincipal loaded with roles/permissions
+4. RBAC Filter checks required permissions
+5. Request allowed/denied based on permissions
+```
+
+#### **CORS Flow**
+```
+1. Browser sends preflight OPTIONS request
+2. CORS configuration validates origin
+3. Appropriate CORS headers returned
+4. Browser sends actual request
+5. Response includes CORS headers
+```
+
+### 📊 Data Flow Examples
+
+#### **Event Creation Flow**
+```
+POST /api/v1/events
+1. Security filters validate request
+2. EventController receives request
+3. EventService creates event
+4. EventRepository saves to database
+5. Response returned with event details
+```
+
+#### **Budget Management Flow**
+```
+PUT /api/v1/budgets/{id}
+1. RBAC checks "budget.update" permission
+2. BudgetController validates request
+3. BudgetService updates budget
+4. Database transaction commits
+5. Updated budget returned
+```
+
+#### **Vendor Search Flow**
+```
+GET /api/v1/vendors?search=catering
+1. Rate limiting applied
+2. VendorController processes search
+3. VendorService queries database
+4. Results cached in Redis
+5. Paginated results returned
+```
+
+### 🚀 Performance Optimizations
+
+- **Redis Caching**: Frequently accessed data cached
+- **Connection Pooling**: Database connections reused
+- **Rate Limiting**: Prevents abuse and ensures fair usage
+- **CORS Preflight Caching**: 1-hour cache for OPTIONS requests
+- **JWT Stateless**: No server-side session storage
+- **Database Indexing**: Optimized queries with proper indexes
+
 ## Quick Start
 
 ### Prerequisites

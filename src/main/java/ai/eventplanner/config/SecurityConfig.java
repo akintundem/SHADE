@@ -6,6 +6,7 @@ import ai.eventplanner.auth.security.ClientValidationFilter;
 import ai.eventplanner.auth.security.RateLimitingFilter;
 import ai.eventplanner.auth.security.SecurityHeadersFilter;
 import ai.eventplanner.auth.security.RbacAuthorizationFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -17,10 +18,18 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    @Value("${APP_CORS_ALLOWED_ORIGINS}")
+    private String allowedOrigins;
 
     private final SecurityHeadersFilter securityHeadersFilter;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -44,8 +53,31 @@ public class SecurityConfig {
     }
 
     @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        
+        // Parse allowed origins from environment variable
+        if (allowedOrigins != null && !allowedOrigins.trim().isEmpty()) {
+            configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
+        } else {
+            // Default to localhost for development if not configured
+            configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://localhost:8080"));
+        }
+        
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
+        
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", configuration);
+        return source;
+    }
+
+    @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .ignoringRequestMatchers("/api/v1/auth/**"))
@@ -66,8 +98,6 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/verify-email").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/verify-email/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/validate-token").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/auth/organizations/**").authenticated()
-                .requestMatchers(HttpMethod.GET, "/api/v1/weather/**").permitAll()
                 .anyRequest().authenticated()
             )
             .httpBasic(httpBasic -> httpBasic.disable())
