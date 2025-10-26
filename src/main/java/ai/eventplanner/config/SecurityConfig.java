@@ -4,7 +4,7 @@ import ai.eventplanner.auth.security.JwtAuthenticationEntryPoint;
 import ai.eventplanner.auth.security.JwtAuthenticationFilter;
 import ai.eventplanner.auth.security.ClientValidationFilter;
 import ai.eventplanner.auth.security.RateLimitingFilter;
-import ai.eventplanner.config.SecurityHeadersConfig.SecurityHeadersFilter;
+import ai.eventplanner.auth.security.SecurityHeadersFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -51,7 +51,7 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/info").permitAll()
                 .requestMatchers("/actuator/metrics").authenticated()
                 .requestMatchers("/error", "/favicon.ico", "/css/**", "/js/**", "/images/**").permitAll()
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").authenticated()
                 .requestMatchers(HttpMethod.GET, "/").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").permitAll()
@@ -62,7 +62,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/verify-email").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/verify-email/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/validate-token").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/auth/organizations/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/auth/organizations/**").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/v1/weather/**").permitAll()
                 .anyRequest().authenticated()
             )

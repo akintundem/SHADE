@@ -91,9 +91,15 @@ public class RateLimitingService {
         String minuteKey = RATE_LIMIT_MINUTE_PREFIX + clientId + ":" + endpoint + ":" + getCurrentMinute();
         String hourKey = RATE_LIMIT_HOUR_PREFIX + clientId + ":" + endpoint + ":" + getCurrentHour();
         
-        // Default limits for anonymous clients (more restrictive)
-        int minuteLimit = 50;  // 10 requests per minute
-        int hourLimit = 1000;   // 100 requests per hour
+        // Stricter limits for authentication endpoints
+        int minuteLimit, hourLimit;
+        if (endpoint.contains("/auth/login") || endpoint.contains("/auth/register")) {
+            minuteLimit = 5;   // 5 requests per minute for auth endpoints
+            hourLimit = 20;    // 20 requests per hour for auth endpoints
+        } else {
+            minuteLimit = 10;  // 10 requests per minute for other endpoints
+            hourLimit = 100;   // 100 requests per hour for other endpoints
+        }
         
         // Check minute rate limit
         String minuteCount = redisTemplate.opsForValue().get(minuteKey);

@@ -96,7 +96,7 @@ echo "   - API Documentation: http://localhost:8080/swagger-ui"
 
 # Start Java app in background
 mvn spring-boot:run \
-    -Dspring-boot.run.arguments="--spring.datasource.url=jdbc:postgresql://localhost:5432/eventplanner --spring.datasource.username=postgres --spring.datasource.password=postgres --spring.jpa.hibernate.ddl-auto=create-drop" \
+    -Dspring-boot.run.arguments="--spring.jpa.hibernate.ddl-auto=create-drop" \
     > java_app.log 2>&1 &
 
 JAVA_PID=$!

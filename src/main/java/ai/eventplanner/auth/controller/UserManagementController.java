@@ -52,7 +52,7 @@ public class UserManagementController {
         if (principal == null) {
             throw new ForbiddenException("Unauthorized");
         }
-        return authService.searchUsers(searchTerm, pageable);
+        throw new ForbiddenException("User search is restricted to administrators only");
     }
 
     private void ensureSameUser(UserPrincipal principal, UUID userId) {
