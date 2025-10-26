@@ -26,7 +26,6 @@ The monolith includes all the functionality from the original microservices:
 - Docker & Docker Compose
 - PostgreSQL 15+
 - Redis 7+
-- RabbitMQ 3+
 
 ### Local Development
 
@@ -38,7 +37,7 @@ The monolith includes all the functionality from the original microservices:
 
 2. **Start infrastructure services:**
    ```bash
-   docker-compose up -d postgres redis
+   docker-compose up -d postgres redis mongodb
    ```
    > Alternatively, install PostgreSQL locally and ensure it is running on `localhost:5432` with credentials matching `.env`.
 
@@ -70,7 +69,6 @@ The monolith includes all the functionality from the original microservices:
 
 2. **Access services:**
    - Application: http://localhost:8080
-   - RabbitMQ Management: http://localhost:15672 (guest/guest)
    - MailHog: http://localhost:8025
 
 ## API Endpoints

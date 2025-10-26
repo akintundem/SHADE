@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # Database
   postgres:
     image: postgres:15
     environment:
@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5436:5432"
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -39,15 +39,49 @@ services:
     environment:
       MONGO_INITDB_DATABASE: event_planner
 
-  # Pinecone Local Vector Database
-  pinecone-local:
-    image: ghcr.io/pinecone-io/pinecone-local:latest
+  # Java Spring Boot App
+  java-app:
+    build: .
     ports:
-      - "5081:5081"
+      - "8080:8080"
     environment:
-      - PORT=5081
-      - PINECONE_HOST=localhost
-    platform: linux/amd64
+      - SPRING_PROFILES_ACTIVE=docker
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=eventplanner
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres
+      - SPRING_REDIS_HOST=redis
+      - SPRING_REDIS_PORT=6379
+      - MONGODB_URL=mongodb://mongodb:27017
+      - SHADE_ASSISTANT_URL=http://python-app:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+    env_file:
+      - .env
+
+  # Python AI Assistant
+  python-app:
+    build:
+      context: ./shade
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URL=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      mongodb:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
 
 volumes:
   pgdata:
