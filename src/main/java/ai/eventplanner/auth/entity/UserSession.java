@@ -84,4 +84,18 @@ public class UserSession extends BaseEntity {
     public void revoke() {
         this.revoked = true;
     }
+    
+    /**
+     * Check if session is revoked
+     */
+    public boolean isRevoked() {
+        return this.revoked;
+    }
+    
+    /**
+     * Set revoked status
+     */
+    public void setRevoked(boolean revoked) {
+        this.revoked = revoked;
+    }
 }

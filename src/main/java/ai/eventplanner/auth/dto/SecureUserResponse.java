@@ -6,12 +6,14 @@ import lombok.Value;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
+/**
+ * Secure User Response DTO that excludes sensitive internal identifiers
+ * and other fields that shouldn't be exposed to clients.
+ */
 @Value
 @Builder
-public class UserResponse {
-    UUID id;
+public class SecureUserResponse {
     String email;
     String name;
     String phoneNumber;

@@ -1,10 +1,11 @@
 package ai.eventplanner.auth.controller;
 
-import ai.eventplanner.auth.dto.AuthResponse;
 import ai.eventplanner.auth.dto.LoginRequest;
+import ai.eventplanner.auth.dto.LogoutResponse;
 import ai.eventplanner.auth.dto.RefreshTokenRequest;
 import ai.eventplanner.auth.dto.RegisterRequest;
-import ai.eventplanner.auth.dto.UserResponse;
+import ai.eventplanner.auth.dto.SecureAuthResponse;
+import ai.eventplanner.auth.dto.SecureUserResponse;
 import ai.eventplanner.auth.entity.UserAccount;
 import ai.eventplanner.auth.repo.UserAccountRepository;
 import ai.eventplanner.auth.service.AuthMapper;
@@ -54,26 +55,26 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
-        AuthResponse response = authService.register(request, resolveClientIp(httpRequest));
+    public ResponseEntity<SecureAuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
+        SecureAuthResponse response = authService.register(request, resolveClientIp(httpRequest));
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+    public SecureAuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         return authService.login(request, resolveClientIp(httpRequest));
     }
 
     @GetMapping("/me")
-    public UserResponse currentUser(@AuthenticationPrincipal UserPrincipal principal) {
+    public SecureUserResponse currentUser(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
             throw new ResourceNotFoundException("User not found");
         }
-        return AuthMapper.toUserResponse(principal.getUser());
+        return AuthMapper.toSecureUserResponse(principal.getUser());
     }
 
     @PostMapping("/refresh-token")
-    public AuthResponse refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
+    public SecureAuthResponse refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
         return authService.refreshToken(request);
     }
 
@@ -95,7 +96,7 @@ public class AuthController {
                     .orElseThrow(() -> new ResourceNotFoundException("User not found"));
             return ResponseEntity.ok(Map.of(
                     "isValid", true,
-                    "user", AuthMapper.toUserResponse(user)
+                    "user", AuthMapper.toSecureUserResponse(user)
             ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("isValid", false, "error", "Invalid token format"));
@@ -103,11 +104,15 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public Map<String, Object> logout(@AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<LogoutResponse> logout(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal != null) {
             authService.logout(principal.getUser());
         }
-        return Map.of("message", "Logged out successfully");
+        LogoutResponse response = LogoutResponse.builder()
+                .message("Logged out successfully")
+                .success(true)
+                .build();
+        return ResponseEntity.ok(response);
     }
 
     private String resolveClientIp(HttpServletRequest request) {

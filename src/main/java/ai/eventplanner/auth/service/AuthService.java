@@ -1,6 +1,6 @@
 package ai.eventplanner.auth.service;
 
-import ai.eventplanner.auth.dto.AuthResponse;
+import ai.eventplanner.auth.dto.SecureAuthResponse;
 import ai.eventplanner.auth.dto.ChangePasswordRequest;
 import ai.eventplanner.auth.dto.ForgotPasswordRequest;
 import ai.eventplanner.auth.dto.LoginRequest;
@@ -12,7 +12,7 @@ import ai.eventplanner.auth.dto.RefreshTokenRequest;
 import ai.eventplanner.auth.dto.RegisterRequest;
 import ai.eventplanner.auth.dto.ResetPasswordRequest;
 import ai.eventplanner.auth.dto.UpdateUserProfileRequest;
-import ai.eventplanner.auth.dto.UserResponse;
+import ai.eventplanner.auth.dto.SecureUserResponse;
 import ai.eventplanner.auth.dto.UserSessionResponse;
 import ai.eventplanner.auth.entity.EmailVerificationToken;
 import ai.eventplanner.auth.entity.OrganizationAddress;
@@ -75,7 +75,7 @@ public class AuthService {
         this.tokenService = tokenService;
     }
 
-    public AuthResponse register(RegisterRequest request, String clientIp) {
+    public SecureAuthResponse register(RegisterRequest request, String clientIp) {
         validatePasswordMatch(request.getPassword(), request.getConfirmPassword());
         if (!Boolean.TRUE.equals(request.getAcceptTerms()) || !Boolean.TRUE.equals(request.getAcceptPrivacy())) {
             throw new IllegalArgumentException("Terms and privacy policy must be accepted");
@@ -103,7 +103,7 @@ public class AuthService {
         return issueAuthResponse(user, false, request.getClientId(), request.getDeviceId(), clientIp, "User registered successfully");
     }
 
-    public AuthResponse login(LoginRequest request, String clientIp) {
+    public SecureAuthResponse login(LoginRequest request, String clientIp) {
         
         UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizeEmail(request.getEmail()))
                 .orElseThrow(() -> {
@@ -119,7 +119,7 @@ public class AuthService {
         return issueAuthResponse(user, request.isRememberMe(), request.getClientId(), request.getDeviceId(), clientIp, "Login successful");
     }
 
-    public AuthResponse refreshToken(RefreshTokenRequest request) {
+    public SecureAuthResponse refreshToken(RefreshTokenRequest request) {
         
         UserSession session = sessionRepository.findByRefreshTokenAndRevokedFalse(request.getRefreshToken())
                 .orElseThrow(() -> {
@@ -139,9 +139,9 @@ public class AuthService {
         String accessToken = tokenService.generateAccessToken(user, session.getClientId());
         
 
-        return AuthResponse.builder()
+        return SecureAuthResponse.builder()
                 .message("Token refreshed successfully")
-                .user(AuthMapper.toUserResponse(user))
+                .user(AuthMapper.toSecureUserResponse(user))
                 .accessToken(accessToken)
                 .refreshToken(session.getRefreshToken())
                 .tokenType("Bearer")
@@ -149,20 +149,22 @@ public class AuthService {
     }
 
     public void logout(UserAccount user) {
-        sessionRepository.findByUser(user).forEach(session -> session.setRevoked(true));
+        List<UserSession> userSessions = sessionRepository.findByUser(user);
+        userSessions.forEach(session -> session.setRevoked(true));
+        sessionRepository.saveAll(userSessions); // Save the revoked sessions
     }
 
-    public UserResponse currentUser(UserAccount user) {
-        return AuthMapper.toUserResponse(user);
+    public SecureUserResponse currentSecureUser(UserAccount user) {
+        return AuthMapper.toSecureUserResponse(user);
     }
 
-    public UserResponse getUser(UUID userId) {
+    public SecureUserResponse getSecureUser(UUID userId) {
         UserAccount user = userAccountRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        return AuthMapper.toUserResponse(user);
+        return AuthMapper.toSecureUserResponse(user);
     }
 
-    public UserResponse updateUser(UUID userId, UserAccount requester, UpdateUserProfileRequest request) {
+    public SecureUserResponse updateSecureUser(UUID userId, UserAccount requester, UpdateUserProfileRequest request) {
         UserAccount user = userAccountRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -173,10 +175,10 @@ public class AuthService {
         user.setPreferences(safeTrim(request.getPreferences()));
         user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
 
-        return AuthMapper.toUserResponse(user);
+        return AuthMapper.toSecureUserResponse(user);
     }
 
-    public Page<UserResponse> searchUsers(String term, Pageable pageable) {
+    public Page<SecureUserResponse> searchSecureUsers(String term, Pageable pageable) {
         // Validate and sanitize search term
         if (term == null || term.trim().isEmpty()) {
             throw new IllegalArgumentException("Search term cannot be empty");
@@ -195,16 +197,27 @@ public class AuthService {
         
         return userAccountRepository
                 .findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(sanitized, sanitized, pageable)
-                .map(AuthMapper::toUserResponse);
+                .map(AuthMapper::toSecureUserResponse);
     }
 
     public void changePassword(UserAccount user, ChangePasswordRequest request) {
-        validatePasswordMatch(request.getNewPassword(), request.getConfirmPassword());
-        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
-            throw new UnauthorizedException("Current password is incorrect");
+        try {
+            validatePasswordMatch(request.getNewPassword(), request.getConfirmPassword());
+            if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
+                throw new UnauthorizedException("Current password is incorrect");
+            }
+            user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+            userAccountRepository.save(user); // Save the updated user entity
+            
+            // Revoke all user sessions
+            List<UserSession> userSessions = sessionRepository.findByUser(user);
+            userSessions.forEach(session -> session.setRevoked(true));
+            sessionRepository.saveAll(userSessions); // Save the revoked sessions
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Password validation failed: " + e.getMessage());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to change password: " + e.getMessage(), e);
         }
-        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
-        sessionRepository.findByUser(user).forEach(session -> session.setRevoked(true));
     }
 
     public String requestPasswordReset(ForgotPasswordRequest request) {
@@ -224,6 +237,8 @@ public class AuthService {
     }
 
     public boolean resetPassword(ResetPasswordRequest request) {
+        validatePasswordMatch(request.getNewPassword(), request.getConfirmPassword());
+        
         PasswordResetToken token = passwordResetTokenRepository.findByToken(request.getToken())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired reset token"));
 
@@ -233,8 +248,16 @@ public class AuthService {
 
         UserAccount user = token.getUser();
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userAccountRepository.save(user); // Save the updated user entity
+        
         token.setConsumed(true);
-        sessionRepository.findByUser(user).forEach(session -> session.setRevoked(true));
+        passwordResetTokenRepository.save(token); // Save the consumed token
+        
+        // Revoke all user sessions
+        List<UserSession> userSessions = sessionRepository.findByUser(user);
+        userSessions.forEach(session -> session.setRevoked(true));
+        sessionRepository.saveAll(userSessions); // Save the revoked sessions
+        
         return true;
     }
 
@@ -341,10 +364,12 @@ public class AuthService {
     }
 
     public void terminateAllSessions(UserAccount user) {
-        sessionRepository.findByUser(user).forEach(session -> session.setRevoked(true));
+        List<UserSession> userSessions = sessionRepository.findByUser(user);
+        userSessions.forEach(session -> session.setRevoked(true));
+        sessionRepository.saveAll(userSessions); // Save the revoked sessions
     }
 
-    private AuthResponse issueAuthResponse(UserAccount user,
+    private SecureAuthResponse issueAuthResponse(UserAccount user,
                                            boolean rememberMe,
                                            String clientId,
                                            String deviceId,
@@ -375,9 +400,9 @@ public class AuthService {
                 .build();
         sessionRepository.save(session);
 
-        return AuthResponse.builder()
+        return SecureAuthResponse.builder()
                 .message(message)
-                .user(AuthMapper.toUserResponse(user))
+                .user(AuthMapper.toSecureUserResponse(user))
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")

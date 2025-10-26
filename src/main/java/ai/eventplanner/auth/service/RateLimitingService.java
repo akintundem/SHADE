@@ -44,8 +44,8 @@ public class RateLimitingService {
             
             // Apply stricter limits for authentication endpoints
             if (endpoint.contains("/auth/login") || endpoint.contains("/auth/register")) {
-                minuteLimit = Math.min(minuteLimit, 5);
-                hourLimit = Math.min(hourLimit, 20);
+                minuteLimit = Math.min(minuteLimit, 100);
+                hourLimit = Math.min(hourLimit, 1000);
             }
 
             String minuteKey = RATE_LIMIT_MINUTE_PREFIX + rateLimitKey + ":" + endpoint + ":" + getCurrentMinute();
@@ -121,8 +121,8 @@ public class RateLimitingService {
             
             // Apply stricter limits for authentication endpoints
             if (endpoint.contains("/auth/login") || endpoint.contains("/auth/register")) {
-                minuteLimit = Math.min(minuteLimit, 5);
-                hourLimit = Math.min(hourLimit, 20);
+                minuteLimit = Math.min(minuteLimit, 100);
+                hourLimit = Math.min(hourLimit, 1000);
             }
 
             String minuteKey = RATE_LIMIT_MINUTE_PREFIX + rateLimitKey + ":" + endpoint + ":" + getCurrentMinute();

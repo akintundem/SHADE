@@ -1,7 +1,7 @@
 package ai.eventplanner.auth.service;
 
 import ai.eventplanner.auth.dto.OrganizationResponse;
-import ai.eventplanner.auth.dto.UserResponse;
+import ai.eventplanner.auth.dto.SecureUserResponse;
 import ai.eventplanner.auth.dto.UserSessionResponse;
 import ai.eventplanner.auth.entity.OrganizationAddress;
 import ai.eventplanner.auth.entity.OrganizationProfile;
@@ -13,9 +13,12 @@ public final class AuthMapper {
     private AuthMapper() {
     }
 
-    public static UserResponse toUserResponse(UserAccount user) {
-        return UserResponse.builder()
-                .id(user.getId())
+    /**
+     * Creates a secure user response that excludes sensitive internal identifiers.
+     * This should be used for all public-facing API responses.
+     */
+    public static SecureUserResponse toSecureUserResponse(UserAccount user) {
+        return SecureUserResponse.builder()
                 .email(user.getEmail())
                 .name(user.getName())
                 .phoneNumber(user.getPhoneNumber())

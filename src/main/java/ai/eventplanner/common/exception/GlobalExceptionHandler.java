@@ -25,6 +25,8 @@ public class GlobalExceptionHandler {
     private boolean isDevelopmentEnvironment() {
         return "dev".equals(activeProfile) || "development".equals(activeProfile);
     }
+    
+    @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationExceptions(
             MethodArgumentNotValidException ex, WebRequest request) {
         
@@ -150,6 +152,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex, WebRequest request) {
+        
+        // Log the exception details for debugging
+        System.err.println("=== UNHANDLED EXCEPTION ===");
+        System.err.println("Exception: " + ex.getClass().getSimpleName());
+        System.err.println("Message: " + ex.getMessage());
+        System.err.println("Path: " + request.getDescription(false).replace("uri=", ""));
+        ex.printStackTrace();
+        System.err.println("==========================");
         
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())

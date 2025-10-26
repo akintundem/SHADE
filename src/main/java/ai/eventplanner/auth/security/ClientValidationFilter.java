@@ -33,6 +33,7 @@ public class ClientValidationFilter implements Filter {
     private static final List<String> EXCLUDED_PATHS = Arrays.asList(
             "/actuator/health",
             "/actuator/info",
+            "/api/v1/auth/health",
             "/swagger-ui",
             "/v3/api-docs",
             "/error",

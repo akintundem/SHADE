@@ -237,6 +237,7 @@ public class RbacAuthorizationFilter extends OncePerRequestFilter {
                requestURI.startsWith("/api/v1/auth/reset-password") ||
                requestURI.startsWith("/api/v1/auth/forgot-password") ||
                requestURI.startsWith("/api/v1/auth/validate-token") ||
+               requestURI.startsWith("/api/v1/auth/health") ||
                requestURI.startsWith("/health") ||
                requestURI.startsWith("/actuator/health") ||
                requestURI.startsWith("/actuator/info") ||

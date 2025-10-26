@@ -1,7 +1,7 @@
 package ai.eventplanner.auth.controller;
 
+import ai.eventplanner.auth.dto.SecureUserResponse;
 import ai.eventplanner.auth.dto.UpdateUserProfileRequest;
-import ai.eventplanner.auth.dto.UserResponse;
 import ai.eventplanner.auth.service.AuthService;
 import ai.eventplanner.auth.service.UserPrincipal;
 import jakarta.validation.Valid;
@@ -33,22 +33,22 @@ public class UserManagementController {
     }
 
     @GetMapping("/{userId}")
-    public UserResponse getUser(@AuthenticationPrincipal UserPrincipal principal,
+    public SecureUserResponse getUser(@AuthenticationPrincipal UserPrincipal principal,
                                 @PathVariable UUID userId) {
-        return authService.getUser(userId);
+        return authService.getSecureUser(userId);
     }
 
     @PutMapping("/{userId}")
-    public UserResponse updateUser(@AuthenticationPrincipal UserPrincipal principal,
+    public SecureUserResponse updateUser(@AuthenticationPrincipal UserPrincipal principal,
                                    @PathVariable UUID userId,
                                    @Valid @RequestBody UpdateUserProfileRequest request) {
-        return authService.updateUser(userId, principal.getUser(), request);
+        return authService.updateSecureUser(userId, principal.getUser(), request);
     }
 
     @GetMapping("/search")
-    public Page<UserResponse> searchUsers(@AuthenticationPrincipal UserPrincipal principal,
+    public Page<SecureUserResponse> searchUsers(@AuthenticationPrincipal UserPrincipal principal,
                                           @RequestParam(defaultValue = "") String searchTerm,
                                           @PageableDefault(size = 10) Pageable pageable) {
-        return authService.searchUsers(searchTerm, pageable);
+        return authService.searchSecureUsers(searchTerm, pageable);
     }
 }

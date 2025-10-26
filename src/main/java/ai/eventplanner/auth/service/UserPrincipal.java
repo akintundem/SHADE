@@ -20,6 +20,7 @@ import java.util.UUID;
 @Getter
 public class UserPrincipal implements UserDetails {
     
+    private final UserAccount user;
     private final UUID id;
     private final String email;
     private final String passwordHash;
@@ -37,6 +38,7 @@ public class UserPrincipal implements UserDetails {
     private List<String> eventRoles;
     
     public UserPrincipal(UserAccount user) {
+        this.user = user;
         this.id = user.getId();
         this.email = user.getEmail();
         this.passwordHash = user.getPasswordHash();
@@ -168,13 +170,6 @@ public class UserPrincipal implements UserDetails {
      * Get the underlying user account
      */
     public UserAccount getUser() {
-        UserAccount user = new UserAccount();
-        user.setId(id);
-        user.setEmail(email);
-        user.setPasswordHash(passwordHash);
-        user.setName(name);
-        user.setEmailVerified(emailVerified);
-        user.setLastLoginAt(lastLoginAt);
         return user;
     }
 }
