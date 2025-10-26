@@ -1,9 +1,11 @@
 package ai.eventplanner.timeline.dto;
 
+import ai.eventplanner.timeline.entity.TimelineItem;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public class TimelineItemCreateRequest {
@@ -19,9 +21,23 @@ public class TimelineItemCreateRequest {
 
     private Integer durationMinutes;
 
+    private TimelineItem.ItemType itemType;
+
+    private String priority;
+
+    private String location;
+
     private UUID assignedTo;
 
-    private UUID[] dependencies;
+    private List<UUID> dependencies;
+
+    private Integer setupTimeMinutes;
+
+    private Integer teardownTimeMinutes;
+
+    private String resourcesRequired;
+
+    private String notes;
 
     public UUID getEventId() { return eventId; }
     public void setEventId(UUID eventId) { this.eventId = eventId; }
@@ -38,10 +54,31 @@ public class TimelineItemCreateRequest {
     public Integer getDurationMinutes() { return durationMinutes; }
     public void setDurationMinutes(Integer durationMinutes) { this.durationMinutes = durationMinutes; }
 
+    public TimelineItem.ItemType getItemType() { return itemType; }
+    public void setItemType(TimelineItem.ItemType itemType) { this.itemType = itemType; }
+
+    public String getPriority() { return priority; }
+    public void setPriority(String priority) { this.priority = priority; }
+
+    public String getLocation() { return location; }
+    public void setLocation(String location) { this.location = location; }
+
     public UUID getAssignedTo() { return assignedTo; }
     public void setAssignedTo(UUID assignedTo) { this.assignedTo = assignedTo; }
 
-    public UUID[] getDependencies() { return dependencies; }
-    public void setDependencies(UUID[] dependencies) { this.dependencies = dependencies; }
+    public List<UUID> getDependencies() { return dependencies; }
+    public void setDependencies(List<UUID> dependencies) { this.dependencies = dependencies; }
+
+    public Integer getSetupTimeMinutes() { return setupTimeMinutes; }
+    public void setSetupTimeMinutes(Integer setupTimeMinutes) { this.setupTimeMinutes = setupTimeMinutes; }
+
+    public Integer getTeardownTimeMinutes() { return teardownTimeMinutes; }
+    public void setTeardownTimeMinutes(Integer teardownTimeMinutes) { this.teardownTimeMinutes = teardownTimeMinutes; }
+
+    public String getResourcesRequired() { return resourcesRequired; }
+    public void setResourcesRequired(String resourcesRequired) { this.resourcesRequired = resourcesRequired; }
+
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
 }
 

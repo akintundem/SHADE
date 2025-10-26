@@ -1,4 +1,4 @@
-package ai.eventplanner.timeline.dto.response;
+package ai.eventplanner.timeline.dto.request;
 
 import ai.eventplanner.timeline.entity.TimelineItem;
 import lombok.Data;
@@ -8,16 +8,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Data
-public class TimelineItemResponse {
-    private UUID id;
-    private UUID eventId;
+public class TimelineItemUpdateRequest {
     private String title;
     private String description;
     private LocalDateTime scheduledAt;
     private Integer durationMinutes;
-    private LocalDateTime endTime;
     private TimelineItem.ItemType itemType;
-    private ai.eventplanner.common.domain.enums.Status status;
     private String priority;
     private String location;
     private UUID assignedTo;
@@ -26,7 +22,4 @@ public class TimelineItemResponse {
     private Integer teardownTimeMinutes;
     private String resourcesRequired;
     private String notes;
-    private LocalDateTime completedAt;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
 }
