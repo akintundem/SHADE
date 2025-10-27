@@ -80,7 +80,10 @@ public class RbacInitializationService implements CommandLineRunner {
             createPermission(ResourceType.USER, ActionType.READ, "Read user details", true, false, false),
             createPermission(ResourceType.USER, ActionType.UPDATE, "Update user details", true, false, false),
             createPermission(ResourceType.USER, ActionType.DELETE, "Delete users", true, false, false),
-            createPermission(ResourceType.USER, ActionType.MANAGE, "Manage all user aspects", true, false, false)
+            createPermission(ResourceType.USER, ActionType.MANAGE, "Manage all user aspects", true, false, false),
+
+            // Weather permissions
+            createPermission(ResourceType.WEATHER, ActionType.READ, "Read weather data", true, false, true)
         );
 
         permissionRepository.saveAll(permissions);
@@ -112,7 +115,8 @@ public class RbacInitializationService implements CommandLineRunner {
             "event.create", "event.read", "event.update", "event.delete", "event.manage",
             "budget.create", "budget.read", "budget.update", "budget.delete", "budget.manage",
             "vendor.create", "vendor.read", "vendor.update", "vendor.delete", "vendor.manage",
-            "role.assign", "role.remove", "role.read", "role.manage"
+            "role.assign", "role.remove", "role.read", "role.manage",
+            "weather.read"
         ), "event");
 
         // Event Coordinator permissions
@@ -120,19 +124,112 @@ public class RbacInitializationService implements CommandLineRunner {
             "event.read", "event.update",
             "budget.read", "budget.update",
             "vendor.read", "vendor.update",
-            "role.assign", "role.read"
+            "role.assign", "role.read",
+            "weather.read"
         ), "event");
 
         // Event Staff permissions
         createRolePermissions(RoleName.STAFF, List.of(
             "event.read",
             "budget.read",
-            "vendor.read"
+            "vendor.read",
+            "weather.read"
         ), "event");
 
         // Event Volunteer permissions
         createRolePermissions(RoleName.VOLUNTEER, List.of(
-            "event.read"
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Security permissions
+        createRolePermissions(RoleName.SECURITY, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Technical permissions
+        createRolePermissions(RoleName.TECHNICAL, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Catering permissions
+        createRolePermissions(RoleName.CATERING, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Cleanup permissions
+        createRolePermissions(RoleName.CLEANUP, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Registration permissions
+        createRolePermissions(RoleName.REGISTRATION, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Photographer permissions
+        createRolePermissions(RoleName.PHOTOGRAPHER, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Videographer permissions
+        createRolePermissions(RoleName.VIDEographer, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // DJ permissions
+        createRolePermissions(RoleName.DJ, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // MC permissions
+        createRolePermissions(RoleName.MC, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Speaker permissions
+        createRolePermissions(RoleName.SPEAKER, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Moderator permissions
+        createRolePermissions(RoleName.MODERATOR, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Sponsor permissions
+        createRolePermissions(RoleName.SPONSOR, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Vendor permissions
+        createRolePermissions(RoleName.VENDOR, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Media permissions
+        createRolePermissions(RoleName.MEDIA, List.of(
+            "event.read",
+            "weather.read"
+        ), "event");
+
+        // Guest permissions
+        createRolePermissions(RoleName.GUEST, List.of(
+            "event.read",
+            "weather.read"
         ), "event");
 
         log.info("Initialized role permissions");

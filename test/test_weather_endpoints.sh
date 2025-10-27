@@ -17,12 +17,24 @@ NC='\033[0m' # No Color
 
 # Configuration
 BASE_URL="http://localhost:8080"
+CLIENT_ID="web-app"
 REPORT_FILE="reports/weather_test_report_$(date +%Y%m%d_%H%M%S).md"
 
 # Test counters
 TOTAL_TESTS=0
 PASSED_TESTS=0
 FAILED_TESTS=0
+
+# Variables to store tokens and user data
+ACCESS_TOKEN=""
+REFRESH_TOKEN=""
+USER_ID=""
+
+# Generate random email for each test run to avoid conflicts
+RANDOM_ID=$(date +%s%N | cut -b1-10)
+TEST_USER_EMAIL="weathertest${RANDOM_ID}@example.com"
+TEST_USER_PASSWORD="Password123!"
+TEST_USER_NAME="Weather Test User"
 
 # Test coordinates and locations
 NEW_YORK_LAT="40.7128"
@@ -41,6 +53,7 @@ cat > "$REPORT_FILE" << EOF
 
 **Test Started:** $(date)
 **Base URL:** $BASE_URL
+**Client ID:** $CLIENT_ID
 **Report File:** $REPORT_FILE
 
 ## Test Summary
@@ -61,6 +74,15 @@ cat > "$REPORT_FILE" << EOF
 
 EOF
 
+# Function to build headers with authentication
+build_auth_headers() {
+    if [ -n "$ACCESS_TOKEN" ]; then
+        echo "-H 'Content-Type: application/json' -H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'"
+    else
+        echo "-H 'Content-Type: application/json' -H 'X-Client-ID: $CLIENT_ID'"
+    fi
+}
+
 # Function to run a test and log results
 run_test() {
     local test_name="$1"
@@ -74,6 +96,7 @@ run_test() {
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
     
     echo -e "${BLUE}🧪 Running: $test_name${NC}"
+    echo -e "${CYAN}   URL: $BASE_URL$endpoint${NC}"
     
     # Build curl command
     local curl_cmd="curl -s -w '%{http_code}' -X $method"
@@ -100,6 +123,7 @@ run_test() {
         local status_icon="✅"
     else
         echo -e "${RED}❌ FAILED${NC} - Expected: $expected_status, Got: $http_code"
+        echo -e "${RED}   Response: $response_body${NC}"
         FAILED_TESTS=$((FAILED_TESTS + 1))
         local status_icon="❌"
     fi
@@ -111,8 +135,10 @@ run_test() {
 **Status:** $status_icon $http_code (Expected: $expected_status)
 **Description:** $description
 **Endpoint:** $method $endpoint
+**Full URL:** $BASE_URL$endpoint
 **Request Headers:** $headers
 **Request Body:** $data
+**Curl Command:** $curl_cmd
 
 **Response:**
 \`\`\`json
@@ -123,71 +149,102 @@ $response_body
 
 EOF
     
+    # Extract tokens and user data from successful responses
+    if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
+        case "$test_name" in
+            "User Registration")
+                ACCESS_TOKEN=$(echo "$response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
+                REFRESH_TOKEN=$(echo "$response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
+                USER_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+                ;;
+            "User Login")
+                ACCESS_TOKEN=$(echo "$response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
+                REFRESH_TOKEN=$(echo "$response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
+                USER_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+                ;;
+        esac
+    fi
+    
+    # Extract important data from successful weather responses
+    if [ "$http_code" = "200" ]; then
+        case "$test_name" in
+            *"Forecast"*)
+                # Extract temperature and weather condition from forecast responses
+                local temperature=$(echo "$response_body" | grep -o '"temperature":[^,}]*' | head -1 | cut -d':' -f2 | tr -d ' "')
+                local condition=$(echo "$response_body" | grep -o '"condition":"[^"]*"' | head -1 | cut -d'"' -f4)
+                if [ -n "$temperature" ]; then
+                    echo -e "${CYAN}   Temperature: ${temperature}°C${NC}"
+                fi
+                if [ -n "$condition" ]; then
+                    echo -e "${CYAN}   Condition: ${condition}${NC}"
+                fi
+                ;;
+            *"Event Viability"*)
+                # Extract viability recommendation
+                local viability=$(echo "$response_body" | grep -o '"viable":[^,}]*' | cut -d':' -f2 | tr -d ' "')
+                local recommendation=$(echo "$response_body" | grep -o '"recommendation":"[^"]*"' | cut -d'"' -f4)
+                if [ -n "$viability" ]; then
+                    echo -e "${CYAN}   Viable: ${viability}${NC}"
+                fi
+                if [ -n "$recommendation" ]; then
+                    echo -e "${CYAN}   Recommendation: ${recommendation}${NC}"
+                fi
+                ;;
+            *"Geocode"*)
+                # Extract coordinates from geocoding responses
+                local lat=$(echo "$response_body" | grep -o '"latitude":[^,}]*' | cut -d':' -f2 | tr -d ' "')
+                local lon=$(echo "$response_body" | grep -o '"longitude":[^,}]*' | cut -d':' -f2 | tr -d ' "')
+                if [ -n "$lat" ] && [ -n "$lon" ]; then
+                    echo -e "${CYAN}   Coordinates: ${lat}, ${lon}${NC}"
+                fi
+                ;;
+        esac
+    fi
+    
     echo ""
 }
 
 # Function to wait for service to be ready
 wait_for_service() {
-    echo -e "${YELLOW}⏳ Waiting for services to be ready...${NC}"
+    echo -e "${YELLOW}⏳ Waiting for Java Spring Boot service to be ready...${NC}"
     local max_attempts=60
     local attempt=1
-    local java_ready=false
-    local python_ready=false
     
     while [ $attempt -le $max_attempts ]; do
         # Check Java Spring Boot service
-        if ! $java_ready; then
-            if curl -s "$BASE_URL/actuator/health" > /dev/null 2>&1; then
-                echo -e "${GREEN}✅ Java Application is ready!${NC}"
-                java_ready=true
-            else
-                echo -e "${YELLOW}   Attempt $attempt/$max_attempts - waiting for Java Application...${NC}"
-            fi
-        fi
-        
-        # Check Python Shade Assistant service
-        if ! $python_ready; then
-            if curl -s "http://localhost:8000/health" > /dev/null 2>&1; then
-                echo -e "${GREEN}✅ Python Shade Assistant is ready!${NC}"
-                python_ready=true
-            else
-                echo -e "${YELLOW}   Attempt $attempt/$max_attempts - waiting for Python Assistant...${NC}"
-            fi
-        fi
-        
-        # If both services are ready, return success
-        if $java_ready && $python_ready; then
-            echo -e "${GREEN}✅ All services are ready!${NC}"
+        if curl -s "$BASE_URL/actuator/health" > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Java Application is ready!${NC}"
             return 0
+        else
+            echo -e "${YELLOW}   Attempt $attempt/$max_attempts - waiting for Java Application...${NC}"
         fi
         
         sleep 2
         ((attempt++))
     done
     
-    echo -e "${RED}❌ Services failed to start within expected time${NC}"
-    echo -e "${RED}   Java ready: $java_ready${NC}"
-    echo -e "${RED}   Python ready: $python_ready${NC}"
+    echo -e "${RED}❌ Java service failed to start within expected time${NC}"
     return 1
 }
 
 # Function to stop and start services
 restart_services() {
-    echo -e "${YELLOW}🛑 Stopping services...${NC}"
-    cd .. && ./stop_full_stack.sh && cd test
+    echo -e "${YELLOW}🛑 Stopping Java service...${NC}"
+    pkill -f "spring-boot:run" || true
     
-    echo -e "${YELLOW}⏳ Waiting 5 seconds...${NC}"
-    sleep 5
+    echo -e "${YELLOW}⏳ Waiting 3 seconds...${NC}"
+    sleep 3
     
-    echo -e "${YELLOW}🚀 Starting services...${NC}"
-    cd .. && ./start_full_stack.sh & cd test
+    echo -e "${YELLOW}🚀 Starting Java Spring Boot Application...${NC}"
+    cd .. && mvn spring-boot:run &
+    cd test
     
-    # Wait for services to be ready
+    # Wait for service to be ready
     if wait_for_service; then
-        echo -e "${GREEN}✅ Services restarted successfully!${NC}"
+        echo -e "${GREEN}✅ Java service restarted successfully!${NC}"
         return 0
     else
-        echo -e "${RED}❌ Failed to restart services${NC}"
+        echo -e "${RED}❌ Failed to restart Java service${NC}"
         return 1
     fi
 }
@@ -195,20 +252,22 @@ restart_services() {
 # Main test execution
 main() {
     echo -e "${PURPLE}📋 Test Plan:${NC}"
-    echo "1. Stop and restart services"
+    echo "1. Stop and restart Java service"
     echo "2. Test health check endpoint"
-    echo "3. Test weather forecast by coordinates"
-    echo "4. Test weather forecast by location name"
-    echo "5. Test outdoor event viability"
-    echo "6. Test geocoding service"
-    echo "7. Test error handling"
+    echo "3. Register test user"
+    echo "4. Login to get authentication token"
+    echo "5. Test weather forecast by coordinates"
+    echo "6. Test weather forecast by location name"
+    echo "7. Test outdoor event viability"
+    echo "8. Test geocoding service"
+    echo "9. Test error handling"
     echo ""
     
-    # Step 1: Restart services
-    echo -e "${CYAN}🔄 Step 1: Restarting Services${NC}"
-    echo "=================================="
+    # Step 1: Restart service
+    echo -e "${CYAN}🔄 Step 1: Restarting Java Service${NC}"
+    echo "====================================="
     if ! restart_services; then
-        echo -e "${RED}❌ Failed to restart services. Exiting.${NC}"
+        echo -e "${RED}❌ Failed to restart Java service. Exiting.${NC}"
         exit 1
     fi
     echo ""
@@ -216,75 +275,95 @@ main() {
     # Step 2: Health Check Tests
     echo -e "${CYAN}🏥 Step 2: Health Check Tests${NC}"
     echo "============================="
-    run_test "Health Check" "GET" "/actuator/health" "-H 'Content-Type: application/json'" "" "200" "Check if application is healthy"
+    run_test "Health Check" "GET" "/actuator/health" "-H 'Content-Type: application/json' -H 'X-Client-ID: $CLIENT_ID'" "" "200" "Check if application is healthy"
     echo ""
     
-    # Step 3: Forecast by Coordinates Tests
-    echo -e "${CYAN}📍 Step 3: Forecast by Coordinates Tests${NC}"
+    # Step 3: User Registration
+    echo -e "${CYAN}📝 Step 3: User Registration${NC}"
+    echo "============================="
+    run_test "User Registration" "POST" "/api/v1/auth/register" "-H 'Content-Type: application/json' -H 'X-Client-ID: $CLIENT_ID'" "{\"email\":\"$TEST_USER_EMAIL\",\"password\":\"$TEST_USER_PASSWORD\",\"confirmPassword\":\"$TEST_USER_PASSWORD\",\"name\":\"$TEST_USER_NAME\",\"acceptTerms\":true,\"acceptPrivacy\":true}" "201" "Register test user for weather testing"
+    echo ""
+    
+    # Step 4: User Login
+    echo -e "${CYAN}🔑 Step 4: User Login${NC}"
+    echo "======================"
+    run_test "User Login" "POST" "/api/v1/auth/login" "-H 'Content-Type: application/json' -H 'X-Client-ID: $CLIENT_ID'" "{\"email\":\"$TEST_USER_EMAIL\",\"password\":\"$TEST_USER_PASSWORD\"}" "200" "Login to get authentication token"
+    echo ""
+    
+    # Check if we have an access token
+    if [ -z "$ACCESS_TOKEN" ]; then
+        echo -e "${RED}❌ Failed to get access token. Cannot proceed with weather tests.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ Authentication successful! Access token obtained.${NC}"
+    echo ""
+    
+    # Step 5: Forecast by Coordinates Tests
+    echo -e "${CYAN}📍 Step 5: Forecast by Coordinates Tests${NC}"
     echo "============================================="
-    run_test "New York Forecast" "GET" "/api/v1/weather/forecast?lat=$NEW_YORK_LAT&lon=$NEW_YORK_LON" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for New York coordinates"
+    run_test "New York Forecast" "GET" "/api/v1/weather/forecast?lat=$NEW_YORK_LAT&lon=$NEW_YORK_LON" "$(build_auth_headers)" "" "200" "Get weather forecast for New York coordinates"
     
-    run_test "London Forecast" "GET" "/api/v1/weather/forecast?lat=$LONDON_LAT&lon=$LONDON_LON" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for London coordinates"
+    run_test "London Forecast" "GET" "/api/v1/weather/forecast?lat=$LONDON_LAT&lon=$LONDON_LON" "$(build_auth_headers)" "" "200" "Get weather forecast for London coordinates"
     
-    run_test "Miami Forecast" "GET" "/api/v1/weather/forecast?lat=$MIAMI_LAT&lon=$MIAMI_LON" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for Miami coordinates"
+    run_test "Miami Forecast" "GET" "/api/v1/weather/forecast?lat=$MIAMI_LAT&lon=$MIAMI_LON" "$(build_auth_headers)" "" "200" "Get weather forecast for Miami coordinates"
     
-    run_test "Seattle Forecast" "GET" "/api/v1/weather/forecast?lat=$SEATTLE_LAT&lon=$SEATTLE_LON" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for Seattle coordinates"
+    run_test "Seattle Forecast" "GET" "/api/v1/weather/forecast?lat=$SEATTLE_LAT&lon=$SEATTLE_LON" "$(build_auth_headers)" "" "200" "Get weather forecast for Seattle coordinates"
     echo ""
     
-    # Step 4: Forecast by Location Name Tests
-    echo -e "${CYAN}🏙️  Step 4: Forecast by Location Name Tests${NC}"
+    # Step 6: Forecast by Location Name Tests
+    echo -e "${CYAN}🏙️  Step 6: Forecast by Location Name Tests${NC}"
     echo "============================================="
-    run_test "New York by Name" "GET" "/api/v1/weather/forecast/location?location=New%20York" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for New York by name"
+    run_test "New York by Name" "GET" "/api/v1/weather/forecast/location?location=New%20York" "$(build_auth_headers)" "" "200" "Get weather forecast for New York by name"
     
-    run_test "London by Name" "GET" "/api/v1/weather/forecast/location?location=London" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for London by name"
+    run_test "London by Name" "GET" "/api/v1/weather/forecast/location?location=London" "$(build_auth_headers)" "" "200" "Get weather forecast for London by name"
     
-    run_test "Miami by Name" "GET" "/api/v1/weather/forecast/location?location=Miami" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for Miami by name"
+    run_test "Miami by Name" "GET" "/api/v1/weather/forecast/location?location=Miami" "$(build_auth_headers)" "" "200" "Get weather forecast for Miami by name"
     
-    run_test "Seattle by Name" "GET" "/api/v1/weather/forecast/location?location=Seattle" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for Seattle by name"
+    run_test "Seattle by Name" "GET" "/api/v1/weather/forecast/location?location=Seattle" "$(build_auth_headers)" "" "200" "Get weather forecast for Seattle by name"
     
-    run_test "Toronto by Name" "GET" "/api/v1/weather/forecast/location?location=Toronto" "-H 'Content-Type: application/json'" "" "200" "Get weather forecast for Toronto by name"
+    run_test "Toronto by Name" "GET" "/api/v1/weather/forecast/location?location=Toronto" "$(build_auth_headers)" "" "200" "Get weather forecast for Toronto by name"
     echo ""
     
-    # Step 5: Event Viability Tests
-    echo -e "${CYAN}🎪 Step 5: Event Viability Tests${NC}"
+    # Step 7: Event Viability Tests
+    echo -e "${CYAN}🎪 Step 7: Event Viability Tests${NC}"
     echo "=================================="
     local event_date=$(date -d "+3 days" +%Y-%m-%d 2>/dev/null || date -v+3d +%Y-%m-%d 2>/dev/null || echo "2024-01-15")
     
-    run_test "New York Event Viability" "GET" "/api/v1/weather/event-viability?lat=$NEW_YORK_LAT&lon=$NEW_YORK_LON&eventDate=$event_date" "-H 'Content-Type: application/json'" "" "200" "Check outdoor event viability for New York"
+    run_test "New York Event Viability" "GET" "/api/v1/weather/event-viability?lat=$NEW_YORK_LAT&lon=$NEW_YORK_LON&eventDate=$event_date" "$(build_auth_headers)" "" "200" "Check outdoor event viability for New York"
     
-    run_test "London Event Viability" "GET" "/api/v1/weather/event-viability?lat=$LONDON_LAT&lon=$LONDON_LON&eventDate=$event_date" "-H 'Content-Type: application/json'" "" "200" "Check outdoor event viability for London"
+    run_test "London Event Viability" "GET" "/api/v1/weather/event-viability?lat=$LONDON_LAT&lon=$LONDON_LON&eventDate=$event_date" "$(build_auth_headers)" "" "200" "Check outdoor event viability for London"
     
-    run_test "Miami Event Viability" "GET" "/api/v1/weather/event-viability?lat=$MIAMI_LAT&lon=$MIAMI_LON&eventDate=$event_date" "-H 'Content-Type: application/json'" "" "200" "Check outdoor event viability for Miami"
+    run_test "Miami Event Viability" "GET" "/api/v1/weather/event-viability?lat=$MIAMI_LAT&lon=$MIAMI_LON&eventDate=$event_date" "$(build_auth_headers)" "" "200" "Check outdoor event viability for Miami"
     
-    run_test "Seattle Event Viability" "GET" "/api/v1/weather/event-viability?lat=$SEATTLE_LAT&lon=$SEATTLE_LON&eventDate=$event_date" "-H 'Content-Type: application/json'" "" "200" "Check outdoor event viability for Seattle"
+    run_test "Seattle Event Viability" "GET" "/api/v1/weather/event-viability?lat=$SEATTLE_LAT&lon=$SEATTLE_LON&eventDate=$event_date" "$(build_auth_headers)" "" "200" "Check outdoor event viability for Seattle"
     echo ""
     
-    # Step 6: Geocoding Tests
-    echo -e "${CYAN}🗺️  Step 6: Geocoding Tests${NC}"
+    # Step 8: Geocoding Tests
+    echo -e "${CYAN}🗺️  Step 8: Geocoding Tests${NC}"
     echo "============================="
-    run_test "Geocode New York" "GET" "/api/v1/weather/geocode?location=New%20York" "-H 'Content-Type: application/json'" "" "200" "Geocode New York location"
+    run_test "Geocode New York" "GET" "/api/v1/weather/geocode?location=New%20York" "$(build_auth_headers)" "" "200" "Geocode New York location"
     
-    run_test "Geocode London" "GET" "/api/v1/weather/geocode?location=London" "-H 'Content-Type: application/json'" "" "200" "Geocode London location"
+    run_test "Geocode London" "GET" "/api/v1/weather/geocode?location=London" "$(build_auth_headers)" "" "200" "Geocode London location"
     
-    run_test "Geocode Tokyo" "GET" "/api/v1/weather/geocode?location=Tokyo" "-H 'Content-Type: application/json'" "" "200" "Geocode Tokyo location"
+    run_test "Geocode Tokyo" "GET" "/api/v1/weather/geocode?location=Tokyo" "$(build_auth_headers)" "" "200" "Geocode Tokyo location"
     
-    run_test "Geocode Sydney" "GET" "/api/v1/weather/geocode?location=Sydney" "-H 'Content-Type: application/json'" "" "200" "Geocode Sydney location"
+    run_test "Geocode Sydney" "GET" "/api/v1/weather/geocode?location=Sydney" "$(build_auth_headers)" "" "200" "Geocode Sydney location"
     
-    run_test "Geocode Paris" "GET" "/api/v1/weather/geocode?location=Paris" "-H 'Content-Type: application/json'" "" "200" "Geocode Paris location"
+    run_test "Geocode Paris" "GET" "/api/v1/weather/geocode?location=Paris" "$(build_auth_headers)" "" "200" "Geocode Paris location"
     echo ""
     
-    # Step 7: Error Handling Tests
-    echo -e "${CYAN}⚠️  Step 7: Error Handling Tests${NC}"
+    # Step 9: Error Handling Tests
+    echo -e "${CYAN}⚠️  Step 9: Error Handling Tests${NC}"
     echo "=================================="
-    run_test "Invalid Coordinates" "GET" "/api/v1/weather/forecast?lat=999&lon=999" "-H 'Content-Type: application/json'" "" "400" "Test with invalid coordinates"
+    run_test "Invalid Coordinates" "GET" "/api/v1/weather/forecast?lat=999&lon=999" "$(build_auth_headers)" "" "400" "Test with invalid coordinates"
     
-    run_test "Missing Parameters" "GET" "/api/v1/weather/forecast" "-H 'Content-Type: application/json'" "" "400" "Test with missing required parameters"
+    run_test "Missing Parameters" "GET" "/api/v1/weather/forecast" "$(build_auth_headers)" "" "400" "Test with missing required parameters"
     
-    run_test "Invalid Location" "GET" "/api/v1/weather/forecast/location?location=NonExistentCity12345" "-H 'Content-Type: application/json'" "" "400" "Test with non-existent location"
+    run_test "Invalid Location" "GET" "/api/v1/weather/forecast/location?location=NonExistentCity12345" "$(build_auth_headers)" "" "400" "Test with non-existent location"
     
-    run_test "Invalid Event Date" "GET" "/api/v1/weather/event-viability?lat=$NEW_YORK_LAT&lon=$NEW_YORK_LON&eventDate=invalid-date" "-H 'Content-Type: application/json'" "" "400" "Test with invalid event date format"
+    run_test "Invalid Event Date" "GET" "/api/v1/weather/event-viability?lat=$NEW_YORK_LAT&lon=$NEW_YORK_LON&eventDate=invalid-date" "$(build_auth_headers)" "" "400" "Test with invalid event date format"
     
-    run_test "Past Event Date" "GET" "/api/v1/weather/event-viability?lat=$NEW_YORK_LAT&lon=$NEW_YORK_LON&eventDate=2020-01-01" "-H 'Content-Type: application/json'" "" "400" "Test with past event date"
+    run_test "Past Event Date" "GET" "/api/v1/weather/event-viability?lat=$NEW_YORK_LAT&lon=$NEW_YORK_LON&eventDate=2020-01-01" "$(build_auth_headers)" "" "400" "Test with past event date"
     echo ""
     
     # Generate final summary
@@ -374,6 +453,12 @@ EOF
 EOF
     
     echo -e "${GREEN}📄 Detailed report saved to: $REPORT_FILE${NC}"
+    echo ""
+    
+    # Clean up Java service
+    echo -e "${YELLOW}🧹 Cleaning up Java service...${NC}"
+    pkill -f "spring-boot:run" || true
+    echo -e "${GREEN}✅ Java service stopped${NC}"
     echo ""
     
     if [ $FAILED_TESTS -eq 0 ]; then
