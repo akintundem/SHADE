@@ -377,27 +377,17 @@ authenticate_user() {
     local response_body="${response%???}"
     
     if [ "$http_code" = "201" ]; then
+        # Extract tokens and user ID - try multiple methods for reliability
         ACCESS_TOKEN=$(echo "$response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
         REFRESH_TOKEN=$(echo "$response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
-        
-        # Extract user ID from JWT token (subject claim in payload)
-        if [ -n "$ACCESS_TOKEN" ]; then
-            # JWT format: header.payload.signature
-            local jwt_payload=$(echo "$ACCESS_TOKEN" | cut -d'.' -f2)
-            # Add base64 padding if needed
-            local padding=$((4 - ${#jwt_payload} % 4))
-            if [ $padding -ne 4 ]; then
-                jwt_payload="${jwt_payload}$(printf '%*s' $padding | tr ' ' '=')"
-            fi
-            # Decode base64 and extract 'sub' field (user ID)
-            if command -v jq &> /dev/null; then
-                USER_ID=$(echo "$jwt_payload" | base64 -d 2>/dev/null | jq -r '.sub // empty' 2>/dev/null)
-            else
-                # Fallback: try to extract UUID pattern from decoded payload
-                USER_ID=$(echo "$jwt_payload" | base64 -d 2>/dev/null | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}' | head -1)
-            fi
+        # Try multiple patterns for user ID
+        USER_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+        if [ -z "$USER_ID" ]; then
+            USER_ID=$(echo "$response_body" | grep -oE '"id":\s*"([a-f0-9-]+)"' | cut -d'"' -f4)
         fi
-        
+        if [ -z "$USER_ID" ] && command -v jq &> /dev/null; then
+            USER_ID=$(echo "$response_body" | jq -r '.id // empty')
+        fi
         echo -e "${GREEN}✅ User registered and authenticated${NC}"
         return 0
     elif [ "$http_code" = "400" ]; then
@@ -422,21 +412,10 @@ authenticate_user() {
         if [ "$login_http_code" = "200" ]; then
             ACCESS_TOKEN=$(echo "$login_response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
             REFRESH_TOKEN=$(echo "$login_response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
-            
-            # Extract user ID from JWT token (subject claim in payload)
-            if [ -n "$ACCESS_TOKEN" ]; then
-                local jwt_payload=$(echo "$ACCESS_TOKEN" | cut -d'.' -f2)
-                local padding=$((4 - ${#jwt_payload} % 4))
-                if [ $padding -ne 4 ]; then
-                    jwt_payload="${jwt_payload}$(printf '%*s' $padding | tr ' ' '=')"
-                fi
-                if command -v jq &> /dev/null; then
-                    USER_ID=$(echo "$jwt_payload" | base64 -d 2>/dev/null | jq -r '.sub // empty' 2>/dev/null)
-                else
-                    USER_ID=$(echo "$jwt_payload" | base64 -d 2>/dev/null | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}' | head -1)
-                fi
+            USER_ID=$(echo "$login_response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+            if [ -z "$USER_ID" ] && command -v jq &> /dev/null; then
+                USER_ID=$(echo "$login_response_body" | jq -r '.id // empty')
             fi
-            
             echo -e "${GREEN}✅ User logged in successfully${NC}"
             return 0
         fi
