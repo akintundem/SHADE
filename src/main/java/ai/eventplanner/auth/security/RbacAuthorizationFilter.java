@@ -195,7 +195,7 @@ public class RbacAuthorizationFilter extends OncePerRequestFilter {
         String requestURI = request.getRequestURI();
         String method = request.getMethod();
         
-        log.debug("RBAC Filter checking: {} {}", method, requestURI);
+        log.info("🔍 RBAC Filter checking: {} {} - URI: {}", method, requestURI, requestURI);
         
         // Skip authorization for public endpoints
         if (isPublicEndpoint(requestURI)) {
@@ -205,8 +205,16 @@ public class RbacAuthorizationFilter extends OncePerRequestFilter {
         
         // Get authentication
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        log.info("🔐 RBAC Auth check - auth: {}, principal type: {}", 
+                authentication != null ? "present" : "null",
+                authentication != null && authentication.getPrincipal() != null ? 
+                    authentication.getPrincipal().getClass().getSimpleName() : "null");
+        
         if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal)) {
-            log.warn("No valid authentication found for request: {} {}", method, requestURI);
+            log.warn("❌ No valid authentication found for request: {} {} - Principal: {}", 
+                    method, requestURI, 
+                    authentication != null && authentication.getPrincipal() != null ? 
+                        authentication.getPrincipal().getClass().getName() : "null");
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
