@@ -18,6 +18,8 @@ spring:
       - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchDataAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchRepositoriesAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ReactiveElasticsearchRepositoriesAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.metrics.SystemMetricsAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.metrics.web.tomcat.TomcatMetricsAutoConfiguration
   
   # Component scan to exclude problematic services
   main:
@@ -40,23 +42,23 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
-      maximum-pool-size: ${DB_POOL_MAX_SIZE}
-      minimum-idle: ${DB_POOL_MIN_IDLE}
-      connection-timeout: ${DB_CONNECTION_TIMEOUT}
-      idle-timeout: ${DB_IDLE_TIMEOUT}
-      max-lifetime: ${DB_MAX_LIFETIME}
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT:30000}
+      idle-timeout: ${DB_IDLE_TIMEOUT:600000}
+      max-lifetime: ${DB_MAX_LIFETIME:1800000}
   
   redis:
-    host: ${SPRING_REDIS_HOST}
-    port: ${SPRING_REDIS_PORT}
-    password: ${SPRING_REDIS_PASSWORD}
-    timeout: ${SPRING_REDIS_TIMEOUT}
-    database: ${SPRING_REDIS_DATABASE}
+    host: ${SPRING_REDIS_HOST:localhost}
+    port: ${SPRING_REDIS_PORT:6379}
+    password: ${SPRING_REDIS_PASSWORD:}
+    timeout: ${SPRING_REDIS_TIMEOUT:2000ms}
+    database: ${SPRING_REDIS_DATABASE:0}
     lettuce:
       pool:
-        max-active: ${SPRING_REDIS_POOL_MAX_ACTIVE}
-        max-idle: ${SPRING_REDIS_POOL_MAX_IDLE}
-        min-idle: ${SPRING_REDIS_POOL_MIN_IDLE}
+        max-active: ${SPRING_REDIS_POOL_MAX_ACTIVE:8}
+        max-idle: ${SPRING_REDIS_POOL_MAX_IDLE:8}
+        min-idle: ${SPRING_REDIS_POOL_MIN_IDLE:0}
   
   
   ai:
@@ -84,11 +86,11 @@ spring:
   cache:
     type: caffeine
     caffeine:
-      spec: maximumSize=${CACHE_MAX_SIZE},expireAfterWrite=${CACHE_EXPIRE_AFTER_WRITE}
+      spec: maximumSize=${CACHE_MAX_SIZE:1000},expireAfterWrite=${CACHE_EXPIRE_AFTER_WRITE:300s}
 
 assistant:
   service:
-    base-url: ${SHADE_ASSISTANT_URL}
+    base-url: ${SHADE_ASSISTANT_URL:http://python-app:8000}
 
 # Firebase Configuration
 firebase:
@@ -98,13 +100,13 @@ firebase:
 # JWT Configuration
 jwt:
   secret: ${JWT_SECRET} 
-  expiration: ${JWT_EXPIRATION} 
-  refresh-expiration: ${JWT_REFRESH_EXPIRATION}
+  expiration: ${JWT_EXPIRATION:86400000} 
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
 
 # Authentication Configuration
 auth:
   session:
-    max-concurrent: ${AUTH_SESSION_MAX_CONCURRENT}
+    max-concurrent: ${AUTH_SESSION_MAX_CONCURRENT:5}
 
 # Application Configuration
 app:
@@ -124,26 +126,26 @@ external:
 # Logging
 logging:
   level:
-    ai.eventplanner: ${LOG_LEVEL_APP}
-    org.springframework.security: ${LOG_LEVEL_SECURITY}
-    org.springframework.web: ${LOG_LEVEL_WEB}
-    org.springframework.ai: ${LOG_LEVEL_AI}
-    org.springframework.validation: ${LOG_LEVEL_VALIDATION}
+    ai.eventplanner: ${LOG_LEVEL_APP:INFO}
+    org.springframework.security: ${LOG_LEVEL_SECURITY:WARN}
+    org.springframework.web: ${LOG_LEVEL_WEB:INFO}
+    org.springframework.ai: ${LOG_LEVEL_AI:INFO}
+    org.springframework.validation: ${LOG_LEVEL_VALIDATION:WARN}
   pattern:
-    console: ${LOG_PATTERN}
+    console: ${LOG_PATTERN:%d{yyyy-MM-dd HH:mm:ss} - %msg%n}
 
 # Management endpoints
 management:
   endpoints:
     web:
       exposure:
-        include: ${MANAGEMENT_ENDPOINTS}
+        include: ${MANAGEMENT_ENDPOINTS:health,info,metrics,env}
   endpoint:
     health:
-      show-details: ${MANAGEMENT_HEALTH_DETAILS}
+      show-details: ${MANAGEMENT_HEALTH_DETAILS:always}
   health:
     elasticsearch:
-      enabled: ${MANAGEMENT_ELASTICSEARCH_ENABLED}
+      enabled: ${MANAGEMENT_ELASTICSEARCH_ENABLED:false}
 
 # OpenAPI Documentation
 springdoc:

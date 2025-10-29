@@ -158,11 +158,10 @@ run_test() {
 
 # Function to wait for service to be ready
 wait_for_service() {
-    echo -e "${YELLOW}⏳ Waiting for services to be ready...${NC}"
+    echo -e "${YELLOW}⏳ Waiting for service to be ready...${NC}"
     local max_attempts=60
     local attempt=1
     local java_ready=false
-    local python_ready=false
     
     while [ $attempt -le $max_attempts ]; do
         # Check Java Spring Boot service
@@ -175,19 +174,9 @@ wait_for_service() {
             fi
         fi
         
-        # Check Python Shade Assistant service
-        if ! $python_ready; then
-            if curl -s "http://localhost:8000/health" > /dev/null 2>&1; then
-                echo -e "${GREEN}✅ Python Shade Assistant is ready!${NC}"
-                python_ready=true
-            else
-                echo -e "${YELLOW}   Attempt $attempt/$max_attempts - waiting for Python Assistant...${NC}"
-            fi
-        fi
-        
-        # If both services are ready, return success
-        if $java_ready && $python_ready; then
-            echo -e "${GREEN}✅ All services are ready!${NC}"
+        # If service is ready, return success
+        if $java_ready; then
+            echo -e "${GREEN}✅ Service is ready!${NC}"
             return 0
         fi
         
@@ -195,9 +184,7 @@ wait_for_service() {
         ((attempt++))
     done
     
-    echo -e "${RED}❌ Services failed to start within expected time${NC}"
-    echo -e "${RED}   Java ready: $java_ready${NC}"
-    echo -e "${RED}   Python ready: $python_ready${NC}"
+    echo -e "${RED}❌ Service failed to start within expected time${NC}"
     return 1
 }
 

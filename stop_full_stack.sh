@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Full Stack Event Planner Stop Script - Hybrid Mode
-# This script stops Java/Python locally and optionally databases in Docker
+# This script stops Java locally and optionally databases in Docker
 
 echo "🛑 Stopping Event Planner Full Stack Application - Hybrid Mode"
 echo "=============================================================="
@@ -36,17 +36,9 @@ kill_port() {
 echo -e "${BLUE}☕ Stopping Java Spring Boot Application...${NC}"
 kill_port 8080 "Java Application"
 
-# Stop Python Shade Assistant (port 8000)
-echo -e "${BLUE}🐍 Stopping Python Shade Assistant...${NC}"
-kill_port 8000 "Python Shade Assistant"
-
 # Kill any remaining Maven processes
 echo -e "${YELLOW}🧹 Cleaning up Maven processes...${NC}"
 pkill -f "spring-boot:run" 2>/dev/null || true
-
-# Kill any remaining Python processes
-echo -e "${YELLOW}🧹 Cleaning up Python processes...${NC}"
-pkill -f "python.*main.py" 2>/dev/null || true
 
 # Wait a moment for processes to fully stop
 sleep 2
@@ -58,12 +50,6 @@ if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
     echo -e "${RED}❌ Port 8080 is still in use${NC}"
 else
     echo -e "${GREEN}✅ Port 8080 is free${NC}"
-fi
-
-if lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${RED}❌ Port 8000 is still in use${NC}"
-else
-    echo -e "${GREEN}✅ Port 8000 is free${NC}"
 fi
 
 # Ask if user wants to stop databases too
@@ -86,7 +72,6 @@ echo "=============================================="
 echo ""
 echo -e "${BLUE}📝 Log files are preserved:${NC}"
 echo "   • java_app.log"
-echo "   • python_app.log"
 echo ""
 echo -e "${BLUE}📝 Database management:${NC}"
 echo "   • Stop databases: docker-compose down"

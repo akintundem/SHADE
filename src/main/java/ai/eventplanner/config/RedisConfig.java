@@ -1,8 +1,9 @@
 package ai.eventplanner.config;
 
-import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisPassword;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
@@ -20,26 +21,37 @@ import java.time.Duration;
 @Configuration
 public class RedisConfig {
 
+    @Value("${spring.redis.host}")
+    private String redisHost;
+
+    @Value("${spring.redis.port}")
+    private int redisPort;
+
+    @Value("${spring.redis.password}")
+    private String redisPassword;
+
+    @Value("${spring.redis.database}")
+    private int redisDatabase;
+
+    @Value("${spring.redis.timeout}")
+    private Duration redisTimeout;
+
     @Bean
-    public RedisConnectionFactory redisConnectionFactory(RedisProperties redisProperties) {
+    @Primary
+    public RedisConnectionFactory redisConnectionFactory() {
         RedisStandaloneConfiguration standaloneConfiguration = new RedisStandaloneConfiguration();
-        standaloneConfiguration.setHostName(redisProperties.getHost());
-        standaloneConfiguration.setPort(redisProperties.getPort());
+        standaloneConfiguration.setHostName(redisHost);
+        standaloneConfiguration.setPort(redisPort);
 
-        if (redisProperties.getPassword() != null && !redisProperties.getPassword().isEmpty()) {
-            standaloneConfiguration.setPassword(RedisPassword.of(redisProperties.getPassword()));
+        if (redisPassword != null && !redisPassword.isEmpty()) {
+            standaloneConfiguration.setPassword(RedisPassword.of(redisPassword));
         }
-        standaloneConfiguration.setDatabase(redisProperties.getDatabase());
+        standaloneConfiguration.setDatabase(redisDatabase);
 
-        Duration timeout = redisProperties.getTimeout();
         LettuceClientConfiguration.LettuceClientConfigurationBuilder builder = LettuceClientConfiguration.builder();
 
-        if (redisProperties.getSsl() != null && redisProperties.getSsl().isEnabled()) {
-            builder.useSsl();
-        }
-
-        if (timeout != null) {
-            builder.commandTimeout(timeout);
+        if (redisTimeout != null) {
+            builder.commandTimeout(redisTimeout);
         }
 
         LettuceClientConfiguration clientConfiguration = builder.build();

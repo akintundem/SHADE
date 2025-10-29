@@ -157,7 +157,7 @@ EOF
 
 # Function to wait for service to be ready
 wait_for_service() {
-    echo -e "${YELLOW}⏳ Waiting for services to be ready...${NC}"
+    echo -e "${YELLOW}⏳ Waiting for service to be ready...${NC}"
     local max_attempts=60
     local attempt=1
     local java_ready=false

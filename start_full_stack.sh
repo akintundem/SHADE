@@ -68,12 +68,10 @@ wait_for_service() {
 # Check if required ports are available
 echo -e "${BLUE}🔍 Checking port availability...${NC}"
 check_port 8080 || exit 1
-check_port 8000 || exit 1
 
 # Kill any existing processes on these ports
 echo -e "${YELLOW}🧹 Cleaning up any existing processes...${NC}"
 lsof -ti:8080 | xargs kill -9 2>/dev/null || true
-lsof -ti:8000 | xargs kill -9 2>/dev/null || true
 
 # Start databases in Docker
 echo -e "${BLUE}🐳 Starting databases in Docker...${NC}"
@@ -115,54 +113,9 @@ else
     exit 1
 fi
 
-# Start Python Shade Assistant locally
-echo -e "${BLUE}🐍 Starting Python Shade Assistant locally...${NC}"
-echo "   - Port: 8000"
-echo "   - Chat Interface: http://localhost:8000"
-
-# Change to shade directory and start Python app
-cd shade
-
-# Remove and recreate virtual environment for correct architecture
-if [ -d "venv" ]; then
-    echo -e "${YELLOW}⚠️  Removing old virtual environment for architecture compatibility...${NC}"
-    rm -rf venv
-fi
-python3 -m venv venv
-
-# Activate virtual environment
-source venv/bin/activate
-
-# Upgrade pip and install dependencies
-pip install --upgrade pip
-pip install -r requirements.txt
-
-touch venv/.deps_installed
-
-# Start Python app in background
-python main.py > ../python_app.log 2>&1 &
-
-PYTHON_PID=$!
-echo "   Python PID: $PYTHON_PID"
-
-# Go back to root directory
-cd ..
-
-# Wait for Python app to be ready
-if wait_for_service "http://localhost:8000" "Python Shade Assistant"; then
-    echo -e "${GREEN}✅ Python Shade Assistant started successfully!${NC}"
-    echo "   - Chat Interface: http://localhost:8000"
-else
-    echo -e "${RED}❌ Failed to start Python Shade Assistant${NC}"
-    echo "Check python_app.log for details"
-    kill $PYTHON_PID 2>/dev/null || true
-    kill $JAVA_PID 2>/dev/null || true
-    exit 1
-fi
-
 # Display final status
 echo ""
-echo -e "${GREEN}🎉 Hybrid Setup Started Successfully!${NC}"
+echo -e "${GREEN}🎉 Services Started Successfully!${NC}"
 echo "================================================"
 echo -e "${BLUE}📊 Services Status:${NC}"
 echo "   🐳 PostgreSQL (Docker): localhost:5432"
@@ -170,20 +123,16 @@ echo "   🐳 Redis (Docker): localhost:6379"
 echo "   🐳 MongoDB (Docker): localhost:27017"
 echo "   🐳 Pinecone Local (Docker): localhost:5081"
 echo "   ☕ Java Spring Boot (Local): http://localhost:8080"
-echo "   🐍 Python Shade Assistant (Local): http://localhost:8000"
 echo ""
 echo -e "${BLUE}🔗 Quick Links:${NC}"
 echo "   • Java Health: http://localhost:8080/actuator/health"
 echo "   • Java API Docs: http://localhost:8080/swagger-ui"
 echo "   • Event API: http://localhost:8080/api/v1/events"
-echo "   • Chat Interface: http://localhost:8000"
 echo ""
 echo -e "${BLUE}📝 Management Commands:${NC}"
 echo "   • View Java logs: tail -f java_app.log"
-echo "   • View Python logs: tail -f python_app.log"
 echo "   • Stop databases: docker-compose down"
 echo "   • Stop Java: kill $JAVA_PID"
-echo "   • Stop Python: kill $PYTHON_PID"
 echo ""
 echo -e "${YELLOW}🛑 To stop all services: ./stop_full_stack.sh${NC}"
 echo ""
@@ -193,7 +142,6 @@ cleanup() {
     echo ""
     echo -e "${YELLOW}🛑 Stopping services...${NC}"
     kill $JAVA_PID 2>/dev/null || true
-    kill $PYTHON_PID 2>/dev/null || true
     echo -e "${GREEN}✅ Local services stopped${NC}"
     echo -e "${YELLOW}💡 Databases are still running in Docker${NC}"
     echo -e "${YELLOW}💡 To stop databases: docker-compose down${NC}"
@@ -208,5 +156,5 @@ echo -e "${BLUE}📋 Monitoring logs (Ctrl+C to stop monitoring, services will c
 echo ""
 
 # Monitor logs
-tail -f java_app.log python_app.log
+tail -f java_app.log
 
