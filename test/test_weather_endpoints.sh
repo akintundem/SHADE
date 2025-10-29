@@ -2,6 +2,47 @@
 
 # Comprehensive Weather Controller Endpoints Test Script
 # Tests all weather-related endpoints and generates a detailed report
+# Supports both local and production testing with custom API URLs
+#
+# Usage:
+#   ./test_weather_endpoints.sh                    # Interactive mode
+#   ./test_weather_endpoints.sh local              # Test localhost:8080
+#   ./test_weather_endpoints.sh prod <API_URL>     # Test production URL
+#   ./test_weather_endpoints.sh help               # Show help
+
+# Function to show help
+show_help() {
+    echo "🌤️  Weather Controller Endpoints Test Script"
+    echo "============================================="
+    echo ""
+    echo "Usage:"
+    echo "  $0                    # Interactive mode - choose environment"
+    echo "  $0 local              # Test localhost:8080"
+    echo "  $0 prod <API_URL>     # Test production URL"
+    echo "  $0 help               # Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  $0 local"
+    echo "  $0 prod https://your-app.railway.app"
+    echo "  $0 prod https://your-app.herokuapp.com"
+    echo "  $0 prod https://api.yourdomain.com"
+    echo ""
+    echo "Interactive Mode:"
+    echo "  Run without arguments to choose environment interactively"
+    echo ""
+    echo "Requirements:"
+    echo "  - curl command available"
+    echo "  - jq command available (for JSON parsing)"
+    echo "  - For local testing: Spring Boot app running on port 8080"
+    echo "  - For production testing: Valid API URL with health endpoint"
+    echo ""
+    exit 0
+}
+
+# Check for help argument
+if [ "$1" = "help" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    show_help
+fi
 
 echo "🌤️  Starting Comprehensive Weather Controller Endpoints Test"
 echo "============================================================"
@@ -15,8 +56,82 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Function to get user input for testing environment
+get_testing_environment() {
+    # Check for command line arguments
+    if [ $# -gt 0 ]; then
+        case $1 in
+            "local"|"l")
+                BASE_URL="http://localhost:8080"
+                echo -e "${GREEN}✅ Selected: Local Development (from command line)${NC}"
+                echo -e "${YELLOW}💡 Make sure your local Spring Boot application is running${NC}"
+                ;;
+            "prod"|"p")
+                if [ -n "$2" ]; then
+                    BASE_URL="$2"
+                    echo -e "${GREEN}✅ Selected: Production - $BASE_URL (from command line)${NC}"
+                else
+                    echo -e "${RED}❌ Production URL required. Usage: $0 prod <API_URL>${NC}"
+                    exit 1
+                fi
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid argument. Usage:${NC}"
+                echo -e "${YELLOW}   $0 local                    # Test localhost:8080${NC}"
+                echo -e "${YELLOW}   $0 prod <API_URL>          # Test production URL${NC}"
+                echo -e "${YELLOW}   $0                         # Interactive mode${NC}"
+                exit 1
+                ;;
+        esac
+    else
+        # Interactive mode
+        echo -e "${CYAN}🌍 Choose Testing Environment:${NC}"
+        echo "1. Local Development (localhost:8080)"
+        echo "2. Production (Custom API URL)"
+        echo ""
+        read -p "Enter your choice (1 or 2): " choice
+        
+        case $choice in
+            1)
+                BASE_URL="http://localhost:8080"
+                echo -e "${GREEN}✅ Selected: Local Development${NC}"
+                echo -e "${YELLOW}💡 Make sure your local Spring Boot application is running${NC}"
+                ;;
+            2)
+                echo ""
+                echo -e "${CYAN}🌐 Enter Production API URL:${NC}"
+                echo -e "${YELLOW}   Example: https://your-app.railway.app${NC}"
+                echo -e "${YELLOW}   Example: https://your-app.herokuapp.com${NC}"
+                echo -e "${YELLOW}   Example: https://api.yourdomain.com${NC}"
+                echo ""
+                read -p "API URL: " custom_url
+                
+                # Validate URL format
+                if [[ $custom_url =~ ^https?:// ]]; then
+                    BASE_URL="$custom_url"
+                    echo -e "${GREEN}✅ Selected: Production - $BASE_URL${NC}"
+                else
+                    echo -e "${RED}❌ Invalid URL format. Please include http:// or https://${NC}"
+                    echo -e "${YELLOW}   Example: https://your-app.railway.app${NC}"
+                    exit 1
+                fi
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid choice. Please select 1 or 2.${NC}"
+                exit 1
+                ;;
+        esac
+    fi
+    
+    echo ""
+    echo -e "${BLUE}🔗 Testing URL: $BASE_URL${NC}"
+    echo ""
+}
+
+# Get testing environment from user
+get_testing_environment "$@"
+
 # Configuration
-BASE_URL="http://localhost:8080"
 CLIENT_ID="web-app"
 REPORT_FILE="reports/weather_test_report_$(date +%Y%m%d_%H%M%S).md"
 

@@ -2,6 +2,47 @@
 
 # Comprehensive Event Controller Endpoints Test Script
 # Tests all event-related endpoints and generates a detailed report
+# Supports both local and production testing with custom API URLs
+#
+# Usage:
+#   ./test_event_endpoints.sh                    # Interactive mode
+#   ./test_event_endpoints.sh local              # Test localhost:8080
+#   ./test_event_endpoints.sh prod <API_URL>     # Test production URL
+#   ./test_event_endpoints.sh help               # Show help
+
+# Function to show help
+show_help() {
+    echo "🎉 Event Controller Endpoints Test Script"
+    echo "========================================="
+    echo ""
+    echo "Usage:"
+    echo "  $0                    # Interactive mode - choose environment"
+    echo "  $0 local              # Test localhost:8080"
+    echo "  $0 prod <API_URL>     # Test production URL"
+    echo "  $0 help               # Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  $0 local"
+    echo "  $0 prod https://your-app.railway.app"
+    echo "  $0 prod https://your-app.herokuapp.com"
+    echo "  $0 prod https://api.yourdomain.com"
+    echo ""
+    echo "Interactive Mode:"
+    echo "  Run without arguments to choose environment interactively"
+    echo ""
+    echo "Requirements:"
+    echo "  - curl command available"
+    echo "  - jq command available (for JSON parsing)"
+    echo "  - For local testing: Spring Boot app running on port 8080"
+    echo "  - For production testing: Valid API URL with health endpoint"
+    echo ""
+    exit 0
+}
+
+# Check for help argument
+if [ "$1" = "help" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    show_help
+fi
 
 echo "🎉 Starting Comprehensive Event Controller Endpoints Test"
 echo "========================================================"
@@ -15,8 +56,82 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Function to get user input for testing environment
+get_testing_environment() {
+    # Check for command line arguments
+    if [ $# -gt 0 ]; then
+        case $1 in
+            "local"|"l")
+                BASE_URL="http://localhost:8080"
+                echo -e "${GREEN}✅ Selected: Local Development (from command line)${NC}"
+                echo -e "${YELLOW}💡 Make sure your local Spring Boot application is running${NC}"
+                ;;
+            "prod"|"p")
+                if [ -n "$2" ]; then
+                    BASE_URL="$2"
+                    echo -e "${GREEN}✅ Selected: Production - $BASE_URL (from command line)${NC}"
+                else
+                    echo -e "${RED}❌ Production URL required. Usage: $0 prod <API_URL>${NC}"
+                    exit 1
+                fi
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid argument. Usage:${NC}"
+                echo -e "${YELLOW}   $0 local                    # Test localhost:8080${NC}"
+                echo -e "${YELLOW}   $0 prod <API_URL>          # Test production URL${NC}"
+                echo -e "${YELLOW}   $0                         # Interactive mode${NC}"
+                exit 1
+                ;;
+        esac
+    else
+        # Interactive mode
+        echo -e "${CYAN}🌍 Choose Testing Environment:${NC}"
+        echo "1. Local Development (localhost:8080)"
+        echo "2. Production (Custom API URL)"
+        echo ""
+        read -p "Enter your choice (1 or 2): " choice
+        
+        case $choice in
+            1)
+                BASE_URL="http://localhost:8080"
+                echo -e "${GREEN}✅ Selected: Local Development${NC}"
+                echo -e "${YELLOW}💡 Make sure your local Spring Boot application is running${NC}"
+                ;;
+            2)
+                echo ""
+                echo -e "${CYAN}🌐 Enter Production API URL:${NC}"
+                echo -e "${YELLOW}   Example: https://your-app.railway.app${NC}"
+                echo -e "${YELLOW}   Example: https://your-app.herokuapp.com${NC}"
+                echo -e "${YELLOW}   Example: https://api.yourdomain.com${NC}"
+                echo ""
+                read -p "API URL: " custom_url
+                
+                # Validate URL format
+                if [[ $custom_url =~ ^https?:// ]]; then
+                    BASE_URL="$custom_url"
+                    echo -e "${GREEN}✅ Selected: Production - $BASE_URL${NC}"
+                else
+                    echo -e "${RED}❌ Invalid URL format. Please include http:// or https://${NC}"
+                    echo -e "${YELLOW}   Example: https://your-app.railway.app${NC}"
+                    exit 1
+                fi
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid choice. Please select 1 or 2.${NC}"
+                exit 1
+                ;;
+        esac
+    fi
+    
+    echo ""
+    echo -e "${BLUE}🔗 Testing URL: $BASE_URL${NC}"
+    echo ""
+}
+
+# Get testing environment from user
+get_testing_environment "$@"
+
 # Configuration
-BASE_URL="http://localhost:8080"
 CLIENT_ID="web-app"
 REPORT_FILE="reports/event_test_report_$(date +%Y%m%d_%H%M%S).md"
 TEST_USER_EMAIL="testuser@example.com"
@@ -158,34 +273,65 @@ run_test() {
 
 # Function to wait for service to be ready
 wait_for_service() {
-    echo -e "${YELLOW}⏳ Waiting for service to be ready...${NC}"
-    local max_attempts=60
+    local service_name="Service"
+    if [[ $BASE_URL == *"localhost"* ]]; then
+        service_name="Local Spring Boot Application"
+    else
+        service_name="Production Service"
+    fi
+    
+    echo -e "${YELLOW}⏳ Waiting for $service_name to be ready...${NC}"
+    local max_attempts=10
     local attempt=1
-    local java_ready=false
     
     while [ $attempt -le $max_attempts ]; do
-        # Check Java Spring Boot service
-        if ! $java_ready; then
-            if curl -s "$BASE_URL/actuator/health" > /dev/null 2>&1; then
-                echo -e "${GREEN}✅ Java Application is ready!${NC}"
-                java_ready=true
-            else
-                echo -e "${YELLOW}   Attempt $attempt/$max_attempts - waiting for Java Application...${NC}"
-            fi
-        fi
-        
-        # If service is ready, return success
-        if $java_ready; then
-            echo -e "${GREEN}✅ Service is ready!${NC}"
+        # Check service health
+        if curl -s "$BASE_URL/actuator/health" > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ $service_name is ready!${NC}"
             return 0
+        else
+            echo -e "${YELLOW}   Attempt $attempt/$max_attempts - waiting for $service_name...${NC}"
         fi
         
-        sleep 2
+        sleep 3
         ((attempt++))
     done
     
-    echo -e "${RED}❌ Service failed to start within expected time${NC}"
+    echo -e "${RED}❌ $service_name failed to respond within expected time${NC}"
     return 1
+}
+
+# Function to check service availability
+check_service() {
+    local service_name="Service"
+    if [[ $BASE_URL == *"localhost"* ]]; then
+        service_name="Local Spring Boot Application"
+        echo -e "${YELLOW}🔍 Checking local service availability...${NC}"
+        echo -e "${YELLOW}💡 Make sure your local application is running with: mvn spring-boot:run${NC}"
+    else
+        service_name="Production Service"
+        echo -e "${YELLOW}🔍 Checking production service availability...${NC}"
+    fi
+    
+    # Wait for service to be ready
+    if wait_for_service; then
+        echo -e "${GREEN}✅ $service_name is available!${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ $service_name is not available${NC}"
+        if [[ $BASE_URL == *"localhost"* ]]; then
+            echo -e "${YELLOW}💡 Troubleshooting tips for local development:${NC}"
+            echo -e "${YELLOW}   1. Make sure Spring Boot is running: mvn spring-boot:run${NC}"
+            echo -e "${YELLOW}   2. Check if port 8080 is available${NC}"
+            echo -e "${YELLOW}   3. Verify database connections${NC}"
+        else
+            echo -e "${YELLOW}💡 Troubleshooting tips for production:${NC}"
+            echo -e "${YELLOW}   1. Verify the API URL is correct${NC}"
+            echo -e "${YELLOW}   2. Check if the service is deployed and running${NC}"
+            echo -e "${YELLOW}   3. Verify network connectivity${NC}"
+        fi
+        return 1
+    fi
 }
 
 # Function to authenticate and get tokens
@@ -323,7 +469,7 @@ restart_services() {
 # Main test execution
 main() {
     echo -e "${PURPLE}📋 Test Plan:${NC}"
-    echo "1. Stop and restart services"
+    echo "1. Check service availability"
     echo "2. Authenticate user"
     echo "3. Create test event"
     echo "4. Test CRUD operations"
@@ -334,11 +480,11 @@ main() {
     echo "9. Clean up test data"
     echo ""
     
-    # Step 1: Restart services
-    echo -e "${CYAN}🔄 Step 1: Restarting Services${NC}"
-    echo "=================================="
-    if ! restart_services; then
-        echo -e "${RED}❌ Failed to restart services. Exiting.${NC}"
+    # Step 1: Check service availability
+    echo -e "${CYAN}🔍 Step 1: Checking Service Availability${NC}"
+    echo "============================================="
+    if ! check_service; then
+        echo -e "${RED}❌ Service is not available. Exiting.${NC}"
         exit 1
     fi
     echo ""
@@ -696,6 +842,21 @@ main() {
         exit 1
     fi
 }
+
+# Function to handle cleanup on script exit
+cleanup() {
+    echo ""
+    echo -e "${YELLOW}🛑 Test interrupted...${NC}"
+    if [[ $BASE_URL == *"localhost"* ]]; then
+        echo -e "${YELLOW}💡 Local service continues running${NC}"
+    else
+        echo -e "${YELLOW}💡 Production service continues running${NC}"
+    fi
+    exit 0
+}
+
+# Set up signal handlers
+trap cleanup SIGINT SIGTERM
 
 # Run main function
 main "$@"
