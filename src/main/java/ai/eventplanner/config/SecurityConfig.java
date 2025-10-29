@@ -80,7 +80,8 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                .ignoringRequestMatchers("/api/v1/auth/**"))
+                .ignoringRequestMatchers("/api/v1/auth/**")
+                .ignoringRequestMatchers("/api/**")) // Disable CSRF for all API endpoints (using JWT auth)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authz -> authz
                 .requestMatchers("/health", "/actuator/health").permitAll()
