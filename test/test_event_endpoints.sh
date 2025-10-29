@@ -377,9 +377,17 @@ authenticate_user() {
     local response_body="${response%???}"
     
     if [ "$http_code" = "201" ]; then
+        # Extract tokens and user ID - try multiple methods for reliability
         ACCESS_TOKEN=$(echo "$response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
         REFRESH_TOKEN=$(echo "$response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
+        # Try multiple patterns for user ID
         USER_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+        if [ -z "$USER_ID" ]; then
+            USER_ID=$(echo "$response_body" | grep -oE '"id":\s*"([a-f0-9-]+)"' | cut -d'"' -f4)
+        fi
+        if [ -z "$USER_ID" ] && command -v jq &> /dev/null; then
+            USER_ID=$(echo "$response_body" | jq -r '.id // empty')
+        fi
         echo -e "${GREEN}✅ User registered and authenticated${NC}"
         return 0
     elif [ "$http_code" = "400" ]; then
@@ -405,6 +413,9 @@ authenticate_user() {
             ACCESS_TOKEN=$(echo "$login_response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
             REFRESH_TOKEN=$(echo "$login_response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
             USER_ID=$(echo "$login_response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+            if [ -z "$USER_ID" ] && command -v jq &> /dev/null; then
+                USER_ID=$(echo "$login_response_body" | jq -r '.id // empty')
+            fi
             echo -e "${GREEN}✅ User logged in successfully${NC}"
             return 0
         fi
