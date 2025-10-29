@@ -195,8 +195,19 @@ run_test() {
     
     echo -e "${BLUE}🧪 Running: $test_name${NC}"
     
-    # Build curl command
+    # Build curl command - always include Client-ID if not already present
     local curl_cmd="curl -s -w '%{http_code}' -X $method"
+    
+    # Ensure X-Client-ID header is always included for API requests
+    if [[ "$endpoint" == /api/* ]]; then
+        if [[ "$headers" != *"X-Client-ID"* ]]; then
+            if [ -n "$headers" ]; then
+                headers="-H 'X-Client-ID: $CLIENT_ID' $headers"
+            else
+                headers="-H 'X-Client-ID: $CLIENT_ID'"
+            fi
+        fi
+    fi
     
     if [ -n "$headers" ]; then
         curl_cmd="$curl_cmd $headers"
@@ -220,6 +231,9 @@ run_test() {
         local status_icon="✅"
     else
         echo -e "${RED}❌ FAILED${NC} - Expected: $expected_status, Got: $http_code"
+        if [ "$http_code" = "403" ] || [ "$http_code" = "401" ]; then
+            echo -e "${YELLOW}   Response: $response_body${NC}"
+        fi
         FAILED_TESTS=$((FAILED_TESTS + 1))
         local status_icon="❌"
     fi
@@ -422,6 +436,10 @@ create_test_event() {
         "eventWebsiteUrl": "https://example.com/event",
         "hashtag": "#TestEvent"
     }'
+    
+    # Debug: Show what we're sending
+    echo -e "${CYAN}   Debug: Creating event with token: ${ACCESS_TOKEN:0:20}...${NC}"
+    echo -e "${CYAN}   Debug: User ID: $USER_ID${NC}"
     
     local response=$(curl -s -w '%{http_code}' -X POST \
         -H "X-Client-ID: $CLIENT_ID" \

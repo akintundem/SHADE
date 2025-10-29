@@ -213,6 +213,13 @@ public class RbacAuthorizationFilter extends OncePerRequestFilter {
         
         UserPrincipal user = (UserPrincipal) authentication.getPrincipal();
         
+        // Allow authenticated users to create events (for new users getting started)
+        if (requestURI.equals("/api/v1/events") && method.equals("POST")) {
+            log.debug("Allowing event creation for authenticated user {}", user.getId());
+            filterChain.doFilter(request, response);
+            return;
+        }
+        
         // Check permissions
         if (!hasPermission(user, requestURI, method)) {
             log.warn("Access denied for user {} to {} {}", user.getId(), method, requestURI);
@@ -274,6 +281,21 @@ public class RbacAuthorizationFilter extends OncePerRequestFilter {
                     // Handle special authorization cases
                     if (handleSpecialAuthorizationCases(user, requestURI, method, resourceId)) {
                         return true;
+                    }
+                    
+                    // Special handling: Allow authenticated users to create events (they become event owner)
+                    // This allows new users to get started without needing explicit permissions
+                    // Check both exact match and startsWith to handle query parameters
+                    if ((requestURI.equals("/api/v1/events") || requestURI.startsWith("/api/v1/events?")) 
+                            && method.equals("POST") && requiredPermission.equals("event.create")) {
+                        log.debug("Allowing event creation for authenticated user {} - user will own the event", user.getId());
+                        return true;
+                    }
+                    
+                    // Special handling: Allow authenticated users to read their own events
+                    if (requestURI.matches("^/api/v1/events/([a-f0-9-]+)$") && method.equals("GET") && requiredPermission.equals("event.read")) {
+                        log.debug("Allowing event read for authenticated user {}", user.getId());
+                        return true; // Ownership check happens in service layer
                     }
                     
                     return authorizationService.hasPermission(user, requiredPermission, context, resourceId);
@@ -398,13 +420,13 @@ public class RbacAuthorizationFilter extends OncePerRequestFilter {
      * Determine context from request URI
      */
     private String determineContext(String requestURI) {
-        if (requestURI.contains("/events/")) {
+        if (requestURI.contains("/events") || requestURI.startsWith("/api/v1/events")) {
             return "event";
-        } else if (requestURI.contains("/organizations/")) {
+        } else if (requestURI.contains("/organizations")) {
             return "organization";
-        } else if (requestURI.contains("/admin/")) {
+        } else if (requestURI.contains("/admin")) {
             return "system";
-        } else if (requestURI.contains("/users/")) {
+        } else if (requestURI.contains("/users")) {
             return "system";
         }
         return "system";

@@ -59,7 +59,10 @@ public class ClientValidationFilter implements Filter {
         String clientId = httpRequest.getHeader("X-Client-ID");
         
         if (clientId == null || clientId.trim().isEmpty()) {
-            sendErrorResponse(httpResponse, "X-Client-ID header is required", HttpStatus.BAD_REQUEST);
+            sendErrorResponse(httpResponse, 
+                "X-Client-ID header is required. Please include a valid client ID in the request header. " +
+                "Default client IDs: web-app, mobile-app, api-client, desktop-app", 
+                HttpStatus.BAD_REQUEST);
             return;
         }
 
@@ -67,7 +70,10 @@ public class ClientValidationFilter implements Filter {
         try {
             clientValidationService.validateClientId(clientId);
         } catch (UnauthorizedException e) {
-            sendErrorResponse(httpResponse, "Invalid client ID", HttpStatus.UNAUTHORIZED);
+            sendErrorResponse(httpResponse, 
+                "Invalid client ID: " + clientId + ". Please use a valid client ID. " +
+                "Contact your administrator if you need a new client application registered.", 
+                HttpStatus.UNAUTHORIZED);
             return;
         }
 
