@@ -377,17 +377,27 @@ authenticate_user() {
     local response_body="${response%???}"
     
     if [ "$http_code" = "201" ]; then
-        # Extract tokens and user ID - try multiple methods for reliability
+        # Extract tokens
         ACCESS_TOKEN=$(echo "$response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
         REFRESH_TOKEN=$(echo "$response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
-        # Try multiple patterns for user ID
-        USER_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
-        if [ -z "$USER_ID" ]; then
-            USER_ID=$(echo "$response_body" | grep -oE '"id":\s*"([a-f0-9-]+)"' | cut -d'"' -f4)
+        
+        # Extract user ID from JWT token (subject claim)
+        if [ -n "$ACCESS_TOKEN" ]; then
+            # JWT format: header.payload.signature
+            local jwt_payload=$(echo "$ACCESS_TOKEN" | cut -d'.' -f2)
+            # Base64 decode and extract 'sub' (user ID)
+            if command -v python3 &> /dev/null; then
+                USER_ID=$(echo "$jwt_payload" | python3 -c "import sys, base64, json; data=sys.stdin.read().strip(); padding=4-len(data)%4; data+=('='*padding if padding<4 else ''); print(json.loads(base64.b64decode(data)).get('sub', ''))" 2>/dev/null)
+            elif command -v jq &> /dev/null; then
+                # Add padding for base64
+                local padding=$((4 - ${#jwt_payload} % 4))
+                if [ $padding -ne 4 ]; then
+                    jwt_payload="${jwt_payload}$(printf '%*s' $padding | tr ' ' '=')"
+                fi
+                USER_ID=$(echo "$jwt_payload" | base64 -d 2>/dev/null | jq -r '.sub // empty' 2>/dev/null)
+            fi
         fi
-        if [ -z "$USER_ID" ] && command -v jq &> /dev/null; then
-            USER_ID=$(echo "$response_body" | jq -r '.id // empty')
-        fi
+        
         echo -e "${GREEN}✅ User registered and authenticated${NC}"
         return 0
     elif [ "$http_code" = "400" ]; then
@@ -412,10 +422,21 @@ authenticate_user() {
         if [ "$login_http_code" = "200" ]; then
             ACCESS_TOKEN=$(echo "$login_response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
             REFRESH_TOKEN=$(echo "$login_response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
-            USER_ID=$(echo "$login_response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
-            if [ -z "$USER_ID" ] && command -v jq &> /dev/null; then
-                USER_ID=$(echo "$login_response_body" | jq -r '.id // empty')
+            
+            # Extract user ID from JWT token (subject claim)
+            if [ -n "$ACCESS_TOKEN" ]; then
+                local jwt_payload=$(echo "$ACCESS_TOKEN" | cut -d'.' -f2)
+                if command -v python3 &> /dev/null; then
+                    USER_ID=$(echo "$jwt_payload" | python3 -c "import sys, base64, json; data=sys.stdin.read().strip(); padding=4-len(data)%4; data+=('='*padding if padding<4 else ''); print(json.loads(base64.b64decode(data)).get('sub', ''))" 2>/dev/null)
+                elif command -v jq &> /dev/null; then
+                    local padding=$((4 - ${#jwt_payload} % 4))
+                    if [ $padding -ne 4 ]; then
+                        jwt_payload="${jwt_payload}$(printf '%*s' $padding | tr ' ' '=')"
+                    fi
+                    USER_ID=$(echo "$jwt_payload" | base64 -d 2>/dev/null | jq -r '.sub // empty' 2>/dev/null)
+                fi
             fi
+            
             echo -e "${GREEN}✅ User logged in successfully${NC}"
             return 0
         fi
