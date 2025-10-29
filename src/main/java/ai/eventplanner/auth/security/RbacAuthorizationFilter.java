@@ -214,8 +214,10 @@ public class RbacAuthorizationFilter extends OncePerRequestFilter {
         UserPrincipal user = (UserPrincipal) authentication.getPrincipal();
         
         // Allow authenticated users to create events (for new users getting started)
-        if (requestURI.equals("/api/v1/events") && method.equals("POST")) {
-            log.debug("Allowing event creation for authenticated user {}", user.getId());
+        // Check both exact match and normalized URI (handles query params, trailing slashes)
+        String normalizedURI = requestURI.split("\\?")[0]; // Remove query parameters
+        if ((requestURI.equals("/api/v1/events") || normalizedURI.equals("/api/v1/events")) && method.equals("POST")) {
+            log.info("✅ ALLOWING event creation for authenticated user {} - URI: {}, Method: {}", user.getId(), requestURI, method);
             filterChain.doFilter(request, response);
             return;
         }
