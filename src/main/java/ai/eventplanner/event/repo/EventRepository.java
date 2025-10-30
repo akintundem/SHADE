@@ -1,5 +1,7 @@
 package ai.eventplanner.event.repo;
 
+import ai.eventplanner.common.domain.enums.EventStatus;
+import ai.eventplanner.common.domain.enums.EventType;
 import ai.eventplanner.event.entity.Event;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,9 +21,9 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     Page<Event> findByOwnerId(UUID ownerId, Pageable pageable);
     
     // Event type and status queries
-    List<Event> findByEventType(String eventType);
-    List<Event> findByEventStatus(String eventStatus);
-    List<Event> findByEventTypeAndEventStatus(String eventType, String eventStatus);
+    List<Event> findByEventType(EventType eventType);
+    List<Event> findByEventStatus(EventStatus eventStatus);
+    List<Event> findByEventTypeAndEventStatus(EventType eventType, EventStatus eventStatus);
     
     // Public events
     List<Event> findByIsPublicTrue();
@@ -82,4 +84,3 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     @Query("SELECT e FROM Event e WHERE e.isPublic = true AND e.eventStatus = 'PUBLISHED' ORDER BY e.currentAttendeeCount DESC")
     List<Event> findTrendingEvents(Pageable pageable);
 }
-

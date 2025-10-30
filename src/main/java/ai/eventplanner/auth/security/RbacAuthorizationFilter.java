@@ -1,5 +1,9 @@
 package ai.eventplanner.auth.security;
 
+import ai.eventplanner.auth.security.rbac.AccessScope;
+import ai.eventplanner.auth.security.rbac.PermissionCheck;
+import ai.eventplanner.auth.security.rbac.PermissionDescriptor;
+import ai.eventplanner.auth.security.rbac.PermissionRegistry;
 import ai.eventplanner.auth.service.AuthorizationService;
 import ai.eventplanner.auth.service.UserPrincipal;
 import jakarta.servlet.FilterChain;
@@ -14,431 +18,120 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Map;
-import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Optional;
+import java.util.Set;
 
 /**
- * RBAC Filter for authorization at the filter level
- * Handles permission checking based on URL patterns and HTTP methods
+ * Filter that enforces RBAC policies using the configured permission registry.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class RbacAuthorizationFilter extends OncePerRequestFilter {
 
+    private static final Set<String> PUBLIC_ENDPOINT_PREFIXES = Set.of(
+        "/api/v1/auth/login",
+        "/api/v1/auth/register",
+        "/api/v1/auth/refresh",
+        "/api/v1/auth/verify-email",
+        "/api/v1/auth/reset-password",
+        "/api/v1/auth/forgot-password",
+        "/api/v1/auth/validate-token",
+        "/api/v1/auth/health",
+        "/api/v1/weather",
+        "/health",
+        "/actuator/health",
+        "/actuator/info",
+        "/error",
+        "/favicon.ico",
+        "/css/",
+        "/js/",
+        "/images/"
+    );
+
+    private final PermissionRegistry permissionRegistry;
     private final AuthorizationService authorizationService;
 
-    // URL patterns and their required permissions
-    private static final Map<Pattern, Map<String, String>> URL_PERMISSIONS = createUrlPermissions();
-    
-    private static Map<Pattern, Map<String, String>> createUrlPermissions() {
-        Map<Pattern, Map<String, String>> permissions = new java.util.HashMap<>();
-        
-        // Event management patterns
-        permissions.put(Pattern.compile("^/api/v1/events$"), Map.of(
-            "POST", "event.create",
-            "GET", "event.read"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/events/([a-f0-9-]+)$"), Map.of(
-            "GET", "event.read",
-            "PUT", "event.update",
-            "DELETE", "event.delete"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/events/([a-f0-9-]+)/.*$"), Map.of(
-            "GET", "event.read",
-            "POST", "event.update",
-            "PUT", "event.update",
-            "DELETE", "event.delete"
-        ));
-
-        // Budget management patterns (corrected URLs)
-        permissions.put(Pattern.compile("^/api/v1/budgets$"), Map.of(
-            "POST", "budget.create",
-            "GET", "budget.read"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/budgets/([a-f0-9-]+)$"), Map.of(
-            "GET", "budget.read",
-            "PUT", "budget.update",
-            "DELETE", "budget.delete"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/budgets/([a-f0-9-]+)/.*$"), Map.of(
-            "GET", "budget.read",
-            "POST", "budget.update",
-            "PUT", "budget.update",
-            "DELETE", "budget.delete"
-        ));
-
-        // Vendor management patterns
-        permissions.put(Pattern.compile("^/api/v1/vendors$"), Map.of(
-            "POST", "vendor.create",
-            "GET", "vendor.read"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/vendors/([a-f0-9-]+)$"), Map.of(
-            "GET", "vendor.read",
-            "PUT", "vendor.update",
-            "DELETE", "vendor.delete"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/events/([a-f0-9-]+)/vendors.*$"), Map.of(
-            "GET", "vendor.read",
-            "POST", "vendor.create",
-            "PUT", "vendor.update",
-            "DELETE", "vendor.delete"
-        ));
-
-        // Role management patterns
-        permissions.put(Pattern.compile("^/api/v1/roles/events/([a-f0-9-]+)/assign$"), Map.of(
-            "POST", "role.assign"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/roles/events/([a-f0-9-]+)/users/([a-f0-9-]+)/roles/([^/]+)$"), Map.of(
-            "DELETE", "role.remove"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/roles/events/([a-f0-9-]+)/.*$"), Map.of(
-            "GET", "role.read"
-        ));
-
-        // Organization management patterns (corrected URLs)
-        permissions.put(Pattern.compile("^/api/v1/auth/organizations$"), Map.of(
-            "POST", "organization.create",
-            "GET", "organization.read"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/auth/organizations/([a-f0-9-]+)$"), Map.of(
-            "GET", "organization.read",
-            "PUT", "organization.update",
-            "DELETE", "organization.delete"
-        ));
-
-        // User management patterns (corrected URLs)
-        permissions.put(Pattern.compile("^/api/v1/auth/users$"), Map.of(
-            "POST", "user.create",
-            "GET", "user.read"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/auth/users/([a-f0-9-]+)$"), Map.of(
-            "GET", "user.read",
-            "PUT", "user.update",
-            "DELETE", "user.delete"
-        ));
-
-        // Timeline management patterns
-        permissions.put(Pattern.compile("^/api/v1/timeline/([a-f0-9-]+)$"), Map.of(
-            "GET", "timeline.read",
-            "POST", "timeline.create",
-            "PUT", "timeline.update",
-            "DELETE", "timeline.delete"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/timeline/([a-f0-9-]+)/.*$"), Map.of(
-            "GET", "timeline.read",
-            "POST", "timeline.create",
-            "PUT", "timeline.update",
-            "DELETE", "timeline.delete"
-        ));
-
-        // Risk management patterns
-        permissions.put(Pattern.compile("^/api/v1/risks/([a-f0-9-]+)$"), Map.of(
-            "GET", "risk.read"
-        ));
-
-        // Weather patterns (public endpoints)
-        permissions.put(Pattern.compile("^/api/v1/weather/.*$"), Map.of(
-            "GET", "weather.read"
-        ));
-
-        // Attendee management patterns
-        permissions.put(Pattern.compile("^/api/v1/events/([a-f0-9-]+)/attendances.*$"), Map.of(
-            "GET", "attendee.read",
-            "POST", "attendee.create",
-            "PUT", "attendee.update",
-            "DELETE", "attendee.delete"
-        ));
-        
-        permissions.put(Pattern.compile("^/api/v1/events/([a-f0-9-]+)/users.*$"), Map.of(
-            "GET", "attendee.read",
-            "POST", "attendee.create",
-            "PUT", "attendee.update",
-            "DELETE", "attendee.delete"
-        ));
-
-        // Platform payment patterns
-        permissions.put(Pattern.compile("^/api/platform-payments.*$"), Map.of(
-            "GET", "payment.read",
-            "POST", "payment.create",
-            "PUT", "payment.update"
-        ));
-
-        // Admin patterns
-        permissions.put(Pattern.compile("^/api/v1/admin/.*$"), Map.of(
-            "GET", "admin.read",
-            "POST", "admin.create",
-            "PUT", "admin.update",
-            "DELETE", "admin.delete"
-        ));
-        
-        return permissions;
-    }
-
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
-                                  FilterChain filterChain) throws ServletException, IOException {
-        
-        String requestURI = request.getRequestURI();
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+
+        String uri = request.getRequestURI();
         String method = request.getMethod();
-        
-        log.info("🔍 RBAC Filter checking: {} {} - URI: {}", method, requestURI, requestURI);
-        
-        // Skip authorization for public endpoints
-        if (isPublicEndpoint(requestURI)) {
+
+        if (isPublicEndpoint(uri)) {
             filterChain.doFilter(request, response);
             return;
         }
-        
-        // Get authentication
+
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        log.info("🔐 RBAC Auth check - auth: {}, principal type: {}", 
-                authentication != null ? "present" : "null",
-                authentication != null && authentication.getPrincipal() != null ? 
-                    authentication.getPrincipal().getClass().getSimpleName() : "null");
-        
-        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal)) {
-            log.warn("❌ No valid authentication found for request: {} {} - Principal: {}", 
-                    method, requestURI, 
-                    authentication != null && authentication.getPrincipal() != null ? 
-                        authentication.getPrincipal().getClass().getName() : "null");
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal user)) {
+            log.warn("Blocking unauthenticated access to {} {}", method, uri);
+            respondUnauthorized(response);
             return;
         }
-        
-        UserPrincipal user = (UserPrincipal) authentication.getPrincipal();
-        
-        // Allow authenticated users to create events (for new users getting started)
-        // Check both exact match and normalized URI (handles query params, trailing slashes)
-        String normalizedURI = requestURI.split("\\?")[0]; // Remove query parameters
-        if ((requestURI.equals("/api/v1/events") || normalizedURI.equals("/api/v1/events")) && method.equals("POST")) {
-            log.info("✅ ALLOWING event creation for authenticated user {} - URI: {}, Method: {}", user.getId(), requestURI, method);
+
+        Optional<PermissionCheck> permission = permissionRegistry.resolve(request);
+        if (permission.isEmpty()) {
+            log.warn("RBAC policy missing for {} {} - denying access", method, uri);
+            respondForbidden(response, "Access denied", "No RBAC rule covers this endpoint");
+            return;
+        }
+
+        PermissionCheck check = permission.get();
+        PermissionDescriptor descriptor = check.descriptor();
+
+        if (descriptor == null || descriptor.permission() == null || descriptor.permission().isBlank()) {
             filterChain.doFilter(request, response);
             return;
         }
-        
-        // Check permissions
-        if (!hasPermission(user, requestURI, method)) {
-            log.warn("Access denied for user {} to {} {}", user.getId(), method, requestURI);
-            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-            response.getWriter().write("{\"error\":\"Access denied\",\"message\":\"Insufficient permissions\"}");
-            response.setContentType("application/json");
+
+        if (descriptor.scope() == AccessScope.PUBLIC) {
+            filterChain.doFilter(request, response);
             return;
         }
-        
-        log.debug("Access granted for user {} to {} {}", user.getId(), method, requestURI);
-        filterChain.doFilter(request, response);
+
+        if (descriptor.allowAuthenticated()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (descriptor.allowOwner() && authorizationService.isOwner(user, check)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (authorizationService.hasPermission(user, check)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        log.warn("RBAC denied {} {} for user {}", method, uri, user.getId());
+        respondForbidden(response, "Access denied", "Insufficient permissions");
     }
-    
-    /**
-     * Check if the endpoint is public (no authorization required)
-     */
-    private boolean isPublicEndpoint(String requestURI) {
-        return requestURI.startsWith("/api/v1/auth/login") ||
-               requestURI.startsWith("/api/v1/auth/register") ||
-               requestURI.startsWith("/api/v1/auth/refresh") ||
-               requestURI.startsWith("/api/v1/auth/verify-email") ||
-               requestURI.startsWith("/api/v1/auth/reset-password") ||
-               requestURI.startsWith("/api/v1/auth/forgot-password") ||
-               requestURI.startsWith("/api/v1/auth/validate-token") ||
-               requestURI.startsWith("/api/v1/auth/health") ||
-               requestURI.startsWith("/health") ||
-               requestURI.startsWith("/actuator/health") ||
-               requestURI.startsWith("/actuator/info") ||
-               requestURI.startsWith("/api/v1/weather") ||
-               requestURI.equals("/") ||
-               requestURI.startsWith("/error") ||
-               requestURI.startsWith("/favicon.ico") ||
-               requestURI.startsWith("/css/") ||
-               requestURI.startsWith("/js/") ||
-               requestURI.startsWith("/images/");
+
+    private boolean isPublicEndpoint(String uri) {
+        if (uri == null || uri.isBlank()) {
+            return false;
+        }
+        return PUBLIC_ENDPOINT_PREFIXES.stream().anyMatch(uri::startsWith) || "/".equals(uri);
     }
-    
-    /**
-     * Check if user has permission for the request
-     */
-    private boolean hasPermission(UserPrincipal user, String requestURI, String method) {
-        // Find matching URL pattern
-        for (Map.Entry<Pattern, Map<String, String>> entry : URL_PERMISSIONS.entrySet()) {
-            Pattern pattern = entry.getKey();
-            Matcher matcher = pattern.matcher(requestURI);
-            
-            if (matcher.matches()) {
-                Map<String, String> methodPermissions = entry.getValue();
-                String requiredPermission = methodPermissions.get(method);
-                
-                if (requiredPermission != null) {
-                    // Extract resource ID from URL if present
-                    UUID resourceId = extractResourceId(matcher, requestURI);
-                    String context = determineContext(requestURI);
-                    
-                    log.debug("Checking permission: {} for user: {} in context: {} for resource: {}", 
-                             requiredPermission, user.getId(), context, resourceId);
-                    
-                    // Handle special authorization cases
-                    if (handleSpecialAuthorizationCases(user, requestURI, method, resourceId)) {
-                        return true;
-                    }
-                    
-                    // Special handling: Allow authenticated users to create events (they become event owner)
-                    // This allows new users to get started without needing explicit permissions
-                    // Check both exact match and startsWith to handle query parameters
-                    if ((requestURI.equals("/api/v1/events") || requestURI.startsWith("/api/v1/events?")) 
-                            && method.equals("POST") && requiredPermission.equals("event.create")) {
-                        log.debug("Allowing event creation for authenticated user {} - user will own the event", user.getId());
-                        return true;
-                    }
-                    
-                    // Special handling: Allow authenticated users to read their own events
-                    if (requestURI.matches("^/api/v1/events/([a-f0-9-]+)$") && method.equals("GET") && requiredPermission.equals("event.read")) {
-                        log.debug("Allowing event read for authenticated user {}", user.getId());
-                        return true; // Ownership check happens in service layer
-                    }
-                    
-                    return authorizationService.hasPermission(user, requiredPermission, context, resourceId);
-                }
-            }
-        }
-        
-        // If no specific pattern matches, check for general authenticated access
-        log.debug("No specific permission pattern found for: {} {}, allowing authenticated access", method, requestURI);
-        return true;
+
+    private void respondUnauthorized(HttpServletResponse response) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"error\":\"Unauthorized\",\"message\":\"Authentication required\"}");
     }
-    
-    /**
-     * Handle special authorization cases that require custom logic
-     */
-    private boolean handleSpecialAuthorizationCases(UserPrincipal user, String requestURI, String method, UUID resourceId) {
-        // User can only access their own profile
-        if (requestURI.matches("^/api/v1/auth/users/([a-f0-9-]+)$") && 
-            (method.equals("GET") || method.equals("PUT"))) {
-            return user.getId().equals(resourceId);
-        }
-        
-        // User search is restricted to administrators only
-        if (requestURI.equals("/api/v1/auth/users/search") && method.equals("GET")) {
-            return user.isSystemAdmin();
-        }
-        
-        // Organization ownership check
-        if (requestURI.matches("^/api/v1/organizations/([a-f0-9-]+)$") && 
-            (method.equals("PUT") || method.equals("DELETE"))) {
-            return isOrganizationOwner(user, resourceId);
-        }
-        
-        // Event ownership check for sensitive operations
-        if (requestURI.matches("^/api/v1/events/([a-f0-9-]+)$") && method.equals("DELETE")) {
-            return isEventOwner(user, resourceId);
-        }
-        
-        // Role assignment permissions
-        if (requestURI.matches("^/api/v1/roles/events/([a-f0-9-]+)/assign$") && method.equals("POST")) {
-            return canAssignEventRoles(user, resourceId);
-        }
-        
-        if (requestURI.matches("^/api/v1/roles/events/([a-f0-9-]+)/users/([a-f0-9-]+)/roles/([^/]+)$") && method.equals("DELETE")) {
-            return canRemoveEventRoles(user, resourceId);
-        }
-        
-        return false; // Let normal permission checking handle it
-    }
-    
-    /**
-     * Check if user is organization owner
-     */
-    private boolean isOrganizationOwner(UserPrincipal user, UUID organizationId) {
-        // This would need to be implemented with proper organization role checking
-        // For now, return true for system admins
-        return user.isSystemAdmin();
-    }
-    
-    /**
-     * Check if user is event owner
-     */
-    private boolean isEventOwner(UserPrincipal user, UUID eventId) {
-        // This would need to be implemented with proper event ownership checking
-        // For now, return true for system admins
-        return user.isSystemAdmin();
-    }
-    
-    /**
-     * Check if user can assign event roles
-     */
-    private boolean canAssignEventRoles(UserPrincipal user, UUID eventId) {
-        // System admins can assign any role
-        if (user.isSystemAdmin()) {
-            return true;
-        }
-        
-        // Event organizers can assign roles
-        if (user.isEventOrganizer()) {
-            return true;
-        }
-        
-        // This would need to be enhanced with proper event role checking
-        return false;
-    }
-    
-    /**
-     * Check if user can remove event roles
-     */
-    private boolean canRemoveEventRoles(UserPrincipal user, UUID eventId) {
-        // System admins can remove any role
-        if (user.isSystemAdmin()) {
-            return true;
-        }
-        
-        // Event organizers can remove roles
-        if (user.isEventOrganizer()) {
-            return true;
-        }
-        
-        // This would need to be enhanced with proper event role checking
-        return false;
-    }
-    
-    /**
-     * Extract resource ID from URL matcher
-     */
-    private UUID extractResourceId(Matcher matcher, String requestURI) {
-        try {
-            // Try to extract UUID from the first group
-            if (matcher.groupCount() > 0) {
-                String idString = matcher.group(1);
-                return UUID.fromString(idString);
-            }
-        } catch (Exception e) {
-            log.debug("Could not extract resource ID from URL: {}", requestURI);
-        }
-        return null;
-    }
-    
-    /**
-     * Determine context from request URI
-     */
-    private String determineContext(String requestURI) {
-        if (requestURI.contains("/events") || requestURI.startsWith("/api/v1/events")) {
-            return "event";
-        } else if (requestURI.contains("/organizations")) {
-            return "organization";
-        } else if (requestURI.contains("/admin")) {
-            return "system";
-        } else if (requestURI.contains("/users")) {
-            return "system";
-        }
-        return "system";
+
+    private void respondForbidden(HttpServletResponse response, String error, String message) throws IOException {
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"error\":\"" + error + "\",\"message\":\"" + message + "\"}");
     }
 }

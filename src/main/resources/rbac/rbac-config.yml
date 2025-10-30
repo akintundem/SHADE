@@ -1,0 +1,468 @@
+routes:
+  - name: events-collection
+    pattern: "^/api/v1/events$"
+    methods:
+      GET:
+        permission: "event.read"
+        scope: SYSTEM
+      POST:
+        permission: "event.create"
+        scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: event-item
+    pattern: "^/api/v1/events/(?<eventId>[a-f0-9-]+)$"
+    resourceIdGroup: eventId
+    methods:
+      GET:
+        permission: "event.read"
+        scope: EVENT
+        allowOwner: true
+        allowAuthenticated: true
+      PUT:
+        permission: "event.update"
+        scope: EVENT
+        allowOwner: true
+      DELETE:
+        permission: "event.delete"
+        scope: EVENT
+        allowOwner: true
+
+  - name: event-sub-resources
+    pattern: "^/api/v1/events/(?<eventId>[a-f0-9-]+)/.*$"
+    resourceIdGroup: eventId
+    methods:
+      GET:
+        permission: "event.read"
+        scope: EVENT
+        allowOwner: true
+      POST:
+        permission: "event.update"
+        scope: EVENT
+        allowOwner: true
+      PUT:
+        permission: "event.update"
+        scope: EVENT
+        allowOwner: true
+      DELETE:
+        permission: "event.delete"
+        scope: EVENT
+        allowOwner: true
+
+  - name: events-by-type
+    pattern: "^/api/v1/events/by-type/[^/]+$"
+    methods:
+      GET:
+        permission: "event.read"
+        scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: events-by-status
+    pattern: "^/api/v1/events/by-status/[^/]+$"
+    methods:
+      GET:
+        permission: "event.read"
+        scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: events-discovery
+    pattern: "^/api/v1/events/(public|featured|trending|upcoming)$"
+    methods:
+      GET:
+        permission: "event.read"
+        scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: events-search
+    pattern: "^/api/v1/events/search$"
+    methods:
+      GET:
+        permission: "event.read"
+        scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: events-user-collections
+    pattern: "^/api/v1/events/user/(?<userId>[a-f0-9-]+)(/(owned|upcoming|past))?$"
+    resourceIdGroup: userId
+    methods:
+      GET:
+        permission: "event.read"
+        scope: SYSTEM
+        allowOwner: true
+
+  - name: events-my-collections
+    pattern: "^/api/v1/events/my-events(/(owned|upcoming|past))?$"
+    methods:
+      GET:
+        permission: "event.read"
+        scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: budgets-collection
+    pattern: "^/api/v1/budgets$"
+    methods:
+      GET:
+        permission: "budget.read"
+        scope: SYSTEM
+      POST:
+        permission: "budget.create"
+        scope: SYSTEM
+
+  - name: budget-item
+    pattern: "^/api/v1/budgets/(?<budgetId>[a-f0-9-]+)(/.*)?$"
+    resourceIdGroup: budgetId
+    methods:
+      GET:
+        permission: "budget.read"
+        scope: SYSTEM
+      POST:
+        permission: "budget.update"
+        scope: SYSTEM
+      PUT:
+        permission: "budget.update"
+        scope: SYSTEM
+      DELETE:
+        permission: "budget.delete"
+        scope: SYSTEM
+
+  - name: vendors-collection
+    pattern: "^/api/v1/vendors$"
+    methods:
+      GET:
+        permission: "vendor.read"
+        scope: SYSTEM
+      POST:
+        permission: "vendor.create"
+        scope: SYSTEM
+
+  - name: vendor-item
+    pattern: "^/api/v1/vendors/(?<vendorId>[a-f0-9-]+)$"
+    resourceIdGroup: vendorId
+    methods:
+      GET:
+        permission: "vendor.read"
+        scope: SYSTEM
+      PUT:
+        permission: "vendor.update"
+        scope: SYSTEM
+      DELETE:
+        permission: "vendor.delete"
+        scope: SYSTEM
+
+  - name: event-vendors
+    pattern: "^/api/v1/events/(?<eventId>[a-f0-9-]+)/vendors.*$"
+    resourceIdGroup: eventId
+    methods:
+      GET:
+        permission: "vendor.read"
+        scope: EVENT
+        allowOwner: true
+      POST:
+        permission: "vendor.create"
+        scope: EVENT
+        allowOwner: true
+      PUT:
+        permission: "vendor.update"
+        scope: EVENT
+        allowOwner: true
+      DELETE:
+        permission: "vendor.delete"
+        scope: EVENT
+        allowOwner: true
+
+  - name: role-assignment
+    pattern: "^/api/v1/roles/events/(?<eventId>[a-f0-9-]+)/assign$"
+    resourceIdGroup: eventId
+    methods:
+      POST:
+        permission: "role.assign"
+        scope: EVENT
+        allowOwner: true
+
+  - name: role-remove
+    pattern: "^/api/v1/roles/events/(?<eventId>[a-f0-9-]+)/users/(?<userId>[a-f0-9-]+)/roles/[^/]+$"
+    resourceIdGroup: eventId
+    methods:
+      DELETE:
+        permission: "role.remove"
+        scope: EVENT
+        allowOwner: true
+
+  - name: role-read
+    pattern: "^/api/v1/roles/events/(?<eventId>[a-f0-9-]+)/.*$"
+    resourceIdGroup: eventId
+    methods:
+      GET:
+        permission: "role.read"
+        scope: EVENT
+        allowOwner: true
+
+  - name: organization-collection
+    pattern: "^/api/v1/auth/organizations$"
+    methods:
+      GET:
+        permission: "organization.read"
+        scope: SYSTEM
+      POST:
+        permission: "organization.create"
+        scope: SYSTEM
+
+  - name: organization-item
+    pattern: "^/api/v1/auth/organizations/(?<organizationId>[a-f0-9-]+)$"
+    resourceIdGroup: organizationId
+    methods:
+      GET:
+        permission: "organization.read"
+        scope: ORGANIZATION
+        allowOwner: true
+      PUT:
+        permission: "organization.update"
+        scope: ORGANIZATION
+        allowOwner: true
+      DELETE:
+        permission: "organization.delete"
+        scope: ORGANIZATION
+        allowOwner: true
+
+  - name: users-collection
+    pattern: "^/api/v1/auth/users$"
+    methods:
+      GET:
+        permission: "user.read"
+        scope: SYSTEM
+      POST:
+        permission: "user.create"
+        scope: SYSTEM
+
+  - name: user-item
+    pattern: "^/api/v1/auth/users/(?<userId>[a-f0-9-]+)$"
+    resourceIdGroup: userId
+    methods:
+      GET:
+        permission: "user.read"
+        scope: SYSTEM
+      PUT:
+        permission: "user.update"
+        scope: SYSTEM
+        allowOwner: true
+      DELETE:
+        permission: "user.delete"
+        scope: SYSTEM
+
+  - name: auth-me
+    pattern: "^/api/v1/auth/me$"
+    methods:
+      GET:
+        permission: "user.read"
+        scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: auth-change-password
+    pattern: "^/api/v1/auth/change-password$"
+    methods:
+      POST:
+        permission: "user.update"
+        scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: auth-sessions
+    pattern: "^/api/v1/auth/sessions$"
+    methods:
+      GET:
+        permission: "user.read"
+        scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: auth-sessions-all
+    pattern: "^/api/v1/auth/sessions/all$"
+    methods:
+      DELETE:
+        permission: "user.update"
+        scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: auth-logout
+    pattern: "^/api/v1/auth/logout$"
+    methods:
+      POST:
+        permission: "user.update"
+        scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: timeline
+    pattern: "^/api/v1/timeline/(?<eventId>[a-f0-9-]+)(/.*)?$"
+    resourceIdGroup: eventId
+    methods:
+      GET:
+        permission: "timeline.read"
+        scope: EVENT
+        allowOwner: true
+      POST:
+        permission: "timeline.create"
+        scope: EVENT
+        allowOwner: true
+      PUT:
+        permission: "timeline.update"
+        scope: EVENT
+        allowOwner: true
+      DELETE:
+        permission: "timeline.delete"
+        scope: EVENT
+        allowOwner: true
+
+  - name: risks
+    pattern: "^/api/v1/risks/(?<eventId>[a-f0-9-]+)$"
+    resourceIdGroup: eventId
+    methods:
+      GET:
+        permission: "risk.read"
+        scope: EVENT
+        allowOwner: true
+
+  - name: attendees
+    pattern: "^/api/v1/events/(?<eventId>[a-f0-9-]+)/(attendances.*|users.*)$"
+    resourceIdGroup: eventId
+    methods:
+      GET:
+        permission: "attendee.read"
+        scope: EVENT
+        allowOwner: true
+      POST:
+        permission: "attendee.create"
+        scope: EVENT
+        allowOwner: true
+      PUT:
+        permission: "attendee.update"
+        scope: EVENT
+        allowOwner: true
+      DELETE:
+        permission: "attendee.delete"
+        scope: EVENT
+        allowOwner: true
+
+  - name: platform-payments
+    pattern: "^/api/platform-payments.*$"
+    methods:
+      GET:
+        permission: "payment.read"
+        scope: SYSTEM
+      POST:
+        permission: "payment.create"
+        scope: SYSTEM
+      PUT:
+        permission: "payment.update"
+        scope: SYSTEM
+
+  - name: admin
+    pattern: "^/api/v1/admin/.*$"
+    methods:
+      GET:
+        permission: "admin.read"
+        scope: SYSTEM
+      POST:
+        permission: "admin.create"
+        scope: SYSTEM
+      PUT:
+        permission: "admin.update"
+        scope: SYSTEM
+      DELETE:
+        permission: "admin.delete"
+        scope: SYSTEM
+
+roles:
+  system:
+    ROLE_SUPER_ADMIN:
+      - "*"
+    ROLE_ADMIN:
+      - "admin.*"
+      - "organization.*"
+      - "user.*"
+      - "event.*"
+      - "vendor.*"
+      - "budget.*"
+      - "timeline.*"
+      - "risk.*"
+      - "payment.*"
+    ROLE_MODERATOR:
+      - "event.read"
+      - "user.read"
+      - "risk.read"
+
+  organization:
+    OWNER:
+      - "organization.*"
+      - "event.*"
+      - "vendor.*"
+      - "budget.*"
+      - "timeline.*"
+      - "role.*"
+    MANAGER:
+      - "organization.read"
+      - "organization.update"
+      - "event.read"
+      - "event.update"
+      - "vendor.*"
+      - "budget.read"
+      - "timeline.*"
+      - "attendee.*"
+    MEMBER:
+      - "event.read"
+      - "vendor.read"
+      - "budget.read"
+
+  event:
+    ORGANIZER:
+      - "event.*"
+      - "budget.*"
+      - "vendor.*"
+      - "timeline.*"
+      - "attendee.*"
+      - "role.assign"
+      - "role.remove"
+    COORDINATOR:
+      - "event.read"
+      - "event.update"
+      - "budget.read"
+      - "budget.update"
+      - "vendor.read"
+      - "vendor.update"
+      - "timeline.*"
+      - "attendee.*"
+    STAFF:
+      - "event.read"
+      - "attendee.*"
+      - "timeline.read"
+    VOLUNTEER:
+      - "event.read"
+    SECURITY:
+      - "event.read"
+    TECHNICAL:
+      - "event.read"
+    CATERING:
+      - "event.read"
+    CLEANUP:
+      - "event.read"
+    REGISTRATION:
+      - "event.read"
+      - "attendee.*"
+    PHOTOGRAPHER:
+      - "event.read"
+    VIDEOGRAPHER:
+      - "event.read"
+    DJ:
+      - "event.read"
+    MC:
+      - "event.read"
+    SPEAKER:
+      - "event.read"
+    MODERATOR:
+      - "event.read"
+    SPONSOR:
+      - "event.read"
+    VENDOR:
+      - "event.read"
+      - "vendor.*"
+    MEDIA:
+      - "event.read"
+    GUEST:
+      - "event.read"

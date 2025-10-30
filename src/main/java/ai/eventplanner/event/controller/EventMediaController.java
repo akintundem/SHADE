@@ -226,11 +226,10 @@ public class EventMediaController {
     public ResponseEntity<Map<String, Object>> removeCoverImage(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
         try {
-            Map<String, Object> response = Map.of(
-                    "eventId", id,
-                    "coverImageUrl", null,
-                    "updatedAt", LocalDateTime.now()
-            );
+            Map<String, Object> response = new java.util.HashMap<>();
+            response.put("eventId", id);
+            response.put("coverImageUrl", null);
+            response.put("updatedAt", LocalDateTime.now());
             
             return ResponseEntity.ok(response);
         } catch (Exception ex) {

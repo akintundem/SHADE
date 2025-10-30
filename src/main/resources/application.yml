@@ -157,3 +157,7 @@ springdoc:
     title: ${API_TITLE}
     description: ${API_DESCRIPTION}
     version: ${API_VERSION}
+
+rbac:
+  config:
+    location: classpath:rbac/rbac-config.yml

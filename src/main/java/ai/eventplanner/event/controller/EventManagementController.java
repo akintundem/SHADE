@@ -607,18 +607,6 @@ public class EventManagementController {
         }
     }
 
-    @GetMapping("/{id}/analytics/attendance")
-    @Operation(summary = "Get attendance analytics", description = "Get attendance analytics for an event")
-    public ResponseEntity<Map<String, Object>> getAttendanceAnalytics(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
-        try {
-            Map<String, Object> analytics = eventService.getAttendanceAnalytics(id);
-            return ResponseEntity.ok(analytics);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
-    }
-
     // ==================== 8. EVENT DUPLICATION & TEMPLATES ENDPOINTS ====================
 
     @PostMapping("/{id}/duplicate")

@@ -12,5 +12,7 @@ public enum EventUserType {
     SPEAKER,
     SPONSOR,
     MEDIA,
-    STAFF
+    STAFF,
+    COLLABORATOR,
+    ADMIN
 }

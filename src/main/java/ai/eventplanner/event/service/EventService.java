@@ -1,5 +1,6 @@
 package ai.eventplanner.event.service;
 
+import ai.eventplanner.common.domain.enums.EventType;
 import ai.eventplanner.event.dto.request.CreateEventRequest;
 import ai.eventplanner.event.dto.request.UpdateEventRequest;
 import ai.eventplanner.event.dto.request.EventCreationRequest;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.ArrayList;
@@ -670,14 +672,24 @@ public class EventService {
      * Get events by type
      */
     public List<Event> getEventsByType(String eventType) {
-        return eventRepository.findByEventType(eventType);
+        try {
+            EventType type = EventType.valueOf(eventType.toUpperCase(Locale.US));
+            return eventRepository.findByEventType(type);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Invalid event type: " + eventType);
+        }
     }
 
     /**
      * Get events by status
      */
     public List<Event> getEventsByStatus(String eventStatus) {
-        return eventRepository.findByEventStatus(eventStatus);
+        try {
+            EventStatus status = EventStatus.valueOf(eventStatus.toUpperCase(Locale.US));
+            return eventRepository.findByEventStatus(status);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Invalid event status: " + eventStatus);
+        }
     }
 
     /**
