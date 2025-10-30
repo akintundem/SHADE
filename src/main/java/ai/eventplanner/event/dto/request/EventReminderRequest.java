@@ -3,6 +3,7 @@ package ai.eventplanner.event.dto.request;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -19,6 +20,7 @@ import java.util.UUID;
 public class EventReminderRequest {
 
     @NotBlank(message = "Title is required")
+    @Size(max = 200, message = "Title must be <= 200 chars")
     @Schema(description = "Reminder title")
     private String title;
 
@@ -30,6 +32,7 @@ public class EventReminderRequest {
     private LocalDateTime reminderTime;
 
     @NotBlank(message = "Channel is required")
+    @Size(max = 30, message = "Channel must be <= 30 chars")
     @Schema(description = "Reminder channel (email, sms, push)", example = "email")
     private String channel;
 
@@ -40,6 +43,7 @@ public class EventReminderRequest {
     private List<String> recipientEmails;
 
     @Schema(description = "Reminder type (event_start, registration_deadline, custom)")
+    @Size(max = 30, message = "Reminder type must be <= 30 chars")
     private String reminderType = "custom";
 
     @Schema(description = "Whether reminder is active")

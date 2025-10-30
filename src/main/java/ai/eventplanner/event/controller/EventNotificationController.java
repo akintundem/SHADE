@@ -5,6 +5,9 @@ import ai.eventplanner.event.dto.request.EventReminderRequest;
 import ai.eventplanner.event.dto.response.EventNotificationResponse;
 import ai.eventplanner.event.dto.response.EventNotificationSettingsResponse;
 import ai.eventplanner.event.dto.response.EventReminderResponse;
+import ai.eventplanner.comms.entity.Communication;
+import ai.eventplanner.comms.service.NotificationService;
+import ai.eventplanner.event.service.EventReminderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -12,10 +15,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -30,7 +31,12 @@ import java.util.*;
 @SecurityRequirement(name = "bearerAuth")
 public class EventNotificationController {
 
-    public EventNotificationController() {
+    private final NotificationService notificationService;
+    private final EventReminderService reminderService;
+
+    public EventNotificationController(NotificationService notificationService, EventReminderService reminderService) {
+        this.notificationService = notificationService;
+        this.reminderService = reminderService;
     }
 
     // ==================== EVENT NOTIFICATION ENDPOINTS ====================
@@ -44,22 +50,17 @@ public class EventNotificationController {
     })
     public ResponseEntity<EventNotificationSettingsResponse> getNotificationSettings(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
-        try {
-            EventNotificationSettingsResponse response = new EventNotificationSettingsResponse();
-            response.setEventId(id);
-            response.setEmailNotifications(true);
-            response.setSmsNotifications(false);
-            response.setPushNotifications(true);
-            response.setReminderEnabled(true);
-            response.setDefaultReminderTime("24h");
-            response.setAvailableChannels(Arrays.asList("email", "sms", "push"));
-            response.setAvailableTemplates(Arrays.asList("event_reminder", "event_update", "event_cancelled"));
-            response.setUpdatedAt(LocalDateTime.now().toString());
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+        EventNotificationSettingsResponse response = new EventNotificationSettingsResponse();
+        response.setEventId(id);
+        response.setEmailNotifications(true);
+        response.setSmsNotifications(false);
+        response.setPushNotifications(true);
+        response.setReminderEnabled(true);
+        response.setDefaultReminderTime("24h");
+        response.setAvailableChannels(Arrays.asList("email", "sms", "push"));
+        response.setAvailableTemplates(Arrays.asList("event_reminder", "event_update", "event_cancelled"));
+        response.setUpdatedAt(LocalDateTime.now().toString());
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{id}/notifications")
@@ -67,14 +68,10 @@ public class EventNotificationController {
     public ResponseEntity<Map<String, Object>> updateNotificationSettings(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @RequestBody Map<String, Object> settings) {
-        try {
-            Map<String, Object> response = new HashMap<>(settings);
-            response.put("eventId", id);
-            response.put("updatedAt", LocalDateTime.now());
-            return ResponseEntity.ok(response);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+        Map<String, Object> response = new HashMap<>(settings);
+        response.put("eventId", id);
+        response.put("updatedAt", LocalDateTime.now());
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{id}/notifications/send")
@@ -82,35 +79,35 @@ public class EventNotificationController {
     public ResponseEntity<EventNotificationResponse> sendNotification(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Valid @RequestBody EventNotificationRequest request) {
-        try {
-            EventNotificationResponse response = new EventNotificationResponse();
-            response.setNotificationId(UUID.randomUUID());
-            response.setEventId(id);
-            response.setChannel(request.getChannel());
-            response.setSubject(request.getSubject());
-            response.setContent(request.getContent());
-            response.setStatus("sent");
-            response.setRecipientCount(
-                    (request.getRecipientUserIds() != null ? request.getRecipientUserIds().size() : 0) +
-                    (request.getRecipientEmails() != null ? request.getRecipientEmails().size() : 0)
-            );
-            response.setScheduledAt(request.getScheduledAt());
-            response.setSentAt(request.getScheduledAt() != null ? null : LocalDateTime.now());
-            response.setPriority(request.getPriority());
-            response.setCreatedAt(LocalDateTime.now());
-            
-            // Simulate successful and failed recipients
-            List<String> allRecipients = new ArrayList<>();
-            if (request.getRecipientEmails() != null) {
-                allRecipients.addAll(request.getRecipientEmails());
-            }
-            response.setSuccessfulRecipients(allRecipients);
-            response.setFailedRecipients(new ArrayList<>());
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+        Communication c = notificationService.send(
+                id,
+                request.getChannel(),
+                request.getSubject(),
+                request.getContent(),
+                request.getRecipientEmails(),
+                request.getScheduledAt(),
+                request.getPriority()
+        );
+
+        EventNotificationResponse response = new EventNotificationResponse();
+        response.setNotificationId(c.getId());
+        response.setEventId(id);
+        response.setChannel(request.getChannel());
+        response.setSubject(request.getSubject());
+        response.setContent(request.getContent());
+        response.setStatus(c.getStatus().name().toLowerCase());
+        response.setRecipientCount(
+                (request.getRecipientUserIds() != null ? request.getRecipientUserIds().size() : 0) +
+                (request.getRecipientEmails() != null ? request.getRecipientEmails().size() : 0)
+        );
+        response.setScheduledAt(request.getScheduledAt());
+        response.setSentAt(c.getSentAt());
+        response.setPriority(request.getPriority());
+        response.setCreatedAt(c.getCreatedAt());
+        response.setSuccessfulRecipients(request.getRecipientEmails() != null ? request.getRecipientEmails() : new ArrayList<>());
+        response.setFailedRecipients(new ArrayList<>());
+
+        return ResponseEntity.ok(response);
     }
 
     // ==================== EVENT REMINDER ENDPOINTS ====================
@@ -118,14 +115,10 @@ public class EventNotificationController {
     @GetMapping("/{id}/reminders")
     @Operation(summary = "Get event reminders", description = "Get all reminders for an event")
     public ResponseEntity<List<EventReminderResponse>> getReminders(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
-        try {
-            // For now, return empty list - this would be populated from a reminders table
-            List<EventReminderResponse> reminders = new ArrayList<>();
-            return ResponseEntity.ok(reminders);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size) {
+        return ResponseEntity.ok(reminderService.list(id, page, size));
     }
 
     @PostMapping("/{id}/reminders")
@@ -133,29 +126,7 @@ public class EventNotificationController {
     public ResponseEntity<EventReminderResponse> createReminder(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Valid @RequestBody EventReminderRequest request) {
-        try {
-            EventReminderResponse response = new EventReminderResponse();
-            response.setReminderId(UUID.randomUUID());
-            response.setEventId(id);
-            response.setTitle(request.getTitle());
-            response.setDescription(request.getDescription());
-            response.setReminderTime(request.getReminderTime());
-            response.setChannel(request.getChannel());
-            response.setReminderType(request.getReminderType());
-            response.setIsActive(request.getIsActive());
-            response.setCustomMessage(request.getCustomMessage());
-            response.setRecipientCount(
-                    (request.getRecipientUserIds() != null ? request.getRecipientUserIds().size() : 0) +
-                    (request.getRecipientEmails() != null ? request.getRecipientEmails().size() : 0)
-            );
-            response.setCreatedAt(LocalDateTime.now());
-            response.setUpdatedAt(LocalDateTime.now());
-            response.setWasSent(false);
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+        return ResponseEntity.ok(reminderService.create(id, request));
     }
 
     @PutMapping("/{id}/reminders/{reminderId}")
@@ -164,27 +135,7 @@ public class EventNotificationController {
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Parameter(description = "Reminder ID") @PathVariable UUID reminderId,
             @Valid @RequestBody EventReminderRequest request) {
-        try {
-            EventReminderResponse response = new EventReminderResponse();
-            response.setReminderId(reminderId);
-            response.setEventId(id);
-            response.setTitle(request.getTitle());
-            response.setDescription(request.getDescription());
-            response.setReminderTime(request.getReminderTime());
-            response.setChannel(request.getChannel());
-            response.setReminderType(request.getReminderType());
-            response.setIsActive(request.getIsActive());
-            response.setCustomMessage(request.getCustomMessage());
-            response.setRecipientCount(
-                    (request.getRecipientUserIds() != null ? request.getRecipientUserIds().size() : 0) +
-                    (request.getRecipientEmails() != null ? request.getRecipientEmails().size() : 0)
-            );
-            response.setUpdatedAt(LocalDateTime.now());
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+        return ResponseEntity.ok(reminderService.update(id, reminderId, request));
     }
 
     @DeleteMapping("/{id}/reminders/{reminderId}")
@@ -192,12 +143,8 @@ public class EventNotificationController {
     public ResponseEntity<Void> deleteReminder(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Parameter(description = "Reminder ID") @PathVariable UUID reminderId) {
-        try {
-            // In a real implementation, this would delete the reminder from the database
-            return ResponseEntity.noContent().build();
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+        reminderService.delete(id, reminderId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/reminders/{reminderId}")
@@ -205,23 +152,6 @@ public class EventNotificationController {
     public ResponseEntity<EventReminderResponse> getReminder(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Parameter(description = "Reminder ID") @PathVariable UUID reminderId) {
-        try {
-            EventReminderResponse response = new EventReminderResponse();
-            response.setReminderId(reminderId);
-            response.setEventId(id);
-            response.setTitle("Sample Reminder");
-            response.setDescription("This is a sample reminder");
-            response.setReminderTime(LocalDateTime.now().plusHours(24));
-            response.setChannel("email");
-            response.setReminderType("custom");
-            response.setIsActive(true);
-            response.setCreatedAt(LocalDateTime.now());
-            response.setUpdatedAt(LocalDateTime.now());
-            response.setWasSent(false);
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+        return ResponseEntity.ok(reminderService.get(id, reminderId));
     }
 }

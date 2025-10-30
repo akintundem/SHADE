@@ -1,4 +1,74 @@
 routes:
+  - name: event-collaborators
+    pattern: ^/api/v1/events/([a-f0-9-]+)/collaborators(?:/([a-f0-9-]+))?$
+    resourceIdGroup: 1
+    methods:
+      GET:
+        permission: event.read
+        scope: EVENT
+        allowOwner: true
+      POST:
+        permission: role.assign
+        scope: EVENT
+        allowOwner: true
+      PUT:
+        permission: role.assign
+        scope: EVENT
+        allowOwner: true
+      DELETE:
+        permission: role.remove
+        scope: EVENT
+        allowOwner: true
+
+  - name: event-reminders
+    pattern: ^/api/v1/events/([a-f0-9-]+)/reminders(?:/([a-f0-9-]+))?$
+    resourceIdGroup: 1
+    methods:
+      GET:
+        permission: event.read
+        scope: EVENT
+        allowOwner: true
+      POST:
+        permission: event.update
+        scope: EVENT
+        allowOwner: true
+      PUT:
+        permission: event.update
+        scope: EVENT
+        allowOwner: true
+      DELETE:
+        permission: event.update
+        scope: EVENT
+        allowOwner: true
+
+  - name: event-notifications
+    pattern: ^/api/v1/events/([a-f0-9-]+)/notifications(?:/send)?$
+    resourceIdGroup: 1
+    methods:
+      GET:
+        permission: event.read
+        scope: EVENT
+        allowOwner: true
+      PUT:
+        permission: event.update
+        scope: EVENT
+        allowOwner: true
+      POST:
+        permission: communication.send
+        scope: EVENT
+        allowOwner: true
+
+roles:
+  system:
+    ROLE_SUPER_ADMIN: ["*"]
+    ROLE_ADMIN: ["event.*", "role.*", "communication.*"]
+    ROLE_USER: ["event.read", "communication.read"]
+  organization: {}
+  event:
+    ORGANIZER: ["event.*", "role.*", "communication.*"]
+    COORDINATOR: ["event.read", "event.update", "communication.send"]
+    STAFF: ["event.read"]
+routes:
   - name: events-collection
     pattern: "^/api/v1/events$"
     methods:

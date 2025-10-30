@@ -3,6 +3,8 @@ package ai.eventplanner.user.repo;
 import ai.eventplanner.user.entity.EventUser;
 import ai.eventplanner.common.domain.enums.EventUserType;
 import ai.eventplanner.common.domain.enums.RegistrationStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +18,7 @@ import java.util.UUID;
 public interface EventUserRepository extends JpaRepository<EventUser, UUID> {
     
     List<EventUser> findByEventId(UUID eventId);
+    Page<EventUser> findByEventId(UUID eventId, Pageable pageable);
     
     List<EventUser> findByEventIdAndUserType(UUID eventId, EventUserType userType);
     

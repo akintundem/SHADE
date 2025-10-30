@@ -77,7 +77,10 @@ public class RateLimitingService {
             return true;
 
         } catch (Exception e) {
-            // In case of error, allow the request but log it
+            // On Redis error: default-deny for sensitive auth endpoints, allow for others
+            if (endpoint.contains("/auth/login") || endpoint.contains("/auth/register")) {
+                return false;
+            }
             return true;
         }
     }

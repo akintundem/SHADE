@@ -79,7 +79,7 @@ public class RbacAuthorizationFilter extends OncePerRequestFilter {
 
         Optional<PermissionCheck> permission = permissionRegistry.resolve(request);
         if (permission.isEmpty()) {
-            log.warn("RBAC policy missing for {} {} - denying access", method, uri);
+            log.debug("RBAC policy missing for {} {} - denying access", method, uri);
             respondForbidden(response, "Access denied", "No RBAC rule covers this endpoint");
             return;
         }

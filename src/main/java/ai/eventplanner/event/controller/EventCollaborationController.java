@@ -6,6 +6,9 @@ import ai.eventplanner.event.dto.response.EventCollaboratorResponse;
 import ai.eventplanner.event.dto.response.EventShareResponse;
 import ai.eventplanner.event.dto.response.EventSharingOptionsResponse;
 import ai.eventplanner.event.service.EventService;
+import ai.eventplanner.user.entity.EventUser;
+import ai.eventplanner.user.repo.EventUserRepository;
+import ai.eventplanner.common.domain.enums.RegistrationStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -32,9 +35,11 @@ import java.util.*;
 public class EventCollaborationController {
 
     private final EventService eventService;
+    private final EventUserRepository eventUserRepository;
 
-    public EventCollaborationController(EventService eventService) {
+    public EventCollaborationController(EventService eventService, EventUserRepository eventUserRepository) {
         this.eventService = eventService;
+        this.eventUserRepository = eventUserRepository;
     }
 
     // ==================== EVENT SHARING ENDPOINTS ====================
@@ -103,14 +108,25 @@ public class EventCollaborationController {
     @GetMapping("/{id}/collaborators")
     @Operation(summary = "Get event collaborators", description = "Get list of event collaborators")
     public ResponseEntity<List<EventCollaboratorResponse>> getCollaborators(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
-        try {
-            // For now, return empty list - this would be populated from EventUser table
-            List<EventCollaboratorResponse> collaborators = new ArrayList<>();
-            return ResponseEntity.ok(collaborators);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size) {
+        var pageable = org.springframework.data.domain.PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        var eventUsersPage = eventUserRepository.findByEventId(id, pageable);
+        List<EventUser> eventUsers = eventUsersPage.getContent();
+        List<EventCollaboratorResponse> collaborators = new ArrayList<>();
+        for (EventUser eu : eventUsers) {
+            EventCollaboratorResponse r = new EventCollaboratorResponse();
+            r.setCollaboratorId(eu.getId());
+            r.setEventId(eu.getEventId());
+            r.setUserId(eu.getUserId());
+            r.setEmail(eu.getEmail());
+            r.setRole(eu.getUserType());
+            r.setPermissions(null);
+            r.setNotes(eu.getNotes());
+            collaborators.add(r);
         }
+        return ResponseEntity.ok(collaborators);
     }
 
     @PostMapping("/{id}/collaborators")
@@ -118,24 +134,30 @@ public class EventCollaborationController {
     public ResponseEntity<EventCollaboratorResponse> addCollaborator(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Valid @RequestBody EventCollaboratorRequest request) {
-        try {
-            EventCollaboratorResponse response = new EventCollaboratorResponse();
-            response.setCollaboratorId(UUID.randomUUID());
-            response.setEventId(id);
-            response.setUserId(request.getUserId());
-            response.setEmail(request.getEmail());
-            response.setRole(request.getRole());
-            response.setPermissions(request.getPermissions());
-            response.setNotes(request.getNotes());
-            response.setInvitationSent(request.getSendInvitation());
-            response.setInvitationSentAt(request.getSendInvitation() ? LocalDateTime.now() : null);
-            response.setAddedAt(LocalDateTime.now());
-            response.setUpdatedAt(LocalDateTime.now());
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+        EventUser eu = new EventUser();
+        eu.setEventId(id);
+        eu.setUserId(request.getUserId());
+        eu.setEmail(request.getEmail());
+        eu.setUserType(request.getRole());
+        eu.setRegistrationStatus(RegistrationStatus.CONFIRMED);
+        eu.setRegistrationDate(LocalDateTime.now());
+        eu.setNotes(request.getNotes());
+        EventUser saved = eventUserRepository.save(eu);
+
+        EventCollaboratorResponse response = new EventCollaboratorResponse();
+        response.setCollaboratorId(saved.getId());
+        response.setEventId(saved.getEventId());
+        response.setUserId(saved.getUserId());
+        response.setEmail(saved.getEmail());
+        response.setRole(saved.getUserType());
+        response.setPermissions(request.getPermissions());
+        response.setNotes(saved.getNotes());
+        response.setInvitationSent(request.getSendInvitation());
+        response.setInvitationSentAt(request.getSendInvitation() ? LocalDateTime.now() : null);
+        response.setAddedAt(saved.getCreatedAt());
+        response.setUpdatedAt(saved.getUpdatedAt());
+
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{id}/collaborators/{collaboratorId}")
@@ -144,21 +166,28 @@ public class EventCollaborationController {
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Parameter(description = "Collaborator ID") @PathVariable UUID collaboratorId,
             @Valid @RequestBody EventCollaboratorRequest request) {
-        try {
-            EventCollaboratorResponse response = new EventCollaboratorResponse();
-            response.setCollaboratorId(collaboratorId);
-            response.setEventId(id);
-            response.setUserId(request.getUserId());
-            response.setEmail(request.getEmail());
-            response.setRole(request.getRole());
-            response.setPermissions(request.getPermissions());
-            response.setNotes(request.getNotes());
-            response.setUpdatedAt(LocalDateTime.now());
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        EventUser eu = eventUserRepository.findById(collaboratorId)
+                .orElseThrow(() -> new IllegalArgumentException("Collaborator not found"));
+        if (!eu.getEventId().equals(id)) {
+            throw new IllegalArgumentException("Collaborator does not belong to event");
         }
+        if (request.getUserId() != null) eu.setUserId(request.getUserId());
+        if (request.getEmail() != null) eu.setEmail(request.getEmail());
+        if (request.getRole() != null) eu.setUserType(request.getRole());
+        if (request.getNotes() != null) eu.setNotes(request.getNotes());
+        EventUser saved = eventUserRepository.save(eu);
+
+        EventCollaboratorResponse response = new EventCollaboratorResponse();
+        response.setCollaboratorId(saved.getId());
+        response.setEventId(saved.getEventId());
+        response.setUserId(saved.getUserId());
+        response.setEmail(saved.getEmail());
+        response.setRole(saved.getUserType());
+        response.setPermissions(request.getPermissions());
+        response.setNotes(saved.getNotes());
+        response.setUpdatedAt(saved.getUpdatedAt());
+
+        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/{id}/collaborators/{collaboratorId}")
@@ -166,12 +195,13 @@ public class EventCollaborationController {
     public ResponseEntity<Void> removeCollaborator(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Parameter(description = "Collaborator ID") @PathVariable UUID collaboratorId) {
-        try {
-            // In a real implementation, this would remove the collaborator from the database
-            return ResponseEntity.noContent().build();
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        EventUser eu = eventUserRepository.findById(collaboratorId)
+                .orElseThrow(() -> new IllegalArgumentException("Collaborator not found"));
+        if (!eu.getEventId().equals(id)) {
+            throw new IllegalArgumentException("Collaborator does not belong to event");
         }
+        eventUserRepository.delete(eu);
+        return ResponseEntity.noContent().build();
     }
 
     // ==================== HELPER METHODS ====================
@@ -179,4 +209,6 @@ public class EventCollaborationController {
     private String generateShareLink(UUID eventId) {
         return "https://eventplanner.app/events/" + eventId.toString();
     }
+
+    
 }

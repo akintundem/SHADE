@@ -224,9 +224,11 @@ public class AuthService {
         String normalizedEmail = normalizeEmail(request.getEmail());
         return userAccountRepository.findByEmailIgnoreCase(normalizedEmail)
                 .map(user -> {
+                    String rawToken = generateSecureToken();
+                    String hashed = ai.eventplanner.common.security.TokenHashUtil.sha256(rawToken);
                     PasswordResetToken token = PasswordResetToken.builder()
                             .user(user)
-                            .token(generateSecureToken())
+                            .token(hashed)
                             .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plusHours(1))
                             .consumed(false)
                             .build();
@@ -239,7 +241,8 @@ public class AuthService {
     public boolean resetPassword(ResetPasswordRequest request) {
         validatePasswordMatch(request.getNewPassword(), request.getConfirmPassword());
         
-        PasswordResetToken token = passwordResetTokenRepository.findByToken(request.getToken())
+        String hashed = ai.eventplanner.common.security.TokenHashUtil.sha256(request.getToken());
+        PasswordResetToken token = passwordResetTokenRepository.findByToken(hashed)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired reset token"));
 
         if (token.isConsumed() || token.getExpiresAt().isBefore(LocalDateTime.now(ZoneOffset.UTC))) {
@@ -265,9 +268,11 @@ public class AuthService {
         String normalizedEmail = normalizeEmail(request.getEmail());
         return userAccountRepository.findByEmailIgnoreCase(normalizedEmail)
                 .map(user -> {
+                    String rawToken = generateSecureToken();
+                    String hashed = ai.eventplanner.common.security.TokenHashUtil.sha256(rawToken);
                     EmailVerificationToken token = EmailVerificationToken.builder()
                             .user(user)
-                            .token(generateSecureToken())
+                            .token(hashed)
                             .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plusDays(1))
                             .consumed(false)
                             .build();
@@ -278,7 +283,8 @@ public class AuthService {
     }
 
     public boolean verifyEmailToken(String tokenValue) {
-        return emailVerificationTokenRepository.findByToken(tokenValue)
+        String hashed = ai.eventplanner.common.security.TokenHashUtil.sha256(tokenValue);
+        return emailVerificationTokenRepository.findByToken(hashed)
                 .map(token -> {
                     if (token.isConsumed() || token.getExpiresAt().isBefore(LocalDateTime.now(ZoneOffset.UTC))) {
                         return false;

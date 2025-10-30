@@ -2,6 +2,7 @@ package ai.eventplanner.event.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -19,10 +20,12 @@ public class EventNotificationRequest {
 
     @NotBlank(message = "Channel is required")
     @Schema(description = "Notification channel (email, sms, push)", example = "email")
+    @Size(max = 30, message = "Channel must be <= 30 chars")
     private String channel;
 
     @NotBlank(message = "Subject is required")
     @Schema(description = "Notification subject")
+    @Size(max = 200, message = "Subject must be <= 200 chars")
     private String subject;
 
     @NotBlank(message = "Content is required")

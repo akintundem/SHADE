@@ -1,11 +1,15 @@
 package ai.eventplanner.auth.service;
 
 import ai.eventplanner.auth.entity.ClientApplication;
+import ai.eventplanner.auth.repo.ClientApplicationRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Internal service for managing client applications
@@ -16,9 +20,11 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class InternalClientManagementService implements CommandLineRunner {
 
     private final ClientValidationService clientValidationService;
+    private final ClientApplicationRepository clientApplicationRepository;
 
     /**
      * Initialize default clients on application startup
@@ -44,16 +50,20 @@ public class InternalClientManagementService implements CommandLineRunner {
 
         for (ClientInfo clientInfo : defaultClients) {
             try {
-                if (!clientValidationService.isValidClient(clientInfo.clientId)) {
-                    clientValidationService.createClientInternal(
-                        clientInfo.clientId,
-                        clientInfo.clientName,
-                        clientInfo.clientType,
-                        clientInfo.description
-                    );
-                } else {
-                }
+                clientApplicationRepository.findByClientId(clientInfo.clientId)
+                    .ifPresentOrElse(
+                        existing -> ensureClientUpToDate(existing, clientInfo),
+                        () -> {
+                            ClientApplication created = clientValidationService.createClientInternal(
+                                clientInfo.clientId,
+                                clientInfo.clientName,
+                                clientInfo.clientType,
+                                clientInfo.description
+                            );
+                            log.info("Initialized default client '{}'", created.getClientId());
+                        });
             } catch (Exception e) {
+                log.error("Failed to initialize default client '{}': {}", clientInfo.clientId, e.getMessage(), e);
             }
         }
 
@@ -71,15 +81,67 @@ public class InternalClientManagementService implements CommandLineRunner {
      * Deactivate a client application (ADMIN ONLY)
      */
     public void deactivateClient(String clientId) {
-        // Implementation would go here
+        ClientApplication client = clientApplicationRepository.findByClientId(clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Client not found: " + clientId));
+
+        if (!client.isActive()) {
+            log.debug("Client '{}' already inactive", clientId);
+            return;
+        }
+
+        client.setActive(false);
+        clientApplicationRepository.save(client);
+        log.info("Deactivated client '{}'", clientId);
     }
 
     /**
      * Get all client applications (ADMIN ONLY)
      */
     public List<ClientApplication> getAllClients() {
-        // Implementation would go here - for now just return empty list
-        return List.of();
+        return clientApplicationRepository.findAll();
+    }
+
+    private void ensureClientUpToDate(ClientApplication existing, ClientInfo definition) {
+        boolean updated = false;
+
+        if (!existing.isActive()) {
+            existing.setActive(true);
+            updated = true;
+        }
+        if (!Objects.equals(existing.getClientName(), definition.clientName)) {
+            existing.setClientName(definition.clientName);
+            updated = true;
+        }
+        if (!Objects.equals(existing.getClientType(), definition.clientType)) {
+            existing.setClientType(definition.clientType);
+            updated = true;
+        }
+        if (!Objects.equals(existing.getDescription(), definition.description)) {
+            existing.setDescription(definition.description);
+            updated = true;
+        }
+        if (existing.getRateLimitPerMinute() == null) {
+            existing.setRateLimitPerMinute(100);
+            updated = true;
+        }
+        if (existing.getRateLimitPerHour() == null) {
+            existing.setRateLimitPerHour(1000);
+            updated = true;
+        }
+        if (existing.getMaxConcurrentSessions() == null) {
+            existing.setMaxConcurrentSessions(5);
+            updated = true;
+        }
+
+        // keep track of the last time the default was revalidated to aid debugging
+        existing.setLastUsed(LocalDateTime.now());
+
+        if (updated) {
+            clientApplicationRepository.save(existing);
+            log.info("Updated default client '{}'", existing.getClientId());
+        } else {
+            log.debug("Default client '{}' already up to date", existing.getClientId());
+        }
     }
 
     /**
