@@ -197,6 +197,7 @@ run_test() {
     
     # Build curl command - always include Client-ID if not already present
     local curl_cmd="curl -s -w '%{http_code}' -X $method"
+    local temp_data_file=""
     
     # Ensure X-Client-ID header is always included for API requests
     if [[ "$endpoint" == /api/* ]]; then
@@ -214,13 +215,28 @@ run_test() {
     fi
     
     if [ -n "$data" ]; then
-        curl_cmd="$curl_cmd -d '$data'"
+        temp_data_file=$(mktemp)
+        printf '%s' "$data" > "$temp_data_file"
+        curl_cmd="$curl_cmd --data-binary @$temp_data_file"
     fi
     
     curl_cmd="$curl_cmd '$BASE_URL$endpoint'"
     
     # Execute the request
-    local response=$(eval $curl_cmd)
+    local response
+    if ! response=$(eval "$curl_cmd"); then
+        echo -e "${RED}❌ Failed to execute curl command${NC}"
+        echo -e "${YELLOW}   Command: $curl_cmd${NC}"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+        if [ -n "$temp_data_file" ]; then
+            rm -f "$temp_data_file"
+        fi
+        return 1
+    fi
+
+    if [ -n "$temp_data_file" ]; then
+        rm -f "$temp_data_file"
+    fi
     local http_code="${response: -3}"
     local response_body="${response%???}"
     
@@ -781,33 +797,41 @@ main() {
     run_test "Get Event Reminders" "GET" "/api/v1/events/$EVENT_ID/reminders" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event reminders"
     
     local reminder_time=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
-    local reminder_data='{
-        "title": "Event Reminder",
-        "description": "Don'\''t forget about the event!",
-        "reminderTime": "'$reminder_time'",
-        "channel": "email",
-        "reminderType": "custom",
-        "isActive": true,
-        "customMessage": "Custom reminder message",
-        "recipientUserIds": ["'$USER_ID'"],
-        "recipientEmails": ["test@example.com"]
-    }'
+    local reminder_data
+    reminder_data=$(cat <<EOF
+{
+    "title": "Event Reminder",
+    "description": "Don't forget about the event!",
+    "reminderTime": "$reminder_time",
+    "channel": "email",
+    "reminderType": "custom",
+    "isActive": true,
+    "customMessage": "Custom reminder message",
+    "recipientUserIds": ["$USER_ID"],
+    "recipientEmails": ["test@example.com"]
+}
+EOF
+)
     run_test "Create Event Reminder" "POST" "/api/v1/events/$EVENT_ID/reminders" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$reminder_data" "200" "Create event reminder"
     
     # Update reminder (using mock reminder ID)
     local mock_reminder_id="12345678-1234-1234-1234-123456789012"
     local reminder_update_time=$(date -u -v+2d '+%Y-%m-%dT%H:%M:%S')
-    local reminder_update_data='{
-        "title": "Updated Event Reminder",
-        "description": "Updated reminder description",
-        "reminderTime": "'$reminder_update_time'",
-        "channel": "sms",
-        "reminderType": "custom",
-        "isActive": true,
-        "customMessage": "Updated reminder message",
-        "recipientUserIds": ["'$USER_ID'"],
-        "recipientEmails": ["test@example.com"]
-    }'
+    local reminder_update_data
+    reminder_update_data=$(cat <<EOF
+{
+    "title": "Updated Event Reminder",
+    "description": "Updated reminder description",
+    "reminderTime": "$reminder_update_time",
+    "channel": "sms",
+    "reminderType": "custom",
+    "isActive": true,
+    "customMessage": "Updated reminder message",
+    "recipientUserIds": ["$USER_ID"],
+    "recipientEmails": ["test@example.com"]
+}
+EOF
+)
     run_test "Update Event Reminder" "PUT" "/api/v1/events/$EVENT_ID/reminders/$mock_reminder_id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$reminder_update_data" "200" "Update event reminder"
     
     run_test "Get Specific Reminder" "GET" "/api/v1/events/$EVENT_ID/reminders/$mock_reminder_id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific reminder"

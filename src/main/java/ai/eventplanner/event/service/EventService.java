@@ -11,6 +11,9 @@ import ai.eventplanner.event.entity.Event;
 import ai.eventplanner.event.repo.EventRepository;
 import ai.eventplanner.common.domain.enums.EventStatus;
 import ai.eventplanner.common.domain.enums.EventUserType;
+import ai.eventplanner.roles.entity.EventRole;
+import ai.eventplanner.common.domain.enums.RoleName;
+import ai.eventplanner.roles.repo.EventRoleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -30,6 +33,9 @@ public class EventService {
 
     @Autowired
     private EventRepository eventRepository;
+    
+    @Autowired
+    private EventRoleRepository eventRoleRepository;
 
     /**
      * Create a new event from structured DTO
@@ -289,15 +295,35 @@ public class EventService {
         event.setDescription(request.getDescription());
         event.setOwnerId(ownerId);
         event.setEventType(request.getEventType());
-        event.setEventStatus(request.getEventStatus());
+        event.setEventStatus(request.getEventStatus() != null ? request.getEventStatus() : EventStatus.PLANNING);
         event.setStartDateTime(request.getStartDateTime());
         event.setEndDateTime(request.getEndDateTime());
         event.setCapacity(request.getCapacity());
-        event.setIsPublic(request.getIsPublic());
-        event.setRequiresApproval(request.getRequiresApproval());
-        event.setQrCodeEnabled(request.getQrCodeEnabled());
+        event.setIsPublic(request.getIsPublic() != null ? request.getIsPublic() : Boolean.TRUE);
+        event.setRequiresApproval(request.getRequiresApproval() != null ? request.getRequiresApproval() : Boolean.FALSE);
+        event.setQrCodeEnabled(request.getQrCodeEnabled() != null ? request.getQrCodeEnabled() : Boolean.FALSE);
+        event.setVenueRequirements(request.getVenueRequirements());
+        event.setCoverImageUrl(request.getCoverImageUrl());
+        event.setEventWebsiteUrl(request.getEventWebsiteUrl());
+        event.setHashtag(request.getHashtag());
+        event.setTheme(request.getTheme());
+        event.setObjectives(request.getObjectives());
+        event.setTargetAudience(request.getTargetAudience());
+        event.setSuccessMetrics(request.getSuccessMetrics());
+        event.setBrandingGuidelines(request.getBrandingGuidelines());
+        event.setTechnicalRequirements(request.getTechnicalRequirements());
+        event.setAccessibilityFeatures(request.getAccessibilityFeatures());
+        event.setEmergencyPlan(request.getEmergencyPlan());
+        event.setBackupPlan(request.getBackupPlan());
+        event.setPostEventTasks(request.getPostEventTasks());
+        event.setMetadata(request.getMetadata());
+        event.setRegistrationDeadline(request.getRegistrationDeadline());
+        event.setCurrentAttendeeCount(request.getCurrentAttendeeCount() != null ? request.getCurrentAttendeeCount() : 0);
+        event.setQrCode(request.getQrCode());
         
-        return eventRepository.save(event);
+        Event savedEvent = eventRepository.save(event);
+        assignOwnerOrganizerRole(savedEvent.getId(), ownerId);
+        return savedEvent;
     }
 
     /**
@@ -523,6 +549,36 @@ public class EventService {
         
         event.setEventStatus(newStatus);
         return eventRepository.save(event);
+    }
+
+    private void assignOwnerOrganizerRole(UUID eventId, UUID ownerId) {
+        if (eventId == null || ownerId == null) {
+            return;
+        }
+        
+        Optional<EventRole> existingRole = eventRoleRepository
+                .findByEventIdAndUserIdAndRoleName(eventId, ownerId, RoleName.ORGANIZER);
+        
+        if (existingRole.isPresent()) {
+            EventRole role = existingRole.get();
+            if (Boolean.FALSE.equals(role.getIsActive())) {
+                role.setIsActive(true);
+                role.setAssignedAt(LocalDateTime.now());
+                role.setAssignedBy(ownerId);
+                eventRoleRepository.save(role);
+            }
+            return;
+        }
+        
+        EventRole organizerRole = new EventRole();
+        organizerRole.setEventId(eventId);
+        organizerRole.setUserId(ownerId);
+        organizerRole.setRoleName(RoleName.ORGANIZER);
+        organizerRole.setIsActive(true);
+        organizerRole.setAssignedBy(ownerId);
+        organizerRole.setAssignedAt(LocalDateTime.now());
+        organizerRole.setNotes("Auto-assigned event owner");
+        eventRoleRepository.save(organizerRole);
     }
 
     /**
@@ -953,4 +1009,3 @@ public class EventService {
     }
 
 }
-
