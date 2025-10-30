@@ -5,6 +5,7 @@ import ai.eventplanner.event.dto.request.UpdateEventRequest;
 import ai.eventplanner.event.dto.response.EventResponse;
 import ai.eventplanner.event.entity.Event;
 import ai.eventplanner.event.service.EventService;
+import ai.eventplanner.auth.service.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -16,6 +17,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,16 +47,18 @@ public class EventCrudController {
 
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get event by ID", description = "Retrieve a specific event by its unique identifier")
+    @Operation(summary = "Get event by ID", description = "Retrieve a specific event by its unique identifier. Only accessible if event is public, user is owner, or user has appropriate role.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event found",
                 content = @Content(schema = @Schema(implementation = EventResponse.class))),
-        @ApiResponse(responseCode = "404", description = "Event not found"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token")
+        @ApiResponse(responseCode = "404", description = "Event not found or access denied"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions")
     })
     public ResponseEntity<EventResponse> get(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
-        Optional<Event> found = eventService.getById(id);
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal user) {
+        Optional<Event> found = eventService.getByIdWithAccessControl(id, user);
         return found
                 .map(eventService::toResponse)
                 .map(ResponseEntity::ok)

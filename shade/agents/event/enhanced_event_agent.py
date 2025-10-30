@@ -8,7 +8,17 @@ from ..event.tools.enhanced_event_tools import (
     get_event_info,
     get_current_event_status,
     check_event_weather,
-    search_venues_google
+    search_venues_google,
+    check_event_onboarding_requirements,
+    publish_current_event,
+    open_registration_for_current_event,
+    close_registration_for_current_event,
+    update_capacity_for_current_event,
+    set_visibility_for_current_event,
+    generate_qr_for_current_event,
+    get_event_capacity_summary,
+    list_my_events,
+    search_public_events
 )
 from ..event.rag.event_rag import EventRAGSystem
 
@@ -45,6 +55,11 @@ class EnhancedEventAgent(BaseAgent):
         4. **CHECK STATUS:**
            - Use `get_current_event_status` to see what's planned
            - Show what's missing and suggest next steps
+
+        5. **ONBOARDING GATE (Before sensitive actions):**
+           - Always call `check_event_onboarding_requirements` before:
+             publishing, opening registration, generating QR, or changing visibility.
+           - Required: name, eventType, future startDateTime, capacity, visibility.
         
         **CONVERSATION STYLE:**
         - Be warm and professional like a real event planner
@@ -145,7 +160,17 @@ class EnhancedEventAgent(BaseAgent):
             get_event_info,
             get_current_event_status,
             check_event_weather,
-            search_venues_google
+            search_venues_google,
+            check_event_onboarding_requirements,
+            publish_current_event,
+            open_registration_for_current_event,
+            close_registration_for_current_event,
+            update_capacity_for_current_event,
+            set_visibility_for_current_event,
+            generate_qr_for_current_event,
+            get_event_capacity_summary,
+            list_my_events,
+            search_public_events
         ]
     
     def get_rag_system(self):

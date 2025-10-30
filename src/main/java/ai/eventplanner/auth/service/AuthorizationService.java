@@ -127,4 +127,54 @@ public class AuthorizationService {
     private boolean isSelf(UUID userId, UUID targetId) {
         return targetId != null && targetId.equals(userId);
     }
+
+    /**
+     * Check if a user can access an event.
+     * A user can access an event if:
+     * 1. The event is public, OR
+     * 2. The user is the owner, OR
+     * 3. The user has an active role in the event
+     * 
+     * @param user The user principal
+     * @param eventId The event ID
+     * @return true if the user can access the event
+     */
+    public boolean canAccessEvent(UserPrincipal user, UUID eventId) {
+        if (user == null || eventId == null) {
+            return false;
+        }
+
+        // Check if event exists
+        Event event = eventRepository.findById(eventId).orElse(null);
+        if (event == null) {
+            return false;
+        }
+
+        // Public events are accessible to everyone
+        if (Boolean.TRUE.equals(event.getIsPublic())) {
+            return true;
+        }
+
+        // Private events: check ownership
+        if (isEventOwner(user.getId(), eventId)) {
+            return true;
+        }
+
+        // Private events: check if user has an active role
+        List<EventRole> eventRoles = eventRoleRepository.findByEventIdAndUserId(eventId, user.getId());
+        boolean hasActiveRole = eventRoles.stream()
+            .anyMatch(EventRole::getIsActive);
+        
+        if (hasActiveRole) {
+            return true;
+        }
+
+        // System admins can access all events
+        RolePermissionMatrix matrix = permissionRegistry.getRolePermissionMatrix();
+        if (hasSystemPermission(user, "event.*", matrix) || hasSystemPermission(user, "event.read", matrix)) {
+            return true;
+        }
+
+        return false;
+    }
 }

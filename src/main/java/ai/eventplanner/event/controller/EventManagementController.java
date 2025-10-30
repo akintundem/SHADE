@@ -17,6 +17,7 @@ import ai.eventplanner.event.dto.response.UserEventRelationshipResponse;
 import ai.eventplanner.event.dto.response.UserEventsSummaryResponse;
 import ai.eventplanner.event.entity.Event;
 import ai.eventplanner.event.service.EventService;
+import ai.eventplanner.auth.service.UserPrincipal;
 import ai.eventplanner.common.domain.enums.EventStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -29,6 +30,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -189,12 +191,13 @@ public class EventManagementController {
     // ==================== 2. EVENT STATUS & LIFECYCLE ENDPOINTS ====================
 
     @GetMapping("/{id}/status")
-    @Operation(summary = "Get event status", description = "Retrieve the current status of an event")
+    @Operation(summary = "Get event status", description = "Retrieve the current status of an event. Only accessible if event is public, user is owner, or user has appropriate role.")
     public ResponseEntity<EventStatus> getEventStatus(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal user) {
         try {
-            Event event = eventService.getById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+            Event event = eventService.getByIdWithAccessControl(id, user)
+                    .orElseThrow(() -> new IllegalArgumentException("Event not found or access denied"));
             return ResponseEntity.ok(event.getEventStatus());
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
@@ -402,12 +405,13 @@ public class EventManagementController {
     // ==================== 4. EVENT CAPACITY & REGISTRATION ENDPOINTS ====================
 
     @GetMapping("/{id}/capacity")
-    @Operation(summary = "Get event capacity", description = "Retrieve capacity information for an event")
+    @Operation(summary = "Get event capacity", description = "Retrieve capacity information for an event. Only accessible if event is public, user is owner, or user has appropriate role.")
     public ResponseEntity<EventCapacityResponse> getEventCapacity(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal user) {
         try {
-            Event event = eventService.getById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+            Event event = eventService.getByIdWithAccessControl(id, user)
+                    .orElseThrow(() -> new IllegalArgumentException("Event not found or access denied"));
             
             EventCapacityResponse response = new EventCapacityResponse();
             response.setEventId(id);
@@ -465,12 +469,13 @@ public class EventManagementController {
     // ==================== 5. EVENT QR CODE ENDPOINTS ====================
 
     @GetMapping("/{id}/qr-code")
-    @Operation(summary = "Get event QR code", description = "Retrieve the QR code for an event")
+    @Operation(summary = "Get event QR code", description = "Retrieve the QR code for an event. Only accessible if event is public, user is owner, or user has appropriate role.")
     public ResponseEntity<EventQRCodeResponse> getQRCode(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal user) {
         try {
-            Event event = eventService.getById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+            Event event = eventService.getByIdWithAccessControl(id, user)
+                    .orElseThrow(() -> new IllegalArgumentException("Event not found or access denied"));
             
             EventQRCodeResponse response = new EventQRCodeResponse();
             response.setEventId(id);
@@ -524,12 +529,13 @@ public class EventManagementController {
     // ==================== 6. EVENT VISIBILITY & ACCESS CONTROL ENDPOINTS ====================
 
     @GetMapping("/{id}/visibility")
-    @Operation(summary = "Get event visibility", description = "Get the visibility settings for an event")
+    @Operation(summary = "Get event visibility", description = "Get the visibility settings for an event. Only accessible if event is public, user is owner, or user has appropriate role.")
     public ResponseEntity<EventVisibilityResponse> getVisibility(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal user) {
         try {
-            Event event = eventService.getById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+            Event event = eventService.getByIdWithAccessControl(id, user)
+                    .orElseThrow(() -> new IllegalArgumentException("Event not found or access denied"));
             
             EventVisibilityResponse response = new EventVisibilityResponse();
             response.setEventId(id);

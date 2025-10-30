@@ -195,6 +195,306 @@ class JavaSpringAPIClient:
     # Note: Delete is intentionally not implemented per requirements
     # AI should not be able to delete events
     
+    # ==================== EVENT MANAGEMENT (SAFE) ====================
+    async def get_event_status(self, event_id: str) -> Dict[str, Any]:
+        try:
+            session = await self.get_session()
+            async with session.get(f"{self.base_url}/events/{event_id}/status") as response:
+                if response.status == 200:
+                    status = await response.json()
+                    return {"success": True, "status": status}
+                return {"success": False, "error": await response.text()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def publish_event(self, event_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Publish an event. Requires ownership/permission via X-User-Id header.
+        
+        Args:
+            event_id: Event ID to publish
+            user_id: User ID for permission check (required)
+        """
+        try:
+            session = await self.get_session()
+            headers = {}
+            if user_id:
+                try:
+                    uuid.UUID(user_id)
+                    headers["X-User-Id"] = user_id
+                except ValueError:
+                    chatbot_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"chatbot-{user_id}"))
+                    headers["X-User-Id"] = chatbot_uuid
+            else:
+                headers["X-User-Id"] = "550e8400-e29b-41d4-a716-446655440000"
+            
+            async with session.post(f"{self.base_url}/events/{event_id}/publish", headers=headers) as response:
+                if response.status == 200:
+                    return {"success": True, "event": await response.json()}
+                elif response.status == 403:
+                    return {"success": False, "error": "Permission denied", "status_code": 403}
+                return {"success": False, "error": await response.text(), "status_code": response.status}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def open_registration(self, event_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Open registration for an event. Requires ownership/permission via X-User-Id header.
+        
+        Args:
+            event_id: Event ID
+            user_id: User ID for permission check (required)
+        """
+        try:
+            session = await self.get_session()
+            headers = {}
+            if user_id:
+                try:
+                    uuid.UUID(user_id)
+                    headers["X-User-Id"] = user_id
+                except ValueError:
+                    chatbot_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"chatbot-{user_id}"))
+                    headers["X-User-Id"] = chatbot_uuid
+            else:
+                headers["X-User-Id"] = "550e8400-e29b-41d4-a716-446655440000"
+            
+            async with session.post(f"{self.base_url}/events/{event_id}/open-registration", headers=headers) as response:
+                if response.status == 200:
+                    return {"success": True, "event": await response.json()}
+                elif response.status == 403:
+                    return {"success": False, "error": "Permission denied", "status_code": 403}
+                return {"success": False, "error": await response.text(), "status_code": response.status}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def close_registration(self, event_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Close registration for an event. Requires ownership/permission via X-User-Id header.
+        
+        Args:
+            event_id: Event ID
+            user_id: User ID for permission check (required)
+        """
+        try:
+            session = await self.get_session()
+            headers = {}
+            if user_id:
+                try:
+                    uuid.UUID(user_id)
+                    headers["X-User-Id"] = user_id
+                except ValueError:
+                    chatbot_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"chatbot-{user_id}"))
+                    headers["X-User-Id"] = chatbot_uuid
+            else:
+                headers["X-User-Id"] = "550e8400-e29b-41d4-a716-446655440000"
+            
+            async with session.post(f"{self.base_url}/events/{event_id}/close-registration", headers=headers) as response:
+                if response.status == 200:
+                    return {"success": True, "event": await response.json()}
+                elif response.status == 403:
+                    return {"success": False, "error": "Permission denied", "status_code": 403}
+                return {"success": False, "error": await response.text(), "status_code": response.status}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def get_event_capacity(self, event_id: str) -> Dict[str, Any]:
+        try:
+            session = await self.get_session()
+            async with session.get(f"{self.base_url}/events/{event_id}/capacity") as response:
+                if response.status == 200:
+                    return {"success": True, "capacity": await response.json()}
+                return {"success": False, "error": await response.text()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def update_capacity(self, event_id: str, capacity: int, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Update event capacity. Requires ownership/permission via X-User-Id header.
+        
+        Args:
+            event_id: Event ID
+            capacity: New capacity value
+            user_id: User ID for permission check (required)
+        """
+        try:
+            session = await self.get_session()
+            headers = {}
+            if user_id:
+                try:
+                    uuid.UUID(user_id)
+                    headers["X-User-Id"] = user_id
+                except ValueError:
+                    chatbot_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"chatbot-{user_id}"))
+                    headers["X-User-Id"] = chatbot_uuid
+            else:
+                headers["X-User-Id"] = "550e8400-e29b-41d4-a716-446655440000"
+            
+            async with session.put(
+                f"{self.base_url}/events/{event_id}/capacity",
+                json={"capacity": capacity},
+                headers=headers
+            ) as response:
+                if response.status == 200:
+                    return {"success": True, "event": await response.json()}
+                elif response.status == 403:
+                    return {"success": False, "error": "Permission denied", "status_code": 403}
+                return {"success": False, "error": await response.text(), "status_code": response.status}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def update_registration_deadline(self, event_id: str, deadline_iso: str) -> Dict[str, Any]:
+        try:
+            session = await self.get_session()
+            async with session.put(
+                f"{self.base_url}/events/{event_id}/registration-deadline",
+                json={"deadline": deadline_iso}
+            ) as response:
+                if response.status == 200:
+                    return {"success": True, "event": await response.json()}
+                return {"success": False, "error": await response.text()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def get_visibility(self, event_id: str) -> Dict[str, Any]:
+        try:
+            session = await self.get_session()
+            async with session.get(f"{self.base_url}/events/{event_id}/visibility") as response:
+                if response.status == 200:
+                    return {"success": True, "visibility": await response.json()}
+                return {"success": False, "error": await response.text()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def update_visibility(self, event_id: str, is_public: bool, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Update event visibility. Requires ownership/permission via X-User-Id header.
+        
+        Args:
+            event_id: Event ID
+            is_public: True for public, False for private
+            user_id: User ID for permission check (required)
+        """
+        try:
+            session = await self.get_session()
+            headers = {}
+            if user_id:
+                try:
+                    uuid.UUID(user_id)
+                    headers["X-User-Id"] = user_id
+                except ValueError:
+                    chatbot_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"chatbot-{user_id}"))
+                    headers["X-User-Id"] = chatbot_uuid
+            else:
+                headers["X-User-Id"] = "550e8400-e29b-41d4-a716-446655440000"
+            
+            async with session.put(
+                f"{self.base_url}/events/{event_id}/visibility",
+                json={"isPublic": is_public},
+                headers=headers
+            ) as response:
+                if response.status == 200:
+                    return {"success": True, "event": await response.json()}
+                elif response.status == 403:
+                    return {"success": False, "error": "Permission denied", "status_code": 403}
+                return {"success": False, "error": await response.text(), "status_code": response.status}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def generate_qr_code(self, event_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Generate QR code for an event. Requires ownership/permission via X-User-Id header.
+        
+        Args:
+            event_id: Event ID
+            user_id: User ID for permission check (required)
+        """
+        try:
+            session = await self.get_session()
+            headers = {}
+            if user_id:
+                try:
+                    uuid.UUID(user_id)
+                    headers["X-User-Id"] = user_id
+                except ValueError:
+                    chatbot_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"chatbot-{user_id}"))
+                    headers["X-User-Id"] = chatbot_uuid
+            else:
+                headers["X-User-Id"] = "550e8400-e29b-41d4-a716-446655440000"
+            
+            async with session.post(f"{self.base_url}/events/{event_id}/qr-code/generate", headers=headers) as response:
+                if response.status == 200:
+                    return {"success": True, "event": await response.json()}
+                elif response.status == 403:
+                    return {"success": False, "error": "Permission denied", "status_code": 403}
+                return {"success": False, "error": await response.text(), "status_code": response.status}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def get_qr_code(self, event_id: str) -> Dict[str, Any]:
+        try:
+            session = await self.get_session()
+            async with session.get(f"{self.base_url}/events/{event_id}/qr-code") as response:
+                if response.status == 200:
+                    return {"success": True, "qr": await response.json()}
+                return {"success": False, "error": await response.text()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def validate_event(self, event_id: str) -> Dict[str, Any]:
+        try:
+            session = await self.get_session()
+            async with session.get(f"{self.base_url}/events/{event_id}/validation") as response:
+                if response.status == 200:
+                    return {"success": True, "validation": await response.json()}
+                return {"success": False, "error": await response.text()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def event_health(self, event_id: str) -> Dict[str, Any]:
+        try:
+            session = await self.get_session()
+            async with session.get(f"{self.base_url}/events/{event_id}/health") as response:
+                if response.status == 200:
+                    return {"success": True, "health": await response.json()}
+                return {"success": False, "error": await response.text()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def search_events(self, q: Optional[str] = None, type: Optional[str] = None, status: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            session = await self.get_session()
+            params = {}
+            if q: params["q"] = q
+            if type: params["type"] = type
+            if status: params["status"] = status
+            if date_from: params["dateFrom"] = date_from
+            if date_to: params["dateTo"] = date_to
+            async with session.get(f"{self.base_url}/events/search", params=params) as response:
+                if response.status == 200:
+                    return {"success": True, "events": await response.json()}
+                return {"success": False, "error": await response.text()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def get_my_events(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            session = await self.get_session()
+            headers = {}
+            if user_id:
+                try:
+                    uuid.UUID(user_id)
+                    headers["X-User-Id"] = user_id
+                except ValueError:
+                    headers["X-User-Id"] = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"chatbot-{user_id}"))
+            else:
+                headers["X-User-Id"] = "550e8400-e29b-41d4-a716-446655440000"
+            async with session.get(f"{self.base_url}/events/my-events", headers=headers) as response:
+                if response.status == 200:
+                    return {"success": True, "summary": await response.json()}
+                return {"success": False, "error": await response.text()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
     async def health_check(self) -> Dict[str, Any]:
         """Check if Java Spring API is reachable."""
         try:

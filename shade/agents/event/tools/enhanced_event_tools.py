@@ -19,6 +19,7 @@ _java_client = None
 # Global event data storage for context passing
 _pending_event_data = None
 _current_event_id = None
+_current_user_id = None  # Track current user context
 
 # Lightweight RAG for event facts
 _vector_store = VectorStore()
@@ -190,6 +191,12 @@ async def search_venues_google(
         "message": f"Here are venues around {area} that fit your event.",
         "ui": {"cards": venues, "nextStep": {"prompt": "Select a venue or send an inquiry.", "suggestedActions": ["Select Venue", "Send Inquiry"]}}
     }
+
+# Helper to extract user_id from tool invocation context
+def _get_user_id_from_context() -> Optional[str]:
+    """Try to extract user_id from current context if available."""
+    global _current_user_id
+    return _current_user_id
 
 @tool
 async def start_event_creation(
@@ -507,22 +514,26 @@ Just let me know what's on your mind! 😊
 @tool
 async def get_event_info(
     question: str,
-    event_id: Optional[str] = None
+    event_id: Optional[str] = None,
+    user_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Get information about an event and answer natural language questions.
     This can answer questions like "What date is my event?" or "How many guests can attend?"
+    Only returns data if user has access to the event (owner or event is public).
     
     Args:
         question: Natural language question about the event
         event_id: Specific event ID (optional, uses current event if not provided)
+        user_id: User ID for permission check (required for private events)
     
     Returns:
         Dict with answer and event details
     """
-    global _current_event_id
+    global _current_event_id, _current_user_id
     
     target_event_id = event_id or _current_event_id
+    target_user_id = user_id or _current_user_id
     
     if not target_event_id:
         return {
@@ -543,6 +554,22 @@ async def get_event_info(
         
         if result.get("success"):
             event = result.get("event", {})
+            
+            # Check visibility: if private, user must be owner
+            if not event.get("isPublic", True) and target_user_id:
+                perm_check = await _check_event_permission(target_event_id, target_user_id)
+                if not perm_check.get("allowed") or not perm_check.get("is_owner"):
+                    return {
+                        "success": False,
+                        "error": "Access denied",
+                        "message": "This is a private event. Only the owner can view event information."
+                    }
+            elif not event.get("isPublic", True) and not target_user_id:
+                return {
+                    "success": False,
+                    "error": "Access denied",
+                    "message": "This is a private event. Please provide your user ID to access it."
+                }
             
             # Analyze the question and provide intelligent answers (prefer RAG if directly answers)
             question_lower = question.lower()
@@ -714,3 +741,356 @@ async def get_current_event_status() -> Dict[str, Any]:
             "error": str(e),
             "message": "I had trouble checking the current event. Let me help you try again."
         }
+
+@tool
+async def check_event_onboarding_requirements() -> Dict[str, Any]:
+    """
+    Check required onboarding details for the current event and return missing items.
+    Required before sensitive actions (publish, open registration, QR, visibility changes):
+    - capacity
+    - visibility (public/private)
+    - startDateTime (future)
+    - eventType
+    - name
+    - registrationDeadline (recommended if registration will be opened)
+    """
+    global _current_event_id
+    if not _current_event_id:
+        return {"success": False, "error": "No current event", "missing": ["event"]}
+
+    client = get_java_client()
+    ev = await client.get_event(_current_event_id)
+    if not ev.get("success"):
+        return {"success": False, "error": ev.get("error", "not found"), "missing": ["event"]}
+
+    e = ev["event"]
+    missing = []
+    if not e.get("name"): missing.append("name")
+    if not e.get("eventType"): missing.append("eventType")
+    if not e.get("startDateTime"): missing.append("startDateTime")
+    if e.get("startDateTime"):
+        try:
+            dt = datetime.fromisoformat(e["startDateTime"].replace('Z', '+00:00'))
+            if dt <= datetime.utcnow():
+                missing.append("startDateTime_future")
+        except Exception:
+            missing.append("startDateTime_format")
+    if e.get("capacity") is None: missing.append("capacity")
+
+    vis = await client.get_visibility(_current_event_id)
+    if not vis.get("success"):
+        missing.append("visibility")
+    else:
+        v = vis["visibility"]
+        if v.get("isPublic") is None: missing.append("visibility")
+
+    if e.get("eventStatus") == "REGISTRATION_OPEN" and not e.get("registrationDeadline"):
+        missing.append("registrationDeadline")
+
+    return {
+        "success": True,
+        "missing": missing,
+        "ready": len([m for m in missing if m not in ["registrationDeadline", "startDateTime_future", "startDateTime_format"]]) == 0
+    }
+
+async def _check_event_permission(event_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Internal helper to check if user has permission to modify an event.
+    Returns permission check result.
+    """
+    global _current_user_id
+    target_user_id = user_id or _current_user_id
+    
+    if not target_user_id:
+        return {"success": False, "error": "User ID required for permission check", "allowed": False}
+    
+    # Get event to check ownership
+    client = get_java_client()
+    event_result = await client.get_event(event_id)
+    
+    if not event_result.get("success"):
+        return {"success": False, "error": "Event not found", "allowed": False}
+    
+    event = event_result.get("event", {})
+    
+    # Check ownership via Java API (it will enforce RBAC on the backend)
+    # For now, we rely on the Java backend to enforce permissions via headers
+    # But we can do a pre-check by verifying the event exists and is accessible
+    
+    # Attempt to get user's events to verify ownership
+    my_events = await client.get_my_events(target_user_id)
+    if my_events.get("success"):
+        summary = my_events.get("summary", {})
+        # Check if event is in user's owned events
+        owned_events = summary.get("ownedEvents", [])
+        is_owner = any(str(e.get("eventId")) == str(event_id) for e in owned_events)
+        
+        if is_owner:
+            return {"success": True, "allowed": True, "is_owner": True}
+    
+    # Fallback: rely on backend permission check
+    # The Java API will return 403 if user doesn't have permission
+    return {"success": True, "allowed": True, "is_owner": None, "note": "Backend will enforce permissions"}
+
+@tool
+async def publish_current_event(user_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Publish the current event. Requires onboarding requirements to be satisfied.
+    Also requires user to have ownership/permission for this event.
+    
+    Args:
+        user_id: User ID of the person requesting the action (required for permission check)
+    """
+    global _current_event_id, _current_user_id
+    target_user_id = user_id or _current_user_id
+    
+    if not _current_event_id:
+        return {"success": False, "error": "No current event"}
+    
+    if not target_user_id:
+        return {"success": False, "error": "User ID required for publishing events"}
+    
+    # Check permissions
+    perm_check = await _check_event_permission(_current_event_id, target_user_id)
+    if not perm_check.get("allowed"):
+        return {"success": False, "error": "Permission denied", "details": perm_check.get("error", "You don't have permission to publish this event")}
+    
+    checklist = await check_event_onboarding_requirements()
+    if not checklist.get("success") or not checklist.get("ready"):
+        return {"success": False, "error": "Onboarding incomplete", "missing": checklist.get("missing", [])}
+    
+    client = get_java_client()
+    # Note: Backend will enforce ownership via X-User-Id header
+    return await client.publish_event(_current_event_id, target_user_id)
+
+@tool
+async def open_registration_for_current_event(user_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Open registration for the current event. Requires onboarding requirements satisfied
+    and preferably a registrationDeadline set. Also requires user to have ownership/permission.
+    
+    Args:
+        user_id: User ID of the person requesting the action (required for permission check)
+    """
+    global _current_event_id, _current_user_id
+    target_user_id = user_id or _current_user_id
+    
+    if not _current_event_id:
+        return {"success": False, "error": "No current event"}
+    
+    if not target_user_id:
+        return {"success": False, "error": "User ID required for opening registration"}
+    
+    # Check permissions
+    perm_check = await _check_event_permission(_current_event_id, target_user_id)
+    if not perm_check.get("allowed"):
+        return {"success": False, "error": "Permission denied", "details": perm_check.get("error", "You don't have permission to modify this event")}
+    
+    checklist = await check_event_onboarding_requirements()
+    if not checklist.get("success") or not checklist.get("ready"):
+        return {"success": False, "error": "Onboarding incomplete", "missing": checklist.get("missing", [])}
+    
+    client = get_java_client()
+    return await client.open_registration(_current_event_id, target_user_id)
+
+@tool
+async def close_registration_for_current_event(user_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Close registration for the current event. Requires user to have ownership/permission.
+    
+    Args:
+        user_id: User ID of the person requesting the action (required for permission check)
+    """
+    global _current_event_id, _current_user_id
+    target_user_id = user_id or _current_user_id
+    
+    if not _current_event_id:
+        return {"success": False, "error": "No current event"}
+    
+    if not target_user_id:
+        return {"success": False, "error": "User ID required for closing registration"}
+    
+    # Check permissions
+    perm_check = await _check_event_permission(_current_event_id, target_user_id)
+    if not perm_check.get("allowed"):
+        return {"success": False, "error": "Permission denied", "details": perm_check.get("error", "You don't have permission to modify this event")}
+    
+    client = get_java_client()
+    return await client.close_registration(_current_event_id, target_user_id)
+
+@tool
+async def update_capacity_for_current_event(capacity: int, user_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Update capacity for the current event. Requires user to have ownership/permission.
+    
+    Args:
+        capacity: New capacity value (must be >= 1)
+        user_id: User ID of the person requesting the action (required for permission check)
+    """
+    global _current_event_id, _current_user_id
+    target_user_id = user_id or _current_user_id
+    
+    if not _current_event_id:
+        return {"success": False, "error": "No current event"}
+    
+    if not target_user_id:
+        return {"success": False, "error": "User ID required for updating capacity"}
+    
+    if capacity < 1:
+        return {"success": False, "error": "Capacity must be at least 1"}
+    
+    # Check permissions
+    perm_check = await _check_event_permission(_current_event_id, target_user_id)
+    if not perm_check.get("allowed"):
+        return {"success": False, "error": "Permission denied", "details": perm_check.get("error", "You don't have permission to modify this event")}
+    
+    client = get_java_client()
+    return await client.update_capacity(_current_event_id, capacity, target_user_id)
+
+@tool
+async def set_visibility_for_current_event(is_public: bool, user_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Set visibility (public/private) for the current event. Requires user to have ownership/permission.
+    
+    Args:
+        is_public: True for public, False for private
+        user_id: User ID of the person requesting the action (required for permission check)
+    """
+    global _current_event_id, _current_user_id
+    target_user_id = user_id or _current_user_id
+    
+    if not _current_event_id:
+        return {"success": False, "error": "No current event"}
+    
+    if not target_user_id:
+        return {"success": False, "error": "User ID required for changing visibility"}
+    
+    # Check permissions
+    perm_check = await _check_event_permission(_current_event_id, target_user_id)
+    if not perm_check.get("allowed"):
+        return {"success": False, "error": "Permission denied", "details": perm_check.get("error", "You don't have permission to modify this event")}
+    
+    client = get_java_client()
+    return await client.update_visibility(_current_event_id, is_public, target_user_id)
+
+@tool
+async def generate_qr_for_current_event(user_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Generate a QR code for the current event. Requires onboarding to be ready and user to have ownership/permission.
+    
+    Args:
+        user_id: User ID of the person requesting the action (required for permission check)
+    """
+    global _current_event_id, _current_user_id
+    target_user_id = user_id or _current_user_id
+    
+    if not _current_event_id:
+        return {"success": False, "error": "No current event"}
+    
+    if not target_user_id:
+        return {"success": False, "error": "User ID required for generating QR code"}
+    
+    # Check permissions
+    perm_check = await _check_event_permission(_current_event_id, target_user_id)
+    if not perm_check.get("allowed"):
+        return {"success": False, "error": "Permission denied", "details": perm_check.get("error", "You don't have permission to modify this event")}
+    
+    checklist = await check_event_onboarding_requirements()
+    if not checklist.get("success") or not checklist.get("ready"):
+        return {"success": False, "error": "Onboarding incomplete", "missing": checklist.get("missing", [])}
+    
+    client = get_java_client()
+    return await client.generate_qr_code(_current_event_id, target_user_id)
+
+@tool
+async def get_event_capacity_summary(event_id: Optional[str] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get capacity summary (capacity, registered, available spots, registration open) for an event.
+    Only returns data if user has access to the event (owner or event is public).
+    
+    Args:
+        event_id: Event ID (uses current event if not provided)
+        user_id: User ID for permission check (optional, but recommended)
+    """
+    global _current_event_id, _current_user_id
+    target_event_id = event_id or _current_event_id
+    target_user_id = user_id or _current_user_id
+    
+    if not target_event_id:
+        return {"success": False, "error": "No event specified"}
+    
+    client = get_java_client()
+    
+    # First check if event exists and user has access
+    event_result = await client.get_event(target_event_id)
+    if not event_result.get("success"):
+        return {"success": False, "error": "Event not found or access denied"}
+    
+    event = event_result.get("event", {})
+    
+    # Check visibility: if private, user must be owner
+    if not event.get("isPublic", True) and target_user_id:
+        perm_check = await _check_event_permission(target_event_id, target_user_id)
+        if not perm_check.get("allowed") or not perm_check.get("is_owner"):
+            return {"success": False, "error": "Access denied", "details": "This is a private event. Only the owner can view capacity information."}
+    
+    cap = await client.get_event_capacity(target_event_id)
+    return cap
+
+@tool
+async def list_my_events(user_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    List the current user's events (summary) via Java API.
+    """
+    client = get_java_client()
+    return await client.get_my_events(user_id)
+
+@tool
+async def search_public_events(query: Optional[str] = None, type: Optional[str] = None, status: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Search public events with optional filters. Only returns PUBLIC events.
+    Private events are automatically filtered out.
+    
+    Args:
+        query: Search query string
+        type: Event type filter (WEDDING, CONFERENCE, etc.)
+        status: Event status filter
+        date_from: Start date filter (ISO format)
+        date_to: End date filter (ISO format)
+        user_id: User ID (optional, used to also include user's private events if needed)
+    """
+    client = get_java_client()
+    
+    # Use the search endpoint which respects visibility
+    # The Java backend getPublicEvents() and searchPublicEvents() only return public events
+    result = await client.search_events(q=query, type=type, status=status, date_from=date_from, date_to=date_to)
+    
+    if result.get("success"):
+        events = result.get("events", [])
+        # Filter to only public events (backend should do this, but double-check)
+        public_events = [e for e in events if e.get("isPublic", False)]
+        
+        # If user_id provided, also include their private events
+        if user_id:
+            my_events = await client.get_my_events(user_id)
+            if my_events.get("success"):
+                summary = my_events.get("summary", {})
+                owned = summary.get("ownedEvents", [])
+                # Add user's private events to results
+                for owned_event in owned:
+                    if not owned_event.get("isPublic", False):
+                        # Check if it matches filters
+                        matches = True
+                        if type and owned_event.get("eventType") != type:
+                            matches = False
+                        if status and owned_event.get("eventStatus") != status:
+                            matches = False
+                        if query and query.lower() not in owned_event.get("eventName", "").lower():
+                            matches = False
+                        if matches:
+                            public_events.append(owned_event)
+        
+        result["events"] = public_events
+        result["count"] = len(public_events)
+    
+    return result

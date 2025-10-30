@@ -88,10 +88,14 @@ class FlowManager:
                 domain = state.get("current_domain")
                 if domain and domain in self.domain_agents:
                     agent = self.domain_agents[domain]
-                    # Pass shared context for conversation continuity
+                    # Pass shared context for conversation continuity with user_id
+                    shared_ctx = state.get("shared_context", {})
+                    shared_ctx["user_id"] = state.get("user_id")
+                    shared_ctx["chat_id"] = state.get("chat_id")
+                    shared_ctx["event_id"] = state.get("event_id")
                     response = await agent.process_message(
                         state["messages"][-1].content,
-                        state.get("shared_context", {})
+                        shared_ctx
                     )
                     if response is not None:
                         domain_responses[domain] = response
@@ -114,10 +118,14 @@ class FlowManager:
                 for domain in domains:
                     if domain in self.domain_agents:
                         agent = self.domain_agents[domain]
-                        # Pass shared context for conversation continuity
+                        # Pass shared context for conversation continuity with user_id
+                        shared_ctx = state.get("shared_context", {})
+                        shared_ctx["user_id"] = state.get("user_id")
+                        shared_ctx["chat_id"] = state.get("chat_id")
+                        shared_ctx["event_id"] = state.get("event_id")
                         task = agent.process_message(
                             state["messages"][-1].content,
-                            state.get("shared_context", {})
+                            shared_ctx
                         )
                         tasks.append((domain, task))
                 

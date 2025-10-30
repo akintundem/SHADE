@@ -103,7 +103,14 @@ class ShadeAgentProcessor:
             }
         
         try:
-            print(f"🔄 LangGraph Flow processing: '{message}'")
+            # Set global user context for tools (if they use global state)
+            import sys
+            if 'shade.agents.event.tools.enhanced_event_tools' in sys.modules:
+                from shade.agents.event.tools.enhanced_event_tools import _current_user_id
+                # Use globals() to update the module-level variable
+                sys.modules['shade.agents.event.tools.enhanced_event_tools']._current_user_id = user_id
+            
+            print(f"🔄 LangGraph Flow processing: '{message}' for user: {user_id}")
             
             # Check for structured response patterns
             structured_response = await self._create_structured_response(message, user_id, chat_id, event_id)

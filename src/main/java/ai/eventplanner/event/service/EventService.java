@@ -15,8 +15,12 @@ import ai.eventplanner.common.domain.enums.EventUserType;
 import ai.eventplanner.roles.entity.EventRole;
 import ai.eventplanner.common.domain.enums.RoleName;
 import ai.eventplanner.roles.repo.EventRoleRepository;
+import ai.eventplanner.auth.service.AuthorizationService;
+import ai.eventplanner.auth.service.UserPrincipal;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +42,9 @@ public class EventService {
     
     @Autowired
     private EventRoleRepository eventRoleRepository;
+    
+    @Autowired(required = false)
+    private AuthorizationService authorizationService;
 
     /**
      * Create a new event from structured DTO
@@ -177,6 +184,70 @@ public class EventService {
      */
     public Optional<Event> getById(UUID id) {
         return eventRepository.findById(id);
+    }
+
+    /**
+     * Get event by ID with access control check
+     * Only returns the event if the user has permission to access it
+     * @param id The event ID
+     * @param user The user principal (can be null for public access checks)
+     * @return Optional containing the event if found and accessible
+     */
+    public Optional<Event> getByIdWithAccessControl(UUID id, UserPrincipal user) {
+        Optional<Event> eventOpt = eventRepository.findById(id);
+        if (eventOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        
+        Event event = eventOpt.get();
+        
+        // If authorization service is available and user is provided, check access
+        if (authorizationService != null && user != null) {
+            if (!authorizationService.canAccessEvent(user, id)) {
+                return Optional.empty();
+            }
+        } else if (user == null) {
+            // No user context - only return public events
+            if (!Boolean.TRUE.equals(event.getIsPublic())) {
+                return Optional.empty();
+            }
+        }
+        
+        return Optional.of(event);
+    }
+
+    /**
+     * Get current user from security context
+     */
+    private UserPrincipal getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal) {
+            return (UserPrincipal) authentication.getPrincipal();
+        }
+        return null;
+    }
+
+    /**
+     * Filter events based on user access
+     * Returns only events that are either public OR owned by user OR user has role in
+     */
+    private List<Event> filterEventsByAccess(List<Event> events, UserPrincipal user) {
+        if (user == null || authorizationService == null) {
+            // No user context - only return public events
+            return events.stream()
+                .filter(event -> Boolean.TRUE.equals(event.getIsPublic()))
+                .collect(Collectors.toList());
+        }
+        
+        return events.stream()
+            .filter(event -> {
+                if (Boolean.TRUE.equals(event.getIsPublic())) {
+                    return true; // Public events are accessible
+                }
+                // For private events, check if user has access
+                return authorizationService.canAccessEvent(user, event.getId());
+            })
+            .collect(Collectors.toList());
     }
 
     /**
@@ -627,7 +698,10 @@ public class EventService {
         if (searchTerm == null || searchTerm.trim().isEmpty()) {
             return new ArrayList<>();
         }
-        return eventRepository.searchEvents(searchTerm.trim());
+        List<Event> events = eventRepository.searchEvents(searchTerm.trim());
+        // Filter by access - only return events user can access
+        UserPrincipal user = getCurrentUser();
+        return filterEventsByAccess(events, user);
     }
 
     /**
@@ -674,7 +748,10 @@ public class EventService {
     public List<Event> getEventsByType(String eventType) {
         try {
             EventType type = EventType.valueOf(eventType.toUpperCase(Locale.US));
-            return eventRepository.findByEventType(type);
+            List<Event> events = eventRepository.findByEventType(type);
+            // Filter by access - only return events user can access
+            UserPrincipal user = getCurrentUser();
+            return filterEventsByAccess(events, user);
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException("Invalid event type: " + eventType);
         }
@@ -686,7 +763,10 @@ public class EventService {
     public List<Event> getEventsByStatus(String eventStatus) {
         try {
             EventStatus status = EventStatus.valueOf(eventStatus.toUpperCase(Locale.US));
-            return eventRepository.findByEventStatus(status);
+            List<Event> events = eventRepository.findByEventStatus(status);
+            // Filter by access - only return events user can access
+            UserPrincipal user = getCurrentUser();
+            return filterEventsByAccess(events, user);
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException("Invalid event status: " + eventStatus);
         }
@@ -696,7 +776,10 @@ public class EventService {
      * Get events by date range
      */
     public List<Event> getEventsByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
-        return eventRepository.findByStartDateTimeBetween(startDate, endDate);
+        List<Event> events = eventRepository.findByStartDateTimeBetween(startDate, endDate);
+        // Filter by access - only return events user can access
+        UserPrincipal user = getCurrentUser();
+        return filterEventsByAccess(events, user);
     }
 
     // ==================== EVENT CAPACITY & REGISTRATION METHODS ====================
