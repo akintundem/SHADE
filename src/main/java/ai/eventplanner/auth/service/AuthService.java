@@ -25,6 +25,7 @@ import ai.eventplanner.auth.repo.OrganizationProfileRepository;
 import ai.eventplanner.auth.repo.PasswordResetTokenRepository;
 import ai.eventplanner.auth.repo.UserAccountRepository;
 import ai.eventplanner.auth.repo.UserSessionRepository;
+import ai.eventplanner.auth.util.AuthMapper;
 import ai.eventplanner.common.domain.enums.OrganizationType;
 import ai.eventplanner.common.exception.ResourceNotFoundException;
 import ai.eventplanner.common.exception.UnauthorizedException;

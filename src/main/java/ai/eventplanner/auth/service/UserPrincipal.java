@@ -8,11 +8,10 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Enhanced UserPrincipal with multi-level role support
@@ -21,46 +20,21 @@ import java.util.UUID;
 public class UserPrincipal implements UserDetails {
     
     private final UserAccount user;
-    private final UUID id;
-    private final String email;
-    private final String passwordHash;
-    private final String name;
-    private final SystemRole systemRole;
-    private final boolean emailVerified;
-    private final boolean accountNonExpired;
-    private final boolean accountNonLocked;
-    private final boolean credentialsNonExpired;
-    private final boolean enabled;
-    private final LocalDateTime lastLoginAt;
-    
     // Context-specific roles (loaded per request)
-    private List<String> organizationRoles;
-    private List<String> eventRoles;
+    private final List<String> organizationRoles;
+    private final List<String> eventRoles;
     
     public UserPrincipal(UserAccount user) {
-        this.user = user;
-        this.id = user.getId();
-        this.email = user.getEmail();
-        this.passwordHash = user.getPasswordHash();
-        this.name = user.getName();
-        this.systemRole = determineSystemRole(user);
-        this.emailVerified = user.isEmailVerified();
-        this.accountNonExpired = true;
-        this.accountNonLocked = user.getStatus() != UserStatus.SUSPENDED;
-        this.credentialsNonExpired = true;
-        this.enabled = user.getStatus() == UserStatus.ACTIVE;
-        this.lastLoginAt = user.getLastLoginAt();
+        this(user, List.of(), List.of());
     }
     
     public UserPrincipal(UserAccount user, List<String> organizationRoles, List<String> eventRoles) {
-        this(user);
-        this.organizationRoles = organizationRoles;
-        this.eventRoles = eventRoles;
+        this.user = user;
+        this.organizationRoles = organizationRoles != null ? List.copyOf(organizationRoles) : List.of();
+        this.eventRoles = eventRoles != null ? List.copyOf(eventRoles) : List.of();
     }
     
-    private SystemRole determineSystemRole(UserAccount user) {
-        // For now, determine based on user type or other criteria
-        // This could be enhanced with a dedicated system role field
+    public SystemRole getSystemRole() {
         if (user.getUserType() != null && user.getUserType().name().equals("ADMIN")) {
             return SystemRole.ADMIN;
         }
@@ -72,51 +46,71 @@ public class UserPrincipal implements UserDetails {
         List<GrantedAuthority> authorities = new ArrayList<>();
         
         // System-level roles
-        authorities.add(new SimpleGrantedAuthority("ROLE_" + systemRole.name()));
+        authorities.add(new SimpleGrantedAuthority("ROLE_" + getSystemRole().name()));
         
         // Organization roles
-        if (organizationRoles != null) {
-            organizationRoles.forEach(role -> 
-                authorities.add(new SimpleGrantedAuthority("ORG_" + role)));
-        }
+        organizationRoles.forEach(role ->
+            authorities.add(new SimpleGrantedAuthority("ORG_" + role)));
         
         // Event-specific roles
-        if (eventRoles != null) {
-            eventRoles.forEach(role -> 
-                authorities.add(new SimpleGrantedAuthority("EVENT_" + role)));
-        }
+        eventRoles.forEach(role ->
+            authorities.add(new SimpleGrantedAuthority("EVENT_" + role)));
         
         return authorities;
     }
     
     @Override
     public String getPassword() {
-        return passwordHash;
+        return user.getPasswordHash();
     }
     
     @Override
     public String getUsername() {
-        return email;
+        return user.getEmail();
     }
     
     @Override
     public boolean isAccountNonExpired() {
-        return accountNonExpired;
+        return true;
     }
     
     @Override
     public boolean isAccountNonLocked() {
-        return accountNonLocked;
+        return user.getStatus() != UserStatus.SUSPENDED;
     }
     
     @Override
     public boolean isCredentialsNonExpired() {
-        return credentialsNonExpired;
+        return true;
     }
     
     @Override
     public boolean isEnabled() {
-        return enabled;
+        return user.getStatus() == UserStatus.ACTIVE;
+    }
+
+    public boolean isEmailVerified() {
+        return user.isEmailVerified();
+    }
+
+    public java.util.UUID getId() {
+        return user.getId();
+    }
+
+    public String getName() {
+        return user.getName();
+    }
+
+    public java.time.LocalDateTime getLastLoginAt() {
+        return user.getLastLoginAt();
+    }
+
+    public List<String> getOrganizationRoles() {
+        return Collections.unmodifiableList(organizationRoles);
+    }
+
+    public List<String> getEventRoles() {
+        return Collections.unmodifiableList(eventRoles);
     }
     
     /**
@@ -147,23 +141,22 @@ public class UserPrincipal implements UserDetails {
      * Check if user has system admin privileges
      */
     public boolean isSystemAdmin() {
-        return systemRole == SystemRole.SUPER_ADMIN || systemRole == SystemRole.ADMIN;
+        SystemRole role = getSystemRole();
+        return role == SystemRole.SUPER_ADMIN || role == SystemRole.ADMIN;
     }
     
     /**
      * Check if user has organization admin privileges
      */
     public boolean isOrganizationAdmin() {
-        return organizationRoles != null && 
-               (organizationRoles.contains("OWNER") || 
-                organizationRoles.contains("MANAGER"));
+        return organizationRoles.contains("OWNER") || organizationRoles.contains("MANAGER");
     }
     
     /**
      * Check if user has event organizer privileges
      */
     public boolean isEventOrganizer() {
-        return eventRoles != null && eventRoles.contains("ORGANIZER");
+        return eventRoles.contains("ORGANIZER");
     }
     
     /**

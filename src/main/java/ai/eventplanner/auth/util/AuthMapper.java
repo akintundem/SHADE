@@ -1,4 +1,4 @@
-package ai.eventplanner.auth.service;
+package ai.eventplanner.auth.util;
 
 import ai.eventplanner.auth.dto.res.OrganizationResponse;
 import ai.eventplanner.auth.dto.res.SecureUserResponse;
@@ -8,6 +8,9 @@ import ai.eventplanner.auth.entity.OrganizationProfile;
 import ai.eventplanner.auth.entity.UserAccount;
 import ai.eventplanner.auth.entity.UserSession;
 
+/**
+ * Utility mappers for converting authentication domain entities to DTOs.
+ */
 public final class AuthMapper {
 
     private AuthMapper() {

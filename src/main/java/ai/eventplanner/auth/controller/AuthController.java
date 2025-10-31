@@ -8,7 +8,7 @@ import ai.eventplanner.auth.dto.res.SecureUserResponse;
 import ai.eventplanner.auth.dto.res.TokenValidationResponse;
 import ai.eventplanner.auth.entity.UserAccount;
 import ai.eventplanner.auth.repo.UserAccountRepository;
-import ai.eventplanner.auth.service.AuthMapper;
+import ai.eventplanner.auth.util.AuthMapper;
 import ai.eventplanner.auth.service.AuthService;
 import ai.eventplanner.auth.service.UserPrincipal;
 import ai.eventplanner.common.dto.ApiMessageResponse;
