@@ -1,16 +1,17 @@
 package ai.eventplanner.auth.controller;
 
 import ai.eventplanner.auth.dto.req.LoginRequest;
-import ai.eventplanner.auth.dto.res.LogoutResponse;
 import ai.eventplanner.auth.dto.req.RefreshTokenRequest;
 import ai.eventplanner.auth.dto.req.RegisterRequest;
 import ai.eventplanner.auth.dto.res.SecureAuthResponse;
 import ai.eventplanner.auth.dto.res.SecureUserResponse;
+import ai.eventplanner.auth.dto.res.TokenValidationResponse;
 import ai.eventplanner.auth.entity.UserAccount;
 import ai.eventplanner.auth.repo.UserAccountRepository;
 import ai.eventplanner.auth.service.AuthMapper;
 import ai.eventplanner.auth.service.AuthService;
 import ai.eventplanner.auth.service.UserPrincipal;
+import ai.eventplanner.common.dto.ApiMessageResponse;
 import ai.eventplanner.common.exception.ResourceNotFoundException;
 import ai.eventplanner.common.security.JwtValidationUtil;
 import io.jsonwebtoken.Claims;
@@ -61,58 +62,53 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public SecureAuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        return authService.login(request, resolveClientIp(httpRequest));
+    public ResponseEntity<SecureAuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        SecureAuthResponse response = authService.login(request, resolveClientIp(httpRequest));
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/me")
-    public SecureUserResponse currentUser(@AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<SecureUserResponse> currentUser(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
             throw new ResourceNotFoundException("User not found");
         }
-        return AuthMapper.toSecureUserResponse(principal.getUser());
+        return ResponseEntity.ok(AuthMapper.toSecureUserResponse(principal.getUser()));
     }
 
     @PostMapping("/refresh-token")
-    public SecureAuthResponse refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
-        return authService.refreshToken(request);
+    public ResponseEntity<SecureAuthResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
+        SecureAuthResponse response = authService.refreshToken(request);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/validate-token")
-    public ResponseEntity<Map<String, Object>> validateToken(@RequestParam("token") String token) {
+    public ResponseEntity<TokenValidationResponse> validateToken(@RequestParam("token") String token) {
         try {
             if (token == null || token.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("isValid", false, "error", "Token is required"));
+                return ResponseEntity.badRequest().body(TokenValidationResponse.invalid("Token is required"));
             }
             
             boolean valid = jwtValidationUtil.validateToken(token);
             if (!valid) {
-                return ResponseEntity.ok(Map.of("isValid", false));
+                return ResponseEntity.ok(TokenValidationResponse.invalid(null));
             }
             
             Claims claims = jwtValidationUtil.getClaimsFromToken(token);
             UUID userId = UUID.fromString(claims.getSubject());
             UserAccount user = userAccountRepository.findById(userId)
                     .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-            return ResponseEntity.ok(Map.of(
-                    "isValid", true,
-                    "user", AuthMapper.toSecureUserResponse(user)
-            ));
+            return ResponseEntity.ok(TokenValidationResponse.valid(AuthMapper.toSecureUserResponse(user)));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("isValid", false, "error", "Invalid token format"));
+            return ResponseEntity.badRequest().body(TokenValidationResponse.invalid("Invalid token format"));
         }
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<LogoutResponse> logout(@AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<ApiMessageResponse> logout(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal != null) {
             authService.logout(principal.getUser());
         }
-        LogoutResponse response = LogoutResponse.builder()
-                .message("Logged out successfully")
-                .success(true)
-                .build();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiMessageResponse.success("Logged out successfully"));
     }
 
     private String resolveClientIp(HttpServletRequest request) {
