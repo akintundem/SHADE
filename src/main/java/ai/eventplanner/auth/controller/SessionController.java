@@ -1,9 +1,9 @@
 package ai.eventplanner.auth.controller;
 
-import ai.eventplanner.auth.dto.res.SessionResponse;
 import ai.eventplanner.auth.dto.res.UserSessionResponse;
 import ai.eventplanner.auth.service.AuthService;
 import ai.eventplanner.auth.service.UserPrincipal;
+import ai.eventplanner.common.dto.ApiMessageResponse;
 import ai.eventplanner.common.exception.UnauthorizedException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -33,15 +33,11 @@ public class SessionController {
     }
 
     @DeleteMapping("/all")
-    public ResponseEntity<SessionResponse> terminateAll(@AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<ApiMessageResponse> terminateAll(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
             throw new UnauthorizedException("Unauthorized");
         }
         authService.terminateAllSessions(principal.getUser());
-        SessionResponse response = SessionResponse.builder()
-                .message("Sessions terminated")
-                .success(true)
-                .build();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiMessageResponse.success("Sessions terminated"));
     }
 }

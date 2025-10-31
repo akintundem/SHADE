@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 
 import java.util.UUID;
 
@@ -32,27 +34,30 @@ public class OrganizationController {
     }
 
     @PostMapping("/register")
-    public org.springframework.http.ResponseEntity<OrganizationResponse> registerOrganization(@AuthenticationPrincipal UserPrincipal principal,
+    public ResponseEntity<OrganizationResponse> registerOrganization(@AuthenticationPrincipal UserPrincipal principal,
                                                       @Valid @RequestBody OrganizationRegisterRequest request) {
         OrganizationResponse response = authService.registerOrganization(principal.getUser(), request);
-        return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{organizationId}")
-    public OrganizationResponse getOrganization(@PathVariable UUID organizationId) {
-        return authService.getOrganization(organizationId);
+    public ResponseEntity<OrganizationResponse> getOrganization(@PathVariable UUID organizationId) {
+        OrganizationResponse response = authService.getOrganization(organizationId);
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{organizationId}")
-    public OrganizationResponse updateOrganization(@AuthenticationPrincipal UserPrincipal principal,
-                                                    @PathVariable UUID organizationId,
+    public ResponseEntity<OrganizationResponse> updateOrganization(@AuthenticationPrincipal UserPrincipal principal,
+                                                                   @PathVariable UUID organizationId,
                                                     @Valid @RequestBody OrganizationUpdateRequest request) {
-        return authService.updateOrganization(organizationId, principal.getUser(), request);
+        OrganizationResponse response = authService.updateOrganization(organizationId, principal.getUser(), request);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/search")
-    public Page<OrganizationResponse> searchOrganizations(@RequestParam(defaultValue = "") String searchTerm,
+    public ResponseEntity<Page<OrganizationResponse>> searchOrganizations(@RequestParam(defaultValue = "") String searchTerm,
                                                           @PageableDefault(size = 10) Pageable pageable) {
-        return authService.searchOrganizations(searchTerm, pageable);
+        Page<OrganizationResponse> response = authService.searchOrganizations(searchTerm, pageable);
+        return ResponseEntity.ok(response);
     }
 }

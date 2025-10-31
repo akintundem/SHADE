@@ -2,10 +2,10 @@ package ai.eventplanner.auth.controller;
 
 import ai.eventplanner.auth.dto.req.ChangePasswordRequest;
 import ai.eventplanner.auth.dto.req.ForgotPasswordRequest;
-import ai.eventplanner.auth.dto.res.PasswordResponse;
 import ai.eventplanner.auth.dto.req.ResetPasswordRequest;
 import ai.eventplanner.auth.service.AuthService;
 import ai.eventplanner.auth.service.UserPrincipal;
+import ai.eventplanner.common.dto.ApiMessageResponse;
 import ai.eventplanner.common.exception.UnauthorizedException;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -26,36 +26,27 @@ public class PasswordController {
     }
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<PasswordResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+    public ResponseEntity<ApiMessageResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         String message = authService.requestPasswordReset(request);
-        PasswordResponse response = PasswordResponse.builder()
-                .message(message)
-                .success(true)
-                .build();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiMessageResponse.success(message));
     }
 
     @PostMapping("/reset-password")
-    public ResponseEntity<PasswordResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+    public ResponseEntity<ApiMessageResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         boolean changed = authService.resetPassword(request);
-        PasswordResponse response = PasswordResponse.builder()
-                .message(changed ? "Password reset successfully" : "Unable to reset password")
-                .success(changed)
-                .build();
+        ApiMessageResponse response = changed
+                ? ApiMessageResponse.success("Password reset successfully")
+                : ApiMessageResponse.failure("Unable to reset password");
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/change-password")
-    public ResponseEntity<PasswordResponse> changePassword(@AuthenticationPrincipal UserPrincipal principal,
+    public ResponseEntity<ApiMessageResponse> changePassword(@AuthenticationPrincipal UserPrincipal principal,
                                                            @Valid @RequestBody ChangePasswordRequest request) {
         if (principal == null) {
             throw new UnauthorizedException("Unauthorized");
         }
         authService.changePassword(principal.getUser(), request);
-        PasswordResponse response = PasswordResponse.builder()
-                .message("Password changed successfully")
-                .success(true)
-                .build();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiMessageResponse.success("Password changed successfully"));
     }
 }
