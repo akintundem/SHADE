@@ -29,7 +29,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.net.URI;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -82,7 +81,7 @@ public class EventCrudController {
             }
             Event created = eventService.create(request, principal.getId());
             EventResponse response = eventService.toResponse(created);
-            return ResponseEntity.created(URI.create("/api/v1/events/" + response.getId())).body(response);
+            return ResponseEntity.ok(response);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
