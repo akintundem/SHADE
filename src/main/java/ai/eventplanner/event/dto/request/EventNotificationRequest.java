@@ -1,7 +1,10 @@
 package ai.eventplanner.event.dto.request;
 
+import ai.eventplanner.event.enums.EventNotificationChannel;
+import ai.eventplanner.event.enums.EventNotificationPriority;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -18,10 +21,9 @@ import java.util.UUID;
 @Setter
 public class EventNotificationRequest {
 
-    @NotBlank(message = "Channel is required")
-    @Schema(description = "Notification channel (email, sms, push)", example = "email")
-    @Size(max = 30, message = "Channel must be <= 30 chars")
-    private String channel;
+    @NotNull(message = "Channel is required")
+    @Schema(description = "Notification channel", example = "EMAIL")
+    private EventNotificationChannel channel;
 
     @NotBlank(message = "Subject is required")
     @Schema(description = "Notification subject")
@@ -47,8 +49,8 @@ public class EventNotificationRequest {
     @Schema(description = "Whether to include QR code")
     private Boolean includeQRCode = false;
 
-    @Schema(description = "Notification priority (low, normal, high)")
-    private String priority = "normal";
+    @Schema(description = "Notification priority", example = "NORMAL")
+    private EventNotificationPriority priority = EventNotificationPriority.NORMAL;
 
     @Schema(description = "Custom template ID")
     private String templateId;

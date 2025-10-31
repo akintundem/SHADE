@@ -22,14 +22,15 @@ public class NotificationService {
 
     private final CommunicationRepository communicationRepository;
 
-    public Communication send(UUID eventId, String channel, String subject, String content, List<String> recipientEmails, LocalDateTime scheduledAt, String priority) {
+    public Communication send(UUID eventId, CommunicationType channel, String subject, String content,
+                              List<String> recipientEmails, LocalDateTime scheduledAt, String priority) {
         String idempotencyKey = buildIdempotencyKey(eventId, subject, content, recipientEmails);
         // In a real provider integration, we would check a cache/store for idempotencyKey
         log.info("notification_send request eventId={} channel={} scheduledAt={} priority={} idemKey={}",
                 eventId, channel, scheduledAt, priority, idempotencyKey);
         Communication c = new Communication();
         c.setEventId(eventId);
-        c.setCommunicationType(CommunicationType.valueOf(channel.toUpperCase()));
+        c.setCommunicationType(channel);
         c.setRecipientType(RecipientType.USER);
         c.setSubject(subject);
         c.setContent(content);
@@ -54,5 +55,4 @@ public class NotificationService {
         return Integer.toHexString(base.hashCode());
     }
 }
-
 

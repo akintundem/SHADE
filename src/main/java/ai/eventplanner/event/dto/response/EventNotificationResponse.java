@@ -1,5 +1,7 @@
 package ai.eventplanner.event.dto.response;
 
+import ai.eventplanner.event.enums.EventNotificationChannel;
+import ai.eventplanner.event.enums.EventNotificationPriority;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
@@ -23,7 +25,7 @@ public class EventNotificationResponse {
     private UUID eventId;
 
     @Schema(description = "Notification channel")
-    private String channel;
+    private EventNotificationChannel channel;
 
     @Schema(description = "Notification subject")
     private String subject;
@@ -44,7 +46,7 @@ public class EventNotificationResponse {
     private LocalDateTime sentAt;
 
     @Schema(description = "Notification priority")
-    private String priority;
+    private EventNotificationPriority priority;
 
     @Schema(description = "Creation timestamp")
     private LocalDateTime createdAt;

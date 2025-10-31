@@ -5,6 +5,7 @@ package ai.eventplanner.common.domain.enums;
  */
 public enum CommunicationType {
     EMAIL,
+    SMS,
     PUSH_NOTIFICATION,
     IN_APP_NOTIFICATION
 }

@@ -1,11 +1,12 @@
 package ai.eventplanner.event.dto.response;
 
+import ai.eventplanner.event.enums.EventNotificationChannel;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.UUID;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Response DTO for event notification settings
@@ -30,15 +31,18 @@ public class EventNotificationSettingsResponse {
     @Schema(description = "Whether reminders are enabled")
     private Boolean reminderEnabled;
 
-    @Schema(description = "Default reminder time")
-    private String defaultReminderTime;
+    @Schema(description = "Default reminder offset in minutes")
+    private Integer defaultReminderMinutes;
 
     @Schema(description = "Available notification channels")
-    private List<String> availableChannels;
+    private List<EventNotificationChannel> availableChannels;
+
+    @Schema(description = "Channels currently enabled based on settings")
+    private List<EventNotificationChannel> enabledChannels;
 
     @Schema(description = "Available notification templates")
     private List<String> availableTemplates;
 
-    @Schema(description = "Settings updated timestamp")
+    @Schema(description = "Settings updated timestamp ISO-8601")
     private String updatedAt;
 }
