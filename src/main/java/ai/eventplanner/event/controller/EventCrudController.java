@@ -1,5 +1,6 @@
 package ai.eventplanner.event.controller;
 
+import ai.eventplanner.common.dto.ApiMessageResponse;
 import ai.eventplanner.event.dto.request.CreateEventRequest;
 import ai.eventplanner.event.dto.request.UpdateEventRequest;
 import ai.eventplanner.event.dto.response.EventResponse;
@@ -24,7 +25,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -74,12 +74,13 @@ public class EventCrudController {
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token")
     })
     public ResponseEntity<EventResponse> create(
-            @Valid @RequestBody CreateEventRequest request,
-            @Parameter(description = "Gateway injected user identifier")
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody CreateEventRequest request) {
         try {
-            UUID ownerId = resolveOwnerId(userIdHeader);
-            Event created = eventService.create(request, ownerId);
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            Event created = eventService.create(request, principal.getId());
             EventResponse response = eventService.toResponse(created);
             return ResponseEntity.created(URI.create("/api/v1/events/" + response.getId())).body(response);
         } catch (IllegalArgumentException ex) {
@@ -116,24 +117,19 @@ public class EventCrudController {
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete event", description = "Delete an event by its unique identifier")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "204", description = "Event deleted successfully"),
+        @ApiResponse(responseCode = "200", description = "Event deleted successfully",
+                content = @Content(schema = @Schema(implementation = ApiMessageResponse.class))),
         @ApiResponse(responseCode = "404", description = "Event not found"),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token")
     })
-    public ResponseEntity<Void> delete(
+    public ResponseEntity<ApiMessageResponse> delete(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
-        eventService.delete(id);
-        return ResponseEntity.noContent().build();
+        try {
+            eventService.delete(id);
+            return ResponseEntity.ok(ApiMessageResponse.success("Event deleted successfully"));
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
     }
 
-    private UUID resolveOwnerId(String userIdHeader) {
-        if (userIdHeader != null && !userIdHeader.isBlank()) {
-            try {
-                return UUID.fromString(userIdHeader);
-            } catch (IllegalArgumentException ex) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid X-User-Id header. Must be a UUID.", ex);
-            }
-        }
-        return null;
-    }
 }
