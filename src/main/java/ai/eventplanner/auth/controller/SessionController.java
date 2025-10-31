@@ -1,7 +1,7 @@
 package ai.eventplanner.auth.controller;
 
 import ai.eventplanner.auth.dto.res.UserSessionResponse;
-import ai.eventplanner.auth.service.AuthService;
+import ai.eventplanner.auth.service.SessionManagementService;
 import ai.eventplanner.auth.service.UserPrincipal;
 import ai.eventplanner.common.dto.ApiMessageResponse;
 import ai.eventplanner.common.exception.UnauthorizedException;
@@ -18,10 +18,10 @@ import java.util.List;
 @RequestMapping("/api/v1/auth/sessions")
 public class SessionController {
 
-    private final AuthService authService;
+    private final SessionManagementService sessionManagementService;
 
-    public SessionController(AuthService authService) {
-        this.authService = authService;
+    public SessionController(SessionManagementService sessionManagementService) {
+        this.sessionManagementService = sessionManagementService;
     }
 
     @GetMapping
@@ -29,7 +29,7 @@ public class SessionController {
         if (principal == null) {
             throw new UnauthorizedException("Unauthorized");
         }
-        return authService.getActiveSessions(principal.getUser());
+        return sessionManagementService.getActiveSessions(principal.getUser());
     }
 
     @DeleteMapping("/all")
@@ -37,7 +37,7 @@ public class SessionController {
         if (principal == null) {
             throw new UnauthorizedException("Unauthorized");
         }
-        authService.terminateAllSessions(principal.getUser());
+        sessionManagementService.terminateAllSessions(principal.getUser());
         return ResponseEntity.ok(ApiMessageResponse.success("Sessions terminated"));
     }
 }

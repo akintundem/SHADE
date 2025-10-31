@@ -3,7 +3,7 @@ package ai.eventplanner.auth.controller;
 import ai.eventplanner.auth.dto.req.ChangePasswordRequest;
 import ai.eventplanner.auth.dto.req.ForgotPasswordRequest;
 import ai.eventplanner.auth.dto.req.ResetPasswordRequest;
-import ai.eventplanner.auth.service.AuthService;
+import ai.eventplanner.auth.service.AccountRecoveryService;
 import ai.eventplanner.auth.service.UserPrincipal;
 import ai.eventplanner.common.dto.ApiMessageResponse;
 import ai.eventplanner.common.exception.UnauthorizedException;
@@ -19,21 +19,21 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/auth")
 public class PasswordController {
 
-    private final AuthService authService;
+    private final AccountRecoveryService accountRecoveryService;
 
-    public PasswordController(AuthService authService) {
-        this.authService = authService;
+    public PasswordController(AccountRecoveryService accountRecoveryService) {
+        this.accountRecoveryService = accountRecoveryService;
     }
 
     @PostMapping("/forgot-password")
     public ResponseEntity<ApiMessageResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-        String message = authService.requestPasswordReset(request);
+        String message = accountRecoveryService.requestPasswordReset(request);
         return ResponseEntity.ok(ApiMessageResponse.success(message));
     }
 
     @PostMapping("/reset-password")
     public ResponseEntity<ApiMessageResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
-        boolean changed = authService.resetPassword(request);
+        boolean changed = accountRecoveryService.resetPassword(request);
         ApiMessageResponse response = changed
                 ? ApiMessageResponse.success("Password reset successfully")
                 : ApiMessageResponse.failure("Unable to reset password");
@@ -46,7 +46,7 @@ public class PasswordController {
         if (principal == null) {
             throw new UnauthorizedException("Unauthorized");
         }
-        authService.changePassword(principal.getUser(), request);
+        accountRecoveryService.changePassword(principal.getUser(), request);
         return ResponseEntity.ok(ApiMessageResponse.success("Password changed successfully"));
     }
 }

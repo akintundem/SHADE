@@ -3,7 +3,7 @@ package ai.eventplanner.auth.controller;
 import ai.eventplanner.auth.dto.req.OrganizationRegisterRequest;
 import ai.eventplanner.auth.dto.res.OrganizationResponse;
 import ai.eventplanner.auth.dto.req.OrganizationUpdateRequest;
-import ai.eventplanner.auth.service.AuthService;
+import ai.eventplanner.auth.service.OrganizationManagementService;
 import ai.eventplanner.auth.service.UserPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -27,22 +27,22 @@ import java.util.UUID;
 @RequestMapping("/api/v1/auth/organizations")
 public class OrganizationController {
 
-    private final AuthService authService;
+    private final OrganizationManagementService organizationManagementService;
 
-    public OrganizationController(AuthService authService) {
-        this.authService = authService;
+    public OrganizationController(OrganizationManagementService organizationManagementService) {
+        this.organizationManagementService = organizationManagementService;
     }
 
     @PostMapping("/register")
     public ResponseEntity<OrganizationResponse> registerOrganization(@AuthenticationPrincipal UserPrincipal principal,
                                                       @Valid @RequestBody OrganizationRegisterRequest request) {
-        OrganizationResponse response = authService.registerOrganization(principal.getUser(), request);
+        OrganizationResponse response = organizationManagementService.registerOrganization(principal.getUser(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{organizationId}")
     public ResponseEntity<OrganizationResponse> getOrganization(@PathVariable UUID organizationId) {
-        OrganizationResponse response = authService.getOrganization(organizationId);
+        OrganizationResponse response = organizationManagementService.getOrganization(organizationId);
         return ResponseEntity.ok(response);
     }
 
@@ -50,14 +50,14 @@ public class OrganizationController {
     public ResponseEntity<OrganizationResponse> updateOrganization(@AuthenticationPrincipal UserPrincipal principal,
                                                                    @PathVariable UUID organizationId,
                                                     @Valid @RequestBody OrganizationUpdateRequest request) {
-        OrganizationResponse response = authService.updateOrganization(organizationId, principal.getUser(), request);
+        OrganizationResponse response = organizationManagementService.updateOrganization(organizationId, principal.getUser(), request);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/search")
     public ResponseEntity<Page<OrganizationResponse>> searchOrganizations(@RequestParam(defaultValue = "") String searchTerm,
                                                           @PageableDefault(size = 10) Pageable pageable) {
-        Page<OrganizationResponse> response = authService.searchOrganizations(searchTerm, pageable);
+        Page<OrganizationResponse> response = organizationManagementService.searchOrganizations(searchTerm, pageable);
         return ResponseEntity.ok(response);
     }
 }

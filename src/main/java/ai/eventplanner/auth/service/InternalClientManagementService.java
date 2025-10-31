@@ -44,7 +44,6 @@ public class InternalClientManagementService implements CommandLineRunner {
         List<ClientInfo> defaultClients = List.of(
             new ClientInfo("web-app", "Web Application", "WEB", "Main web application client"),
             new ClientInfo("mobile-app", "Mobile Application", "MOBILE", "Mobile app client"),
-            new ClientInfo("api-client", "API Client", "API", "Third-party API client"),
             new ClientInfo("desktop-app", "Desktop Application", "DESKTOP", "Desktop application client")
         );
 
@@ -67,38 +66,6 @@ public class InternalClientManagementService implements CommandLineRunner {
             }
         }
 
-    }
-
-    /**
-     * Create a new client application (ADMIN ONLY)
-     * This method should only be called by system administrators
-     */
-    public ClientApplication createClient(String clientId, String clientName, String clientType, String description) {
-        return clientValidationService.createClientInternal(clientId, clientName, clientType, description);
-    }
-
-    /**
-     * Deactivate a client application (ADMIN ONLY)
-     */
-    public void deactivateClient(String clientId) {
-        ClientApplication client = clientApplicationRepository.findByClientId(clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Client not found: " + clientId));
-
-        if (!client.isActive()) {
-            log.debug("Client '{}' already inactive", clientId);
-            return;
-        }
-
-        client.setActive(false);
-        clientApplicationRepository.save(client);
-        log.info("Deactivated client '{}'", clientId);
-    }
-
-    /**
-     * Get all client applications (ADMIN ONLY)
-     */
-    public List<ClientApplication> getAllClients() {
-        return clientApplicationRepository.findAll();
     }
 
     private void ensureClientUpToDate(ClientApplication existing, ClientInfo definition) {

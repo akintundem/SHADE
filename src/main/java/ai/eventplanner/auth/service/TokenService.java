@@ -51,11 +51,8 @@ public class TokenService {
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiry))
                 .claim("email", user.getEmail())
-                .claim("name", user.getName())
-                .claim("type", "access")
                 .claim("roles", List.of("USER"));
         
-        // Add client ID if provided
         if (clientId != null && !clientId.trim().isEmpty()) {
             builder.claim("clientId", clientId);
         }

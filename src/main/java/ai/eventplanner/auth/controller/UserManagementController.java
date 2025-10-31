@@ -2,7 +2,7 @@ package ai.eventplanner.auth.controller;
 
 import ai.eventplanner.auth.dto.res.SecureUserResponse;
 import ai.eventplanner.auth.dto.req.UpdateUserProfileRequest;
-import ai.eventplanner.auth.service.AuthService;
+import ai.eventplanner.auth.service.UserAccountService;
 import ai.eventplanner.auth.service.UserPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -26,29 +26,29 @@ import java.util.UUID;
 @RequestMapping("/api/v1/auth/users")
 public class UserManagementController {
 
-    private final AuthService authService;
+    private final UserAccountService userAccountService;
 
-    public UserManagementController(AuthService authService) {
-        this.authService = authService;
+    public UserManagementController(UserAccountService userAccountService) {
+        this.userAccountService = userAccountService;
     }
 
     @GetMapping("/{userId}")
     public SecureUserResponse getUser(@AuthenticationPrincipal UserPrincipal principal,
                                 @PathVariable UUID userId) {
-        return authService.getSecureUser(userId);
+        return userAccountService.getSecureUser(userId);
     }
 
     @PutMapping("/{userId}")
     public SecureUserResponse updateUser(@AuthenticationPrincipal UserPrincipal principal,
                                    @PathVariable UUID userId,
                                    @Valid @RequestBody UpdateUserProfileRequest request) {
-        return authService.updateSecureUser(userId, principal.getUser(), request);
+        return userAccountService.updateSecureUser(userId, principal.getUser(), request);
     }
 
     @GetMapping("/search")
     public Page<SecureUserResponse> searchUsers(@AuthenticationPrincipal UserPrincipal principal,
                                           @RequestParam(defaultValue = "") String searchTerm,
                                           @PageableDefault(size = 10) Pageable pageable) {
-        return authService.searchSecureUsers(searchTerm, pageable);
+        return userAccountService.searchSecureUsers(searchTerm, pageable);
     }
 }

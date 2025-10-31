@@ -1,7 +1,7 @@
 package ai.eventplanner.auth.controller;
 
 import ai.eventplanner.auth.dto.req.ForgotPasswordRequest;
-import ai.eventplanner.auth.service.AuthService;
+import ai.eventplanner.auth.service.AccountRecoveryService;
 import ai.eventplanner.common.dto.ApiMessageResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -17,22 +17,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/auth")
 public class EmailVerificationController {
 
-    private final AuthService authService;
+    private final AccountRecoveryService accountRecoveryService;
 
-    public EmailVerificationController(AuthService authService) {
-        this.authService = authService;
+    public EmailVerificationController(AccountRecoveryService accountRecoveryService) {
+        this.accountRecoveryService = accountRecoveryService;
     }
 
     @PostMapping("/verify-email")
     public ResponseEntity<ApiMessageResponse> resendVerification(
             @Valid @RequestBody ForgotPasswordRequest request) {
-        String message = authService.resendVerification(request);
+        String message = accountRecoveryService.resendVerification(request);
         return ResponseEntity.ok(ApiMessageResponse.success(message));
     }
 
     @GetMapping("/verify-email/{token}")
     public ResponseEntity<ApiMessageResponse> verifyEmail(@PathVariable String token) {
-        boolean verified = authService.verifyEmailToken(token);
+        boolean verified = accountRecoveryService.verifyEmailToken(token);
         ApiMessageResponse response = verified
             ? ApiMessageResponse.success("Email verified successfully")
             : ApiMessageResponse.failure("Invalid or expired verification token");
