@@ -134,6 +134,7 @@ get_testing_environment "$@"
 # Configuration
 CLIENT_ID="web-app"
 REPORT_FILE="reports/weather_test_report_$(date +%Y%m%d_%H%M%S).md"
+SERVICE_RESTART_MESSAGE="Pending"
 
 # Test counters
 TOTAL_TESTS=0
@@ -163,6 +164,7 @@ SEATTLE_LON="-122.3321"
 
 # Create report file
 mkdir -p reports
+initialize_report() {
 cat > "$REPORT_FILE" << EOF
 # Weather Controller Endpoints Test Report
 
@@ -170,6 +172,7 @@ cat > "$REPORT_FILE" << EOF
 **Base URL:** $BASE_URL
 **Client ID:** $CLIENT_ID
 **Report File:** $REPORT_FILE
+**Service Restart:** $SERVICE_RESTART_MESSAGE
 
 ## Test Summary
 
@@ -188,6 +191,7 @@ cat > "$REPORT_FILE" << EOF
 ## Detailed Test Results
 
 EOF
+}
 
 # Function to build headers with authentication
 build_auth_headers() {
@@ -214,20 +218,26 @@ run_test() {
     echo -e "${CYAN}   URL: $BASE_URL$endpoint${NC}"
     
     # Build curl command
-    local curl_cmd="curl -s -w '%{http_code}' -X $method"
+    local curl_exec_cmd="curl -s -w '%{http_code}' -X $method"
+    local curl_display_cmd="curl -s -X $method"
     
     if [ -n "$headers" ]; then
-        curl_cmd="$curl_cmd $headers"
+        curl_exec_cmd="$curl_exec_cmd $headers"
+        curl_display_cmd="$curl_display_cmd $headers"
     fi
     
+    local request_body_display="(empty)"
     if [ -n "$data" ]; then
-        curl_cmd="$curl_cmd -d '$data'"
+        curl_exec_cmd="$curl_exec_cmd -d '$data'"
+        curl_display_cmd="$curl_display_cmd -d '$data'"
+        request_body_display="$data"
     fi
     
-    curl_cmd="$curl_cmd '$BASE_URL$endpoint'"
+    curl_exec_cmd="$curl_exec_cmd '$BASE_URL$endpoint'"
+    curl_display_cmd="$curl_display_cmd '$BASE_URL$endpoint'"
     
     # Execute the request
-    local response=$(eval $curl_cmd)
+    local response=$(eval "$curl_exec_cmd")
     local http_code="${response: -3}"
     local response_body="${response%???}"
     
@@ -243,6 +253,16 @@ run_test() {
         local status_icon="❌"
     fi
     
+    local headers_display="$headers"
+    if [ -z "$headers_display" ]; then
+        headers_display="(none)"
+    fi
+    
+    local response_body_display="$response_body"
+    if [ -z "$response_body_display" ]; then
+        response_body_display="(empty response body)"
+    fi
+    
     # Log to report
     cat >> "$REPORT_FILE" << EOF
 
@@ -251,13 +271,17 @@ run_test() {
 **Description:** $description
 **Endpoint:** $method $endpoint
 **Full URL:** $BASE_URL$endpoint
-**Request Headers:** $headers
-**Request Body:** $data
-**Curl Command:** $curl_cmd
+**Request Headers:** $headers_display
+**Request Body:** $request_body_display
+**Request Command:**
+\`\`\`bash
+$curl_display_cmd
+\`\`\`
 
-**Response:**
+**Response Status:** $http_code
+**Response Body:**
 \`\`\`json
-$response_body
+$response_body_display
 \`\`\`
 
 ---
@@ -381,10 +405,20 @@ main() {
     # Step 1: Restart service
     echo -e "${CYAN}🔄 Step 1: Restarting Java Service${NC}"
     echo "====================================="
+    local service_restart_success=1
     if ! restart_services; then
-        echo -e "${RED}❌ Failed to restart Java service. Exiting.${NC}"
-        exit 1
+        service_restart_success=0
+        echo -e "${YELLOW}⚠️  Failed to restart Java service. Continuing with existing service state.${NC}"
+        echo -e "${YELLOW}   Subsequent requests may fail if the service is unavailable.${NC}"
     fi
+    
+    if [ $service_restart_success -eq 1 ]; then
+        SERVICE_RESTART_MESSAGE="✅ Successful"
+    else
+        SERVICE_RESTART_MESSAGE="❌ Failed - proceeding with current service state"
+    fi
+    
+    initialize_report
     echo ""
     
     # Step 2: Health Check Tests

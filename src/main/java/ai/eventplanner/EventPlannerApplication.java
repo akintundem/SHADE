@@ -23,7 +23,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "ai.eventplanner.auth.repo",
     "ai.eventplanner.assistant.repository",
     "ai.eventplanner.admin.repository",
-    "ai.eventplanner.risk.repository",
     "ai.eventplanner.checklist.repository",
     "ai.eventplanner.roles.repo",
     "ai.eventplanner.user.repo",
@@ -46,8 +45,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "ai.eventplanner.checklist.entity",
     "ai.eventplanner.roles.entity",
     "ai.eventplanner.user.entity",
-    "ai.eventplanner.admin.entity",
-    "ai.eventplanner.risk.entity"
+    "ai.eventplanner.admin.entity"
 })
 public class EventPlannerApplication {
 
