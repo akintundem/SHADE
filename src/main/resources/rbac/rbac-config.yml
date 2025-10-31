@@ -174,26 +174,40 @@ routes:
       GET:
         permission: "budget.read"
         scope: SYSTEM
+        allowAuthenticated: true
       POST:
         permission: "budget.create"
         scope: SYSTEM
+        allowAuthenticated: true
 
   - name: budget-item
-    pattern: "^/api/v1/budgets/(?<budgetId>[a-f0-9-]+)(/.*)?$"
-    resourceIdGroup: budgetId
+    pattern: "^/api/v1/budgets/(?<resourceId>[a-f0-9-]+)(/.*)?$"
+    resourceIdGroup: resourceId
     methods:
       GET:
         permission: "budget.read"
         scope: SYSTEM
+        allowAuthenticated: true
       POST:
         permission: "budget.update"
         scope: SYSTEM
+        allowAuthenticated: true
       PUT:
         permission: "budget.update"
         scope: SYSTEM
+        allowAuthenticated: true
       DELETE:
         permission: "budget.delete"
         scope: SYSTEM
+        allowAuthenticated: true
+
+  - name: budget-categories
+    pattern: "^/api/v1/budgets/categories$"
+    methods:
+      GET:
+        permission: "budget.read"
+        scope: SYSTEM
+        allowAuthenticated: true
 
   - name: vendors-collection
     pattern: "^/api/v1/vendors$"

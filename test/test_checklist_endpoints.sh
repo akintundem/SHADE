@@ -3,6 +3,40 @@
 # Comprehensive Checklist Controller Endpoints Test Script
 # Tests all checklist-related endpoints and generates a detailed report
 
+# Function to show help
+show_help() {
+    echo "✅ Checklist Controller Endpoints Test Script"
+    echo "============================================="
+    echo ""
+    echo "Usage:"
+    echo "  $0                    # Interactive mode - choose environment"
+    echo "  $0 local              # Test localhost:8080"
+    echo "  $0 prod <API_URL>     # Test production URL"
+    echo "  $0 help               # Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  $0 local"
+    echo "  $0 prod https://your-app.railway.app"
+    echo "  $0 prod https://your-app.herokuapp.com"
+    echo "  $0 prod https://api.yourdomain.com"
+    echo ""
+    echo "Interactive Mode:"
+    echo "  Run without arguments to choose environment interactively"
+    echo ""
+    echo "Requirements:"
+    echo "  - curl command available"
+    echo "  - jq command available (for JSON parsing)"
+    echo "  - For local testing: Spring Boot app running on port 8080"
+    echo "  - For production testing: Valid API URL with health endpoint"
+    echo ""
+    exit 0
+}
+
+# Check for help argument
+if [ "$1" = "help" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    show_help
+fi
+
 echo "✅ Starting Comprehensive Checklist Controller Endpoints Test"
 echo "============================================================="
 
@@ -15,8 +49,82 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Function to get user input for testing environment
+get_testing_environment() {
+    # Check for command line arguments
+    if [ $# -gt 0 ]; then
+        case $1 in
+            "local"|"l")
+                BASE_URL="http://localhost:8080"
+                echo -e "${GREEN}✅ Selected: Local Development (from command line)${NC}"
+                echo -e "${YELLOW}💡 Make sure your local Spring Boot application is running${NC}"
+                ;;
+            "prod"|"p")
+                if [ -n "$2" ]; then
+                    BASE_URL="$2"
+                    echo -e "${GREEN}✅ Selected: Production - $BASE_URL (from command line)${NC}"
+                else
+                    echo -e "${RED}❌ Production URL required. Usage: $0 prod <API_URL>${NC}"
+                    exit 1
+                fi
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid argument. Usage:${NC}"
+                echo -e "${YELLOW}   $0 local                    # Test localhost:8080${NC}"
+                echo -e "${YELLOW}   $0 prod <API_URL>          # Test production URL${NC}"
+                echo -e "${YELLOW}   $0                         # Interactive mode${NC}"
+                exit 1
+                ;;
+        esac
+    else
+        # Interactive mode
+        echo -e "${CYAN}🌍 Choose Testing Environment:${NC}"
+        echo "1. Local Development (localhost:8080)"
+        echo "2. Production (Custom API URL)"
+        echo ""
+        read -p "Enter your choice (1 or 2): " choice
+        
+        case $choice in
+            1)
+                BASE_URL="http://localhost:8080"
+                echo -e "${GREEN}✅ Selected: Local Development${NC}"
+                echo -e "${YELLOW}💡 Make sure your local Spring Boot application is running${NC}"
+                ;;
+            2)
+                echo ""
+                echo -e "${CYAN}🌐 Enter Production API URL:${NC}"
+                echo -e "${YELLOW}   Example: https://your-app.railway.app${NC}"
+                echo -e "${YELLOW}   Example: https://your-app.herokuapp.com${NC}"
+                echo -e "${YELLOW}   Example: https://api.yourdomain.com${NC}"
+                echo ""
+                read -p "API URL: " custom_url
+                
+                # Validate URL format
+                if [[ $custom_url =~ ^https?:// ]]; then
+                    BASE_URL="$custom_url"
+                    echo -e "${GREEN}✅ Selected: Production - $BASE_URL${NC}"
+                else
+                    echo -e "${RED}❌ Invalid URL format. Please include http:// or https://${NC}"
+                    echo -e "${YELLOW}   Example: https://your-app.railway.app${NC}"
+                    exit 1
+                fi
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid choice. Please select 1 or 2.${NC}"
+                exit 1
+                ;;
+        esac
+    fi
+    
+    echo ""
+    echo -e "${BLUE}🔗 Testing URL: $BASE_URL${NC}"
+    echo ""
+}
+
+# Get testing environment from user
+get_testing_environment "$@"
+
 # Configuration
-BASE_URL="http://localhost:8080"
 CLIENT_ID="web-app"
 REPORT_FILE="reports/checklist_test_report_$(date +%Y%m%d_%H%M%S).md"
 TEST_USER_EMAIL="testuser@example.com"
@@ -83,20 +191,26 @@ run_test() {
     echo -e "${BLUE}🧪 Running: $test_name${NC}"
     
     # Build curl command
-    local curl_cmd="curl -s -w '%{http_code}' -X $method"
+    local curl_exec_cmd="curl -s -w '%{http_code}' -X $method"
+    local curl_display_cmd="curl -s -X $method"
     
     if [ -n "$headers" ]; then
-        curl_cmd="$curl_cmd $headers"
+        curl_exec_cmd="$curl_exec_cmd $headers"
+        curl_display_cmd="$curl_display_cmd $headers"
     fi
     
+    local request_body_display="(empty)"
     if [ -n "$data" ]; then
-        curl_cmd="$curl_cmd -d '$data'"
+        curl_exec_cmd="$curl_exec_cmd -d '$data'"
+        curl_display_cmd="$curl_display_cmd -d '$data'"
+        request_body_display="$data"
     fi
     
-    curl_cmd="$curl_cmd '$BASE_URL$endpoint'"
+    curl_exec_cmd="$curl_exec_cmd '$BASE_URL$endpoint'"
+    curl_display_cmd="$curl_display_cmd '$BASE_URL$endpoint'"
     
     # Execute the request
-    local response=$(eval $curl_cmd)
+    local response=$(eval "$curl_exec_cmd")
     local http_code="${response: -3}"
     local response_body="${response%???}"
     
@@ -107,8 +221,19 @@ run_test() {
         local status_icon="✅"
     else
         echo -e "${RED}❌ FAILED${NC} - Expected: $expected_status, Got: $http_code"
+        echo -e "${RED}   Response: $response_body${NC}"
         FAILED_TESTS=$((FAILED_TESTS + 1))
         local status_icon="❌"
+    fi
+    
+    local headers_display="$headers"
+    if [ -z "$headers_display" ]; then
+        headers_display="(none)"
+    fi
+    
+    local response_body_display="$response_body"
+    if [ -z "$response_body_display" ]; then
+        response_body_display="(empty response body)"
     fi
     
     # Log to report
@@ -118,12 +243,17 @@ run_test() {
 **Status:** $status_icon $http_code (Expected: $expected_status)
 **Description:** $description
 **Endpoint:** $method $endpoint
-**Request Headers:** $headers
-**Request Body:** $data
+**Request Headers:** $headers_display
+**Request Body:** $request_body_display
+**Request Command:**
+\`\`\`bash
+$curl_display_cmd
+\`\`\`
 
-**Response:**
+**Response Status:** $http_code
+**Response Body:**
 \`\`\`json
-$response_body
+$response_body_display
 \`\`\`
 
 ---
@@ -182,23 +312,34 @@ wait_for_service() {
     return 1
 }
 
-# Function to stop and start services
-restart_services() {
-    echo -e "${YELLOW}🛑 Stopping services...${NC}"
-    cd .. && ./stop_full_stack.sh
+# Function to check service availability
+check_service() {
+    local service_name="Service"
+    if [[ $BASE_URL == *"localhost"* ]]; then
+        service_name="Local Spring Boot Application"
+        echo -e "${YELLOW}🔍 Checking local service availability...${NC}"
+        echo -e "${YELLOW}💡 Make sure your local application is running with: mvn spring-boot:run${NC}"
+    else
+        service_name="Remote Service"
+        echo -e "${YELLOW}🔍 Checking remote service availability...${NC}"
+    fi
     
-    echo -e "${YELLOW}⏳ Waiting 5 seconds...${NC}"
-    sleep 5
-    
-    echo -e "${YELLOW}🚀 Starting services...${NC}"
-    ./start_full_stack.sh &
-    
-    # Wait for services to be ready
     if wait_for_service; then
-        echo -e "${GREEN}✅ Services restarted successfully!${NC}"
+        echo -e "${GREEN}✅ $service_name is available!${NC}"
         return 0
     else
-        echo -e "${RED}❌ Failed to restart services${NC}"
+        echo -e "${RED}❌ $service_name is not available${NC}"
+        if [[ $BASE_URL == *"localhost"* ]]; then
+            echo -e "${YELLOW}💡 Troubleshooting tips:${NC}"
+            echo -e "${YELLOW}   1. Start Spring Boot with: mvn spring-boot:run${NC}"
+            echo -e "${YELLOW}   2. Confirm port 8080 is free${NC}"
+            echo -e "${YELLOW}   3. Verify database connectivity${NC}"
+        else
+            echo -e "${YELLOW}💡 Troubleshooting tips:${NC}"
+            echo -e "${YELLOW}   1. Verify the API URL is correct${NC}"
+            echo -e "${YELLOW}   2. Confirm the service is deployed and running${NC}"
+            echo -e "${YELLOW}   3. Check network connectivity${NC}"
+        fi
         return 1
     fi
 }
@@ -206,7 +347,7 @@ restart_services() {
 # Main test execution
 main() {
     echo -e "${PURPLE}📋 Test Plan:${NC}"
-    echo "1. Stop and restart services"
+    echo "1. Verify service availability"
     echo "2. Test health check endpoint"
     echo "3. Test user authentication"
     echo "4. Test event creation"
@@ -219,11 +360,11 @@ main() {
     echo "11. Test checklist analytics"
     echo ""
     
-    # Step 1: Restart services
-    echo -e "${CYAN}🔄 Step 1: Restarting Services${NC}"
-    echo "=================================="
-    if ! restart_services; then
-        echo -e "${RED}❌ Failed to restart services. Exiting.${NC}"
+    # Step 1: Verify service availability
+    echo -e "${CYAN}🔍 Step 1: Checking Service Availability${NC}"
+    echo "=========================================="
+    if ! check_service; then
+        echo -e "${RED}❌ Service is not available. Exiting.${NC}"
         exit 1
     fi
     echo ""
