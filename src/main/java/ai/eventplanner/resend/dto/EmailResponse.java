@@ -1,4 +1,4 @@
-package ai.eventplanner.sendgrid.dto;
+package ai.eventplanner.resend.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * DTO for SendGrid email responses
+ * DTO for Resend email responses
  */
 @Data
 @Builder
@@ -28,16 +28,5 @@ public class EmailResponse {
     private LocalDateTime sentAt;
 
     private List<String> errors;
-
-    private String requestId;
-
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class Error {
-        private String field;
-        private String message;
-        private String help;
-    }
 }
+

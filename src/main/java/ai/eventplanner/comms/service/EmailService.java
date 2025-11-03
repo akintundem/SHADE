@@ -3,8 +3,8 @@ package ai.eventplanner.comms.service;
 import ai.eventplanner.comms.model.CommunicationLogEntity;
 import ai.eventplanner.comms.repository.CommunicationLogRepository;
 import ai.eventplanner.common.domain.enums.CommunicationStatus;
-import ai.eventplanner.sendgrid.dto.EmailResponse;
-import ai.eventplanner.sendgrid.service.SendGridService;
+import ai.eventplanner.resend.dto.EmailResponse;
+import ai.eventplanner.resend.service.ResendService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -12,43 +12,43 @@ import org.springframework.util.StringUtils;
 import java.util.Map;
 
 /**
- * Template email service using SendGrid with optional logging
+ * Template email service using Resend with optional logging
  * Focused on sending beautifully designed template emails
  */
 @Service
 public class EmailService {
 
 
-    private final SendGridService sendGridService;
+    private final ResendService resendService;
     private final CommunicationLogRepository logRepository;
     private final String defaultFromEmail;
 
-    public EmailService(SendGridService sendGridService, 
+    public EmailService(ResendService resendService, 
                        CommunicationLogRepository logRepository,
-                       @Value("${external.sendgrid.from-email:noreply@eventplanner.com}") String defaultFromEmail) {
-        this.sendGridService = sendGridService;
+                       @Value("${external.resend.from-email:noreply@shde.com}") String defaultFromEmail) {
+        this.resendService = resendService;
         this.logRepository = logRepository;
         this.defaultFromEmail = defaultFromEmail;
     }
 
     /**
-     * Send email using template (with logging)
+     * Send HTML email
      */
-    public EmailResponse sendTemplate(String to, String templateId, java.util.Map<String, Object> templateData) {
-        return sendTemplate(to, defaultFromEmail, templateId, templateData, true);
+    public EmailResponse sendEmail(String to, String subject, String html) {
+        return sendEmail(to, defaultFromEmail, subject, html, true);
     }
 
     /**
-     * Send email using template with custom from address
+     * Send HTML email with custom from address
      */
-    public EmailResponse sendTemplate(String to, String from, String templateId, java.util.Map<String, Object> templateData) {
-        return sendTemplate(to, from, templateId, templateData, true);
+    public EmailResponse sendEmail(String to, String from, String subject, String html) {
+        return sendEmail(to, from, subject, html, true);
     }
 
     /**
-     * Send email using template with optional logging
+     * Send HTML email with optional logging
      */
-    public EmailResponse sendTemplate(String to, String from, String templateId, java.util.Map<String, Object> templateData, boolean logToDatabase) {
+    public EmailResponse sendEmail(String to, String from, String subject, String html, boolean logToDatabase) {
         if (!StringUtils.hasText(to)) {
             return EmailResponse.builder()
                     .success(false)
@@ -56,20 +56,26 @@ public class EmailService {
                     .build();
         }
 
-        if (!StringUtils.hasText(templateId)) {
+        if (!StringUtils.hasText(subject)) {
             return EmailResponse.builder()
                     .success(false)
-                    .statusMessage("Template ID is blank")
+                    .statusMessage("Subject is blank")
                     .build();
         }
 
-        
-        // Send template email via SendGrid
-        EmailResponse response = sendGridService.sendTemplateEmail(to, from, templateId, templateData);
+        if (!StringUtils.hasText(html)) {
+            return EmailResponse.builder()
+                    .success(false)
+                    .statusMessage("Email content is blank")
+                    .build();
+        }
+
+        // Send email via Resend
+        EmailResponse response = resendService.sendEmail(to, from, subject, html);
         
         // Log to database if requested
         if (logToDatabase) {
-            logEmail(to, from, "Template: " + templateId, "Template email", response);
+            logEmail(to, from, subject, "HTML email", response);
         }
         
         return response;
@@ -79,7 +85,7 @@ public class EmailService {
      * Validate email address
      */
     public boolean isValidEmail(String email) {
-        return sendGridService.isValidEmail(email);
+        return resendService.isValidEmail(email);
     }
 
     /**
@@ -95,7 +101,7 @@ public class EmailService {
             entity.setStatus(response.isSuccess() ? CommunicationStatus.SENT : CommunicationStatus.FAILED);
             entity.setMetadata(serializeMetadata(Map.of(
                 "from", from,
-                "sendGridResponse", response.getStatusMessage(),
+                "resendResponse", response.getStatusMessage(),
                 "messageId", response.getMessageId() != null ? response.getMessageId() : ""
             )));
             

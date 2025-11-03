@@ -4,12 +4,17 @@ import ai.eventplanner.auth.dto.req.LoginRequest;
 import ai.eventplanner.auth.dto.req.RefreshTokenRequest;
 import ai.eventplanner.auth.dto.req.RegisterRequest;
 import ai.eventplanner.auth.dto.res.SecureAuthResponse;
+import ai.eventplanner.auth.entity.EmailVerificationToken;
 import ai.eventplanner.auth.entity.UserAccount;
 import ai.eventplanner.auth.entity.UserSession;
+import ai.eventplanner.auth.repo.EmailVerificationTokenRepository;
 import ai.eventplanner.auth.repo.UserAccountRepository;
 import ai.eventplanner.auth.repo.UserSessionRepository;
 import ai.eventplanner.auth.util.AuthMapper;
 import ai.eventplanner.common.exception.UnauthorizedException;
+import ai.eventplanner.common.security.TokenHashUtil;
+import ai.eventplanner.comms.service.EmailService;
+import ai.eventplanner.resend.service.EmailTemplateService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -22,6 +27,7 @@ import java.util.List;
 import static ai.eventplanner.auth.util.AuthValidationUtil.normalizeEmail;
 import static ai.eventplanner.auth.util.AuthValidationUtil.safeTrim;
 import static ai.eventplanner.auth.util.AuthValidationUtil.validatePasswordMatch;
+import static ai.eventplanner.auth.util.SecureTokenUtil.generateSecureToken;
 
 @Service
 @Transactional
@@ -29,20 +35,32 @@ public class AuthService {
 
     private final UserAccountRepository userAccountRepository;
     private final UserSessionRepository sessionRepository;
+    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
+    private final EmailService emailService;
+    private final EmailTemplateService emailTemplateService;
 
     @Value("${auth.session.max-concurrent:5}")
     private int maxConcurrentSessions;
 
+    @Value("${app.base-url:http://localhost:8080}")
+    private String baseUrl;
+
     public AuthService(UserAccountRepository userAccountRepository,
                        UserSessionRepository sessionRepository,
+                       EmailVerificationTokenRepository emailVerificationTokenRepository,
                        PasswordEncoder passwordEncoder,
-                       TokenService tokenService) {
+                       TokenService tokenService,
+                       EmailService emailService,
+                       EmailTemplateService emailTemplateService) {
         this.userAccountRepository = userAccountRepository;
         this.sessionRepository = sessionRepository;
+        this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenService = tokenService;
+        this.emailService = emailService;
+        this.emailTemplateService = emailTemplateService;
     }
 
     public SecureAuthResponse register(RegisterRequest request, String clientIp) {
@@ -69,6 +87,31 @@ public class AuthService {
             .build();
         userAccountRepository.save(user);
         userAccountRepository.flush();
+
+        // Generate email verification token
+        String rawToken = generateSecureToken();
+        String hashedToken = TokenHashUtil.sha256(rawToken);
+        EmailVerificationToken verificationToken = EmailVerificationToken.builder()
+            .user(user)
+            .token(hashedToken)
+            .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plusDays(1))
+            .consumed(false)
+            .build();
+        emailVerificationTokenRepository.save(verificationToken);
+
+        // Send confirmation email
+        try {
+            String confirmLink = baseUrl + "/api/v1/auth/verify-email/" + rawToken;
+            String emailHtml = emailTemplateService.renderWelcomeEmail(user.getName(), confirmLink);
+            emailService.sendEmail(
+                user.getEmail(),
+                "Welcome to SHDE - Confirm Your Email",
+                emailHtml
+            );
+        } catch (Exception ex) {
+            // Log error but don't fail registration
+            // Email sending failures shouldn't block user registration
+        }
 
         return issueAuthResponse(user, false, request.getClientId(), request.getDeviceId(), clientIp,
             "User registered successfully");

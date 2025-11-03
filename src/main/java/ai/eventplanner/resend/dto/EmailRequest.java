@@ -1,4 +1,4 @@
-package ai.eventplanner.sendgrid.dto;
+package ai.eventplanner.resend.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -9,10 +9,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
-import java.util.Map;
 
 /**
- * DTO for SendGrid email requests
+ * DTO for Resend email requests
  */
 @Data
 @Builder
@@ -21,7 +20,7 @@ import java.util.Map;
 public class EmailRequest {
 
     @NotNull(message = "Recipients are required")
-    private List<EmailRecipient> to;
+    private List<String> to;
 
     @Email(message = "From email must be valid")
     @NotBlank(message = "From email is required")
@@ -30,33 +29,11 @@ public class EmailRequest {
     @NotBlank(message = "Subject is required")
     private String subject;
 
-    @NotBlank(message = "Content is required")
-    private String content;
+    private String html; // HTML content
 
-    @Builder.Default
-    private String contentType = "text/plain"; // text/plain or text/html
+    private String text; // Plain text content
 
     private List<EmailAttachment> attachments;
-
-    private Map<String, Object> customArgs;
-
-    private String templateId;
-
-    private Map<String, Object> templateData;
-
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class EmailRecipient {
-        @Email(message = "Email must be valid")
-        @NotBlank(message = "Email is required")
-        private String email;
-
-        private String name;
-
-        private Map<String, Object> substitutions;
-    }
 
     @Data
     @Builder
@@ -70,8 +47,6 @@ public class EmailRequest {
         private String filename;
 
         private String type;
-
-        @Builder.Default
-        private String disposition = "attachment";
     }
 }
+

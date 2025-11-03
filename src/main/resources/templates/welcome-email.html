@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SHDE — Welcome</title>
+    <style>
+      /* Email-friendly reset and simple responsive styles */
+      body { margin:0; padding:24px 12px; background:#ffffff; font-family:Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#000; }
+      .wrapper { max-width:680px; margin:0 auto; }
+      .header { background:#000; color:#fff; text-align:center; padding:40px 24px; border-radius:12px 12px 0 0; box-shadow:0 14px 40px rgba(0,0,0,0.12); }
+      .logo { display:block; margin:0 auto 12px; width:64px; height:64px; border-radius:50%; }
+      h1 { font-size:24px; letter-spacing:8px; font-weight:600; margin:0 0 8px; }
+      .sub { font-size:16px; margin-top:8px; color:#ddd; }
+      .card { background:#fff; padding:28px; border-radius:0 0 12px 12px; box-shadow:0 8px 30px rgba(0,0,0,0.06); }
+      p { font-size:15px; line-height:1.6; color:#111; margin:0 0 16px; }
+      .confirm-box { border:1px solid #e6e6e6; border-radius:8px; padding:28px; text-align:center; margin-bottom:32px; background:#fff; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.02); display:flex; align-items:flex-start; gap:12px; }
+      .accent { width:6px; background:#000; border-radius:4px; }
+      .confirm-content { max-width:480px; text-align:center; margin:0 auto; }
+      .secure-icon { width:40px; height:40px; display:block; margin:0 auto 16px; }
+      h2 { font-size:18px; margin:0 0 12px; }
+      .btn { display:inline-block; background:#000; color:#fff; text-decoration:none; padding:14px 32px; font-size:14px; font-weight:600; border-radius:6px; }
+      .muted { font-size:12px; color:#666; margin-top:12px; }
+      ul { padding-left:20px; margin-bottom:24px; color:#111; }
+      .footer { background:#000; color:#aaa; text-align:center; padding:24px; font-size:12px; margin:16px auto 0; border-radius:6px; }
+      .footer a { color:#777; text-decoration:none; margin:0 8px; }
+      @media screen and (max-width:480px) {
+        .confirm-box { flex-direction:column; align-items:center; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="header" style="background:#000; color:#fff; text-align:center; padding:40px 24px; border-radius:12px 12px 0 0; box-shadow:0 14px 40px rgba(0,0,0,0.12);">
+        <img class="logo" src="shade_app_icon.png" alt="SHDE Logo" width="64" height="64" style="display:block; margin:0 auto 12px; width:64px; height:64px; border-radius:50%;" />
+        <h1 style="font-size:24px; letter-spacing:8px; font-weight:600; margin:0 0 8px; color:#fff;">SHDE</h1>
+        <div style="font-size:16px; margin-top:8px; color:#eee;">Welcome to the Future of Events</div>
+      </div>
+
+      <div class="card">
+        <p style="font-size:16px; margin-bottom:16px;">{{greeting}}</p>
+
+        <p style="line-height:1.6; font-size:15px; margin-bottom:24px; color:#111;">
+          You have been granted access to
+          <a href="https://shde.com" style="color:#000; text-decoration:underline;">SHDE</a>
+          — an intelligent platform that transcends conventional event management. Whether orchestrating grand conferences, intimate gatherings, or corporate affairs, our AI serves as your guide through every phase.
+        </p>
+
+        <div class="confirm-box" role="region" aria-labelledby="confirm-heading">
+          <div class="accent" aria-hidden="true"></div>
+          <div class="confirm-content">
+            <svg class="secure-icon" width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block; margin:0 auto 16px;">
+              <circle cx="20" cy="20" r="18" stroke="#222" stroke-width="2" fill="#fff"/>
+              <path d="M13 21l5 5 9-9" stroke="#222" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+            <h2 id="confirm-heading">Confirm Your Email</h2>
+            <p style="font-size:14px; margin-bottom:24px; color:#333;">
+              To activate your account and unlock the full potential of SHDE, please verify your email by clicking the button below.
+            </p>
+            <a class="btn" href="{{confirmLink}}">CONFIRM EMAIL</a>
+            <div class="muted">This link will expire in 24 hours.</div>
+          </div>
+        </div>
+
+        <p style="margin-top:24px; font-size:14px;">We eagerly anticipate the extraordinary events you shall create.</p>
+        <p style="margin-top:8px; font-weight:600;">Thank You,<br />The SHDE TEAM</p>
+      </div>
+
+      <div class="footer" role="contentinfo">
+        <img src="shade_app_icon.png" alt="SHDE" width="24" height="24" style="display:block;margin:0 auto 8px; border-radius:50%;" />
+        <div style="color:#aaa; margin-bottom:4px;">© 2025 SHDE</div>
+        <div style="color:#777; margin-bottom:12px;">AI-Powered Event Guiding Platform</div>
+        <div>
+          <a href="https://shde.com/privacy">Privacy</a>|
+          <a href="https://shde.com/terms">Terms</a>|
+          <a href="https://shde.com/unsubscribe">Unsubscribe</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+
