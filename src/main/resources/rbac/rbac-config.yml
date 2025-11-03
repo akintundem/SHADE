@@ -374,13 +374,14 @@ routes:
         allowAuthenticated: true
 
   - name: timeline
-    pattern: "^/api/v1/timeline/(?<eventId>[a-f0-9-]+)(/.*)?$"
+    pattern: "^/api/v1/timeline/(?<eventId>[a-f0-9-]+)(/view|/tasks|/summary|/upcoming|/overdue|/search)(/.*)?$"
     resourceIdGroup: eventId
     methods:
       GET:
         permission: "timeline.read"
         scope: EVENT
         allowOwner: true
+        allowAuthenticated: true
       POST:
         permission: "timeline.create"
         scope: EVENT
@@ -391,6 +392,53 @@ routes:
         allowOwner: true
       DELETE:
         permission: "timeline.delete"
+        scope: EVENT
+        allowOwner: true
+
+  - name: timeline-tasks
+    pattern: "^/api/v1/timeline/(?<eventId>[a-f0-9-]+)/tasks$"
+    resourceIdGroup: eventId
+    methods:
+      GET:
+        permission: "timeline.read"
+        scope: EVENT
+        allowOwner: true
+        allowAuthenticated: true
+      POST:
+        permission: "timeline.create"
+        scope: EVENT
+        allowOwner: true
+
+  - name: timeline-task-item
+    pattern: "^/api/v1/timeline/tasks/(?<taskId>[a-f0-9-]+)(/.*)?$"
+    resourceIdGroup: taskId
+    methods:
+      GET:
+        permission: "timeline.read"
+        scope: EVENT
+        allowOwner: true
+        allowAuthenticated: true
+      PUT:
+        permission: "timeline.update"
+        scope: EVENT
+        allowOwner: true
+        allowAuthenticated: true
+      DELETE:
+        permission: "timeline.delete"
+        scope: EVENT
+        allowOwner: true
+      POST:
+        permission: "timeline.update"
+        scope: EVENT
+        allowOwner: true
+        allowAuthenticated: true
+
+  - name: timeline-bulk
+    pattern: "^/api/v1/timeline/(?<eventId>[a-f0-9-]+)/tasks/bulk$"
+    resourceIdGroup: eventId
+    methods:
+      PUT:
+        permission: "timeline.update"
         scope: EVENT
         allowOwner: true
 

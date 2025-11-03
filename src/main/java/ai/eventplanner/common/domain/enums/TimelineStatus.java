@@ -5,8 +5,11 @@ package ai.eventplanner.common.domain.enums;
  */
 public enum TimelineStatus {
     PENDING,
-    IN_PROGRESS,
+    TO_DO,      // Task not yet started
+    ACTIVE,     // Task currently in progress
+    IN_PROGRESS, // Alias for ACTIVE
     COMPLETED,
+    DONE,       // Alias for COMPLETED
     CANCELLED,
     POSTPONED,
     OVERDUE
