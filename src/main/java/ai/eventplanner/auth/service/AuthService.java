@@ -15,6 +15,9 @@ import ai.eventplanner.common.exception.UnauthorizedException;
 import ai.eventplanner.common.security.TokenHashUtil;
 import ai.eventplanner.comms.service.EmailService;
 import ai.eventplanner.resend.service.EmailTemplateService;
+import ai.eventplanner.pushnotification.service.PushNotificationService;
+import ai.eventplanner.pushnotification.dto.PushNotificationRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -22,7 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static ai.eventplanner.auth.util.AuthValidationUtil.normalizeEmail;
 import static ai.eventplanner.auth.util.AuthValidationUtil.safeTrim;
@@ -31,6 +36,7 @@ import static ai.eventplanner.auth.util.SecureTokenUtil.generateSecureToken;
 
 @Service
 @Transactional
+@Slf4j
 public class AuthService {
 
     private final UserAccountRepository userAccountRepository;
@@ -40,6 +46,7 @@ public class AuthService {
     private final TokenService tokenService;
     private final EmailService emailService;
     private final EmailTemplateService emailTemplateService;
+    private final PushNotificationService pushNotificationService;
 
     @Value("${auth.session.max-concurrent:5}")
     private int maxConcurrentSessions;
@@ -53,7 +60,8 @@ public class AuthService {
                        PasswordEncoder passwordEncoder,
                        TokenService tokenService,
                        EmailService emailService,
-                       EmailTemplateService emailTemplateService) {
+                       EmailTemplateService emailTemplateService,
+                       PushNotificationService pushNotificationService) {
         this.userAccountRepository = userAccountRepository;
         this.sessionRepository = sessionRepository;
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
@@ -61,6 +69,7 @@ public class AuthService {
         this.tokenService = tokenService;
         this.emailService = emailService;
         this.emailTemplateService = emailTemplateService;
+        this.pushNotificationService = pushNotificationService;
     }
 
     public SecureAuthResponse register(RegisterRequest request, String clientIp) {
@@ -111,6 +120,29 @@ public class AuthService {
         } catch (Exception ex) {
             // Log error but don't fail registration
             // Email sending failures shouldn't block user registration
+            log.error("Failed to send welcome email to user: {}", user.getEmail(), ex);
+        }
+
+        // Send welcome push notification
+        try {
+            Map<String, String> notificationData = new HashMap<>();
+            notificationData.put("type", "welcome");
+            notificationData.put("action", "view_profile");
+
+            PushNotificationRequest welcomeNotification = PushNotificationRequest.builder()
+                .userId(user.getId())
+                .title("Welcome to SHDE!")
+                .body("Welcome " + user.getName() + "! We're excited to have you on board. Start planning your first event!")
+                .data(notificationData)
+                .actionUrl(baseUrl + "/profile")
+                .build();
+
+            pushNotificationService.sendToUser(welcomeNotification);
+            log.info("Welcome push notification sent to user: {}", user.getId());
+        } catch (Exception ex) {
+            // Log error but don't fail registration
+            // Push notification failures shouldn't block user registration
+            log.error("Failed to send welcome push notification to user: {}", user.getId(), ex);
         }
 
         return issueAuthResponse(user, false, request.getClientId(), request.getDeviceId(), clientIp,
