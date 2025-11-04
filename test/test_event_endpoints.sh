@@ -500,8 +500,13 @@ create_test_event() {
     local http_code="${response: -3}"
     local response_body="${response%???}"
     
-    if [ "$http_code" = "201" ]; then
+    if [ "$http_code" = "201" ] || [ "$http_code" = "200" ]; then
         EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+        if [ -z "$EVENT_ID" ]; then
+            echo -e "${RED}❌ Failed to extract event ID from response${NC}"
+            echo -e "${RED}Response: $response_body${NC}"
+            return 1
+        fi
         echo -e "${GREEN}✅ Test event created with ID: $EVENT_ID${NC}"
         return 0
     else

@@ -8,7 +8,7 @@
         <version>3.3.0</version>
         <relativePath/>
     </parent>
-    <groupId>ai.eventplanner</groupId>
+    <groupId>eventplanner</groupId>
     <artifactId>event-planner-monolith</artifactId>
     <version>1.0.0</version>
     <name>AI Event Planner Monolith</name>
@@ -183,7 +183,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>ai.eventplanner.EventPlannerApplication</mainClass>
+                    <mainClass>eventplanner.EventPlannerApplication</mainClass>
                 </configuration>
             </plugin>
             <plugin>
