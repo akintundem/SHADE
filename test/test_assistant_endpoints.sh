@@ -356,7 +356,7 @@ authenticate_user() {
     local http_code="${response: -3}"
     local response_body="${response%???}"
     
-    if [ "$http_code" = "201" ]; then
+    if [ "$http_code" = "201" ] || [ "$http_code" = "200" ]; then
         ACCESS_TOKEN=$(echo "$response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
         REFRESH_TOKEN=$(echo "$response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
         USER_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
@@ -428,7 +428,7 @@ create_test_event() {
     local http_code="${response: -3}"
     local response_body="${response%???}"
     
-    if [ "$http_code" = "201" ]; then
+    if [ "$http_code" = "201" ] || [ "$http_code" = "200" ]; then
         EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
         echo -e "${GREEN}✅ Test event created with ID: $EVENT_ID${NC}"
         return 0

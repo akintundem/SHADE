@@ -1,0 +1,41 @@
+package eventplanner.features.timeline.service;
+
+import eventplanner.features.timeline.entity.TimelineItem;
+import eventplanner.features.timeline.repository.TimelineItemRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+@Service
+public class TimelineService {
+    private final TimelineItemRepository repository;
+
+    public TimelineService(TimelineItemRepository repository) { this.repository = repository; }
+
+    public List<TimelineItem> list(UUID eventId) {
+        return repository.findByEventIdOrderByScheduledAtAsc(eventId);
+    }
+
+    public TimelineItem create(TimelineItem item) {
+        validateDependencies(item);
+        return repository.save(item);
+    }
+
+    public void delete(UUID id) { repository.deleteById(id); }
+
+    private void validateDependencies(TimelineItem item) {
+        UUID[] deps = item.getDependencies();
+        if (deps == null || deps.length == 0) return;
+        Set<UUID> seen = new HashSet<>();
+        for (UUID dep : deps) {
+            if (dep == null) continue;
+            if (dep.equals(item.getId())) throw new IllegalArgumentException("Item cannot depend on itself");
+            if (!seen.add(dep)) throw new IllegalArgumentException("Duplicate dependency: " + dep);
+        }
+    }
+}
+
+
