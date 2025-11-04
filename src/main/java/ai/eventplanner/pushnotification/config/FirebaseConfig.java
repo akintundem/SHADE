@@ -7,6 +7,7 @@ import com.google.firebase.messaging.FirebaseMessaging;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
 
@@ -16,9 +17,11 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Firebase Configuration for FCM Push Notifications
+ * Only loads when both firebase.service-account-key and firebase.project-id are provided and non-empty
  */
 @Configuration
 @Slf4j
+@Conditional(FirebaseCondition.class)
 public class FirebaseConfig {
 
     @Value("${firebase.service-account-key:}")
@@ -36,9 +39,17 @@ public class FirebaseConfig {
             // Firebase not initialized, proceed with initialization
         }
 
+        // Validate that properties are not empty and look like valid JSON
         if (!StringUtils.hasText(serviceAccountKey) || !StringUtils.hasText(projectId)) {
-            log.warn("Firebase configuration is missing. Push notifications will be disabled.");
-            return null;
+            log.warn("Firebase configuration is missing or empty. Push notifications will be disabled.");
+            throw new IllegalStateException("Firebase service account key or project ID is missing or empty");
+        }
+
+        // Check if the service account key looks like valid JSON (should start with '{')
+        String trimmedKey = serviceAccountKey.trim();
+        if (!trimmedKey.startsWith("{") && !trimmedKey.startsWith("[")) {
+            log.error("Firebase service account key does not appear to be valid JSON. It should be a JSON object or array.");
+            throw new IllegalArgumentException("Firebase service account key must be valid JSON");
         }
 
         try {
@@ -63,10 +74,6 @@ public class FirebaseConfig {
 
     @Bean
     public FirebaseMessaging firebaseMessaging(FirebaseApp firebaseApp) {
-        if (firebaseApp == null) {
-            log.warn("Firebase app is not initialized. Push notifications will be disabled.");
-            return null;
-        }
         return FirebaseMessaging.getInstance(firebaseApp);
     }
 }

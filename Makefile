@@ -1,36 +1,223 @@
-.PHONY: help build run start stop restart logs clean test postman
+.PHONY: help build run start stop restart logs clean test postman \
+	compose-up compose-up-build compose-down compose-build compose-rebuild compose-rebuild-up \
+	compose-logs compose-logs-tail compose-ps compose-restart compose-clean compose-recreate \
+	service-rebuild service-recreate service-logs service-stop service-start service-restart \
+	dev-up dev-down dev-logs dev-restart
 
-# Default target - rcd un the application
-.DEFAULT_GOAL := run
+# Default target
+.DEFAULT_GOAL := help
+
+# Docker Compose file
+COMPOSE_FILE := docker-compose.yml
+
+# Colors for output
+GREEN := \033[0;32m
+YELLOW := \033[0;33m
+RED := \033[0;31m
+NC := \033[0m # No Color
 
 help:
-	@echo "Event Planner Monolith - Make Targets"
+	@echo "$(GREEN)Event Planner Monolith - Make Targets$(NC)"
 	@echo ""
-	@echo "  make          - Build and run the monolithic application (default)"
-	@echo "  make run      - Build and run the monolithic application"
-	@echo "  make build    - Build the application with Maven"
-	@echo "  make start    - Start the application (if already built)"
-	@echo "  make stop     - Stop the running application"
-	@echo "  make restart  - Stop, rebuild, and restart the application"
-	@echo "  make logs     - Show application logs"
-	@echo "  make clean    - Clean build artifacts and stop application"
-	@echo "  make test     - Spin up dependencies, launch the app, and run Postman smoke tests"
-	@echo "  make postman  - Alias for make test"
+	@echo "$(YELLOW)Docker Compose Commands (with Hot-Reload):$(NC)"
+	@echo "  make compose-up          - Start all services (code changes auto-reload!)"
+	@echo "  make compose-up-build    - Build (with cache) then start all services"
+	@echo "  make compose-rebuild-up  - Rebuild (no cache) then start all services"
 	@echo ""
+	@echo "$(YELLOW)Note:$(NC) Hot-reload is enabled by default! Edit code and changes reflect immediately."
+	@echo "  make compose-down        - Stop and remove all containers"
+	@echo "  make compose-build       - Build all service images (doesn't start)"
+	@echo "  make compose-rebuild     - Rebuild all service images (no cache, doesn't start)"
+	@echo "  make compose-restart     - Restart all services"
+	@echo "  make compose-logs        - Show logs from all services"
+	@echo "  make compose-ps          - Show status of all services"
+	@echo "  make compose-clean       - Stop containers and remove volumes"
+	@echo "  make compose-recreate    - Recreate all containers"
+	@echo ""
+	@echo "$(YELLOW)Service Management:$(NC)"
+	@echo "  make service-rebuild SERVICE=<name>  - Rebuild (no cache) then restart a specific service"
+	@echo "  make service-recreate SERVICE=<name> - Recreate a specific service"
+	@echo "  make service-logs SERVICE=<name>     - Show logs for a specific service"
+	@echo "  make service-stop SERVICE=<name>    - Stop a specific service"
+	@echo "  make service-start SERVICE=<name>   - Start a specific service"
+	@echo "  make service-restart SERVICE=<name> - Restart a specific service"
+	@echo ""
+	@echo "$(YELLOW)Available Services:$(NC)"
+	@echo "  - postgres"
+	@echo "  - redis"
+	@echo "  - mongodb"
+	@echo "  - java-app"
+	@echo "  - python-app"
+	@echo ""
+	@echo "$(YELLOW)Legacy Commands:$(NC)"
+	@echo "  make build              - Build the application with Maven"
+	@echo "  make run                - Build and run the monolithic application (non-Docker)"
+	@echo "  make start              - Start the application (non-Docker)"
+	@echo "  make stop               - Stop the running application (non-Docker)"
+	@echo "  make restart            - Stop, rebuild, and restart the application (non-Docker)"
+	@echo "  make logs               - Show application logs (non-Docker)"
+	@echo "  make clean              - Clean build artifacts (non-Docker)"
+	@echo "  make test               - Run Postman smoke tests"
+	@echo "  make postman            - Alias for make test"
+	@echo ""
+	@echo "$(YELLOW)Examples:$(NC)"
+	@echo "  make compose-up                    # Start services"
+	@echo "  make compose-rebuild-up            # Rebuild (no cache) then start all"
+	@echo "  make service-rebuild SERVICE=java-app  # Rebuild then restart Java app"
+	@echo "  make service-logs SERVICE=java-app     # View Java app logs"
 
-# Default target - build and run
+# ============================================================================
+# Docker Compose Commands
+# ============================================================================
+
+compose-up:
+	@echo "$(GREEN)Starting all services with Docker Compose...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) up -d
+	@echo "$(GREEN)Services started!$(NC)"
+	@echo "$(YELLOW)Java App: http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Python App: http://localhost:8000$(NC)"
+	@make compose-ps
+
+compose-up-build:
+	@echo "$(GREEN)Building and starting all services...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) up -d --build
+	@echo "$(GREEN)Services built and started!$(NC)"
+	@make compose-ps
+
+compose-down:
+	@echo "$(YELLOW)Stopping and removing all containers...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) down
+	@echo "$(GREEN)All services stopped and removed!$(NC)
+
+compose-build:
+	@echo "$(GREEN)Building all service images...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) build
+	@echo "$(GREEN)Build completed!$(NC)"
+
+compose-rebuild:
+	@echo "$(GREEN)Rebuilding all service images (no cache)...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) build --no-cache
+	@echo "$(GREEN)Rebuild completed!$(NC)"
+
+compose-rebuild-up:
+	@echo "$(GREEN)Rebuilding all service images (no cache) then starting...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) build --no-cache
+	docker-compose -f $(COMPOSE_FILE) up -d
+	@echo "$(GREEN)All services rebuilt and started!$(NC)"
+	@make compose-ps
+
+compose-restart:
+	@echo "$(YELLOW)Restarting all services...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) restart
+	@echo "$(GREEN)All services restarted!$(NC)"
+
+compose-logs:
+	@echo "$(GREEN)Showing logs from all services...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) logs -f
+
+compose-logs-tail:
+	@echo "$(GREEN)Showing last 100 lines of logs...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) logs --tail=100
+
+compose-ps:
+	@echo "$(GREEN)Service Status:$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) ps
+
+compose-clean:
+	@echo "$(RED)WARNING: This will stop containers and remove volumes!$(NC)"
+	@echo "$(YELLOW)Stopping containers and removing volumes...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) down -v
+	@echo "$(GREEN)Clean completed!$(NC)"
+
+compose-recreate:
+	@echo "$(GREEN)Recreating all containers...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) up -d --force-recreate
+	@echo "$(GREEN)All containers recreated!$(NC)"
+
+# ============================================================================
+# Service-Specific Commands
+# ============================================================================
+
+service-rebuild:
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
+		echo "Usage: make service-rebuild SERVICE=<service-name>"; \
+		echo "Available services: postgres, redis, mongodb, java-app, python-app"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Rebuilding service: $(SERVICE)$(NC)"
+	docker-compose -f $(COMPOSE_FILE) build --no-cache $(SERVICE)
+	@echo "$(GREEN)Rebuilding completed! Restarting service...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) up -d --no-deps $(SERVICE)
+	@echo "$(GREEN)Service $(SERVICE) rebuilt and restarted!$(NC)"
+
+service-recreate:
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
+		echo "Usage: make service-recreate SERVICE=<service-name>"; \
+		echo "Available services: postgres, redis, mongodb, java-app, python-app"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Recreating service: $(SERVICE)$(NC)"
+	docker-compose -f $(COMPOSE_FILE) up -d --force-recreate --no-deps $(SERVICE)
+	@echo "$(GREEN)Service $(SERVICE) recreated!$(NC)"
+
+service-logs:
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
+		echo "Usage: make service-logs SERVICE=<service-name>"; \
+		echo "Available services: postgres, redis, mongodb, java-app, python-app"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Showing logs for service: $(SERVICE)$(NC)"
+	docker-compose -f $(COMPOSE_FILE) logs -f $(SERVICE)
+
+service-stop:
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
+		echo "Usage: make service-stop SERVICE=<service-name>"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Stopping service: $(SERVICE)$(NC)"
+	docker-compose -f $(COMPOSE_FILE) stop $(SERVICE)
+	@echo "$(GREEN)Service $(SERVICE) stopped!$(NC)"
+
+service-start:
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
+		echo "Usage: make service-start SERVICE=<service-name>"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Starting service: $(SERVICE)$(NC)"
+	docker-compose -f $(COMPOSE_FILE) start $(SERVICE)
+	@echo "$(GREEN)Service $(SERVICE) started!$(NC)"
+
+service-restart:
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
+		echo "Usage: make service-restart SERVICE=<service-name>"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Restarting service: $(SERVICE)$(NC)"
+	docker-compose -f $(COMPOSE_FILE) restart $(SERVICE)
+	@echo "$(GREEN)Service $(SERVICE) restarted!$(NC)"
+
+# ============================================================================
+# Legacy Commands (for non-Docker usage)
+# ============================================================================
+
 run: build start
 
 build:
-	@echo "Building monolithic application..."
+	@echo "$(GREEN)Building monolithic application...$(NC)"
 	mvn clean package -DskipTests
-	@echo "Build completed!"
+	@echo "$(GREEN)Build completed!$(NC)"
 
 start:
-	@echo "Starting Event Planner Monolith..."
-	@echo "Application will be available at: http://localhost:8080"
-	@echo "Auth health check: http://localhost:8080/api/v1/auth/health"
-	@echo "Press Ctrl+C to stop the application"
+	@echo "$(GREEN)Starting Event Planner Monolith...$(NC)"
+	@echo "$(YELLOW)Application will be available at: http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Auth health check: http://localhost:8080/api/v1/auth/health$(NC)"
+	@echo "$(YELLOW)Press Ctrl+C to stop the application$(NC)"
 	@echo ""
 	@if [ -f .env ]; then \
 		echo "Loading environment variables from .env file..."; \
@@ -41,24 +228,41 @@ start:
 	fi
 
 stop:
-	@echo "Stopping application..."
+	@echo "$(YELLOW)Stopping application...$(NC)"
 	@pkill -f "java -jar target/event-planner-monolith-1.0.0.jar" || true
-	@echo "Application stopped!"
+	@echo "$(GREEN)Application stopped!$(NC)"
 
 restart: stop build start
 
 logs:
-	@echo "Showing application logs..."
-	@tail -f logs/application.log 2>/dev/null || echo "No log file found. Application may not be running."
+	@echo "$(GREEN)Showing application logs...$(NC)"
+	@tail -f logs/application.log 2>/dev/null || echo "$(RED)No log file found. Application may not be running.$(NC)"
 
 clean:
-	@echo "Cleaning build artifacts..."
+	@echo "$(YELLOW)Cleaning build artifacts...$(NC)"
 	mvn clean
-	@echo "Stopping any running instances..."
+	@echo "$(YELLOW)Stopping any running instances...$(NC)"
 	@pkill -f "java -jar target/event-planner-monolith-1.0.0.jar" || true
-	@echo "Clean completed!"
+	@echo "$(GREEN)Clean completed!$(NC)"
 
 test:
 	@./scripts/test.sh
 
 postman: test
+
+# Development mode with hot-reload (now using main compose file)
+dev-up:
+	@echo "$(GREEN)Starting services with hot-reload enabled...$(NC)"
+	@echo "$(YELLOW)Code changes will be reflected immediately!$(NC)"
+	@make compose-up
+	@echo "$(YELLOW)Watching logs (Ctrl+C to exit)...$(NC)"
+	@make compose-logs
+
+dev-down:
+	@make compose-down
+
+dev-logs:
+	@make compose-logs
+
+dev-restart:
+	@make compose-restart

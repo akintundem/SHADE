@@ -7,8 +7,7 @@ services:
       POSTGRES_DB: ${DB_NAME:-eventplanner}
       POSTGRES_USER: ${DB_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-eventplanner}"]
       interval: 10s
@@ -59,8 +58,20 @@ services:
     container_name: event-planner-app
     ports:
       - "8080:8080"
+      - "5005:5005"  # Debug port for IDE attachment
+    volumes:
+      # Mount source code for hot-reload (changes reflect immediately!)
+      - ./src:/app/src
+      - ./pom.xml:/app/pom.xml
+      # Cache Maven dependencies to avoid re-downloading
+      - maven_cache:/root/.m2
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
+      # Enable Spring Boot DevTools for hot-reload
+      SPRING_DEVTOOLS_RESTART_ENABLED: "true"
+      SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "true"
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: "2s"
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: "1s"
 
       # Database — will use Railway's DATABASE_URL if present, else local defaults
       DATABASE_URL: ${DATABASE_URL:-}
@@ -129,6 +140,13 @@ services:
         condition: service_healthy
       mongodb:
         condition: service_healthy
+    # Extended startup time for Maven build on first run
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s  # Allow 2 minutes for Maven to download deps and start
     restart: unless-stopped
     networks:
       - event-planner-network
@@ -158,9 +176,9 @@ services:
       - event-planner-network
 
 volumes:
-  postgres_data:
   redis_data:
   mongodb_data:
+  maven_cache:  # Cache Maven dependencies for faster builds
 
 networks:
   event-planner-network:

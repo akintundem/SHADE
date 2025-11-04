@@ -37,7 +37,10 @@ public class ClientValidationFilter implements Filter {
             "/swagger-ui",
             "/v3/api-docs",
             "/error",
-            "/favicon.ico"
+            "/favicon.ico",
+            "/images/",
+            "/css/",
+            "/js/"
     );
 
     @Override
@@ -81,6 +84,10 @@ public class ClientValidationFilter implements Filter {
     }
 
     private boolean isExcludedPath(String path) {
+        // Check exact matches
+        if (EXCLUDED_PATHS.contains(path)) {
+            return true;
+        }
         return EXCLUDED_PATHS.stream().anyMatch(path::startsWith);
     }
 
