@@ -18,18 +18,25 @@ public class EmailTemplateService {
     /**
      * Render the SHDE welcome email template with confirmation link
      */
-    public String renderWelcomeEmail(String userName, String confirmLink) {
+    public String renderWelcomeEmail(String userName, String confirmLink, String baseUrl) {
         try {
             ClassPathResource resource = new ClassPathResource(TEMPLATE_PATH);
             String template = StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
 
             String greeting = userName != null && !userName.trim().isEmpty() 
-                ? "Greetings " + escapeHtml(userName) + ","
-                : "Greetings and welcome!";
+                ? escapeHtml(userName)
+                : "there";
+
+            // Ensure baseUrl ends with / and has proper protocol
+            String logoUrl = (baseUrl != null && !baseUrl.isEmpty()) 
+                ? baseUrl.replaceAll("/$", "") + "/images/shade_app_icon.png"
+                : "https://shde.com/images/shade_app_icon.png";
 
             return template
-                .replace("{{greeting}}", greeting)
-                .replace("{{confirmLink}}", confirmLink);
+                .replace("{{userName}}", greeting)
+                .replace("{{confirmLink}}", confirmLink)
+                .replace("{{logoUrl}}", logoUrl)
+                .replace("{{baseUrl}}", baseUrl != null && !baseUrl.isEmpty() ? baseUrl : "https://shde.com");
         } catch (IOException e) {
             throw new RuntimeException("Failed to load email template: " + TEMPLATE_PATH, e);
         }

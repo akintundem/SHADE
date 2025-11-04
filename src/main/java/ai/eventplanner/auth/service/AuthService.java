@@ -111,7 +111,7 @@ public class AuthService {
         // Send confirmation email
         try {
             String confirmLink = baseUrl + "/api/v1/auth/verify-email/" + rawToken;
-            String emailHtml = emailTemplateService.renderWelcomeEmail(user.getName(), confirmLink);
+            String emailHtml = emailTemplateService.renderWelcomeEmail(user.getName(), confirmLink, baseUrl);
             emailService.sendEmail(
                 user.getEmail(),
                 "Welcome to SHDE - Confirm Your Email",
