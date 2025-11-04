@@ -13,10 +13,8 @@ import eventplanner.security.auth.repository.UserSessionRepository;
 import eventplanner.security.util.AuthMapper;
 import eventplanner.common.exception.UnauthorizedException;
 import eventplanner.security.util.TokenHashUtil;
-import eventplanner.common.communication.channels.email.EmailService;
-import eventplanner.common.communication.channels.email.EmailTemplateService;
-import eventplanner.common.communication.channels.push.PushNotificationService;
-import eventplanner.common.communication.channels.push.dto.PushNotificationRequest;
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.channel.email.EmailTemplateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -44,9 +42,8 @@ public class AuthService {
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
-    private final EmailService emailService;
+    private final NotificationService notificationService;
     private final EmailTemplateService emailTemplateService;
-    private final PushNotificationService pushNotificationService;
 
     @Value("${auth.session.max-concurrent:5}")
     private int maxConcurrentSessions;
@@ -59,17 +56,15 @@ public class AuthService {
                        EmailVerificationTokenRepository emailVerificationTokenRepository,
                        PasswordEncoder passwordEncoder,
                        TokenService tokenService,
-                       EmailService emailService,
-                       EmailTemplateService emailTemplateService,
-                       PushNotificationService pushNotificationService) {
+                       NotificationService notificationService,
+                       EmailTemplateService emailTemplateService) {
         this.userAccountRepository = userAccountRepository;
         this.sessionRepository = sessionRepository;
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenService = tokenService;
-        this.emailService = emailService;
+        this.notificationService = notificationService;
         this.emailTemplateService = emailTemplateService;
-        this.pushNotificationService = pushNotificationService;
     }
 
     public SecureAuthResponse register(RegisterRequest request, String clientIp) {
@@ -112,10 +107,11 @@ public class AuthService {
         try {
             String confirmLink = baseUrl + "/api/v1/auth/verify-email/" + rawToken;
             String emailHtml = emailTemplateService.renderWelcomeEmail(user.getName(), confirmLink, baseUrl);
-            emailService.sendEmail(
+            notificationService.sendEmail(
                 user.getEmail(),
                 "Welcome to SHDE - Confirm Your Email",
-                emailHtml
+                emailHtml,
+                null // No eventId for auth emails
             );
         } catch (Exception ex) {
             // Log error but don't fail registration
@@ -129,15 +125,14 @@ public class AuthService {
             notificationData.put("type", "welcome");
             notificationData.put("action", "view_profile");
 
-            PushNotificationRequest welcomeNotification = PushNotificationRequest.builder()
-                .userId(user.getId())
-                .title("Welcome to SHDE!")
-                .body("Welcome " + user.getName() + "! We're excited to have you on board. Start planning your first event!")
-                .data(notificationData)
-                .actionUrl(baseUrl + "/profile")
-                .build();
-
-            pushNotificationService.sendToUser(welcomeNotification);
+            notificationService.sendPushNotification(
+                user.getId(),
+                "Welcome to SHDE!",
+                "Welcome " + user.getName() + "! We're excited to have you on board. Start planning your first event!",
+                notificationData,
+                baseUrl + "/profile",
+                null // No eventId for auth notifications
+            );
             log.info("Welcome push notification sent to user: {}", user.getId());
         } catch (Exception ex) {
             // Log error but don't fail registration

@@ -1,7 +1,7 @@
 package eventplanner.features.event.service;
 
-import eventplanner.common.communication.core.Communication;
-import eventplanner.common.communication.core.NotificationService;
+import eventplanner.common.communication.model.Communication;
+import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.features.event.dto.request.EventNotificationRequest;
 import eventplanner.features.event.dto.response.EventNotificationResponse;
 import eventplanner.features.event.entity.EventNotificationSettings;

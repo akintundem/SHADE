@@ -1,4 +1,4 @@
-package eventplanner.common.communication.channels.push.dto;
+package eventplanner.common.communication.services.channel.push.dto;
 
 import eventplanner.common.communication.model.DeviceToken;
 import lombok.AllArgsConstructor;

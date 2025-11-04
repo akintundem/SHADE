@@ -1,4 +1,4 @@
-package eventplanner.common.communication.channels.email.dto;
+package eventplanner.common.communication.services.channel.email.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

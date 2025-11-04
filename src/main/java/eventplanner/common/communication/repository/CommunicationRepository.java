@@ -1,6 +1,6 @@
 package eventplanner.common.communication.repository;
 
-import eventplanner.common.communication.core.Communication;
+import eventplanner.common.communication.model.Communication;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

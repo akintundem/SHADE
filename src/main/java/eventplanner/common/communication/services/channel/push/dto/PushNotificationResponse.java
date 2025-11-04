@@ -1,4 +1,4 @@
-package eventplanner.common.communication.channels.push.dto;
+package eventplanner.common.communication.services.channel.push.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

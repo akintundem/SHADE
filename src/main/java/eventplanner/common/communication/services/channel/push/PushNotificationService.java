@@ -1,7 +1,7 @@
-package eventplanner.common.communication.channels.push;
+package eventplanner.common.communication.services.channel.push;
 
-import eventplanner.common.communication.channels.push.dto.PushNotificationRequest;
-import eventplanner.common.communication.channels.push.dto.PushNotificationResponse;
+import eventplanner.common.communication.services.channel.push.dto.PushNotificationRequest;
+import eventplanner.common.communication.services.channel.push.dto.PushNotificationResponse;
 import eventplanner.common.communication.model.DeviceToken;
 import eventplanner.common.communication.repository.DeviceTokenRepository;
 import com.google.firebase.messaging.FirebaseMessaging;

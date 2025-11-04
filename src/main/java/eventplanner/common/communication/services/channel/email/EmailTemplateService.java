@@ -1,4 +1,4 @@
-package eventplanner.common.communication.channels.email;
+package eventplanner.common.communication.services.channel.email;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;

@@ -1,6 +1,6 @@
-package eventplanner.common.communication.channels.push;
+package eventplanner.common.communication.services.channel.push;
 
-import eventplanner.common.communication.channels.push.dto.RegisterDeviceTokenRequest;
+import eventplanner.common.communication.services.channel.push.dto.RegisterDeviceTokenRequest;
 import eventplanner.common.communication.model.DeviceToken;
 import eventplanner.common.communication.repository.DeviceTokenRepository;
 import lombok.RequiredArgsConstructor;

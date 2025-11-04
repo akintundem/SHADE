@@ -1,4 +1,4 @@
-package eventplanner.common.communication.channels.email.dto;
+package eventplanner.common.communication.services.channel.email.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

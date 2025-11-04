@@ -1,4 +1,4 @@
-package eventplanner.common.communication.core;
+package eventplanner.common.communication.model;
 
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.CommunicationStatus;
@@ -87,6 +87,9 @@ public class Communication extends BaseEntity {
     @Column(name = "metadata", columnDefinition = "TEXT")
     private String metadata;
     
+    @Column(name = "channel")
+    private String channel; // For logging: "email", "push", "sms"
+    
     public Communication(UUID eventId, CommunicationType communicationType, RecipientType recipientType, String subject, String content) {
         this.eventId = eventId;
         this.communicationType = communicationType;
@@ -95,3 +98,4 @@ public class Communication extends BaseEntity {
         this.content = content;
     }
 }
+
