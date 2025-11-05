@@ -14,7 +14,9 @@ import eventplanner.security.util.AuthMapper;
 import eventplanner.common.exception.UnauthorizedException;
 import eventplanner.security.util.TokenHashUtil;
 import eventplanner.common.communication.services.core.NotificationService;
-import eventplanner.common.communication.services.channel.email.EmailTemplateService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.communication.services.channel.email.EmailService;
+import eventplanner.common.domain.enums.CommunicationType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -43,7 +45,6 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
     private final NotificationService notificationService;
-    private final EmailTemplateService emailTemplateService;
 
     @Value("${auth.session.max-concurrent:5}")
     private int maxConcurrentSessions;
@@ -56,15 +57,13 @@ public class AuthService {
                        EmailVerificationTokenRepository emailVerificationTokenRepository,
                        PasswordEncoder passwordEncoder,
                        TokenService tokenService,
-                       NotificationService notificationService,
-                       EmailTemplateService emailTemplateService) {
+                       NotificationService notificationService) {
         this.userAccountRepository = userAccountRepository;
         this.sessionRepository = sessionRepository;
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenService = tokenService;
         this.notificationService = notificationService;
-        this.emailTemplateService = emailTemplateService;
     }
 
     public SecureAuthResponse register(RegisterRequest request, String clientIp) {
@@ -106,18 +105,22 @@ public class AuthService {
         // Send confirmation email using Resend template
         try {
             String confirmLink = baseUrl + "/api/v1/auth/verify-email/" + rawToken;
-            Map<String, Object> templateVariables = emailTemplateService.prepareWelcomeEmailVariables(
-                user.getName(), 
-                confirmLink, 
-                baseUrl
-            );
-            notificationService.sendEmailWithTemplate(
-                user.getEmail(),
-                "Welcome to SHDE - Confirm Your Email",
-                EmailTemplateService.TEMPLATE_EMAIL_VERIFICATION,
-                templateVariables,
-                null // No eventId for auth emails
-            );
+            Map<String, Object> templateVariables = new HashMap<>();
+            templateVariables.put("user_name", user.getName() != null && !user.getName().trim().isEmpty() 
+                ? user.getName() : "there");
+            templateVariables.put("confirm_link", confirmLink);
+            templateVariables.put("baseUrl", baseUrl);
+            
+            NotificationRequest notificationRequest = NotificationRequest.builder()
+                    .type(CommunicationType.EMAIL)
+                    .to(user.getEmail())
+                    .subject("Welcome to SHDE - Confirm Your Email")
+                    .templateId(EmailService.TEMPLATE_EMAIL_VERIFICATION)
+                    .templateVariables(templateVariables)
+                    .eventId(null) // No eventId for auth emails
+                    .build();
+            
+            notificationService.send(notificationRequest);
             log.info("Welcome email sent using template to user: {}", user.getEmail());
         } catch (Exception ex) {
             // Log error but don't fail registration
@@ -127,18 +130,22 @@ public class AuthService {
 
         // Send welcome push notification
         try {
-            Map<String, String> notificationData = new HashMap<>();
+            Map<String, Object> notificationData = new HashMap<>();
             notificationData.put("type", "welcome");
             notificationData.put("action", "view_profile");
+            notificationData.put("body", "Welcome " + user.getName() + "! We're excited to have you on board. Start planning your first event!");
+            notificationData.put("actionUrl", baseUrl + "/profile");
 
-            notificationService.sendPushNotification(
-                user.getId(),
-                "Welcome to SHDE!",
-                "Welcome " + user.getName() + "! We're excited to have you on board. Start planning your first event!",
-                notificationData,
-                baseUrl + "/profile",
-                null // No eventId for auth notifications
-            );
+            NotificationRequest pushRequest = NotificationRequest.builder()
+                    .type(CommunicationType.PUSH_NOTIFICATION)
+                    .to(user.getId().toString())
+                    .subject("Welcome to SHDE!")
+                    .templateId(null) // Not used for push
+                    .templateVariables(notificationData)
+                    .eventId(null) // No eventId for auth notifications
+                    .build();
+
+            notificationService.send(pushRequest);
             log.info("Welcome push notification sent to user: {}", user.getId());
         } catch (Exception ex) {
             // Log error but don't fail registration

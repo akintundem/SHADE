@@ -2,6 +2,7 @@ package eventplanner.common.communication.services.channel.push;
 
 import eventplanner.common.communication.services.channel.push.dto.PushNotificationRequest;
 import eventplanner.common.communication.services.channel.push.dto.PushNotificationResponse;
+import eventplanner.common.communication.services.core.dto.PushResult;
 import eventplanner.common.communication.model.DeviceToken;
 import eventplanner.common.communication.repository.DeviceTokenRepository;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -13,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import java.time.LocalDateTime;
@@ -36,6 +39,91 @@ public class PushNotificationService {
                                    Optional<FirebaseMessaging> firebaseMessaging) {
         this.deviceTokenRepository = deviceTokenRepository;
         this.firebaseMessaging = firebaseMessaging;
+    }
+
+    /**
+     * Send push notification to a specific user
+     * 
+     * @param userId User ID
+     * @param title Notification title
+     * @param data Map of data (can include "body" and "actionUrl" keys)
+     * @param eventId Optional event ID
+     * @return PushResult with send status
+     */
+    public PushResult sendPushNotification(UUID userId, String title, Map<String, Object> data, UUID eventId) {
+        try {
+            // Extract actionUrl and body if present in data
+            String actionUrl = null;
+            String body = title; // Default to title as body
+            if (data != null) {
+                if (data.containsKey("actionUrl")) {
+                    Object actionUrlObj = data.get("actionUrl");
+                    if (actionUrlObj != null) {
+                        actionUrl = actionUrlObj.toString();
+                    }
+                }
+                if (data.containsKey("body")) {
+                    Object bodyObj = data.get("body");
+                    if (bodyObj != null) {
+                        body = bodyObj.toString();
+                    }
+                }
+            }
+            
+            // Convert data Map<String, Object> to Map<String, String> for push notification
+            // Exclude actionUrl and body as they're handled separately
+            Map<String, String> pushData = null;
+            if (data != null && !data.isEmpty()) {
+                pushData = new HashMap<>();
+                for (Map.Entry<String, Object> entry : data.entrySet()) {
+                    String key = entry.getKey();
+                    // Skip actionUrl and body as they're handled separately
+                    if (!"actionUrl".equals(key) && !"body".equals(key)) {
+                        pushData.put(key, entry.getValue() != null ? entry.getValue().toString() : "");
+                    }
+                }
+            }
+            
+            // Build push notification request
+            PushNotificationRequest pushRequest = PushNotificationRequest.builder()
+                    .userId(userId)
+                    .eventId(eventId)
+                    .title(title)
+                    .body(body)
+                    .data(pushData)
+                    .actionUrl(actionUrl)
+                    .build();
+            
+            // Send push notification
+            PushNotificationResponse response = sendToUser(pushRequest);
+            
+            // Convert response to PushResult
+            String messageId = response.getNotificationId() != null 
+                    ? response.getNotificationId().toString() 
+                    : null;
+            
+            String errorMessage = null;
+            if (!response.isSuccess()) {
+                errorMessage = response.getMessage();
+                if (response.getFailedCount() > 0) {
+                    errorMessage += String.format(" (%d failed, %d sent)", 
+                            response.getFailedCount(), response.getSentCount());
+                }
+            }
+            
+            return PushResult.builder()
+                    .success(response.isSuccess())
+                    .messageId(messageId)
+                    .errorMessage(errorMessage)
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("Failed to send push notification: {}", e.getMessage(), e);
+            return PushResult.builder()
+                    .success(false)
+                    .errorMessage(e.getMessage())
+                    .build();
+        }
     }
 
     /**

@@ -24,7 +24,7 @@ import java.util.UUID;
 @EqualsAndHashCode(callSuper = true)
 public class Communication extends BaseEntity {
     
-    @Column(name = "event_id", nullable = false)
+    @Column(name = "event_id", nullable = true)
     private UUID eventId;
     
     @Enumerated(EnumType.STRING)
