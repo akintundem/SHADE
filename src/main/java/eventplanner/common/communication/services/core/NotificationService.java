@@ -122,6 +122,54 @@ public class NotificationService {
     }
 
     /**
+     * Send email using a Resend template (for auth flows and other non-event notifications)
+     * 
+     * @param to Recipient email address
+     * @param subject Email subject
+     * @param templateId Resend template ID (e.g., "email-verification")
+     * @param templateVariables Map of variables to pass to the template
+     * @param eventId Optional event ID for logging
+     * @return Communication record
+     */
+    public Communication sendEmailWithTemplate(String to, String subject, String templateId, 
+                                               Map<String, Object> templateVariables, UUID eventId) {
+        Communication c = new Communication();
+        if (eventId != null) {
+            c.setEventId(eventId);
+        }
+        c.setCommunicationType(CommunicationType.EMAIL);
+        c.setRecipientType(RecipientType.USER);
+        c.setSubject(subject);
+        c.setContent("Template: " + templateId + " with variables: " + 
+                    (templateVariables != null ? templateVariables.toString() : "none"));
+        c.setRecipientEmail(to);
+        c.setStatus(CommunicationStatus.PENDING);
+        
+        Communication saved = communicationRepository.save(c);
+        
+        try {
+            EmailResponse response = emailService.sendEmailWithTemplate(to, subject, templateId, templateVariables);
+            if (response.isSuccess()) {
+                saved.setStatus(CommunicationStatus.SENT);
+                saved.setSentAt(LocalDateTime.now());
+            } else {
+                saved.setStatus(CommunicationStatus.FAILED);
+                saved.setFailedAt(LocalDateTime.now());
+                saved.setFailureReason(response.getStatusMessage());
+            }
+            communicationRepository.save(saved);
+        } catch (Exception e) {
+            log.error("Failed to send email with template", e);
+            saved.setStatus(CommunicationStatus.FAILED);
+            saved.setFailedAt(LocalDateTime.now());
+            saved.setFailureReason(e.getMessage());
+            communicationRepository.save(saved);
+        }
+        
+        return saved;
+    }
+
+    /**
      * Send push notification to a user (for auth flows and other non-event notifications)
      */
     public Communication sendPushNotification(UUID userId, String title, String body, 

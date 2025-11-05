@@ -112,6 +112,70 @@ public class EmailService {
     public EmailResponse sendEmail(EmailRequest emailRequest) {
         return sendEmailRequest(emailRequest);
     }
+
+    /**
+     * Send email using a Resend template
+     * 
+     * @param to Recipient email address
+     * @param from Sender email address
+     * @param subject Email subject
+     * @param templateId Resend template ID (e.g., "email-verification")
+     * @param templateVariables Map of variables to pass to the template
+     * @param eventId Optional event ID for logging
+     * @param logToDatabase Whether to log the email to database
+     * @return EmailResponse with send status
+     */
+    public EmailResponse sendEmailWithTemplate(String to, String from, String subject, 
+                                                String templateId, Map<String, Object> templateVariables,
+                                                UUID eventId, boolean logToDatabase) {
+        if (!StringUtils.hasText(to)) {
+            return EmailResponse.builder()
+                    .success(false)
+                    .statusMessage("Recipient address is blank")
+                    .build();
+        }
+
+        if (!StringUtils.hasText(subject)) {
+            return EmailResponse.builder()
+                    .success(false)
+                    .statusMessage("Subject is blank")
+                    .build();
+        }
+
+        if (!StringUtils.hasText(templateId)) {
+            return EmailResponse.builder()
+                    .success(false)
+                    .statusMessage("Template ID is blank")
+                    .build();
+        }
+
+        EmailRequest request = EmailRequest.builder()
+                .to(List.of(to))
+                .from(from)
+                .subject(subject)
+                .templateId(templateId)
+                .templateVariables(templateVariables != null ? templateVariables : new HashMap<>())
+                .build();
+
+        EmailResponse response = sendEmailRequest(request);
+        
+        // Log to database if requested
+        if (logToDatabase) {
+            String contentPreview = "Template: " + templateId + " with variables: " + 
+                    (templateVariables != null ? templateVariables.toString() : "none");
+            logEmail(to, from, subject, contentPreview, response, eventId);
+        }
+        
+        return response;
+    }
+
+    /**
+     * Send email using a Resend template with default from address
+     */
+    public EmailResponse sendEmailWithTemplate(String to, String subject, String templateId, 
+                                                Map<String, Object> templateVariables) {
+        return sendEmailWithTemplate(to, defaultFromEmail, subject, templateId, templateVariables, null, true);
+    }
     
     private EmailResponse sendEmailRequest(EmailRequest emailRequest) {
         try {
@@ -124,11 +188,23 @@ public class EmailService {
             requestBody.put("to", emailRequest.getTo());
             requestBody.put("subject", emailRequest.getSubject());
             
-            if (emailRequest.getHtml() != null) {
-                requestBody.put("html", emailRequest.getHtml());
-            }
-            if (emailRequest.getText() != null) {
-                requestBody.put("text", emailRequest.getText());
+            // Use template if provided, otherwise use html/text
+            if (emailRequest.getTemplateId() != null && !emailRequest.getTemplateId().trim().isEmpty()) {
+                // Use Resend template
+                Map<String, Object> template = new HashMap<>();
+                template.put("id", emailRequest.getTemplateId());
+                if (emailRequest.getTemplateVariables() != null && !emailRequest.getTemplateVariables().isEmpty()) {
+                    template.put("variables", emailRequest.getTemplateVariables());
+                }
+                requestBody.put("template", template);
+            } else {
+                // Use traditional html/text content
+                if (emailRequest.getHtml() != null) {
+                    requestBody.put("html", emailRequest.getHtml());
+                }
+                if (emailRequest.getText() != null) {
+                    requestBody.put("text", emailRequest.getText());
+                }
             }
 
             if (emailRequest.getAttachments() != null && !emailRequest.getAttachments().isEmpty()) {

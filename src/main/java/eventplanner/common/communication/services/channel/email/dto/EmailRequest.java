@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * DTO for Resend email requests
@@ -29,11 +30,15 @@ public class EmailRequest {
     @NotBlank(message = "Subject is required")
     private String subject;
 
-    private String html; // HTML content
+    private String html; // HTML content (optional if using template)
 
-    private String text; // Plain text content
+    private String text; // Plain text content (optional if using template)
 
     private List<EmailAttachment> attachments;
+
+    private String templateId;
+
+    private Map<String, Object> templateVariables;
 
     @Data
     @Builder

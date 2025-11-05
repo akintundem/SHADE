@@ -103,16 +103,22 @@ public class AuthService {
             .build();
         emailVerificationTokenRepository.save(verificationToken);
 
-        // Send confirmation email
+        // Send confirmation email using Resend template
         try {
             String confirmLink = baseUrl + "/api/v1/auth/verify-email/" + rawToken;
-            String emailHtml = emailTemplateService.renderWelcomeEmail(user.getName(), confirmLink, baseUrl);
-            notificationService.sendEmail(
+            Map<String, Object> templateVariables = emailTemplateService.prepareWelcomeEmailVariables(
+                user.getName(), 
+                confirmLink, 
+                baseUrl
+            );
+            notificationService.sendEmailWithTemplate(
                 user.getEmail(),
                 "Welcome to SHDE - Confirm Your Email",
-                emailHtml,
+                EmailTemplateService.TEMPLATE_EMAIL_VERIFICATION,
+                templateVariables,
                 null // No eventId for auth emails
             );
+            log.info("Welcome email sent using template to user: {}", user.getEmail());
         } catch (Exception ex) {
             // Log error but don't fail registration
             // Email sending failures shouldn't block user registration

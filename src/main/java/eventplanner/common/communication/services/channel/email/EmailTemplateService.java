@@ -1,59 +1,50 @@
 package eventplanner.common.communication.services.channel.email;
 
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StreamUtils;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Service for rendering email templates
+ * Service for preparing email template variables for Resend templates
+ * Templates are managed on Resend dashboard, we just pass the template name/slug and variables
  */
 @Service
 public class EmailTemplateService {
-
-    private static final String TEMPLATE_PATH = "templates/welcome-email.html";
-
-    /**
-     * Render the SHDE welcome email template with confirmation link
-     */
-    public String renderWelcomeEmail(String userName, String confirmLink, String baseUrl) {
-        try {
-            ClassPathResource resource = new ClassPathResource(TEMPLATE_PATH);
-            String template = StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
-
-            String greeting = userName != null && !userName.trim().isEmpty() 
-                ? escapeHtml(userName)
-                : "there";
-
-            // Ensure baseUrl ends with / and has proper protocol
-            String logoUrl = (baseUrl != null && !baseUrl.isEmpty()) 
-                ? baseUrl.replaceAll("/$", "") + "/images/shade_app_icon.png"
-                : "https://shde.com/images/shade_app_icon.png";
-
-            return template
-                .replace("{{userName}}", greeting)
-                .replace("{{confirmLink}}", confirmLink)
-                .replace("{{logoUrl}}", logoUrl)
-                .replace("{{baseUrl}}", baseUrl != null && !baseUrl.isEmpty() ? baseUrl : "https://shde.com");
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to load email template: " + TEMPLATE_PATH, e);
-        }
-    }
+    
+    // Resend template names/slugs (as defined in Resend dashboard)
+    public static final String TEMPLATE_EMAIL_VERIFICATION = "email-verification";
 
     /**
-     * Escape HTML special characters
+     * Prepare template variables for the email verification/welcome email template
+     * Templates are created on Resend dashboard, we just pass variables here
+     * 
+     * @param userName User's name (can be null)
+     * @param confirmLink Email verification confirmation link
+     * @param baseUrl Base URL for the application
+     * @return Map of template variables for Resend template
      */
-    private String escapeHtml(String input) {
-        if (input == null) {
-            return "";
-        }
-        return input.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&#39;");
+    public Map<String, Object> prepareWelcomeEmailVariables(String userName, String confirmLink, String baseUrl) {
+        Map<String, Object> variables = new HashMap<>();
+        
+        // Common variables that might be used in the template
+        String greeting = userName != null && !userName.trim().isEmpty() 
+            ? userName 
+            : "there";
+        
+        variables.put("userName", greeting);
+        variables.put("name", greeting); // Alternative key in case template uses "name"
+        variables.put("confirmLink", confirmLink);
+        variables.put("verificationLink", confirmLink); // Alternative key
+        variables.put("baseUrl", baseUrl != null && !baseUrl.isEmpty() ? baseUrl : "https://shde.com");
+        
+        // Ensure baseUrl ends with / and has proper protocol
+        String logoUrl = (baseUrl != null && !baseUrl.isEmpty()) 
+            ? baseUrl.replaceAll("/$", "") + "/images/shade_app_icon.png"
+            : "https://shde.com/images/shade_app_icon.png";
+        variables.put("logoUrl", logoUrl);
+        
+        return variables;
     }
 }
 
