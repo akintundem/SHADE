@@ -47,6 +47,15 @@ public class EmailService {
      * @return EmailResult with success status and message ID
      */
     public EmailResult sendEmail(String to, String subject, String templateId, Map<String, Object> variables) {
+        // Check if Resend API key is configured
+        if (!resendConfig.isApiKeyConfigured()) {
+            log.warn("Resend API key is not configured. Email not sent.");
+            return EmailResult.builder()
+                    .success(false)
+                    .errorMessage("Resend API key is not configured. Please set RESEND_API_KEY environment variable.")
+                    .build();
+        }
+
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -91,6 +100,29 @@ public class EmailService {
                         .build();
             }
 
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // Handle HTTP client errors (like domain verification issues)
+            String errorMessage = e.getMessage();
+            if (e.getStatusCode().value() == 403) {
+                // Parse the error response to get the actual message
+                try {
+                    if (e.getResponseBodyAsString() != null) {
+                        JsonNode errorJson = objectMapper.readTree(e.getResponseBodyAsString());
+                        if (errorJson.has("message")) {
+                            errorMessage = errorJson.get("message").asText();
+                        }
+                    }
+                } catch (Exception parseEx) {
+                    // If parsing fails, use the original message
+                }
+                log.warn("Email sending failed due to domain/configuration issue: {}", errorMessage);
+            } else {
+                log.error("Error sending email: {}", errorMessage);
+            }
+            return EmailResult.builder()
+                    .success(false)
+                    .errorMessage(errorMessage)
+                    .build();
         } catch (Exception e) {
             log.error("Error sending email: {}", e.getMessage(), e);
             return EmailResult.builder()

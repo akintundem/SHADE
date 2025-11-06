@@ -6,6 +6,7 @@ import eventplanner.common.communication.services.channel.email.EmailService;
 import eventplanner.common.communication.services.channel.email.dto.EmailResult;
 import eventplanner.common.communication.services.channel.push.PushNotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.communication.services.core.dto.NotificationResponse;
 import eventplanner.common.communication.services.core.dto.PushResult;
 import eventplanner.common.domain.enums.CommunicationStatus;
 import eventplanner.common.domain.enums.CommunicationType;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,8 +41,9 @@ public class NotificationService {
      * Creates and saves communication record, then sends via appropriate channel
      * 
      * @param request Notification request containing all necessary information
+     * @return NotificationResponse indicating success or failure with details
      */
-    public void send(NotificationRequest request) {
+    public NotificationResponse send(NotificationRequest request) {
         CommunicationType type = request.getType();
         String to = request.getTo();
         String subject = request.getSubject();
@@ -61,7 +64,11 @@ public class NotificationService {
                 if (comm.getSentAt() != null && 
                     comm.getSentAt().isAfter(LocalDateTime.now().minusMinutes(5))) {
                     log.info("Communication already sent recently (idempotency check). Skipping duplicate send to: {}, template: {}", to, templateId);
-                    return;
+                    return NotificationResponse.success(
+                            comm.getId(),
+                            comm.getExternalId(),
+                            comm.getStatus()
+                    );
                 }
             }
         }
@@ -89,7 +96,13 @@ public class NotificationService {
                 communication.setRecipientId(userId);
             } catch (IllegalArgumentException e) {
                 log.error("Invalid userId format for push notification: {}", to);
-                throw new IllegalArgumentException("Invalid userId format: " + to);
+                // Create communication record with failed status immediately
+                communication.setStatus(CommunicationStatus.FAILED);
+                communication.setFailedAt(LocalDateTime.now());
+                communication.setFailureReason("Invalid userId format: " + to);
+                communication.setChannel("push");
+                Communication saved = communicationRepository.save(communication);
+                return NotificationResponse.failure(saved.getId(), "Invalid userId format: " + to, saved.getStatus());
             }
             communication.setContent(subject); // Use subject as body for push
             communication.setChannel("push");
@@ -111,7 +124,21 @@ public class NotificationService {
                     errorMessage = emailResult.getErrorMessage();
                     break;
                 case PUSH_NOTIFICATION:
-                    PushResult pushResult = sendPushNotification(to, subject, templateVariables, eventId);
+                    // Convert to Map<String, String> for push notifications
+                    Map<String, String> pushData = new HashMap<>();
+                    if (templateVariables != null) {
+                        for (Map.Entry<String, Object> entry : templateVariables.entrySet()) {
+                            pushData.put(entry.getKey(), String.valueOf(entry.getValue()));
+                        }
+                    }
+                    // Add eventId to data if provided
+                    if (eventId != null) {
+                        pushData.put("eventId", eventId.toString());
+                    }
+                    // Extract body from data if available
+                    String body = pushData.remove("body");
+                    
+                    PushResult pushResult = sendPushNotification(to, subject, body, pushData);
                     success = pushResult.isSuccess();
                     externalId = pushResult.getMessageId();
                     errorMessage = pushResult.getErrorMessage();
@@ -127,14 +154,17 @@ public class NotificationService {
                 if (externalId != null) {
                     saved.setExternalId(externalId);
                 }
+                communicationRepository.save(saved);
+                return NotificationResponse.success(saved.getId(), externalId, saved.getStatus());
             } else {
                 saved.setStatus(CommunicationStatus.FAILED);
                 saved.setFailedAt(LocalDateTime.now());
                 if (errorMessage != null) {
                     saved.setFailureReason(errorMessage);
                 }
+                communicationRepository.save(saved);
+                return NotificationResponse.failure(saved.getId(), errorMessage, saved.getStatus());
             }
-            communicationRepository.save(saved);
             
         } catch (Exception e) {
             // Update communication as failed
@@ -144,7 +174,7 @@ public class NotificationService {
             communicationRepository.save(saved);
             
             log.error("Failed to send communication: {}", e.getMessage(), e);
-            throw e;
+            return NotificationResponse.failure(saved.getId(), e.getMessage(), saved.getStatus());
         }
     }
 
@@ -159,11 +189,11 @@ public class NotificationService {
     /**
      * Send push notification via PushNotificationService
      */
-    private PushResult sendPushNotification(String userIdString, String title, 
-                                           Map<String, Object> data, UUID eventId) {
+    private PushResult sendPushNotification(String userIdString, String title, String body, 
+                                           Map<String, String> data) {
         try {
             UUID userId = UUID.fromString(userIdString);
-            return pushNotificationService.sendPushNotification(userId, title, data, eventId);
+            return pushNotificationService.sendToNotification(userId, title, body, data);
         } catch (IllegalArgumentException e) {
             log.error("Invalid userId format for push notification: {}", userIdString, e);
             return PushResult.builder()

@@ -1,7 +1,7 @@
 package eventplanner.common.communication.services.channel.push;
 
-import eventplanner.common.communication.services.channel.push.dto.PushNotificationRequest;
-import eventplanner.common.communication.services.channel.push.dto.PushNotificationResponse;
+import eventplanner.common.communication.services.channel.push.dto.RefreshDeviceTokenRequest;
+import eventplanner.common.communication.services.channel.push.dto.RegisterDeviceTokenRequest;
 import eventplanner.common.communication.services.core.dto.PushResult;
 import eventplanner.common.communication.model.DeviceToken;
 import eventplanner.common.communication.repository.DeviceTokenRepository;
@@ -14,17 +14,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Service for sending FCM push notifications
+ * Service for sending FCM push notifications and managing device tokens
  */
 @Service
 @Slf4j
@@ -42,250 +39,235 @@ public class PushNotificationService {
     }
 
     /**
-     * Send push notification to a specific user
-     * 
-     * @param userId User ID
-     * @param title Notification title
-     * @param data Map of data (can include "body" and "actionUrl" keys)
-     * @param eventId Optional event ID
-     * @return PushResult with send status
+     * Refresh an existing device token with a new token value
      */
-    public PushResult sendPushNotification(UUID userId, String title, Map<String, Object> data, UUID eventId) {
-        try {
-            // Extract actionUrl and body if present in data
-            String actionUrl = null;
-            String body = title; // Default to title as body
-            if (data != null) {
-                if (data.containsKey("actionUrl")) {
-                    Object actionUrlObj = data.get("actionUrl");
-                    if (actionUrlObj != null) {
-                        actionUrl = actionUrlObj.toString();
-                    }
-                }
-                if (data.containsKey("body")) {
-                    Object bodyObj = data.get("body");
-                    if (bodyObj != null) {
-                        body = bodyObj.toString();
-                    }
-                }
-            }
-            
-            // Convert data Map<String, Object> to Map<String, String> for push notification
-            // Exclude actionUrl and body as they're handled separately
-            Map<String, String> pushData = null;
-            if (data != null && !data.isEmpty()) {
-                pushData = new HashMap<>();
-                for (Map.Entry<String, Object> entry : data.entrySet()) {
-                    String key = entry.getKey();
-                    // Skip actionUrl and body as they're handled separately
-                    if (!"actionUrl".equals(key) && !"body".equals(key)) {
-                        pushData.put(key, entry.getValue() != null ? entry.getValue().toString() : "");
-                    }
+    public DeviceToken refreshDeviceToken(RefreshDeviceTokenRequest request) {
+        // Find the token to refresh
+        Optional<DeviceToken> tokenToRefresh = Optional.empty();
+        
+        if (request.getOldDeviceToken() != null && !request.getOldDeviceToken().isEmpty()) {
+            // If old token is provided, find by old token
+            tokenToRefresh = deviceTokenRepository.findByDeviceToken(request.getOldDeviceToken());
+        } else {
+            // Otherwise, find the most recently used active token for the user
+            List<DeviceToken> activeTokens = deviceTokenRepository.findByUserIdAndIsActiveTrue(request.getUserId());
+            if (!activeTokens.isEmpty()) {
+                // Sort by lastUsedAt descending, get the most recently used one
+                tokenToRefresh = activeTokens.stream()
+                        .filter(token -> token.getLastUsedAt() != null)
+                        .max((t1, t2) -> t1.getLastUsedAt().compareTo(t2.getLastUsedAt()));
+                // If no token has lastUsedAt, take the first one
+                if (tokenToRefresh.isEmpty() && !activeTokens.isEmpty()) {
+                    tokenToRefresh = Optional.of(activeTokens.get(0));
                 }
             }
+        }
+        
+        // If old token exists and belongs to the user, update it
+        if (tokenToRefresh.isPresent() && tokenToRefresh.get().getUserId().equals(request.getUserId())) {
+            DeviceToken token = tokenToRefresh.get();
             
-            // Build push notification request
-            PushNotificationRequest pushRequest = PushNotificationRequest.builder()
-                    .userId(userId)
-                    .eventId(eventId)
-                    .title(title)
-                    .body(body)
-                    .data(pushData)
-                    .actionUrl(actionUrl)
-                    .build();
-            
-            // Send push notification
-            PushNotificationResponse response = sendToUser(pushRequest);
-            
-            // Convert response to PushResult
-            String messageId = response.getNotificationId() != null 
-                    ? response.getNotificationId().toString() 
-                    : null;
-            
-            String errorMessage = null;
-            if (!response.isSuccess()) {
-                errorMessage = response.getMessage();
-                if (response.getFailedCount() > 0) {
-                    errorMessage += String.format(" (%d failed, %d sent)", 
-                            response.getFailedCount(), response.getSentCount());
-                }
+            // Check if new token already exists
+            Optional<DeviceToken> existingNewToken = deviceTokenRepository.findByDeviceToken(request.getDeviceToken());
+            if (existingNewToken.isPresent() && !existingNewToken.get().getId().equals(token.getId())) {
+                // New token belongs to another record, deactivate old token and return existing
+                token.deactivate();
+                deviceTokenRepository.save(token);
+                log.info("Old token deactivated, returning existing token record for user: {}", request.getUserId());
+                return existingNewToken.get();
             }
             
+            // Update the token with new value
+            token.setDeviceToken(request.getDeviceToken());
+            if (request.getPlatform() != null) {
+                token.setPlatform(request.getPlatform());
+            }
+            if (request.getDeviceId() != null) {
+                token.setDeviceId(request.getDeviceId());
+            }
+            if (request.getAppVersion() != null) {
+                token.setAppVersion(request.getAppVersion());
+            }
+            token.setIsActive(true);
+            token.markAsUsed();
+            
+            log.info("Refreshed device token for user: {}", request.getUserId());
+            return deviceTokenRepository.save(token);
+        }
+        
+        // If no matching token found, treat it as a new registration
+        log.info("No matching token found for refresh, creating new token for user: {}", request.getUserId());
+        DeviceToken newToken = new DeviceToken();
+        newToken.setUserId(request.getUserId());
+        newToken.setDeviceToken(request.getDeviceToken());
+        newToken.setPlatform(request.getPlatform() != null ? request.getPlatform() : DeviceToken.Platform.ANDROID);
+        newToken.setDeviceId(request.getDeviceId());
+        newToken.setAppVersion(request.getAppVersion());
+        newToken.setIsActive(true);
+        newToken.setLastUsedAt(LocalDateTime.now());
+        
+        return deviceTokenRepository.save(newToken);
+    }
+
+    /**
+     * Register or update a device token for a user
+     */
+    public DeviceToken registerDeviceToken(RegisterDeviceTokenRequest request) {
+        // Check if token already exists
+        Optional<DeviceToken> existingToken = deviceTokenRepository.findByDeviceToken(request.getDeviceToken());
+        
+        if (existingToken.isPresent()) {
+            DeviceToken token = existingToken.get();
+            // If the token belongs to the same user, update it
+            if (token.getUserId().equals(request.getUserId())) {
+                token.setPlatform(request.getPlatform());
+                token.setDeviceId(request.getDeviceId());
+                token.setAppVersion(request.getAppVersion());
+                token.setIsActive(true);
+                token.markAsUsed();
+                log.info("Updated existing device token for user: {}", request.getUserId());
+                return deviceTokenRepository.save(token);
+            } else {
+                // Token belongs to a different user, deactivate old one and create new
+                token.deactivate();
+                deviceTokenRepository.save(token);
+                log.info("Device token transferred from user {} to user {}", 
+                    token.getUserId(), request.getUserId());
+            }
+        }
+
+        // Create new device token
+        DeviceToken newToken = new DeviceToken();
+        newToken.setUserId(request.getUserId());
+        newToken.setDeviceToken(request.getDeviceToken());
+        newToken.setPlatform(request.getPlatform());
+        newToken.setDeviceId(request.getDeviceId());
+        newToken.setAppVersion(request.getAppVersion());
+        newToken.setIsActive(true);
+        newToken.setLastUsedAt(LocalDateTime.now());
+
+        log.info("Registered new device token for user: {}, platform: {}", 
+            request.getUserId(), request.getPlatform());
+        return deviceTokenRepository.save(newToken);
+    }
+
+    /**
+     * Deactivate all tokens for a user
+     */
+    public void deactivateAllUserTokens(UUID userId) {
+        List<DeviceToken> tokens = deviceTokenRepository.findByUserIdAndIsActiveTrue(userId);
+        tokens.forEach(DeviceToken::deactivate);
+        deviceTokenRepository.saveAll(tokens);
+        log.info("Deactivated all device tokens for user: {}", userId);
+    }
+
+    /**
+     * Update last used timestamp for a device token
+     */
+    public void updateLastUsed(String deviceToken) {
+        Optional<DeviceToken> token = deviceTokenRepository.findByDeviceToken(deviceToken);
+        if (token.isPresent()) {
+            token.get().markAsUsed();
+            deviceTokenRepository.save(token.get());
+        }
+    }
+
+    /**
+     * Send push notification to a specific user
+     * Simple method to send notification to all active device tokens for a user
+     * 
+     * @param userId The user ID
+     * @param title Notification title
+     * @param body Notification body (optional, can be null)
+     * @param data Optional data payload (key-value pairs)
+     * @return PushResult indicating success or failure
+     */
+    public PushResult sendToNotification(UUID userId, String title, String body, Map<String, String> data) {
+        if (firebaseMessaging.isEmpty()) {
+            log.warn("Firebase Messaging is not configured. Push notification not sent.");
             return PushResult.builder()
-                    .success(response.isSuccess())
-                    .messageId(messageId)
-                    .errorMessage(errorMessage)
+                    .success(false)
+                    .errorMessage("Firebase Messaging is not configured")
                     .build();
+        }
+
+        try {
+            // Get all active device tokens for the user
+            List<DeviceToken> tokens = deviceTokenRepository.findByUserIdAndIsActiveTrue(userId);
+            
+            if (tokens.isEmpty()) {
+                log.warn("No active device tokens found for user: {}", userId);
+                return PushResult.builder()
+                        .success(false)
+                        .errorMessage("No active device tokens found for user")
+                        .build();
+            }
+
+            FirebaseMessaging messaging = firebaseMessaging.get();
+            String lastMessageId = null;
+
+            // Send notification to each device token
+            for (DeviceToken token : tokens) {
+                try {
+                    Notification.Builder notificationBuilder = Notification.builder()
+                            .setTitle(title);
                     
+                    if (body != null && !body.isEmpty()) {
+                        notificationBuilder.setBody(body);
+                    }
+
+                    Message.Builder messageBuilder = Message.builder()
+                            .setToken(token.getDeviceToken())
+                            .setNotification(notificationBuilder.build());
+
+                    // Add data payload if provided
+                    if (data != null && !data.isEmpty()) {
+                        messageBuilder.putAllData(data);
+                    }
+
+                    Message message = messageBuilder.build();
+                    String response = messaging.send(message);
+                    lastMessageId = response;
+                    
+                    // Update last used timestamp
+                    updateLastUsed(token.getDeviceToken());
+                    
+                    log.info("Successfully sent push notification to user {} device: {}, messageId: {}", 
+                            userId, token.getDeviceToken(), response);
+                            
+                } catch (FirebaseMessagingException e) {
+                    log.error("Failed to send push notification to device token: {}, error: {}", 
+                            token.getDeviceToken(), e.getMessage());
+                    
+                    // If token is invalid, deactivate it
+                    if (e.getErrorCode().equals("invalid-argument") || 
+                        e.getErrorCode().equals("registration-token-not-registered")) {
+                        token.deactivate();
+                        deviceTokenRepository.save(token);
+                        log.info("Deactivated invalid device token: {}", token.getDeviceToken());
+                    }
+                }
+            }
+
+            if (lastMessageId != null) {
+                return PushResult.builder()
+                        .success(true)
+                        .messageId(lastMessageId)
+                        .build();
+            } else {
+                return PushResult.builder()
+                        .success(false)
+                        .errorMessage("Failed to send notification to any device")
+                        .build();
+            }
+
         } catch (Exception e) {
-            log.error("Failed to send push notification: {}", e.getMessage(), e);
+            log.error("Error sending push notification to user {}: {}", userId, e.getMessage(), e);
             return PushResult.builder()
                     .success(false)
                     .errorMessage(e.getMessage())
                     .build();
         }
-    }
-
-    /**
-     * Send push notification to a specific user
-     */
-    public PushNotificationResponse sendToUser(PushNotificationRequest request) {
-        if (firebaseMessaging.isEmpty()) {
-            log.warn("Firebase is not configured. Push notification not sent.");
-            return PushNotificationResponse.builder()
-                .success(false)
-                .message("Firebase is not configured")
-                .sentAt(LocalDateTime.now())
-                .build();
-        }
-
-        List<DeviceToken> deviceTokens = deviceTokenRepository.findByUserIdAndIsActiveTrue(request.getUserId());
-        
-        if (deviceTokens.isEmpty()) {
-            log.info("No active device tokens found for user: {}", request.getUserId());
-            return PushNotificationResponse.builder()
-                .success(false)
-                .message("No active device tokens found for user")
-                .sentCount(0)
-                .failedCount(0)
-                .sentAt(LocalDateTime.now())
-                .build();
-        }
-
-        return sendToDevices(request, deviceTokens);
-    }
-
-    /**
-     * Send push notification to specific device tokens
-     */
-    public PushNotificationResponse sendToDevices(PushNotificationRequest request, List<DeviceToken> deviceTokens) {
-        if (firebaseMessaging.isEmpty()) {
-            log.warn("Firebase is not configured. Push notification not sent.");
-            return PushNotificationResponse.builder()
-                .success(false)
-                .message("Firebase is not configured")
-                .sentAt(LocalDateTime.now())
-                .build();
-        }
-
-        FirebaseMessaging messaging = firebaseMessaging.get();
-
-        List<String> failedTokens = new ArrayList<>();
-        int sentCount = 0;
-        int failedCount = 0;
-
-        for (DeviceToken deviceToken : deviceTokens) {
-            try {
-                Message message = buildMessage(request, deviceToken);
-                String response = messaging.send(message);
-                log.info("Push notification sent successfully to device: {}, response: {}", 
-                    deviceToken.getId(), response);
-                
-                deviceToken.markAsUsed();
-                deviceTokenRepository.save(deviceToken);
-                sentCount++;
-            } catch (FirebaseMessagingException e) {
-                log.error("Failed to send push notification to device: {}, error: {}", 
-                    deviceToken.getId(), e.getMessage());
-                
-                // Handle invalid tokens
-                if (isInvalidTokenError(e)) {
-                    log.warn("Device token is invalid, deactivating: {}", deviceToken.getDeviceToken());
-                    deviceToken.deactivate();
-                    deviceTokenRepository.save(deviceToken);
-                }
-                
-                failedTokens.add(deviceToken.getDeviceToken());
-                failedCount++;
-            } catch (Exception e) {
-                log.error("Unexpected error sending push notification to device: {}", 
-                    deviceToken.getId(), e);
-                failedTokens.add(deviceToken.getDeviceToken());
-                failedCount++;
-            }
-        }
-
-        return PushNotificationResponse.builder()
-            .success(sentCount > 0)
-            .message(sentCount > 0 
-                ? String.format("Sent %d notification(s), %d failed", sentCount, failedCount)
-                : "Failed to send notifications")
-            .notificationId(UUID.randomUUID())
-            .sentCount(sentCount)
-            .failedCount(failedCount)
-            .failedTokens(failedTokens.isEmpty() ? null : failedTokens)
-            .sentAt(LocalDateTime.now())
-            .build();
-    }
-
-    /**
-     * Build FCM message from request
-     */
-    private Message buildMessage(PushNotificationRequest request, DeviceToken deviceToken) {
-        Message.Builder messageBuilder = Message.builder()
-            .setToken(deviceToken.getDeviceToken())
-            .setNotification(Notification.builder()
-                .setTitle(request.getTitle())
-                .setBody(request.getBody())
-                .setImage(request.getImageUrl())
-                .build());
-
-        // Add custom data payload
-        if (request.getData() != null && !request.getData().isEmpty()) {
-            messageBuilder.putAllData(request.getData());
-        }
-
-        // Add event ID if provided
-        if (request.getEventId() != null) {
-            messageBuilder.putData("eventId", request.getEventId().toString());
-        }
-
-        // Add user ID
-        if (request.getUserId() != null) {
-            messageBuilder.putData("userId", request.getUserId().toString());
-        }
-
-        // Add action URL if provided
-        if (request.getActionUrl() != null) {
-            messageBuilder.putData("actionUrl", request.getActionUrl());
-        }
-
-        // Set platform-specific options
-        if (deviceToken.getPlatform() == DeviceToken.Platform.ANDROID) {
-            messageBuilder.setAndroidConfig(com.google.firebase.messaging.AndroidConfig.builder()
-                .setPriority(com.google.firebase.messaging.AndroidConfig.Priority.HIGH)
-                .build());
-        } else if (deviceToken.getPlatform() == DeviceToken.Platform.IOS) {
-            messageBuilder.setApnsConfig(com.google.firebase.messaging.ApnsConfig.builder()
-                .setAps(com.google.firebase.messaging.Aps.builder()
-                    .setSound("default")
-                    .setBadge(1)
-                    .build())
-                .build());
-        }
-
-        return messageBuilder.build();
-    }
-
-    /**
-     * Check if error code indicates an invalid token
-     */
-    private boolean isInvalidTokenError(FirebaseMessagingException e) {
-        com.google.firebase.messaging.MessagingErrorCode errorCode = e.getMessagingErrorCode();
-        String errorMessage = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
-        
-        if (errorCode != null) {
-            String errorCodeStr = errorCode.toString();
-            if (errorCodeStr.equals("INVALID_ARGUMENT") ||
-                errorCodeStr.equals("UNREGISTERED") ||
-                errorCodeStr.equals("NOT_FOUND")) {
-                return true;
-            }
-        }
-        
-        return errorMessage.contains("registration-token-not-registered") ||
-               errorMessage.contains("invalid registration token") ||
-               errorMessage.contains("unregistered");
     }
 }
 

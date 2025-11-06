@@ -118,7 +118,7 @@ app:
 external:
   resend:
     api-key: ${RESEND_API_KEY}
-    from-email: ${RESEND_FROM_EMAIL:noreply@shde.com}
+    from-email: ${RESEND_FROM_EMAIL}
   google:
     maps-api-key: ${GOOGLE_MAPS_API_KEY}
   openweather:

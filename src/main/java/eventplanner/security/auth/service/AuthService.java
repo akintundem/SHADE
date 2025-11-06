@@ -140,7 +140,7 @@ public class AuthService {
                     .type(CommunicationType.PUSH_NOTIFICATION)
                     .to(user.getId().toString())
                     .subject("Welcome to SHDE!")
-                    .templateId(null) // Not used for push
+                    .templateId(EmailService.TEMPLATE_EMAIL_VERIFICATION) 
                     .templateVariables(notificationData)
                     .eventId(null) // No eventId for auth notifications
                     .build();
