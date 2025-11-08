@@ -101,6 +101,73 @@ public class RateLimitingService {
     
 
     /**
+     * Check if email-based rate limit is within limits for authentication endpoints.
+     * This provides additional protection against brute force attacks targeting specific email addresses.
+     * 
+     * @param email Normalized email address
+     * @param endpoint The endpoint being accessed
+     * @return true if within limits, false if rate limit exceeded
+     */
+    public boolean isEmailWithinRateLimit(String email, String endpoint) {
+        try {
+            // Stricter limits for email-based rate limiting on auth endpoints
+            int minuteLimit = 5;  // 5 attempts per minute per email
+            int hourLimit = 20;   // 20 attempts per hour per email
+            
+            String emailKey = "email:" + email.toLowerCase();
+            String minuteKey = RATE_LIMIT_MINUTE_PREFIX + emailKey + ":" + endpoint + ":" + getCurrentMinute();
+            String hourKey = RATE_LIMIT_HOUR_PREFIX + emailKey + ":" + endpoint + ":" + getCurrentHour();
+            
+            // Check minute rate limit
+            String minuteCount = redisTemplate.opsForValue().get(minuteKey);
+            int currentMinuteCount = minuteCount != null ? Integer.parseInt(minuteCount) : 0;
+            
+            if (currentMinuteCount >= minuteLimit) {
+                return false;
+            }
+            
+            // Check hour rate limit
+            String hourCount = redisTemplate.opsForValue().get(hourKey);
+            int currentHourCount = hourCount != null ? Integer.parseInt(hourCount) : 0;
+            
+            if (currentHourCount >= hourLimit) {
+                return false;
+            }
+            
+            // Increment counters atomically
+            redisTemplate.opsForValue().increment(minuteKey);
+            redisTemplate.expire(minuteKey, Duration.ofMinutes(1));
+            
+            redisTemplate.opsForValue().increment(hourKey);
+            redisTemplate.expire(hourKey, Duration.ofHours(1));
+            
+            return true;
+            
+        } catch (Exception e) {
+            // On Redis error: default-deny for auth endpoints
+            return false;
+        }
+    }
+    
+    /**
+     * Check combined IP + Email rate limit for authentication endpoints.
+     * Both must pass for the request to proceed.
+     * 
+     * @param ipAddress Client IP address
+     * @param email Normalized email address
+     * @param endpoint The endpoint being accessed
+     * @return true if both IP and email are within limits
+     */
+    public boolean isIpAndEmailWithinRateLimit(String ipAddress, String email, String endpoint) {
+        // Both IP and email must pass rate limiting
+        String ipKey = "ip:" + ipAddress;
+        boolean ipAllowed = isWithinRateLimit(ipKey, endpoint);
+        boolean emailAllowed = isEmailWithinRateLimit(email, endpoint);
+        
+        return ipAllowed && emailAllowed;
+    }
+
+    /**
      * Get remaining rate limit for rate limit key (user or IP)
      */
     public RateLimitInfo getRateLimitInfo(String rateLimitKey, String endpoint) {

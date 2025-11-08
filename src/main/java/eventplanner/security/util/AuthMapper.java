@@ -19,9 +19,11 @@ public final class AuthMapper {
     /**
      * Creates a secure user response that excludes sensitive internal identifiers.
      * This should be used for all public-facing API responses.
+     * Includes userId so clients can use it in subsequent requests.
      */
     public static SecureUserResponse toSecureUserResponse(UserAccount user) {
         return SecureUserResponse.builder()
+                .id(user.getId())
                 .email(user.getEmail())
                 .name(user.getName())
                 .phoneNumber(user.getPhoneNumber())

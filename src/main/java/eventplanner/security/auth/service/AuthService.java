@@ -33,7 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Pattern;
+import java.util.UUID;
 
 import static eventplanner.security.util.AuthValidationUtil.normalizeEmail;
 import static eventplanner.security.util.AuthValidationUtil.safeTrim;
@@ -52,6 +52,8 @@ public class AuthService {
     private final NotificationService notificationService;
     private final RegistrationValidator registrationValidator;
     private final EnvironmentUtil environmentUtil;
+    private final RateLimitingService rateLimitingService;
+    private final SecurityAuditService securityAuditService;
 
     @Value("${auth.session.max-concurrent:5}")
     private int maxConcurrentSessions;
@@ -73,8 +75,6 @@ public class AuthService {
     // Format: $2a$10$[22-char salt][31-char hash] - valid BCrypt format that will never match
     private static final String DUMMY_PASSWORD_HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
-    private static final Pattern TRUSTED_IDENTIFIER_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{16,64}$");
-
     public AuthService(UserAccountRepository userAccountRepository,
                        UserSessionRepository sessionRepository,
                        EmailVerificationTokenRepository emailVerificationTokenRepository,
@@ -82,7 +82,9 @@ public class AuthService {
                        TokenService tokenService,
                        NotificationService notificationService,
                        RegistrationValidator registrationValidator,
-                       EnvironmentUtil environmentUtil) {
+                       EnvironmentUtil environmentUtil,
+                       RateLimitingService rateLimitingService,
+                       SecurityAuditService securityAuditService) {
         this.userAccountRepository = userAccountRepository;
         this.sessionRepository = sessionRepository;
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
@@ -91,14 +93,24 @@ public class AuthService {
         this.notificationService = notificationService;
         this.registrationValidator = registrationValidator;
         this.environmentUtil = environmentUtil;
+        this.rateLimitingService = rateLimitingService;
+        this.securityAuditService = securityAuditService;
     }
 
     public SecureAuthResponse register(RegisterRequest request, String clientIp) {
+        String normalizedEmail = normalizeEmail(request.getEmail());
+        
+        // Email-based + IP-based rate limiting for registration endpoint
+        String endpoint = "/api/v1/auth/register";
+        if (!rateLimitingService.isIpAndEmailWithinRateLimit(clientIp, normalizedEmail, endpoint)) {
+            securityAuditService.logRateLimitExceeded(normalizedEmail, clientIp, endpoint, "IP+Email");
+            throw new BadRequestException("RATE_LIMIT_EXCEEDED", 
+                "Too many registration attempts. Please try again later.");
+        }
+        
         // Validate registration request (password match, terms, email uniqueness)
         registrationValidator.validate(request);
         
-        // Normalize email (soft-enforce lowercasing)
-        String normalizedEmail = normalizeEmail(request.getEmail());
         Optional<UserAccount> existingUserOpt = userAccountRepository.findByEmailIgnoreCase(normalizedEmail);
         UserAccount user;
         boolean isReRegistration = existingUserOpt.isPresent();
@@ -175,18 +187,29 @@ public class AuthService {
         } else {
             log.debug("Skipping verification email in dev mode for user: {}", user.getEmail());
         }
-            
-        return issueAuthResponse(user, false, null, null, clientIp, "User registered successfully. Please check your email for verification.");
+        
+        SecureAuthResponse response = issueAuthResponse(user, false, clientIp, "User registered successfully. Please check your email for verification.");
+        
+        // Audit log successful registration
+        securityAuditService.logRegistration(true, user.getId(), normalizedEmail, clientIp, null);
+        
+        return response;
     }
     
-
-
     public SecureAuthResponse login(LoginRequest request, String clientIp) {
         String normalizedEmail = normalizeEmail(request.getEmail());
+        
+        // Email-based + IP-based rate limiting for login endpoint
+        String endpoint = "/api/v1/auth/login";
+        if (!rateLimitingService.isIpAndEmailWithinRateLimit(clientIp, normalizedEmail, endpoint)) {
+            securityAuditService.logRateLimitExceeded(normalizedEmail, clientIp, endpoint, "IP+Email");
+            throw new BadRequestException("RATE_LIMIT_EXCEEDED", 
+                "Too many login attempts. Please try again later.");
+        }
+        
         Optional<UserAccount> userOpt = userAccountRepository.findByEmailIgnoreCase(normalizedEmail);
         
         // Always perform password verification to prevent account enumeration
-        // Use dummy hash if user doesn't exist to maintain consistent timing
         String passwordHash = userOpt.map(UserAccount::getPasswordHash)
             .orElse(DUMMY_PASSWORD_HASH);
         
@@ -195,30 +218,40 @@ public class AuthService {
         // If user doesn't exist or password doesn't match, treat as invalid credentials
         if (!userOpt.isPresent() || !passwordMatches) {
             // Only increment failed attempts if user exists
+            // This implements incremental lockout: failed attempts extend lockout duration
             if (userOpt.isPresent()) {
                 handleFailedLoginAttempt(userOpt.get());
             }
+            // Audit log failed login attempt
+            UUID userId = userOpt.map(UserAccount::getId).orElse(null);
+            securityAuditService.logLoginAttempt(false, userId, normalizedEmail, clientIp, 
+                null, null, null, "Invalid credentials");
             // Always return the same error message and status code to prevent account enumeration
             throw new BadRequestException("INVALID_CREDENTIALS", "Invalid credentials");
         }
         
         UserAccount user = userOpt.get();
         
-        // Check if account is locked
+        // Check if account is locked (after password verification to prevent timing leaks)
         if (isAccountLocked(user)) {
             long minutesRemaining = java.time.Duration.between(
                 LocalDateTime.now(ZoneOffset.UTC), 
                 user.getLockedUntil()
             ).toMinutes();
+            // Audit log locked account access attempt
+            securityAuditService.logLoginAttempt(false, user.getId(), normalizedEmail, clientIp, 
+                null, null, null, "Account locked");
             throw new BadRequestException("ACCOUNT_LOCKED", 
                 String.format("Account is temporarily locked due to multiple failed login attempts. Please try again in %d minute(s).", 
                     minutesRemaining));
         }
         
         // Check email verification
+        // Return same error as invalid credentials to prevent account enumeration so that attacker cannot determine if an account exists and has correct password but unverified email
         if (!user.isEmailVerified()) {
-            throw new BadRequestException("EMAIL_NOT_VERIFIED", 
-                "Email not verified. Please verify your email address before logging in. Check your inbox for the verification link or request a new one.");
+            securityAuditService.logLoginAttempt(false, user.getId(), normalizedEmail, clientIp, 
+                null, null, null, "Email not verified");
+            throw new BadRequestException("INVALID_CREDENTIALS", "Invalid credentials");
         }
         
         // Successful login - reset failed attempts and unlock account
@@ -227,12 +260,21 @@ public class AuthService {
         user.setLastLoginAt(LocalDateTime.now(ZoneOffset.UTC));
         userAccountRepository.save(user);
         
-        return issueAuthResponse(user, request.isRememberMe(), request.getClientId(), request.getDeviceId(), clientIp,
-            "Login successful");
+        // Server generates new clientId and deviceId for this session
+        // These are returned to the client for use in subsequent requests (security and logging)
+        SecureAuthResponse response = issueAuthResponse(user, request.isRememberMe(), clientIp, "Login successful");
+        
+        // Audit log successful login
+        securityAuditService.logLoginAttempt(true, user.getId(), normalizedEmail, clientIp, 
+            null, response.getClientId(), response.getDeviceId(), null);
+        
+        return response;
     }
     
     /**
      * Checks if an account is currently locked.
+     * @param user The user account to check
+     * @return true if the account is locked, false otherwise
      */
     private boolean isAccountLocked(UserAccount user) {
         if (user.getLockedUntil() == null) {
@@ -254,17 +296,45 @@ public class AuthService {
     /**
      * Handles a failed login attempt by incrementing the counter and applying lockout if necessary.
      * Implements incremental lockout: longer lockout durations for repeated failures.
+     * If account is already locked, extends the lockout duration based on new attempt count.
+     * 
+     * @param user The user account to handle the failed login attempt for
      */
     private void handleFailedLoginAttempt(UserAccount user) {
         int currentAttempts = user.getFailedLoginAttempts() != null ? user.getFailedLoginAttempts() : 0;
         int newAttempts = currentAttempts + 1;
         user.setFailedLoginAttempts(newAttempts);
         
-        // Apply incremental lockout based on number of failed attempts
+        // Apply or extend incremental lockout based on number of failed attempts
         if (newAttempts >= maxFailedAttempts) {
             LocalDateTime lockoutUntil = calculateLockoutDuration(newAttempts);
-            user.setLockedUntil(lockoutUntil);
-            log.warn("Account locked due to {} failed login attempts: {}", newAttempts, user.getEmail());
+            LocalDateTime currentLockout = user.getLockedUntil();
+            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+            
+            // Always update lockout when threshold is reached or exceeded (15min → 1hr → 24hr).
+            boolean isCurrentlyLocked = currentLockout != null && currentLockout.isAfter(now);
+            boolean shouldUpdate = currentLockout == null || 
+                                  lockoutUntil.isAfter(currentLockout) || 
+                                  isCurrentlyLocked;
+            
+            if (shouldUpdate) {
+                user.setLockedUntil(lockoutUntil);
+                
+                // Calculate lockout duration in minutes
+                long lockoutDurationMinutes = java.time.Duration.between(now, lockoutUntil).toMinutes();
+                
+                if (isCurrentlyLocked) {
+                    // Account was already locked - extending lockout due to continued attempts
+                    log.warn("Account lockout extended due to continued failed attempts: {} attempts (was {}), " +
+                            "locked until {}", newAttempts, currentAttempts, lockoutUntil);
+                } else {
+                    // First time locking this account - audit log the lockout
+                    log.warn("Account locked due to {} failed login attempts: {}, locked until {}", 
+                            newAttempts, user.getEmail(), lockoutUntil);
+                    securityAuditService.logAccountLocked(user.getId(), user.getEmail(), null, 
+                        newAttempts, lockoutDurationMinutes);
+                }
+            }
         }
         
         userAccountRepository.save(user);
@@ -276,6 +346,9 @@ public class AuthService {
      * - 5-9 attempts: 15 minutes
      * - 10-14 attempts: 1 hour
      * - 15+ attempts: 24 hours
+     * 
+     * @param failedAttempts The number of failed login attempts
+     * @return The lockout duration
      */
     private LocalDateTime calculateLockoutDuration(int failedAttempts) {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
@@ -289,6 +362,11 @@ public class AuthService {
         }
     }
 
+    /**
+     * Refreshes a token.
+     * @param request The refresh token request
+     * @return The refreshed token response
+     */
     public SecureAuthResponse refreshToken(RefreshTokenRequest request) {
         UserSession session = sessionRepository.findByRefreshTokenAndRevokedFalse(request.getRefreshToken())
             .orElseThrow(() -> new UnauthorizedException("Invalid refresh token"));
@@ -319,10 +397,19 @@ public class AuthService {
         sessionRepository.saveAll(userSessions);
     }
 
+    /**
+     * Issues authentication response with server-generated clientId and deviceId.
+     * These identifiers are generated fresh for each session and returned to the client
+     * for use in subsequent requests (security validation and logging).
+     * 
+     * @param user The authenticated user account
+     * @param rememberMe Whether to extend refresh token expiry
+     * @param ipAddress Client IP address for session tracking
+     * @param message Success message
+     * @return SecureAuthResponse with tokens and server-generated identifiers
+     */
     private SecureAuthResponse issueAuthResponse(UserAccount user,
                                                  boolean rememberMe,
-                                                 String clientId,
-                                                 String deviceId,
                                                  String ipAddress,
                                                  String message) {
         long activeSessionCount = sessionRepository.countByUserAndRevokedFalse(user);
@@ -334,17 +421,18 @@ public class AuthService {
                 .forEach(UserSession::revoke);
         }
 
-        String safeClientId = resolveClientIdentifier(user, clientId);
-        String safeDeviceId = resolveDeviceIdentifier(user, deviceId);
+        // Server generates new clientId and deviceId for this session
+        String clientId = generateSecureToken();
+        String deviceId = generateSecureToken();
 
-        String accessToken = tokenService.generateAccessToken(user, safeClientId);
+        String accessToken = tokenService.generateAccessToken(user, clientId);
         String refreshToken = tokenService.generateRefreshToken();
 
         UserSession session = UserSession.builder()
             .user(user)
             .refreshToken(refreshToken)
-            .clientId(safeClientId)
-            .deviceId(safeDeviceId)
+            .clientId(clientId)
+            .deviceId(deviceId)
             .ipAddress(ipAddress)
             .expiresAt(tokenService.calculateRefreshExpiry(rememberMe))
             .revoked(false)
@@ -357,50 +445,9 @@ public class AuthService {
             .accessToken(accessToken)
             .refreshToken(refreshToken)
             .tokenType("Bearer")
-            .clientId(safeClientId)
-            .deviceId(safeDeviceId)
+            .clientId(clientId)
+            .deviceId(deviceId)
             .build();
-    }
-
-    /**
-     * Resolves client identifier: only reuses if it was previously issued by the server for this user.
-     * Otherwise generates a new secure server-side identifier.
-     * This prevents attackers from flooding sessions with arbitrary client IDs.
-     */
-    private String resolveClientIdentifier(UserAccount user, String requestedClientId) {
-        // Only trust identifiers that match our pattern AND were previously issued for this user
-        if (isTrustedIdentifier(requestedClientId) && sessionRepository.existsByUserAndClientId(user, requestedClientId)) {
-            return requestedClientId; // Reuse trusted identifier from previous session
-        }
-        // Generate new secure identifier (always on registration, or when client sends invalid/unknown ID)
-        return generateTrustedIdentifier();
-    }
-
-    /**
-     * Resolves device identifier: only reuses if it was previously issued by the server for this user.
-     * Otherwise generates a new secure server-side identifier.
-     * This prevents attackers from flooding sessions with arbitrary device IDs.
-     */
-    private String resolveDeviceIdentifier(UserAccount user, String requestedDeviceId) {
-        // Only trust identifiers that match our pattern AND were previously issued for this user
-        if (isTrustedIdentifier(requestedDeviceId) && sessionRepository.existsByUserAndDeviceId(user, requestedDeviceId)) {
-            return requestedDeviceId; // Reuse trusted identifier from previous session
-        }
-        // Generate new secure identifier (always on registration, or when client sends invalid/unknown ID)
-        return generateTrustedIdentifier();
-    }
-
-    private boolean isTrustedIdentifier(String candidate) {
-        return candidate != null && TRUSTED_IDENTIFIER_PATTERN.matcher(candidate).matches();
-    }
-
-    /**
-     * Generates a trusted identifier.
-     * 
-     * @return String the trusted identifier
-     */
-    private String generateTrustedIdentifier() {
-        return generateSecureToken();
     }
 
     /**
