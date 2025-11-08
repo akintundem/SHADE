@@ -1,7 +1,7 @@
 package eventplanner.security.authorization.service;
 
+import eventplanner.common.domain.enums.OrganizationRoleType;
 import eventplanner.security.authorization.domain.entity.OrganizationRole;
-import eventplanner.security.auth.repository.OrganizationProfileRepository;
 import eventplanner.security.authorization.domain.repository.OrganizationRoleRepository;
 import eventplanner.security.authorization.rbac.PermissionCheck;
 import eventplanner.security.authorization.rbac.PermissionRegistry;
@@ -30,7 +30,6 @@ public class AuthorizationService {
 
     private final PermissionRegistry permissionRegistry;
     private final OrganizationRoleRepository organizationRoleRepository;
-    private final OrganizationProfileRepository organizationProfileRepository;
     private final EventRoleRepository eventRoleRepository;
     private final EventRepository eventRepository;
 
@@ -120,9 +119,11 @@ public class AuthorizationService {
         if (organizationId == null) {
             return false;
         }
-        return organizationProfileRepository.findById(organizationId)
-            .map(profile -> profile.getOwner() != null && userId.equals(profile.getOwner().getId()))
-            .orElse(false);
+        return organizationRoleRepository.findByUserIdAndOrganizationIdAndActive(userId, organizationId).stream()
+            .map(OrganizationRole::getRole)
+            .filter(role -> role != null && !role.isBlank())
+            .map(role -> role.toUpperCase(Locale.US))
+            .anyMatch(role -> OrganizationRoleType.OWNER.name().equals(role));
     }
 
     private boolean isSelf(UUID userId, UUID targetId) {

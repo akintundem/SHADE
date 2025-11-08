@@ -4,12 +4,10 @@ import eventplanner.security.auth.dto.req.OrganizationRegisterRequest;
 import eventplanner.security.auth.dto.res.OrganizationResponse;
 import eventplanner.security.auth.dto.req.OrganizationUpdateRequest;
 import eventplanner.security.auth.service.OrganizationManagementService;
-import eventplanner.security.auth.service.UserPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,9 +32,8 @@ public class OrganizationController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<OrganizationResponse> registerOrganization(@AuthenticationPrincipal UserPrincipal principal,
-                                                      @Valid @RequestBody OrganizationRegisterRequest request) {
-        OrganizationResponse response = organizationManagementService.registerOrganization(principal.getUser(), request);
+    public ResponseEntity<OrganizationResponse> registerOrganization(@Valid @RequestBody OrganizationRegisterRequest request) {
+        OrganizationResponse response = organizationManagementService.registerOrganization(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -47,10 +44,9 @@ public class OrganizationController {
     }
 
     @PutMapping("/{organizationId}")
-    public ResponseEntity<OrganizationResponse> updateOrganization(@AuthenticationPrincipal UserPrincipal principal,
-                                                                   @PathVariable UUID organizationId,
+    public ResponseEntity<OrganizationResponse> updateOrganization(@PathVariable UUID organizationId,
                                                     @Valid @RequestBody OrganizationUpdateRequest request) {
-        OrganizationResponse response = organizationManagementService.updateOrganization(organizationId, principal.getUser(), request);
+        OrganizationResponse response = organizationManagementService.updateOrganization(organizationId, request);
         return ResponseEntity.ok(response);
     }
 

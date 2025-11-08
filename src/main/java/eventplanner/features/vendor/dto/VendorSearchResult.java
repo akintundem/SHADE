@@ -1,4 +1,4 @@
-package eventplanner.security.auth.dto.res;
+package eventplanner.features.vendor.dto;
 
 import eventplanner.common.domain.enums.OrganizationType;
 import eventplanner.common.domain.enums.VendorProgramStatus;
@@ -11,35 +11,26 @@ import java.util.UUID;
 
 @Value
 @Builder
-public class OrganizationResponse {
-    UUID id;
+public class VendorSearchResult {
+    UUID organizationId;
+    String googlePlaceId;
+    String source; // PLATFORM or GOOGLE
     String name;
     String description;
     OrganizationType type;
     String website;
     String phoneNumber;
-    String contactEmail;
-    String taxId;
-    String registrationNumber;
-    OrganizationAddressResponse address;
-    String googlePlaceId;
-    Boolean platformVendor;
+    String email;
+    String city;
+    String state;
+    String country;
+    boolean platformVendor;
     VendorTier vendorTier;
     VendorProgramStatus vendorStatus;
     LocalDateTime joinedAt;
     Double rating;
     Integer reviewCount;
     Integer bookingCount;
-    LocalDateTime createdAt;
-    LocalDateTime updatedAt;
-
-    @Value
-    @Builder
-    public static class OrganizationAddressResponse {
-        String street;
-        String city;
-        String state;
-        String zipCode;
-        String country;
-    }
+    double priorityScore;
 }
+

@@ -2,21 +2,22 @@ package eventplanner.security.auth.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.OrganizationType;
+import eventplanner.common.domain.enums.VendorProgramStatus;
+import eventplanner.common.domain.enums.VendorTier;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(
@@ -61,7 +62,34 @@ public class OrganizationProfile extends BaseEntity {
     @Embedded
     private OrganizationAddress address;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id")
-    private UserAccount owner;
+    @Column(name = "google_place_id", length = 120, unique = true)
+    private String googlePlaceId;
+
+    @Column(name = "google_place_data", columnDefinition = "TEXT")
+    private String googlePlaceData;
+
+    @Column(name = "is_platform_vendor", nullable = false)
+    @Builder.Default
+    private Boolean isPlatformVendor = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "vendor_tier", length = 30)
+    private VendorTier vendorTier;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "vendor_status", length = 30)
+    private VendorProgramStatus vendorStatus;
+
+    @Column(name = "joined_at")
+    private LocalDateTime joinedAt;
+
+    @Column(name = "rating")
+    private Double rating;
+
+    @Column(name = "review_count")
+    private Integer reviewCount;
+
+    @Column(name = "booking_count")
+    @Builder.Default
+    private Integer bookingCount = 0;
 }

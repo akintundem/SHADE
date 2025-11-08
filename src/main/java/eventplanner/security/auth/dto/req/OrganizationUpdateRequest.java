@@ -1,6 +1,8 @@
 package eventplanner.security.auth.dto.req;
 
 import eventplanner.common.domain.enums.OrganizationType;
+import eventplanner.common.domain.enums.VendorProgramStatus;
+import eventplanner.common.domain.enums.VendorTier;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -41,4 +43,20 @@ public class OrganizationUpdateRequest {
 
     @Size(max = 60)
     private String registrationNumber;
+
+    @Size(max = 120)
+    private String googlePlaceId;
+
+    @Size(max = 4000)
+    private String googlePlaceData;
+
+    private Boolean platformVendor;
+
+    private VendorTier vendorTier;
+
+    private VendorProgramStatus vendorStatus;
+
+    private Double rating;
+
+    private Integer reviewCount;
 }

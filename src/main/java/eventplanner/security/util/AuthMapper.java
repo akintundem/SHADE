@@ -52,20 +52,27 @@ public final class AuthMapper {
         }
 
         return OrganizationResponse.builder()
-                .id(organization.getId())
-                .name(organization.getName())
-                .description(organization.getDescription())
-                .type(organization.getType())
-                .website(organization.getWebsite())
-                .phoneNumber(organization.getPhoneNumber())
-                .contactEmail(organization.getContactEmail())
-                .taxId(organization.getTaxId())
-                .registrationNumber(organization.getRegistrationNumber())
-                .address(addressResponse)
-                .ownerId(organization.getOwner() != null ? organization.getOwner().getId() : null)
-                .createdAt(organization.getCreatedAt())
-                .updatedAt(organization.getUpdatedAt())
-                .build();
+            .id(organization.getId())
+            .name(organization.getName())
+            .description(organization.getDescription())
+            .type(organization.getType())
+            .website(organization.getWebsite())
+            .phoneNumber(organization.getPhoneNumber())
+            .contactEmail(organization.getContactEmail())
+            .taxId(organization.getTaxId())
+            .registrationNumber(organization.getRegistrationNumber())
+            .address(addressResponse)
+            .googlePlaceId(organization.getGooglePlaceId())
+            .platformVendor(organization.getIsPlatformVendor())
+            .vendorTier(organization.getVendorTier())
+            .vendorStatus(organization.getVendorStatus())
+            .joinedAt(organization.getJoinedAt())
+            .rating(organization.getRating())
+            .reviewCount(organization.getReviewCount())
+            .bookingCount(organization.getBookingCount())
+            .createdAt(organization.getCreatedAt())
+            .updatedAt(organization.getUpdatedAt())
+            .build();
     }
 
     public static UserSessionResponse toSessionResponse(UserSession session) {
