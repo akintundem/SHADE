@@ -2,6 +2,7 @@ package eventplanner.security.auth.service;
 
 import eventplanner.security.auth.dto.req.ChangePasswordRequest;
 import eventplanner.security.auth.dto.req.ForgotPasswordRequest;
+import eventplanner.security.auth.dto.req.ResendEmailVerificationRequest;
 import eventplanner.security.auth.dto.req.ResetPasswordRequest;
 import eventplanner.security.auth.entity.EmailVerificationToken;
 import eventplanner.security.auth.entity.PasswordResetToken;
@@ -47,7 +48,7 @@ public class AccountRecoveryService {
     private final NotificationService notificationService;
     private final EnvironmentUtil environmentUtil;
 
-    @Value("${app.base-url:http://localhost:8080}")
+    @Value("${app.base-url}")
     private String baseUrl;
 
     public AccountRecoveryService(UserAccountRepository userAccountRepository,
@@ -128,7 +129,7 @@ public class AccountRecoveryService {
         return true;
     }
 
-    public String resendVerification(ForgotPasswordRequest request) {
+    public String resendVerification(ResendEmailVerificationRequest request) {
         String normalizedEmail = normalizeEmail(request.getEmail());
         UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizedEmail)
             .orElseThrow(() -> new IllegalArgumentException("Email not found. Please check your email address."));

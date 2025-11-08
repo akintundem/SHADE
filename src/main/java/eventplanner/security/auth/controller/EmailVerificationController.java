@@ -1,6 +1,6 @@
 package eventplanner.security.auth.controller;
 
-import eventplanner.security.auth.dto.req.ForgotPasswordRequest;
+import eventplanner.security.auth.dto.req.ResendEmailVerificationRequest;
 import eventplanner.security.auth.service.AccountRecoveryService;
 import eventplanner.common.dto.ApiMessageResponse;
 import jakarta.validation.Valid;
@@ -25,7 +25,7 @@ public class EmailVerificationController {
 
     @PostMapping("/verify-email")
     public ResponseEntity<ApiMessageResponse> resendVerification(
-            @Valid @RequestBody ForgotPasswordRequest request) {
+            @Valid @RequestBody ResendEmailVerificationRequest request) {
         String message = accountRecoveryService.resendVerification(request);
         return ResponseEntity.ok(ApiMessageResponse.success(message));
     }
