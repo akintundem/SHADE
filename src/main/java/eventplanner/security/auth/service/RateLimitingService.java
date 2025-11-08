@@ -47,6 +47,19 @@ public class RateLimitingService {
                 minuteLimit = Math.min(minuteLimit, 100);
                 hourLimit = Math.min(hourLimit, 1000);
             }
+            
+            // Apply very strict limits for validate-token endpoint to prevent token enumeration
+            if (endpoint.contains("/auth/validate-token")) {
+                if (rateLimitKey.startsWith("ip:")) {
+                    // Stricter limits for unauthenticated requests (most vulnerable to enumeration)
+                    minuteLimit = 10;  // 10 attempts per minute per IP
+                    hourLimit = 50;   // 50 attempts per hour per IP
+                } else if (rateLimitKey.startsWith("user:")) {
+                    // Slightly higher for authenticated users, but still strict
+                    minuteLimit = 20;  // 20 attempts per minute per user
+                    hourLimit = 100;   // 100 attempts per hour per user
+                }
+            }
 
             String minuteKey = RATE_LIMIT_MINUTE_PREFIX + rateLimitKey + ":" + endpoint + ":" + getCurrentMinute();
             String hourKey = RATE_LIMIT_HOUR_PREFIX + rateLimitKey + ":" + endpoint + ":" + getCurrentHour();
@@ -78,7 +91,8 @@ public class RateLimitingService {
 
         } catch (Exception e) {
             // On Redis error: default-deny for sensitive auth endpoints, allow for others
-            if (endpoint.contains("/auth/login") || endpoint.contains("/auth/register")) {
+            if (endpoint.contains("/auth/login") || endpoint.contains("/auth/register") 
+                || endpoint.contains("/auth/validate-token")) {
                 return false;
             }
             return true;
@@ -193,6 +207,19 @@ public class RateLimitingService {
             if (endpoint.contains("/auth/login") || endpoint.contains("/auth/register")) {
                 minuteLimit = Math.min(minuteLimit, 100);
                 hourLimit = Math.min(hourLimit, 1000);
+            }
+            
+            // Apply very strict limits for validate-token endpoint to prevent token enumeration
+            if (endpoint.contains("/auth/validate-token")) {
+                if (rateLimitKey.startsWith("ip:")) {
+                    // Stricter limits for unauthenticated requests (most vulnerable to enumeration)
+                    minuteLimit = 10;  // 10 attempts per minute per IP
+                    hourLimit = 50;   // 50 attempts per hour per IP
+                } else if (rateLimitKey.startsWith("user:")) {
+                    // Slightly higher for authenticated users, but still strict
+                    minuteLimit = 20;  // 20 attempts per minute per user
+                    hourLimit = 100;   // 100 attempts per hour per user
+                }
             }
 
             String minuteKey = RATE_LIMIT_MINUTE_PREFIX + rateLimitKey + ":" + endpoint + ":" + getCurrentMinute();

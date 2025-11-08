@@ -1,6 +1,7 @@
 package eventplanner.security.auth.service;
 
 import eventplanner.security.auth.dto.req.LoginRequest;
+import eventplanner.security.auth.dto.req.LogoutRequest;
 import eventplanner.security.auth.dto.req.RefreshTokenRequest;
 import eventplanner.security.auth.dto.req.RegisterRequest;
 import eventplanner.security.auth.dto.res.SecureAuthResponse;
@@ -17,6 +18,9 @@ import eventplanner.security.util.AuthMapper;
 import eventplanner.common.exception.UnauthorizedException;
 import eventplanner.common.exception.BadRequestException;
 import eventplanner.security.util.TokenHashUtil;
+import eventplanner.security.util.JwtValidationUtil;
+import eventplanner.security.auth.dto.res.TokenValidationResponse;
+import io.jsonwebtoken.Claims;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.services.channel.email.EmailService;
@@ -54,20 +58,21 @@ public class AuthService {
     private final EnvironmentUtil environmentUtil;
     private final RateLimitingService rateLimitingService;
     private final SecurityAuditService securityAuditService;
+    private final JwtValidationUtil jwtValidationUtil;
 
-    @Value("${auth.session.max-concurrent:5}")
+    @Value("${auth.session.max-concurrent}")
     private int maxConcurrentSessions;
 
-    @Value("${app.base-url:http://localhost:8080}")
+    @Value("${app.base-url}")
     private String baseUrl;
 
-    @Value("${auth.lockout.max-attempts:5}")
+    @Value("${auth.lockout.max-attempts}")
     private int maxFailedAttempts;
 
-    @Value("${auth.lockout.initial-duration-minutes:15}")
+    @Value("${auth.lockout.initial-duration-minutes}")
     private int initialLockoutDurationMinutes;
 
-    @Value("${auth.lockout.max-duration-hours:24}")
+    @Value("${auth.lockout.max-duration-hours}")
     private int maxLockoutDurationHours;
 
     // Dummy password hash that will never match any real password
@@ -84,7 +89,8 @@ public class AuthService {
                        RegistrationValidator registrationValidator,
                        EnvironmentUtil environmentUtil,
                        RateLimitingService rateLimitingService,
-                       SecurityAuditService securityAuditService) {
+                       SecurityAuditService securityAuditService,
+                       JwtValidationUtil jwtValidationUtil) {
         this.userAccountRepository = userAccountRepository;
         this.sessionRepository = sessionRepository;
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
@@ -95,6 +101,7 @@ public class AuthService {
         this.environmentUtil = environmentUtil;
         this.rateLimitingService = rateLimitingService;
         this.securityAuditService = securityAuditService;
+        this.jwtValidationUtil = jwtValidationUtil;
     }
 
     public SecureAuthResponse register(RegisterRequest request, String clientIp) {
@@ -272,6 +279,127 @@ public class AuthService {
     }
     
     /**
+     * Refreshes a token.
+     * @param request The refresh token request
+     * @return The refreshed token response
+     */
+    public SecureAuthResponse refreshToken(RefreshTokenRequest request) {
+        UserSession session = sessionRepository.findByRefreshTokenAndRevokedFalse(request.getRefreshToken())
+            .orElseThrow(() -> new UnauthorizedException("Invalid refresh token"));
+
+        if (session.getExpiresAt().isBefore(LocalDateTime.now(ZoneOffset.UTC))) {
+            session.setRevoked(true);
+            throw new UnauthorizedException("Refresh token expired");
+        }
+
+        session.setLastSeenAt(LocalDateTime.now(ZoneOffset.UTC));
+        UserAccount user = session.getUser();
+        String accessToken = tokenService.generateAccessToken(user, session.getClientId());
+
+        return SecureAuthResponse.builder()
+            .message("Token refreshed successfully")
+            .user(AuthMapper.toSecureUserResponse(user))
+            .accessToken(accessToken)
+            .refreshToken(session.getRefreshToken())
+            .tokenType("Bearer")
+            .clientId(session.getClientId())
+            .deviceId(session.getDeviceId())
+            .build();
+    }
+
+    /**
+     * Logs out a user from all devices.
+     * Requires explicit confirmation to prevent accidental sign-outs.
+     * 
+     * @param request The logout request containing confirmation
+     * @param user The user account to logout
+     * @throws BadRequestException if confirmation is not provided or not true
+     */
+    public void logout(LogoutRequest request, UserAccount user) {
+        // Validate confirmation to prevent accidental sign-outs
+        if (request.getConfirm() == null || !request.getConfirm()) {
+            throw new BadRequestException("CONFIRMATION_REQUIRED", 
+                "Confirmation required. Set 'confirm' to true to logout from all devices.");
+        }
+        
+        List<UserSession> userSessions = sessionRepository.findByUser(user);
+        userSessions.forEach(session -> session.setRevoked(true));
+        sessionRepository.saveAll(userSessions);
+    }
+
+    /**
+     * Issues authentication response with server-generated clientId and deviceId.
+     * These identifiers are generated fresh for each session and returned to the client
+     * for use in subsequent requests (security validation and logging).
+     * 
+     * @param user The authenticated user account
+     * @param rememberMe Whether to extend refresh token expiry
+     * @param ipAddress Client IP address for session tracking
+     * @param message Success message
+     * @return SecureAuthResponse with tokens and server-generated identifiers
+     */
+    private SecureAuthResponse issueAuthResponse(UserAccount user,
+                                                 boolean rememberMe,
+                                                 String ipAddress,
+                                                 String message) {
+        long activeSessionCount = sessionRepository.countByUserAndRevokedFalse(user);
+        if (activeSessionCount >= maxConcurrentSessions) {
+            int sessionsToRevoke = (int) (activeSessionCount - maxConcurrentSessions + 1);
+            sessionRepository.findByUserAndRevokedFalseOrderByLastSeenAtAsc(user)
+                .stream()
+                .limit(sessionsToRevoke)
+                .forEach(UserSession::revoke);
+        }
+
+        // Server generates new clientId and deviceId for this session
+        String clientId = generateSecureToken();
+        String deviceId = generateSecureToken();
+
+        String accessToken = tokenService.generateAccessToken(user, clientId);
+        String refreshToken = tokenService.generateRefreshToken();
+
+        UserSession session = UserSession.builder()
+            .user(user)
+            .refreshToken(refreshToken)
+            .clientId(clientId)
+            .deviceId(deviceId)
+            .ipAddress(ipAddress)
+            .expiresAt(tokenService.calculateRefreshExpiry(rememberMe))
+            .revoked(false)
+            .build();
+        sessionRepository.save(session);
+
+        return SecureAuthResponse.builder()
+            .message(message)
+            .user(AuthMapper.toSecureUserResponse(user))
+            .accessToken(accessToken)
+            .refreshToken(refreshToken)
+            .tokenType("Bearer")
+            .clientId(clientId)
+            .deviceId(deviceId)
+            .build();
+    }
+
+    /**
+     * Revokes all existing unconsumed verification tokens for a user.
+     * Ensures only one active verification token exists at a time.
+     * 
+     * @param user The user to revoke the verification tokens for
+     * @return void
+     */
+    private void revokeExistingVerificationTokens(UserAccount user) {
+        List<EmailVerificationToken> existingTokens = emailVerificationTokenRepository
+            .findByUserAndConsumedFalse(user);
+        existingTokens.forEach(token -> {
+            token.setConsumed(true);
+            emailVerificationTokenRepository.save(token);
+        });
+        if (!existingTokens.isEmpty()) {
+            log.debug("Revoked {} existing verification token(s) for user: {}", existingTokens.size(), user.getEmail());
+        }
+    }
+
+    /**
      * Checks if an account is currently locked.
      * @param user The user account to check
      * @return true if the account is locked, false otherwise
@@ -363,109 +491,63 @@ public class AuthService {
     }
 
     /**
-     * Refreshes a token.
-     * @param request The refresh token request
-     * @return The refreshed token response
-     */
-    public SecureAuthResponse refreshToken(RefreshTokenRequest request) {
-        UserSession session = sessionRepository.findByRefreshTokenAndRevokedFalse(request.getRefreshToken())
-            .orElseThrow(() -> new UnauthorizedException("Invalid refresh token"));
-
-        if (session.getExpiresAt().isBefore(LocalDateTime.now(ZoneOffset.UTC))) {
-            session.setRevoked(true);
-            throw new UnauthorizedException("Refresh token expired");
-        }
-
-        session.setLastSeenAt(LocalDateTime.now(ZoneOffset.UTC));
-        UserAccount user = session.getUser();
-        String accessToken = tokenService.generateAccessToken(user, session.getClientId());
-
-        return SecureAuthResponse.builder()
-            .message("Token refreshed successfully")
-            .user(AuthMapper.toSecureUserResponse(user))
-            .accessToken(accessToken)
-            .refreshToken(session.getRefreshToken())
-            .tokenType("Bearer")
-            .clientId(session.getClientId())
-            .deviceId(session.getDeviceId())
-            .build();
-    }
-
-    public void logout(UserAccount user) {
-        List<UserSession> userSessions = sessionRepository.findByUser(user);
-        userSessions.forEach(session -> session.setRevoked(true));
-        sessionRepository.saveAll(userSessions);
-    }
-
-    /**
-     * Issues authentication response with server-generated clientId and deviceId.
-     * These identifiers are generated fresh for each session and returned to the client
-     * for use in subsequent requests (security validation and logging).
+     * Validates a JWT token and returns validation result.
+     * Prevents token enumeration by:
+     * - Returning uniform error responses for all failure cases
+     * - Adding delays for invalid tokens to slow down enumeration attempts
      * 
-     * @param user The authenticated user account
-     * @param rememberMe Whether to extend refresh token expiry
-     * @param ipAddress Client IP address for session tracking
-     * @param message Success message
-     * @return SecureAuthResponse with tokens and server-generated identifiers
+     * @param token The JWT token to validate
+     * @return TokenValidationResponse with validation result
      */
-    private SecureAuthResponse issueAuthResponse(UserAccount user,
-                                                 boolean rememberMe,
-                                                 String ipAddress,
-                                                 String message) {
-        long activeSessionCount = sessionRepository.countByUserAndRevokedFalse(user);
-        if (activeSessionCount >= maxConcurrentSessions) {
-            int sessionsToRevoke = (int) (activeSessionCount - maxConcurrentSessions + 1);
-            sessionRepository.findByUserAndRevokedFalseOrderByLastSeenAtAsc(user)
-                .stream()
-                .limit(sessionsToRevoke)
-                .forEach(UserSession::revoke);
-        }
-
-        // Server generates new clientId and deviceId for this session
-        String clientId = generateSecureToken();
-        String deviceId = generateSecureToken();
-
-        String accessToken = tokenService.generateAccessToken(user, clientId);
-        String refreshToken = tokenService.generateRefreshToken();
-
-        UserSession session = UserSession.builder()
-            .user(user)
-            .refreshToken(refreshToken)
-            .clientId(clientId)
-            .deviceId(deviceId)
-            .ipAddress(ipAddress)
-            .expiresAt(tokenService.calculateRefreshExpiry(rememberMe))
-            .revoked(false)
-            .build();
-        sessionRepository.save(session);
-
-        return SecureAuthResponse.builder()
-            .message(message)
-            .user(AuthMapper.toSecureUserResponse(user))
-            .accessToken(accessToken)
-            .refreshToken(refreshToken)
-            .tokenType("Bearer")
-            .clientId(clientId)
-            .deviceId(deviceId)
-            .build();
-    }
-
-    /**
-     * Revokes all existing unconsumed verification tokens for a user.
-     * Ensures only one active verification token exists at a time.
-     * 
-     * @param user The user to revoke the verification tokens for
-     * @return void
-     */
-    private void revokeExistingVerificationTokens(UserAccount user) {
-        List<EmailVerificationToken> existingTokens = emailVerificationTokenRepository
-            .findByUserAndConsumedFalse(user);
-        existingTokens.forEach(token -> {
-            token.setConsumed(true);
-            emailVerificationTokenRepository.save(token);
-        });
-        if (!existingTokens.isEmpty()) {
-            log.debug("Revoked {} existing verification token(s) for user: {}", existingTokens.size(), user.getEmail());
+    public TokenValidationResponse validateToken(String token) {
+        // Prevent token enumeration: always return uniform responses
+        // Add small delay for invalid tokens to slow down enumeration attempts
+        try {
+            if (token == null || token.trim().isEmpty()) {
+                // Add delay to prevent timing attacks
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return TokenValidationResponse.invalid(null);
+            }
+            
+            boolean valid = jwtValidationUtil.validateToken(token);
+            if (!valid) {
+                // Add delay for invalid tokens to slow down enumeration
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return TokenValidationResponse.invalid(null);
+            }
+            
+            Claims claims = jwtValidationUtil.getClaimsFromToken(token);
+            UUID userId = UUID.fromString(claims.getSubject());
+            Optional<UserAccount> userOpt = userAccountRepository.findById(userId);
+            
+            if (userOpt.isEmpty()) {
+                // User not found - add delay and return uniform response
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return TokenValidationResponse.invalid(null);
+            }
+            
+            return TokenValidationResponse.valid(AuthMapper.toSecureUserResponse(userOpt.get()));
+        } catch (Exception e) {
+            // Add delay for any exception to prevent timing-based enumeration
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+            // Return uniform response - don't leak error details
+            return TokenValidationResponse.invalid(null);
         }
     }
 }
