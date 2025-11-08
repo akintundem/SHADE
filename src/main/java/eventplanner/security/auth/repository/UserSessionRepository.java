@@ -16,6 +16,6 @@ public interface UserSessionRepository extends JpaRepository<UserSession, UUID> 
     long deleteByExpiresAtBefore(LocalDateTime cutoff);
     long countByUserAndRevokedFalse(UserAccount user);
     List<UserSession> findByUserAndRevokedFalseOrderByLastSeenAtAsc(UserAccount user);
-    boolean existsByUserAndClientId(UserAccount user, String clientId);
+    Optional<UserSession> findByUserAndDeviceId(UserAccount user, String deviceId);
     boolean existsByUserAndDeviceId(UserAccount user, String deviceId);
 }

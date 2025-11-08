@@ -49,9 +49,6 @@ public class SecurityAuditLog extends BaseEntity {
     @Column(name = "user_agent", length = 500)
     private String userAgent;
 
-    @Column(name = "client_id", length = 120)
-    private String clientId;
-
     @Column(name = "device_id", length = 120)
     private String deviceId;
 

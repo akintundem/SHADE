@@ -39,7 +39,6 @@ public class SecurityAuditService {
                                  String email,
                                  String ipAddress,
                                  String userAgent,
-                                 String clientId,
                                  String deviceId,
                                  String riskLevel,
                                  UUID sessionId,
@@ -62,7 +61,6 @@ public class SecurityAuditService {
                     .email(email)
                     .ipAddress(ipAddress)
                     .userAgent(userAgent)
-                    .clientId(clientId)
                     .deviceId(deviceId)
                     .riskLevel(riskLevel)
                     .sessionId(sessionId)
@@ -87,7 +85,6 @@ public class SecurityAuditService {
                                 String email,
                                 String ipAddress,
                                 String userAgent,
-                                String clientId,
                                 String deviceId,
                                 String failureReason) {
         SecurityAuditLog.SecurityEventType eventType = success 
@@ -108,7 +105,7 @@ public class SecurityAuditService {
         }
 
         logSecurityEvent(eventType, status, message, userId, email, ipAddress, userAgent, 
-                        clientId, deviceId, success ? "LOW" : "MEDIUM", null, metadata);
+                        deviceId, success ? "LOW" : "MEDIUM", null, metadata);
     }
 
     /**
@@ -127,7 +124,6 @@ public class SecurityAuditService {
             userId,
             email,
             ipAddress,
-            null,
             null,
             null,
             "HIGH",
@@ -151,7 +147,6 @@ public class SecurityAuditService {
             null,
             email,
             ipAddress,
-            null,
             null,
             null,
             "MEDIUM",
@@ -182,7 +177,7 @@ public class SecurityAuditService {
         }
 
         logSecurityEvent(eventType, status, message, userId, email, ipAddress, null, 
-                        null, null, success ? "LOW" : "MEDIUM", null, metadata);
+                        null, success ? "LOW" : "MEDIUM", null, metadata);
     }
 
     /**
@@ -196,7 +191,6 @@ public class SecurityAuditService {
             userId,
             email,
             ipAddress,
-            null,
             null,
             null,
             success ? "LOW" : "HIGH",
@@ -216,7 +210,6 @@ public class SecurityAuditService {
             userId,
             email,
             ipAddress,
-            null,
             null,
             null,
             "LOW",

@@ -14,6 +14,5 @@ public class SecureAuthResponse {
     String accessToken;
     String refreshToken;
     String tokenType;
-    String clientId;
-    String deviceId;
+    String deviceId; // Server-issued device identifier for session validation
 }

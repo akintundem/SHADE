@@ -39,25 +39,17 @@ public class TokenService {
     }
 
     public String generateAccessToken(UserAccount user) {
-        return generateAccessToken(user, null);
-    }
-
-    public String generateAccessToken(UserAccount user, String clientId) {
         Instant now = Instant.now();
         Instant expiry = now.plusMillis(accessTokenValidityMillis);
         
-        var builder = Jwts.builder()
+        return Jwts.builder()
                 .subject(user.getId().toString())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiry))
                 .claim("email", user.getEmail())
-                .claim("roles", List.of("USER"));
-        
-        if (clientId != null && !clientId.trim().isEmpty()) {
-            builder.claim("clientId", clientId);
-        }
-        
-        return builder.signWith(signingKey).compact();
+                .claim("roles", List.of("USER"))
+                .signWith(signingKey)
+                .compact();
     }
 
     public String generateRefreshToken() {

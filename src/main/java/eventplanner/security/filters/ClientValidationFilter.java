@@ -34,6 +34,15 @@ public class ClientValidationFilter implements Filter {
             "/actuator/health",
             "/actuator/info",
             "/api/v1/auth/health",
+            // Public auth endpoints should not require X-Client-ID
+            "/api/v1/auth/register",
+            "/api/v1/auth/login",
+            "/api/v1/auth/refresh-token",
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/reset-password",
+            "/api/v1/auth/verify-email",
+            "/api/v1/auth/validate-token",
+            // Docs and static assets
             "/swagger-ui",
             "/v3/api-docs",
             "/error",

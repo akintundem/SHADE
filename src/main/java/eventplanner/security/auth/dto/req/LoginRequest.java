@@ -20,7 +20,4 @@ public class LoginRequest {
 
     @Size(max = 120)
     private String deviceId;
-
-    @Size(max = 120)
-    private String clientId;
 }

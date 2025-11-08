@@ -80,13 +80,20 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<ApiMessageResponse> logout(
             @Valid @RequestBody LogoutRequest request,
-            @AuthenticationPrincipal UserPrincipal principal) {
+            @AuthenticationPrincipal UserPrincipal principal,
+            HttpServletRequest httpRequest) {
         if (principal == null) {
             throw new ResourceNotFoundException("User not found");
         }
         
-        authService.logout(request, principal.getUser());
-        return ResponseEntity.ok(ApiMessageResponse.success("Logged out successfully from all devices"));
+        // Extract deviceId from X-Device-ID header (validated by DeviceValidationFilter)
+        String deviceId = httpRequest.getHeader("X-Device-ID");
+        if (deviceId == null || deviceId.trim().isEmpty()) {
+            throw new ResourceNotFoundException("X-Device-ID header is required");
+        }
+        
+        authService.logout(request, principal.getUser(), deviceId.trim());
+        return ResponseEntity.ok(ApiMessageResponse.success("Logged out successfully from this device"));
     }
 
     private String resolveClientIp(HttpServletRequest request) {

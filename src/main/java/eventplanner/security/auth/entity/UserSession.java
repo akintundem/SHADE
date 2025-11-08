@@ -32,9 +32,6 @@ public class UserSession extends BaseEntity {
     @Column(name = "refresh_token", nullable = false, unique = true, length = 200)
     private String refreshToken;
 
-    @Column(name = "client_id", length = 120)
-    private String clientId;
-
     @Column(name = "device_id", length = 120)
     private String deviceId;
 

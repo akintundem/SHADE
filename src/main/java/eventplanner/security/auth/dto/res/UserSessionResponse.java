@@ -11,7 +11,6 @@ import java.util.UUID;
 public class UserSessionResponse {
     UUID id;
     String deviceId;
-    String clientId;
     String ipAddress;
     LocalDateTime createdAt;
     LocalDateTime lastSeenAt;

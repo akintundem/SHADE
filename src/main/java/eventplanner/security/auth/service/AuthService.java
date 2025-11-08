@@ -232,7 +232,7 @@ public class AuthService {
             // Audit log failed login attempt
             UUID userId = userOpt.map(UserAccount::getId).orElse(null);
             securityAuditService.logLoginAttempt(false, userId, normalizedEmail, clientIp, 
-                null, null, null, "Invalid credentials");
+                null, null, "Invalid credentials");
             // Always return the same error message and status code to prevent account enumeration
             throw new BadRequestException("INVALID_CREDENTIALS", "Invalid credentials");
         }
@@ -247,7 +247,7 @@ public class AuthService {
             ).toMinutes();
             // Audit log locked account access attempt
             securityAuditService.logLoginAttempt(false, user.getId(), normalizedEmail, clientIp, 
-                null, null, null, "Account locked");
+                null, null, "Account locked");
             throw new BadRequestException("ACCOUNT_LOCKED", 
                 String.format("Account is temporarily locked due to multiple failed login attempts. Please try again in %d minute(s).", 
                     minutesRemaining));
@@ -257,7 +257,7 @@ public class AuthService {
         // Return same error as invalid credentials to prevent account enumeration so that attacker cannot determine if an account exists and has correct password but unverified email
         if (!user.isEmailVerified()) {
             securityAuditService.logLoginAttempt(false, user.getId(), normalizedEmail, clientIp, 
-                null, null, null, "Email not verified");
+                null, null, "Email not verified");
             throw new BadRequestException("INVALID_CREDENTIALS", "Invalid credentials");
         }
         
@@ -267,13 +267,13 @@ public class AuthService {
         user.setLastLoginAt(LocalDateTime.now(ZoneOffset.UTC));
         userAccountRepository.save(user);
         
-        // Server generates new clientId and deviceId for this session
-        // These are returned to the client for use in subsequent requests (security and logging)
+        // Server generates deviceId for this session
+        // DeviceId is returned to the client for use in subsequent requests (security and logging)
         SecureAuthResponse response = issueAuthResponse(user, request.isRememberMe(), clientIp, "Login successful");
         
         // Audit log successful login
         securityAuditService.logLoginAttempt(true, user.getId(), normalizedEmail, clientIp, 
-            null, response.getClientId(), response.getDeviceId(), null);
+            null, response.getDeviceId(), null);
         
         return response;
     }
@@ -294,7 +294,7 @@ public class AuthService {
 
         session.setLastSeenAt(LocalDateTime.now(ZoneOffset.UTC));
         UserAccount user = session.getUser();
-        String accessToken = tokenService.generateAccessToken(user, session.getClientId());
+        String accessToken = tokenService.generateAccessToken(user);
 
         return SecureAuthResponse.builder()
             .message("Token refreshed successfully")
@@ -302,41 +302,50 @@ public class AuthService {
             .accessToken(accessToken)
             .refreshToken(session.getRefreshToken())
             .tokenType("Bearer")
-            .clientId(session.getClientId())
             .deviceId(session.getDeviceId())
             .build();
     }
 
     /**
-     * Logs out a user from all devices.
-     * Requires explicit confirmation to prevent accidental sign-outs.
+     * Logs out a user from a specific device.
+     * Revokes the session for the given user + deviceId combination.
      * 
      * @param request The logout request containing confirmation
      * @param user The user account to logout
+     * @param deviceId The device ID to logout from (from X-Device-ID header)
      * @throws BadRequestException if confirmation is not provided or not true
+     * @throws UnauthorizedException if session not found for user + deviceId
      */
-    public void logout(LogoutRequest request, UserAccount user) {
+    public void logout(LogoutRequest request, UserAccount user, String deviceId) {
         // Validate confirmation to prevent accidental sign-outs
         if (request.getConfirm() == null || !request.getConfirm()) {
             throw new BadRequestException("CONFIRMATION_REQUIRED", 
-                "Confirmation required. Set 'confirm' to true to logout from all devices.");
+                "Confirmation required. Set 'confirm' to true to logout from this device.");
         }
         
-        List<UserSession> userSessions = sessionRepository.findByUser(user);
-        userSessions.forEach(session -> session.setRevoked(true));
-        sessionRepository.saveAll(userSessions);
+        // Look up session by user + deviceId
+        Optional<UserSession> sessionOpt = sessionRepository.findByUserAndDeviceId(user, deviceId);
+        
+        if (sessionOpt.isEmpty()) {
+            throw new UnauthorizedException("Session not found for this device");
+        }
+        
+        UserSession session = sessionOpt.get();
+        session.revoke();
+        sessionRepository.save(session);
     }
 
     /**
-     * Issues authentication response with server-generated clientId and deviceId.
-     * These identifiers are generated fresh for each session and returned to the client
+     * Issues authentication response with server-generated deviceId.
+     * DeviceId is generated fresh for each session and returned to the client
      * for use in subsequent requests (security validation and logging).
+     * Sessions are looked up by user (from JWT) + deviceId in filters.
      * 
      * @param user The authenticated user account
      * @param rememberMe Whether to extend refresh token expiry
      * @param ipAddress Client IP address for session tracking
      * @param message Success message
-     * @return SecureAuthResponse with tokens and server-generated identifiers
+     * @return SecureAuthResponse with tokens and server-generated deviceId
      */
     private SecureAuthResponse issueAuthResponse(UserAccount user,
                                                  boolean rememberMe,
@@ -351,17 +360,15 @@ public class AuthService {
                 .forEach(UserSession::revoke);
         }
 
-        // Server generates new clientId and deviceId for this session
-        String clientId = generateSecureToken();
+        // Server generates deviceId for this session
         String deviceId = generateSecureToken();
 
-        String accessToken = tokenService.generateAccessToken(user, clientId);
+        String accessToken = tokenService.generateAccessToken(user);
         String refreshToken = tokenService.generateRefreshToken();
 
         UserSession session = UserSession.builder()
             .user(user)
             .refreshToken(refreshToken)
-            .clientId(clientId)
             .deviceId(deviceId)
             .ipAddress(ipAddress)
             .expiresAt(tokenService.calculateRefreshExpiry(rememberMe))
@@ -375,7 +382,6 @@ public class AuthService {
             .accessToken(accessToken)
             .refreshToken(refreshToken)
             .tokenType("Bearer")
-            .clientId(clientId)
             .deviceId(deviceId)
             .build();
     }

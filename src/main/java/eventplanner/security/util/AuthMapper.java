@@ -72,7 +72,6 @@ public final class AuthMapper {
         return UserSessionResponse.builder()
                 .id(session.getId())
                 .deviceId(session.getDeviceId())
-                .clientId(session.getClientId())
                 .ipAddress(session.getIpAddress())
                 .createdAt(session.getCreatedAt())
                 .lastSeenAt(session.getLastSeenAt())

@@ -29,7 +29,4 @@ public class UpdateUserProfileRequest {
 
     @Size(max = 120)
     private String deviceId;
-
-    @Size(max = 120)
-    private String clientId;
 }
