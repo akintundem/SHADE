@@ -279,15 +279,19 @@ public class AuthService {
     /**
      * Refreshes a token.
      * Validates that the deviceId from header matches the session's deviceId.
-     * @param request The refresh token request
-     * @param deviceId The deviceId from X-Device-ID header (must match session's deviceId)
+     * @param principal The authenticated principal (must include device context)
      * @return The refreshed token response
      */
-    public SecureAuthResponse refreshToken(RefreshTokenRequest request, String deviceId) {
-        if (deviceId == null || deviceId.trim().isEmpty()) {
-            throw new BadRequestException("DEVICE_ID_REQUIRED", "X-Device-ID header is required");
+    public SecureAuthResponse refreshToken(RefreshTokenRequest request, UserPrincipal principal) {
+        if (principal == null) {
+            throw new UnauthorizedException("User not authenticated");
         }
-        
+
+        String deviceId = principal.getDeviceId();
+        if (deviceId == null || deviceId.trim().isEmpty()) {
+            throw new BadRequestException("DEVICE_ID_REQUIRED", "Device identifier is required");
+        }
+
         UserSession session = sessionRepository.findByRefreshTokenAndRevokedFalse(request.getRefreshToken())
             .orElseThrow(() -> new UnauthorizedException("Invalid refresh token"));
 
@@ -302,7 +306,14 @@ public class AuthService {
             log.warn("DeviceId mismatch for refresh token: header={}, session={}", deviceId, session.getDeviceId());
             throw new UnauthorizedException("Device ID mismatch");
         }
-        
+
+        // Ensure refresh token belongs to the authenticated user
+        if (!session.getUser().getId().equals(principal.getId())) {
+            log.warn("Refresh token user mismatch: token user={}, authenticated user={}",
+                session.getUser().getId(), principal.getId());
+            throw new UnauthorizedException("Refresh token does not belong to the authenticated user");
+        }
+
         // Validate session is still valid
         if (!session.isValid()) {
             throw new UnauthorizedException("Session expired or revoked");
@@ -329,7 +340,7 @@ public class AuthService {
      * 
      * @param request The logout request containing confirmation
      * @param user The user account to logout
-     * @param deviceId The device ID to logout from (from X-Device-ID header)
+     * @param deviceId The device identifier associated with the session
      * @throws BadRequestException if confirmation is not provided or not true
      * @throws UnauthorizedException if session not found for user + deviceId
      */

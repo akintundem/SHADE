@@ -6,7 +6,7 @@ import lombok.Data;
 /**
  * Request DTO for logout endpoint.
  * Requires explicit confirmation to prevent accidental sign-outs.
- * Logs out from the current device only (identified by X-Device-ID header).
+ * Logs out from the current authenticated device.
  */
 @Data
 public class LogoutRequest {

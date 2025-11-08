@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Enhanced UserPrincipal with multi-level role support
@@ -23,15 +24,28 @@ public class UserPrincipal implements UserDetails {
     // Context-specific roles (loaded per request)
     private final List<String> organizationRoles;
     private final List<String> eventRoles;
+    private final String deviceId;
     
     public UserPrincipal(UserAccount user) {
-        this(user, List.of(), List.of());
+        this(user, List.of(), List.of(), null);
     }
     
     public UserPrincipal(UserAccount user, List<String> organizationRoles, List<String> eventRoles) {
+        this(user, organizationRoles, eventRoles, null);
+    }
+    
+    public UserPrincipal(UserAccount user, List<String> organizationRoles, List<String> eventRoles, String deviceId) {
         this.user = user;
         this.organizationRoles = organizationRoles != null ? List.copyOf(organizationRoles) : List.of();
         this.eventRoles = eventRoles != null ? List.copyOf(eventRoles) : List.of();
+        this.deviceId = deviceId;
+    }
+    
+    public UserPrincipal withDeviceId(String deviceId) {
+        if (Objects.equals(this.deviceId, deviceId)) {
+            return this;
+        }
+        return new UserPrincipal(this.user, this.organizationRoles, this.eventRoles, deviceId);
     }
     
     public SystemRole getSystemRole() {

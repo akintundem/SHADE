@@ -68,10 +68,13 @@ public class AuthController {
     }
 
     @PostMapping("/refresh-token")
-    public ResponseEntity<SecureAuthResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request, HttpServletRequest httpRequest) {
-        // Extract deviceId from X-Device-ID header (required for refresh token)
-        String deviceId = httpRequest.getHeader("X-Device-ID");
-        SecureAuthResponse response = authService.refreshToken(request, deviceId);
+    public ResponseEntity<SecureAuthResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request,
+                                                          @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            throw new ResourceNotFoundException("User not found");
+        }
+
+        SecureAuthResponse response = authService.refreshToken(request, principal);
         return ResponseEntity.ok(response);
     }
 
@@ -89,13 +92,12 @@ public class AuthController {
         if (principal == null) {
             throw new ResourceNotFoundException("User not found");
         }
-        
-        // Extract deviceId from X-Device-ID header (validated by DeviceValidationFilter)
-        String deviceId = httpRequest.getHeader("X-Device-ID");
+
+        String deviceId = principal.getDeviceId();
         if (deviceId == null || deviceId.trim().isEmpty()) {
-            throw new ResourceNotFoundException("X-Device-ID header is required");
+            throw new ResourceNotFoundException("Device identifier is required");
         }
-        
+
         authService.logout(request, principal.getUser(), deviceId.trim());
         return ResponseEntity.ok(ApiMessageResponse.success("Logged out successfully from this device"));
     }

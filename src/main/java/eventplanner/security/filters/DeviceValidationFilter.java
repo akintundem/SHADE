@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -96,13 +97,14 @@ public class DeviceValidationFilter extends OncePerRequestFilter {
             sendErrorResponse(response, "X-Device-ID header is required", HttpStatus.BAD_REQUEST, requestURI);
             return;
         }
+        String sanitizedDeviceId = headerDeviceId.trim();
         
         // Look up session by user (from JWT) + deviceId (from header)
-        Optional<UserSession> sessionOpt = sessionRepository.findByUserAndDeviceId(user, headerDeviceId.trim());
+        Optional<UserSession> sessionOpt = sessionRepository.findByUserAndDeviceId(user, sanitizedDeviceId);
         
         if (sessionOpt.isEmpty()) {
             log.warn("Session not found for user: {} with deviceId: {} on request: {}", 
-                    user.getId(), headerDeviceId, requestURI);
+                    user.getId(), sanitizedDeviceId, requestURI);
             sendErrorResponse(response, "Session not found", HttpStatus.UNAUTHORIZED, requestURI);
             return;
         }
@@ -113,9 +115,21 @@ public class DeviceValidationFilter extends OncePerRequestFilter {
         if (!session.isValid()) {
             String reason = session.isRevoked() ? "revoked" : "expired";
             log.warn("Session {} for user: {} with deviceId: {} on request: {}", 
-                    reason, user.getId(), headerDeviceId, requestURI);
+                    reason, user.getId(), sanitizedDeviceId, requestURI);
             sendErrorResponse(response, "Session expired or revoked", HttpStatus.UNAUTHORIZED, requestURI);
             return;
+        }
+        
+        // Ensure security context principal carries device ID for downstream usage
+        if (!sanitizedDeviceId.equals(principal.getDeviceId())) {
+            UserPrincipal enrichedPrincipal = principal.withDeviceId(sanitizedDeviceId);
+            UsernamePasswordAuthenticationToken updatedAuthentication = new UsernamePasswordAuthenticationToken(
+                enrichedPrincipal,
+                auth.getCredentials(),
+                enrichedPrincipal.getAuthorities()
+            );
+            updatedAuthentication.setDetails(auth.getDetails());
+            SecurityContextHolder.getContext().setAuthentication(updatedAuthentication);
         }
         
         // Update last seen timestamp
@@ -123,7 +137,7 @@ public class DeviceValidationFilter extends OncePerRequestFilter {
         sessionRepository.save(session);
         
         log.debug("Device validation successful for user: {} with deviceId: {} on request: {}", 
-                user.getId(), headerDeviceId, requestURI);
+                user.getId(), sanitizedDeviceId, requestURI);
         
         filterChain.doFilter(request, response);
     }
