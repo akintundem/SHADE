@@ -12,14 +12,23 @@ import eventplanner.security.auth.repository.PasswordResetTokenRepository;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.repository.UserSessionRepository;
 import eventplanner.common.exception.UnauthorizedException;
+import eventplanner.common.util.EnvironmentUtil;
 import eventplanner.security.util.TokenHashUtil;
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.communication.services.channel.email.EmailService;
+import eventplanner.common.domain.enums.CommunicationType;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static eventplanner.security.util.AuthValidationUtil.normalizeEmail;
 import static eventplanner.security.util.AuthValidationUtil.validatePasswordMatch;
@@ -27,6 +36,7 @@ import static eventplanner.security.util.SecureTokenUtil.generateSecureToken;
 
 @Service
 @Transactional
+@Slf4j
 public class AccountRecoveryService {
 
     private final UserAccountRepository userAccountRepository;
@@ -34,17 +44,26 @@ public class AccountRecoveryService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final NotificationService notificationService;
+    private final EnvironmentUtil environmentUtil;
+
+    @Value("${app.base-url:http://localhost:8080}")
+    private String baseUrl;
 
     public AccountRecoveryService(UserAccountRepository userAccountRepository,
                                   UserSessionRepository sessionRepository,
                                   PasswordResetTokenRepository passwordResetTokenRepository,
                                   EmailVerificationTokenRepository emailVerificationTokenRepository,
-                                  PasswordEncoder passwordEncoder) {
+                                  PasswordEncoder passwordEncoder,
+                                  NotificationService notificationService,
+                                  EnvironmentUtil environmentUtil) {
         this.userAccountRepository = userAccountRepository;
         this.sessionRepository = sessionRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.passwordEncoder = passwordEncoder;
+        this.notificationService = notificationService;
+        this.environmentUtil = environmentUtil;
     }
 
     public void changePassword(UserAccount user, ChangePasswordRequest request) {
@@ -111,20 +130,63 @@ public class AccountRecoveryService {
 
     public String resendVerification(ForgotPasswordRequest request) {
         String normalizedEmail = normalizeEmail(request.getEmail());
-        return userAccountRepository.findByEmailIgnoreCase(normalizedEmail)
-            .map(user -> {
-                String rawToken = generateSecureToken();
-                String hashed = TokenHashUtil.sha256(rawToken);
-                EmailVerificationToken token = EmailVerificationToken.builder()
-                    .user(user)
-                    .token(hashed)
-                    .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plusDays(1))
-                    .consumed(false)
-                    .build();
-                emailVerificationTokenRepository.save(token);
-                return "Verification email sent";
-            })
-            .orElse("Verification email sent");
+        UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizedEmail)
+            .orElseThrow(() -> new IllegalArgumentException("Email not found. Please check your email address."));
+        
+        // Don't allow resending if email is already verified
+        if (user.isEmailVerified()) {
+            throw new IllegalArgumentException("Email is already verified. You can log in directly.");
+        }
+        
+        // Invalidate existing unused tokens for this user
+        List<EmailVerificationToken> existingTokens = emailVerificationTokenRepository.findByUserAndConsumedFalse(user);
+        existingTokens.forEach(token -> {
+            token.setConsumed(true);
+            emailVerificationTokenRepository.save(token);
+        });
+        
+        // Generate new verification token
+        String rawToken = generateSecureToken();
+        String hashed = TokenHashUtil.sha256(rawToken);
+        EmailVerificationToken token = EmailVerificationToken.builder()
+            .user(user)
+            .token(hashed)
+            .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plusDays(1))
+            .consumed(false)
+            .build();
+        emailVerificationTokenRepository.save(token);
+        
+        // Send verification email (skip in dev mode)
+        if (!environmentUtil.isDevelopmentEnvironment()) {
+            try {
+                // Use query parameter instead of path parameter
+                String confirmLink = baseUrl + "/api/v1/auth/verify-email?token=" + rawToken;
+                Map<String, Object> templateVariables = new HashMap<>();
+                templateVariables.put("user_name", user.getName() != null && !user.getName().trim().isEmpty() 
+                    ? user.getName() : "there");
+                templateVariables.put("confirm_link", confirmLink);
+                templateVariables.put("baseUrl", baseUrl);
+                
+                NotificationRequest notificationRequest = NotificationRequest.builder()
+                        .type(CommunicationType.EMAIL)
+                        .to(user.getEmail())
+                        .subject("Verify Your Email - SHDE")
+                        .templateId(EmailService.TEMPLATE_EMAIL_VERIFICATION)
+                        .templateVariables(templateVariables)
+                        .eventId(null)
+                        .build();
+                
+                notificationService.send(notificationRequest);
+                log.info("Verification email resent to user: {}", user.getEmail());
+            } catch (Exception ex) {
+                log.error("Failed to send verification email to user: {}", user.getEmail(), ex);
+                throw new RuntimeException("Failed to send verification email. Please try again later.");
+            }
+        } else {
+            log.debug("Skipping verification email in dev mode for user: {}", user.getEmail());
+        }
+        
+        return "Verification email sent. Please check your inbox and verify your email before logging in.";
     }
 
     public boolean verifyEmailToken(String tokenValue) {
@@ -136,9 +198,12 @@ public class AccountRecoveryService {
                 }
                 UserAccount user = token.getUser();
                 user.setEmailVerified(true);
+                userAccountRepository.save(user);
                 token.setConsumed(true);
+                emailVerificationTokenRepository.save(token);
                 return true;
             })
             .orElse(false);
     }
+
 }

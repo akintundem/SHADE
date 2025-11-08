@@ -79,6 +79,13 @@ public class UserAccount extends BaseEntity {
     @Column(name = "status")
     private UserStatus status;
 
+    @Column(name = "failed_login_attempts", nullable = false)
+    @Builder.Default
+    private Integer failedLoginAttempts = 0;
+
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
+
     @PrePersist
     public void onCreate() {
         if (userType == null) {
@@ -86,6 +93,9 @@ public class UserAccount extends BaseEntity {
         }
         if (status == null) {
             status = UserStatus.ACTIVE;
+        }
+        if (failedLoginAttempts == null) {
+            failedLoginAttempts = 0;
         }
     }
 

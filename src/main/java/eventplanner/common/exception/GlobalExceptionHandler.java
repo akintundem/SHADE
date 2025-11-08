@@ -15,6 +15,7 @@ import java.util.Map;
 
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 @RestControllerAdvice
@@ -150,6 +151,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
     }
 
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<ErrorResponse> handleApiException(
+            ApiException ex, WebRequest request) {
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(ex.getStatus())
+                .error(ex.getCode() != null ? ex.getCode() : "Bad Request")
+                .message(ex.getMessage())
+                .path(request.getDescription(false).replace("uri=", ""))
+                .build();
+
+        return ResponseEntity.status(ex.getStatus()).body(errorResponse);
+    }
+
     @ExceptionHandler(NoHandlerFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoHandlerFoundException(
             NoHandlerFoundException ex, WebRequest request) {
@@ -163,6 +179,25 @@ public class GlobalExceptionHandler {
                 .build();
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(
+            ResponseStatusException ex, WebRequest request) {
+        String message = ex.getReason();
+        if (message == null || message.isEmpty()) {
+            message = ex.getStatusCode().toString();
+        }
+        
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(ex.getStatusCode().value())
+                .error(ex.getStatusCode().toString())
+                .message(message)
+                .path(request.getDescription(false).replace("uri=", ""))
+                .build();
+        
+        return ResponseEntity.status(ex.getStatusCode()).body(errorResponse);
     }
 
     @ExceptionHandler(Exception.class)

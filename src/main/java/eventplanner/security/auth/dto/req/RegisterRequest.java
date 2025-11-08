@@ -44,10 +44,4 @@ public class RegisterRequest {
     private Boolean acceptPrivacy;
 
     private Boolean marketingOptIn = Boolean.FALSE;
-
-    @Size(max = 120, message = "Device ID must be shorter than 120 characters")
-    private String deviceId;
-
-    @Size(max = 120, message = "Client ID must be shorter than 120 characters")
-    private String clientId;
 }

@@ -7,6 +7,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+import static eventplanner.security.util.AuthValidationUtil.normalizeEmail;
+
 @Service
 public class AuthUserDetailsService implements UserDetailsService {
 
@@ -18,7 +20,9 @@ public class AuthUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        UserAccount user = userAccountRepository.findByEmailIgnoreCase(username)
+        // Soft-enforce email lowercasing
+        String normalizedEmail = normalizeEmail(username);
+        UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizedEmail)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
         return new UserPrincipal(user);
     }
