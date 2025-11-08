@@ -104,7 +104,7 @@ public class AuthService {
         this.jwtValidationUtil = jwtValidationUtil;
     }
 
-    public SecureAuthResponse register(RegisterRequest request, String clientIp) {
+    public void register(RegisterRequest request, String clientIp) {
         String normalizedEmail = normalizeEmail(request.getEmail());
         
         // Email-based + IP-based rate limiting for registration endpoint
@@ -195,12 +195,10 @@ public class AuthService {
             log.debug("Skipping verification email in dev mode for user: {}", user.getEmail());
         }
         
-        SecureAuthResponse response = issueAuthResponse(user, false, clientIp, "User registered successfully. Please check your email for verification.");
-        
         // Audit log successful registration
         securityAuditService.logRegistration(true, user.getId(), normalizedEmail, clientIp, null);
         
-        return response;
+        // Registration complete - user must verify email and login to get tokens/deviceId
     }
     
     public SecureAuthResponse login(LoginRequest request, String clientIp) {
@@ -280,19 +278,38 @@ public class AuthService {
     
     /**
      * Refreshes a token.
+     * Validates that the deviceId from header matches the session's deviceId.
      * @param request The refresh token request
+     * @param deviceId The deviceId from X-Device-ID header (must match session's deviceId)
      * @return The refreshed token response
      */
-    public SecureAuthResponse refreshToken(RefreshTokenRequest request) {
+    public SecureAuthResponse refreshToken(RefreshTokenRequest request, String deviceId) {
+        if (deviceId == null || deviceId.trim().isEmpty()) {
+            throw new BadRequestException("DEVICE_ID_REQUIRED", "X-Device-ID header is required");
+        }
+        
         UserSession session = sessionRepository.findByRefreshTokenAndRevokedFalse(request.getRefreshToken())
             .orElseThrow(() -> new UnauthorizedException("Invalid refresh token"));
 
         if (session.getExpiresAt().isBefore(LocalDateTime.now(ZoneOffset.UTC))) {
             session.setRevoked(true);
+            sessionRepository.save(session);
             throw new UnauthorizedException("Refresh token expired");
+        }
+        
+        // Validate deviceId matches session's deviceId
+        if (!deviceId.trim().equals(session.getDeviceId())) {
+            log.warn("DeviceId mismatch for refresh token: header={}, session={}", deviceId, session.getDeviceId());
+            throw new UnauthorizedException("Device ID mismatch");
+        }
+        
+        // Validate session is still valid
+        if (!session.isValid()) {
+            throw new UnauthorizedException("Session expired or revoked");
         }
 
         session.setLastSeenAt(LocalDateTime.now(ZoneOffset.UTC));
+        sessionRepository.save(session);
         UserAccount user = session.getUser();
         String accessToken = tokenService.generateAccessToken(user);
 

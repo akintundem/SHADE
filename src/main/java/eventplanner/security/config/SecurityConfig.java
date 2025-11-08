@@ -2,7 +2,6 @@ package eventplanner.security.config;
 
 import eventplanner.security.filters.JwtAuthenticationErrorHandler;
 import eventplanner.security.filters.JwtAuthenticationFilter;
-import eventplanner.security.filters.ClientValidationFilter;
 import eventplanner.security.filters.DeviceValidationFilter;
 import eventplanner.security.filters.RateLimitingFilter;
 import eventplanner.security.filters.SecurityHeadersFilter;
@@ -36,7 +35,6 @@ public class SecurityConfig {
     private final SecurityHeadersFilter securityHeadersFilter;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationErrorHandler authenticationErrorHandler;
-    private final ClientValidationFilter clientValidationFilter;
     private final DeviceValidationFilter deviceValidationFilter;
     private final RateLimitingFilter rateLimitingFilter;
     private final RbacAuthorizationFilter rbacAuthorizationFilter;
@@ -44,14 +42,12 @@ public class SecurityConfig {
     public SecurityConfig(SecurityHeadersFilter securityHeadersFilter,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
                           JwtAuthenticationErrorHandler authenticationErrorHandler,
-                          ClientValidationFilter clientValidationFilter,
                           DeviceValidationFilter deviceValidationFilter,
                           RateLimitingFilter rateLimitingFilter,
                           RbacAuthorizationFilter rbacAuthorizationFilter) {
         this.securityHeadersFilter = securityHeadersFilter;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authenticationErrorHandler = authenticationErrorHandler;
-        this.clientValidationFilter = clientValidationFilter;
         this.deviceValidationFilter = deviceValidationFilter;
         this.rateLimitingFilter = rateLimitingFilter;
         this.rbacAuthorizationFilter = rbacAuthorizationFilter;
@@ -112,7 +108,6 @@ public class SecurityConfig {
             .formLogin(formLogin -> formLogin.disable())
             .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationErrorHandler))
             .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(clientValidationFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(deviceValidationFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)

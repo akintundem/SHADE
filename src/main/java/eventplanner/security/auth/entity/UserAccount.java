@@ -79,7 +79,7 @@ public class UserAccount extends BaseEntity {
     @Column(name = "status")
     private UserStatus status;
 
-    @Column(name = "failed_login_attempts", nullable = false)
+    @Column(name = "failed_login_attempts", nullable = false, columnDefinition = "integer default 0")
     @Builder.Default
     private Integer failedLoginAttempts = 0;
 

@@ -46,9 +46,11 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<SecureAuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
-        SecureAuthResponse response = authService.register(request, resolveClientIp(httpRequest));
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    public ResponseEntity<ApiMessageResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
+        authService.register(request, resolveClientIp(httpRequest));
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+            ApiMessageResponse.success("User registered successfully. Please check your email for verification.")
+        );
     }
 
     @PostMapping("/login")
@@ -66,8 +68,10 @@ public class AuthController {
     }
 
     @PostMapping("/refresh-token")
-    public ResponseEntity<SecureAuthResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
-        SecureAuthResponse response = authService.refreshToken(request);
+    public ResponseEntity<SecureAuthResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request, HttpServletRequest httpRequest) {
+        // Extract deviceId from X-Device-ID header (required for refresh token)
+        String deviceId = httpRequest.getHeader("X-Device-ID");
+        SecureAuthResponse response = authService.refreshToken(request, deviceId);
         return ResponseEntity.ok(response);
     }
 

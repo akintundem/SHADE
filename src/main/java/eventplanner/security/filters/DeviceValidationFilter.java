@@ -47,22 +47,26 @@ public class DeviceValidationFilter extends OncePerRequestFilter {
 
     // Endpoints that don't require deviceId validation
     private static final List<String> PUBLIC_PATHS = Arrays.asList(
-        "/api/v1/auth/register",         // Public - issues tokens on register in current design
+        "/api/v1/auth/register",         // Public - does not issue tokens/deviceId
         "/api/v1/auth/login",            // Public - issues deviceId here
-        "/api/v1/auth/refresh-token",    // Public - validated via refresh token, not JWT
         "/api/v1/auth/health",           // Health check
         "/api/v1/auth/forgot-password",  // Password recovery
         "/api/v1/auth/reset-password",   // Password reset
         "/api/v1/auth/verify-email",     // Email verification
         "/api/v1/auth/validate-token"    // Token validation (public endpoint)
     );
-    // Note: Refresh token endpoint is public in current configuration; deviceId is not required there
+    // Note: Refresh token endpoint requires authentication and deviceId validation
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String requestURI = request.getRequestURI();
         
         // Skip for public endpoints
