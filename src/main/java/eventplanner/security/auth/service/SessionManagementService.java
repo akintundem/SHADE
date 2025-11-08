@@ -55,10 +55,8 @@ public class SessionManagementService {
 
     /**
      * Scheduled task to periodically prune expired sessions.
-     * Runs at the interval configured in application.yml (auth.session.cleanup-interval-ms).
-     * Defaults to 1 hour (3600000 milliseconds) if not configured.
      */
-    @Scheduled(fixedRateString = "${auth.session.cleanup-interval-ms:3600000}")
+    @Scheduled(fixedRateString = "${auth.session.cleanup-interval-ms}")
     public void scheduledPruneExpiredSessions() {
         try {
             pruneExpiredSessions();
