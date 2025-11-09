@@ -88,12 +88,20 @@ erDiagram
         string contact_email
         string tax_id
         string registration_number
+        string google_place_id
+        text google_place_data
+        boolean is_platform_vendor
+        enum vendor_tier
+        enum vendor_status
+        datetime joined_at
+        double rating
+        integer review_count
+        integer booking_count
         string address_street
         string address_city
         string address_state
         string address_zip
         string address_country
-        UUID owner_id FK
         datetime created_at
         datetime updated_at
         long version
@@ -548,7 +556,6 @@ erDiagram
     auth_users ||--o{ auth_password_resets : "has"
     auth_users ||--o{ auth_email_verifications : "has"
     auth_users ||--o{ security_audit_logs : "generates"
-    auth_users ||--o{ auth_organizations : "owns"
     auth_users ||--o{ organization_roles : "assigned"
     auth_users ||--o{ event_roles : "assigned"
     auth_users ||--o{ device_tokens : "has"

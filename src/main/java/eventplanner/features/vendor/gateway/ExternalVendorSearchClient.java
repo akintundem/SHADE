@@ -22,3 +22,4 @@ public interface ExternalVendorSearchClient {
     List<ExternalVendorSearchResult> search(String query, OrganizationType type, String location, int limit);
 }
 
+

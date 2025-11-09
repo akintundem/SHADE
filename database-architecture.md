@@ -36,7 +36,14 @@ erDiagram
         String taxId
         String registrationNumber
         OrganizationAddress address
-        UUID ownerId FK
+        String googlePlaceId
+        Boolean platformVendor
+        VendorTier vendorTier
+        VendorProgramStatus vendorStatus
+        LocalDateTime joinedAt
+        Double rating
+        Integer reviewCount
+        Integer bookingCount
         LocalDateTime createdAt
         LocalDateTime updatedAt
     }
