@@ -171,5 +171,5 @@ springdoc:
     version: ${API_VERSION}
 
 rbac:
-  config:
-    location: classpath:rbac/rbac-config.yml
+  policy:
+    location: classpath:rbac/RBAC_policy.yml

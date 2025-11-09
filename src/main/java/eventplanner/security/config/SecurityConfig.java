@@ -5,13 +5,14 @@ import eventplanner.security.filters.JwtAuthenticationFilter;
 import eventplanner.security.filters.DeviceValidationFilter;
 import eventplanner.security.filters.RateLimitingFilter;
 import eventplanner.security.filters.SecurityHeadersFilter;
-import eventplanner.security.filters.RbacAuthorizationFilter;
+import eventplanner.security.filters.RbacContextFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,6 +28,7 @@ import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
     @Value("${APP_CORS_ALLOWED_ORIGINS}")
@@ -37,20 +39,20 @@ public class SecurityConfig {
     private final JwtAuthenticationErrorHandler authenticationErrorHandler;
     private final DeviceValidationFilter deviceValidationFilter;
     private final RateLimitingFilter rateLimitingFilter;
-    private final RbacAuthorizationFilter rbacAuthorizationFilter;
+    private final RbacContextFilter rbacContextFilter;
 
     public SecurityConfig(SecurityHeadersFilter securityHeadersFilter,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
                           JwtAuthenticationErrorHandler authenticationErrorHandler,
                           DeviceValidationFilter deviceValidationFilter,
                           RateLimitingFilter rateLimitingFilter,
-                          RbacAuthorizationFilter rbacAuthorizationFilter) {
+                          RbacContextFilter rbacContextFilter) {
         this.securityHeadersFilter = securityHeadersFilter;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authenticationErrorHandler = authenticationErrorHandler;
         this.deviceValidationFilter = deviceValidationFilter;
         this.rateLimitingFilter = rateLimitingFilter;
-        this.rbacAuthorizationFilter = rbacAuthorizationFilter;
+        this.rbacContextFilter = rbacContextFilter;
     }
 
     @Bean
@@ -108,9 +110,9 @@ public class SecurityConfig {
             .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationErrorHandler))
             .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(rbacContextFilter, JwtAuthenticationFilter.class)
             .addFilterBefore(deviceValidationFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterAfter(rbacAuthorizationFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

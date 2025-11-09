@@ -3,9 +3,6 @@ package eventplanner.security.authorization.service;
 import eventplanner.common.domain.enums.OrganizationRoleType;
 import eventplanner.security.authorization.domain.entity.OrganizationRole;
 import eventplanner.security.authorization.domain.repository.OrganizationRoleRepository;
-import eventplanner.security.authorization.rbac.PermissionCheck;
-import eventplanner.security.authorization.rbac.PermissionRegistry;
-import eventplanner.security.authorization.rbac.RolePermissionMatrix;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
@@ -21,88 +18,72 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * Central authorization service leveraging the RBAC registry.
+ * Central authorization service for access control.
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class AuthorizationService {
 
-    private final PermissionRegistry permissionRegistry;
     private final OrganizationRoleRepository organizationRoleRepository;
     private final EventRoleRepository eventRoleRepository;
     private final EventRepository eventRepository;
 
-    public boolean hasPermission(UserPrincipal user, PermissionCheck check) {
-        if (user == null || check == null || check.descriptor() == null) {
+    /**
+     * Check if a user is the owner of an event.
+     * 
+     * @param user The user principal
+     * @param eventId The event ID
+     * @return true if the user is the owner of the event
+     */
+    public boolean isEventOwner(UserPrincipal user, UUID eventId) {
+        if (user == null || eventId == null) {
             return false;
         }
-
-        String permission = check.descriptor().permission();
-        if (permission == null || permission.isBlank()) {
-            return true;
-        }
-
-        RolePermissionMatrix matrix = permissionRegistry.getRolePermissionMatrix();
-
-        if (hasSystemPermission(user, permission, matrix)) {
-            return true;
-        }
-
-        return switch (check.descriptor().scope()) {
-            case SYSTEM -> false;
-            case ORGANIZATION -> hasOrganizationPermission(user, check, matrix);
-            case EVENT -> hasEventPermission(user, check, matrix);
-            case PUBLIC -> true;
-        };
+        return isEventOwner(user.getId(), eventId);
     }
 
-    public boolean isOwner(UserPrincipal user, PermissionCheck check) {
-        if (user == null || check == null || check.descriptor() == null || !check.descriptor().allowOwner()) {
+    /**
+     * Check if a user is the owner of an organization.
+     * 
+     * @param user The user principal
+     * @param organizationId The organization ID
+     * @return true if the user is the owner of the organization
+     */
+    public boolean isOrganizationOwner(UserPrincipal user, UUID organizationId) {
+        if (user == null || organizationId == null) {
             return false;
         }
-
-        return switch (check.descriptor().scope()) {
-            case EVENT -> isEventOwner(user.getId(), check.resourceId());
-            case ORGANIZATION -> isOrganizationOwner(user.getId(), check.resourceId());
-            case SYSTEM -> isSelf(user.getId(), check.resourceId());
-            case PUBLIC -> false;
-        };
+        return isOrganizationOwner(user.getId(), organizationId);
     }
 
-    private boolean hasSystemPermission(UserPrincipal user, String permission, RolePermissionMatrix matrix) {
+    /**
+     * Check if a user is accessing their own resource.
+     * 
+     * @param user The user principal
+     * @param targetId The target resource ID
+     * @return true if the user ID matches the target ID
+     */
+    public boolean isSelf(UserPrincipal user, UUID targetId) {
+        if (user == null || targetId == null) {
+            return false;
+        }
+        return user.getId().equals(targetId);
+    }
+
+    /**
+     * Check if a user has an admin role.
+     * 
+     * @param user The user principal
+     * @return true if the user has ROLE_ADMIN authority
+     */
+    public boolean isAdmin(UserPrincipal user) {
+        if (user == null) {
+            return false;
+        }
         return user.getAuthorities().stream()
             .map(GrantedAuthority::getAuthority)
-            .filter(authority -> authority.startsWith("ROLE_"))
-            .anyMatch(role -> matrix.allowsSystemRole(role, permission));
-    }
-
-    private boolean hasOrganizationPermission(UserPrincipal user, PermissionCheck check, RolePermissionMatrix matrix) {
-        UUID organizationId = check.resourceId();
-        if (organizationId == null) {
-            log.debug("Organization permission check missing resource id for user {}", user.getId());
-            return false;
-        }
-
-        List<OrganizationRole> roles = organizationRoleRepository.findByUserIdAndOrganizationIdAndActive(user.getId(), organizationId);
-        return roles.stream()
-            .filter(OrganizationRole::getIsActive)
-            .map(role -> role.getRole().toUpperCase(Locale.US))
-            .anyMatch(role -> matrix.allowsOrganizationRole(role, check.descriptor().permission()));
-    }
-
-    private boolean hasEventPermission(UserPrincipal user, PermissionCheck check, RolePermissionMatrix matrix) {
-        UUID eventId = check.resourceId();
-        if (eventId == null) {
-            log.debug("Event permission check missing resource id for user {}", user.getId());
-            return false;
-        }
-
-        List<EventRole> eventRoles = eventRoleRepository.findByEventIdAndUserId(eventId, user.getId());
-        return eventRoles.stream()
-            .filter(EventRole::getIsActive)
-            .map(role -> role.getRoleName().name().toUpperCase(Locale.US))
-            .anyMatch(role -> matrix.allowsEventRole(role, check.descriptor().permission()));
+            .anyMatch(authority -> "ROLE_ADMIN".equals(authority));
     }
 
     private boolean isEventOwner(UUID userId, UUID eventId) {
@@ -126,16 +107,13 @@ public class AuthorizationService {
             .anyMatch(role -> OrganizationRoleType.OWNER.name().equals(role));
     }
 
-    private boolean isSelf(UUID userId, UUID targetId) {
-        return targetId != null && targetId.equals(userId);
-    }
-
     /**
      * Check if a user can access an event.
      * A user can access an event if:
      * 1. The event is public, OR
      * 2. The user is the owner, OR
-     * 3. The user has an active role in the event
+     * 3. The user has an active role in the event, OR
+     * 4. The user is an admin
      * 
      * @param user The user principal
      * @param eventId The event ID
@@ -150,6 +128,11 @@ public class AuthorizationService {
         Event event = eventRepository.findById(eventId).orElse(null);
         if (event == null) {
             return false;
+        }
+
+        // System admins can access all events
+        if (isAdmin(user)) {
+            return true;
         }
 
         // Public events are accessible to everyone
@@ -167,16 +150,27 @@ public class AuthorizationService {
         boolean hasActiveRole = eventRoles.stream()
             .anyMatch(EventRole::getIsActive);
         
-        if (hasActiveRole) {
-            return true;
-        }
+        return hasActiveRole;
+    }
 
-        // System admins can access all events
-        RolePermissionMatrix matrix = permissionRegistry.getRolePermissionMatrix();
-        if (hasSystemPermission(user, "event.*", matrix) || hasSystemPermission(user, "event.read", matrix)) {
-            return true;
+    /**
+     * Determine if the user holds any active organization role for the given organization.
+     */
+    public boolean hasOrganizationMembership(UserPrincipal user, UUID organizationId) {
+        if (user == null || organizationId == null) {
+            return false;
         }
+        return !organizationRoleRepository.findByUserIdAndOrganizationIdAndActive(user.getId(), organizationId).isEmpty();
+    }
 
-        return false;
+    /**
+     * Determine if the user has an active event role for the provided event.
+     */
+    public boolean hasEventMembership(UserPrincipal user, UUID eventId) {
+        if (user == null || eventId == null) {
+            return false;
+        }
+        return eventRoleRepository.findByEventIdAndUserId(eventId, user.getId()).stream()
+            .anyMatch(EventRole::getIsActive);
     }
 }

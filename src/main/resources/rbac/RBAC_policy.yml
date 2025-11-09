@@ -1,0 +1,2672 @@
+policy:
+  name: SHDE RBAC
+  version: 2025-11-09T17:27:33Z
+  source: RBAC.xlsx
+  evaluation:
+    order:
+      - resource_resolution
+      - is_authenticated
+      - role_grant
+      - owns_scope
+      - is_member
+      - conditions
+    deny_by_default: true
+  permissions:
+    -
+      name: attendee.analytics.read
+      scope: EVENT
+      resources: event_id
+      description: Get attendance analytics; Get attendance by user type; Get check-in timeline; Get no-show analytics; Get registration timeline
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.checkin
+      scope: EVENT
+      resources: attendance_id,attendee_id,event_id
+      description: Check in attendee; Check-in attendee
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.checkout
+      scope: EVENT
+      resources: attendance_id,event_id
+      description: Check out attendee
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.create
+      scope: EVENT
+      resources: event_id
+      description: Bulk register attendees; Register for event (full details)
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.delete
+      scope: EVENT
+      resources: attendance_id,event_id
+      description: Bulk delete attendees; Cancel attendance
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.export
+      scope: EVENT
+      resources: event_id
+      description: Export attendees to CSV; Export attendees to Excel
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.import
+      scope: EVENT
+      resources: event_id
+      description: Import attendees from CSV
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.qrcode.read
+      scope: EVENT
+      resources: attendance_id,event_id
+      description: Get attendee QR code
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.qrcode.regenerate
+      scope: EVENT
+      resources: attendance_id,event_id
+      description: Regenerate QR code
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.qrcode.scan
+      scope: EVENT
+      resources: event_id
+      description: Scan QR code for check-in
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.read
+      scope: EVENT
+      resources: attendance_id,event_id
+      description: Filter attendees; Find duplicate attendees; Find incomplete profiles; Get all attendees for event; Get attendance statistics; Get capacity status; Get checked-in attendees; Get specific attendance; Get waitlist status; List attendees by event; Search attendees
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.update
+      scope: EVENT
+      resources: attendance_id,attendee_id,event_id
+      description: Bulk update attendees; Update RSVP status; Update attendance details
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.validate
+      scope: EVENT
+      resources: event_id
+      description: Validate attendee data
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.analytics.read
+      scope: EVENT
+      resources: budget_id
+      description: Get budget summary; Get category breakdown; Get contingency analysis; Get variance analysis
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.approve
+      scope: EVENT
+      resources: budget_id
+      description: Approve budget
+      conditions: "Approver ≠ submitter (SoD); audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.create
+      scope: EVENT
+      resources: null
+      description: Create or update budget
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.delete
+      scope: EVENT
+      resources: budget_id
+      description: Delete budget
+      conditions: "Owner only; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: budget.lineitem.create
+      scope: EVENT
+      resources: budget_id
+      description: Add budget line item; Add multiple line items
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.lineitem.delete
+      scope: EVENT
+      resources: budget_id,item_id
+      description: Delete line item
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.lineitem.read
+      scope: EVENT
+      resources: budget_id,item_id
+      description: Get all line items; Get specific line item
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.lineitem.update
+      scope: EVENT
+      resources: budget_id,item_id
+      description: Update line item
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.read
+      scope: EVENT
+      resources: budget_id,event_id
+      description: Compute rollup total; Get event budget
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.recalculate
+      scope: EVENT
+      resources: budget_id
+      description: Recalculate totals
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.reject
+      scope: EVENT
+      resources: budget_id
+      description: Reject budget
+      conditions: "Approver ≠ submitter (SoD); audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.submit
+      scope: EVENT
+      resources: budget_id
+      description: Submit budget for approval
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.update
+      scope: EVENT
+      resources: budget_id
+      description: Update budget details
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: communication.read
+      scope: EVENT
+      resources: event_id
+      description: Get communication history; Get sent invitations
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: communication.send
+      scope: EVENT
+      resources: attendance_id,event_id,id
+      description: Send bulk email; Send bulk email to attendees; Send event notification; Send invitations; Send notification; Send notification to attendee
+      conditions: "Rate-limits; unsubscribe compliance; bulk > N → 2-person rule; audit"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.analytics.read
+      scope: EVENT
+      resources: id
+      description: Get comprehensive event analytics
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.assets.read
+      scope: EVENT
+      resources: id
+      description: Get event assets
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.assets.upload
+      scope: EVENT
+      resources: id
+      description: Upload event asset
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.cancel
+      scope: EVENT
+      resources: id
+      description: Cancel event
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.complete
+      scope: EVENT
+      resources: id
+      description: Mark event as completed
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.coverimage.delete
+      scope: EVENT
+      resources: id
+      description: Remove cover image
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.coverimage.update
+      scope: EVENT
+      resources: id
+      description: Update cover image
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.delete
+      scope: EVENT
+      resources: id
+      description: Delete event
+      conditions: "Owner only; Draft/Cancelled only; if tickets sold → finance approval; 2-step confirm; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.duplicate
+      scope: EVENT
+      resources: id
+      description: Duplicate event
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.health.read
+      scope: EVENT
+      resources: id
+      description: Event health check
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.media.delete
+      scope: EVENT
+      resources: id,media_id
+      description: Delete media
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.media.read
+      scope: EVENT
+      resources: id,media_id
+      description: Get event media; Get specific media
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.media.update
+      scope: EVENT
+      resources: id,media_id
+      description: Update media
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.media.upload
+      scope: EVENT
+      resources: id
+      description: Upload event media
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.notification.read
+      scope: EVENT
+      resources: id
+      description: Get notification settings
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.notification.update
+      scope: EVENT
+      resources: id
+      description: Update notification settings
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.publish
+      scope: EVENT
+      resources: id
+      description: Publish event
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.qrcode.delete
+      scope: EVENT
+      resources: id
+      description: Disable QR code
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.qrcode.generate
+      scope: EVENT
+      resources: id
+      description: Generate QR code
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.qrcode.regenerate
+      scope: EVENT
+      resources: id
+      description: Regenerate QR code
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.read
+      scope: EVENT
+      resources: id
+      description: Get available capacity; Get event QR code; Get event capacity info; Get event status; Get event visibility settings; View event details
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.registration.close
+      scope: EVENT
+      resources: id
+      description: Close registration
+      conditions: "Owner/Manager; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.registration.open
+      scope: EVENT
+      resources: id
+      description: Open registration
+      conditions: "Owner/Manager; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.reminder.create
+      scope: EVENT
+      resources: id
+      description: Create event reminder
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.reminder.delete
+      scope: EVENT
+      resources: id,reminder_id
+      description: Delete reminder
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.reminder.read
+      scope: EVENT
+      resources: id,reminder_id
+      description: Get event reminders; Get specific reminder
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.reminder.update
+      scope: EVENT
+      resources: id,reminder_id
+      description: Update reminder
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.update
+      scope: EVENT
+      resources: id
+      description: Update event capacity; Update event details; Update event status; Update event visibility; Update registration deadline
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.validate
+      scope: EVENT
+      resources: id
+      description: Validate event data
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.visibility.update
+      scope: EVENT
+      resources: id
+      description: Make event private; Make event public
+      conditions: "Owner or Manager+Owner confirm; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: payment.read
+      scope: EVENT
+      resources: event_id
+      description: Get payments for event
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: role.assign
+      scope: EVENT
+      resources: event_id,id,user_id
+      description: Add event collaborator; Add user to event; Assign role to user
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: role.read
+      scope: EVENT
+      resources: event_id,id,user_id
+      description: Get all event users; Get event collaborators; Get specific event user; Get user roles
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: role.remove
+      scope: EVENT
+      resources: collaborator_id,event_id,id,role_id,user_id
+      description: Remove collaborator; Remove user from event; Remove user role
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: role.update
+      scope: EVENT
+      resources: collaborator_id,event_id,id,role_id,user_id
+      description: Update collaborator; Update event user details; Update user role
+      conditions: "Privileged action; ticket & approval required; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.create
+      scope: EVENT
+      resources: null
+      description: Create timeline item
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.delete
+      scope: EVENT
+      resources: id
+      description: Delete timeline item
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.proof.upload
+      scope: EVENT
+      resources: task_id
+      description: Get presigned URL for proof upload; Upload proof image
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.read
+      scope: EVENT
+      resources: event_id
+      description: Get overdue tasks; Get run-of-show timeline; Get tasks with hierarchy; Get timeline summary; Get timeline view with filters; Get upcoming tasks; Search tasks
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.task.create
+      scope: EVENT
+      resources: event_id
+      description: Create task with subtasks
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.task.delete
+      scope: EVENT
+      resources: task_id
+      description: Delete task
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.task.position.update
+      scope: EVENT
+      resources: task_id
+      description: Update task position
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.task.read
+      scope: EVENT
+      resources: task_id
+      description: Get task by ID
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.task.update
+      scope: EVENT
+      resources: event_id,task_id
+      description: Bulk update tasks; Update task
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.workback.generate
+      scope: EVENT
+      resources: event_id
+      description: Generate workback schedule
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: organization.read
+      scope: ORGANIZATION
+      resources: organization_id
+      description: Get organization details
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: organization.update
+      scope: ORGANIZATION
+      resources: organization_id
+      description: Update organization
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: auth.health
+      scope: PUBLIC
+      resources: null
+      description: Health check
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.login
+      scope: PUBLIC
+      resources: null
+      description: Login user
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.register
+      scope: PUBLIC
+      resources: null
+      description: Register new user
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.validate
+      scope: PUBLIC
+      resources: null
+      description: Validate token
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: budget.categories.read
+      scope: PUBLIC
+      resources: null
+      description: Get standard categories
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: event.read
+      scope: PUBLIC
+      resources: null
+      description: Get all public events; Get featured events; Get trending events; Get upcoming public events
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: weather.geocode
+      scope: PUBLIC
+      resources: null
+      description: Geocode location name
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: weather.read
+      scope: PUBLIC
+      resources: null
+      description: Get weather forecast (coordinates); Get weather forecast (location name)
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: weather.viability.read
+      scope: PUBLIC
+      resources: null
+      description: Check outdoor event viability
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.analytics.events
+      scope: SYSTEM
+      resources: null
+      description: View event analytics
+      conditions: "PII minimization; aggregated views"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.analytics.revenue
+      scope: SYSTEM
+      resources: null
+      description: View revenue analytics
+      conditions: "PII minimization; aggregated views"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.analytics.users
+      scope: SYSTEM
+      resources: null
+      description: View user analytics
+      conditions: "PII minimization; aggregated views"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.dashboard.read
+      scope: SYSTEM
+      resources: null
+      description: View admin dashboard overview
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.events.filter
+      scope: SYSTEM
+      resources: status
+      description: View events by status
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.events.read
+      scope: SYSTEM
+      resources: null
+      description: View all events (paginated)
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.events.user
+      scope: SYSTEM
+      resources: user_id
+      description: View events by specific user
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.metrics.read
+      scope: SYSTEM
+      resources: null
+      description: View platform metrics
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.payments.event
+      scope: SYSTEM
+      resources: event_id
+      description: View payments for specific event
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.payments.filter
+      scope: SYSTEM
+      resources: status
+      description: View payments by status
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.payments.read
+      scope: SYSTEM
+      resources: null
+      description: View all platform payments
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.payments.refund
+      scope: SYSTEM
+      resources: payment_id
+      description: Process refund for a payment
+      conditions: "SoD: 2-person approval above threshold; reason_code required; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.users.detail
+      scope: SYSTEM
+      resources: user_id
+      description: View specific user details
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.users.read
+      scope: SYSTEM
+      resources: null
+      description: View all users (paginated)
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.users.update
+      scope: SYSTEM
+      resources: user_id
+      description: Update user status (suspend/activate)
+      conditions: "Requires ticket & reason; time-limited suspension; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: attendee.create
+      scope: SYSTEM
+      resources: null
+      description: Add attendees (bulk)
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.logout
+      scope: SYSTEM
+      resources: null
+      description: Logout user
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.me
+      scope: SYSTEM
+      resources: null
+      description: Get current user info
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.refresh
+      scope: SYSTEM
+      resources: null
+      description: Refresh access token
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: communication.send
+      scope: SYSTEM
+      resources: null
+      description: Send attendee invitations; Send invitations
+      conditions: "Rate-limits; unsubscribe compliance; bulk > N → 2-person rule; audit"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: event.create
+      scope: SYSTEM
+      resources: null
+      description: Create new event
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: event.read
+      scope: SYSTEM
+      resources: status,type,user_id
+      description: Get all events for a user; Get current user's events summary; Get current user's owned events; Get current user's past events; Get current user's upcoming events; Get events by status; Get events by type; Get events owned by user; Get past events for user; Get upcoming events for user; Search events with filters
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: organization.create
+      scope: SYSTEM
+      resources: null
+      description: Register organization
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: organization.search
+      scope: SYSTEM
+      resources: null
+      description: Search organizations
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: payment.create
+      scope: SYSTEM
+      resources: null
+      description: Create payment for event creation
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: payment.process
+      scope: SYSTEM
+      resources: payment_id
+      description: Process failed payment; Process successful payment
+      conditions: "Idempotency key required; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: payment.read
+      scope: SYSTEM
+      resources: payment_id
+      description: Get current user's payments; Get payment by ID
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: payment.refund
+      scope: SYSTEM
+      resources: payment_id
+      description: Process refund
+      conditions: "SoD: 2-person approval above threshold; reason_code required; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: user.read
+      scope: SYSTEM
+      resources: user_id
+      description: Get user details (self or admin)
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: user.search
+      scope: SYSTEM
+      resources: null
+      description: Search users
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: user.update
+      scope: SYSTEM
+      resources: user_id
+      description: Update user profile (self or admin)
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: vendor.create
+      scope: SYSTEM
+      resources: null
+      description: Register vendor
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: vendor.read
+      scope: SYSTEM
+      resources: null
+      description: Search vendors
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: my.events.read
+      scope: SYSTEM
+      resources: null
+      description: List current user's events
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: my.events.search
+      scope: SYSTEM
+      resources: null
+      description: Search/filter current user's events
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: public.events.search
+      scope: SYSTEM
+      resources: null
+      description: Search public events (discovery)
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: vendor.search
+      scope: SYSTEM
+      resources: null
+      description: Search vendors directory
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.analytics.events
+      scope: SYSTEM
+      resources: null
+      description: View event analytics
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.analytics.revenue
+      scope: SYSTEM
+      resources: null
+      description: View revenue analytics
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.analytics.users
+      scope: SYSTEM
+      resources: null
+      description: View user analytics
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.dashboard.read
+      scope: SYSTEM
+      resources: null
+      description: View admin dashboard overview
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.events.filter
+      scope: SYSTEM
+      resources: status
+      description: View events by status
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.events.read
+      scope: SYSTEM
+      resources: null
+      description: View all events (paginated)
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.events.user
+      scope: SYSTEM
+      resources: user_id
+      description: View events by specific user
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.metrics.read
+      scope: SYSTEM
+      resources: null
+      description: View platform metrics
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.payments.event
+      scope: SYSTEM
+      resources: event_id
+      description: View payments for specific event
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.payments.filter
+      scope: SYSTEM
+      resources: status
+      description: View payments by status
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.payments.read
+      scope: SYSTEM
+      resources: null
+      description: View all platform payments
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.payments.refund
+      scope: SYSTEM
+      resources: payment_id
+      description: Process refund for a payment
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.users.detail
+      scope: SYSTEM
+      resources: user_id
+      description: View specific user details
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.users.read
+      scope: SYSTEM
+      resources: null
+      description: View all users (paginated)
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: admin.users.update
+      scope: SYSTEM
+      resources: user_id
+      description: Update user status (suspend/activate)
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.logout
+      scope: SYSTEM
+      resources: null
+      description: Logout user
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.me
+      scope: SYSTEM
+      resources: null
+      description: Get current user info
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.refresh
+      scope: SYSTEM
+      resources: null
+      description: Refresh access token
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: communication.send
+      scope: SYSTEM
+      resources: null
+      description: Send attendee invitations; Send invitations
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: event.create
+      scope: SYSTEM
+      resources: null
+      description: Create new event
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: event.read
+      scope: SYSTEM
+      resources: status,type,user_id
+      description: Get all events for a user; Get current user's events summary; Get current user's owned events; Get current user's past events; Get current user's upcoming events; Get events by status; Get events by type; Get events owned by user; Get past events for user; Get upcoming events for user; Search events with filters
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: organization.create
+      scope: SYSTEM
+      resources: null
+      description: Register organization
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: organization.search
+      scope: SYSTEM
+      resources: null
+      description: Search organizations
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: payment.create
+      scope: SYSTEM
+      resources: null
+      description: Create payment for event creation
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: payment.process
+      scope: SYSTEM
+      resources: payment_id
+      description: Process failed payment; Process successful payment
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: payment.read
+      scope: SYSTEM
+      resources: payment_id
+      description: Get current user's payments; Get payment by ID
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: payment.refund
+      scope: SYSTEM
+      resources: payment_id
+      description: Process refund
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: user.read
+      scope: SYSTEM
+      resources: user_id
+      description: Get user details (self or admin)
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: user.sessions.read
+      scope: SYSTEM
+      resources: user_id
+      description: Get all user's session
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: user.sessions.delete
+      scope: SYSTEM
+      resources: user_id
+      description: Delete all user's session
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: user.search
+      scope: SYSTEM
+      resources: null
+      description: Search users
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: user.update
+      scope: SYSTEM
+      resources: user_id
+      description: Update user profile (self or admin)
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: false
+    -
+      name: vendor.create
+      scope: SYSTEM
+      resources: null
+      description: Register vendor
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: vendor.read
+      scope: SYSTEM
+      resources: null
+      description: Search vendors
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: my.events.read
+      scope: SYSTEM
+      resources: user_id
+      description: List current user's events
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: my.events.search
+      scope: SYSTEM
+      resources: user_id
+      description: Search/filter current user's events
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: public.events.search
+      scope: SYSTEM
+      resources: null
+      description: Search public events (discovery)
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: vendor.search
+      scope: SYSTEM
+      resources: null
+      description: Search vendors directory
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: organization.read
+      scope: ORGANIZATION
+      resources: organization_id
+      description: Get organization details
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: organization.update
+      scope: ORGANIZATION
+      resources: organization_id
+      description: Update organization
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.analytics.read
+      scope: EVENT
+      resources: event_id
+      description: Get attendance analytics; Get attendance by user type; Get check-in timeline; Get no-show analytics; Get registration timeline
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.checkin
+      scope: EVENT
+      resources: attendance_id,attendee_id,event_id
+      description: Check in attendee; Check-in attendee
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.checkout
+      scope: EVENT
+      resources: attendance_id,event_id
+      description: Check out attendee
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.create
+      scope: EVENT
+      resources: event_id
+      description: Bulk register attendees; Register for event (full details)
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.delete
+      scope: EVENT
+      resources: attendance_id,event_id
+      description: Bulk delete attendees; Cancel attendance
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.export
+      scope: EVENT
+      resources: event_id
+      description: Export attendees to CSV; Export attendees to Excel
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.import
+      scope: EVENT
+      resources: event_id
+      description: Import attendees from CSV
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.qrcode.read
+      scope: EVENT
+      resources: attendance_id,event_id
+      description: Get attendee QR code
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.qrcode.regenerate
+      scope: EVENT
+      resources: attendance_id,event_id
+      description: Regenerate QR code
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.qrcode.scan
+      scope: EVENT
+      resources: event_id
+      description: Scan QR code for check-in
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.read
+      scope: EVENT
+      resources: attendance_id,event_id
+      description: Filter attendees; Find duplicate attendees; Find incomplete profiles; Get all attendees for event; Get attendance statistics; Get capacity status; Get checked-in attendees; Get specific attendance; Get waitlist status; List attendees by event; Search attendees
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.update
+      scope: EVENT
+      resources: attendance_id,attendee_id,event_id
+      description: Bulk update attendees; Update RSVP status; Update attendance details
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: attendee.validate
+      scope: EVENT
+      resources: event_id
+      description: Validate attendee data
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.analytics.read
+      scope: EVENT
+      resources: budget_id
+      description: Get budget summary; Get category breakdown; Get contingency analysis; Get variance analysis
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.approve
+      scope: EVENT
+      resources: budget_id
+      description: Approve budget
+      conditions: "Approver ≠ submitter (SoD); audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.create
+      scope: EVENT
+      resources: null
+      description: Create or update budget
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.delete
+      scope: EVENT
+      resources: budget_id
+      description: Delete budget
+      conditions: "Owner only; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: budget.lineitem.create
+      scope: EVENT
+      resources: budget_id
+      description: Add budget line item; Add multiple line items
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.lineitem.delete
+      scope: EVENT
+      resources: budget_id,item_id
+      description: Delete line item
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.lineitem.read
+      scope: EVENT
+      resources: budget_id,item_id
+      description: Get all line items; Get specific line item
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.lineitem.update
+      scope: EVENT
+      resources: budget_id,item_id
+      description: Update line item
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.read
+      scope: EVENT
+      resources: budget_id,event_id
+      description: Compute rollup total; Get event budget
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.recalculate
+      scope: EVENT
+      resources: budget_id
+      description: Recalculate totals
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.reject
+      scope: EVENT
+      resources: budget_id
+      description: Reject budget
+      conditions: "Approver ≠ submitter (SoD); audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.submit
+      scope: EVENT
+      resources: budget_id
+      description: Submit budget for approval
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: budget.update
+      scope: EVENT
+      resources: budget_id
+      description: Update budget details
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: communication.read
+      scope: EVENT
+      resources: event_id
+      description: Get communication history; Get sent invitations
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: communication.send
+      scope: EVENT
+      resources: attendance_id,event_id,id
+      description: Send bulk email; Send bulk email to attendees; Send event notification; Send invitations; Send notification; Send notification to attendee
+      conditions: "Rate-limits; unsubscribe compliance; bulk > N → 2-person rule; audit"
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.analytics.read
+      scope: EVENT
+      resources: id
+      description: Get comprehensive event analytics
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.assets.read
+      scope: EVENT
+      resources: id
+      description: Get event assets
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.assets.upload
+      scope: EVENT
+      resources: id
+      description: Upload event asset
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.cancel
+      scope: EVENT
+      resources: id
+      description: Cancel event
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.complete
+      scope: EVENT
+      resources: id
+      description: Mark event as completed
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.coverimage.delete
+      scope: EVENT
+      resources: id
+      description: Remove cover image
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.coverimage.update
+      scope: EVENT
+      resources: id
+      description: Update cover image
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.delete
+      scope: EVENT
+      resources: id
+      description: Delete event
+      conditions: "Owner only; Draft/Cancelled only; if tickets sold → finance approval; 2-step confirm; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.duplicate
+      scope: EVENT
+      resources: id
+      description: Duplicate event
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.health.read
+      scope: EVENT
+      resources: id
+      description: Event health check
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.media.delete
+      scope: EVENT
+      resources: id,media_id
+      description: Delete media
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.media.read
+      scope: EVENT
+      resources: id,media_id
+      description: Get event media; Get specific media
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.media.update
+      scope: EVENT
+      resources: id,media_id
+      description: Update media
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: event.media.upload
+      scope: EVENT
+      resources: id
+      description: Upload event media
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.notification.read
+      scope: EVENT
+      resources: id
+      description: Get notification settings
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.notification.update
+      scope: EVENT
+      resources: id
+      description: Update notification settings
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.publish
+      scope: EVENT
+      resources: id
+      description: Publish event
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.qrcode.delete
+      scope: EVENT
+      resources: id
+      description: Disable QR code
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.qrcode.generate
+      scope: EVENT
+      resources: id
+      description: Generate QR code
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.qrcode.regenerate
+      scope: EVENT
+      resources: id
+      description: Regenerate QR code
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.read
+      scope: EVENT
+      resources: id
+      description: Get available capacity; Get event QR code; Get event capacity info; Get event status; Get event visibility settings; View event details
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.registration.close
+      scope: EVENT
+      resources: id
+      description: Close registration
+      conditions: "Owner/Manager; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.registration.open
+      scope: EVENT
+      resources: id
+      description: Open registration
+      conditions: "Owner/Manager; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.reminder.create
+      scope: EVENT
+      resources: id
+      description: Create event reminder
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.reminder.delete
+      scope: EVENT
+      resources: id,reminder_id
+      description: Delete reminder
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.reminder.read
+      scope: EVENT
+      resources: id,reminder_id
+      description: Get event reminders; Get specific reminder
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.reminder.update
+      scope: EVENT
+      resources: id,reminder_id
+      description: Update reminder
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.update
+      scope: EVENT
+      resources: id
+      description: Update event capacity; Update event details; Update event status; Update event visibility; Update registration deadline
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.validate
+      scope: EVENT
+      resources: id
+      description: Validate event data
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: event.visibility.update
+      scope: EVENT
+      resources: id
+      description: Make event private; Make event public
+      conditions: "Owner or Manager+Owner confirm; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: role.assign
+      scope: EVENT
+      resources: event_id,id,user_id
+      description: Add event collaborator; Add user to event; Assign role to user
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: role.read
+      scope: EVENT
+      resources: event_id,id,user_id
+      description: Get all event users; Get event collaborators; Get specific event user; Get user roles
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: role.remove
+      scope: EVENT
+      resources: collaborator_id,event_id,id,role_id,user_id
+      description: Remove collaborator; Remove user from event; Remove user role
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: role.update
+      scope: EVENT
+      resources: collaborator_id,event_id,id,role_id,user_id
+      description: Update collaborator; Update event user details; Update user role
+      conditions: "Privileged action; ticket & approval required; audited"
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.create
+      scope: EVENT
+      resources: null
+      description: Create timeline item
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: timeline.delete
+      scope: EVENT
+      resources: id
+      description: Delete timeline item
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: timeline.proof.upload
+      scope: EVENT
+      resources: task_id
+      description: Get presigned URL for proof upload; Upload proof image
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: false
+    -
+      name: timeline.read
+      scope: EVENT
+      resources: event_id
+      description: Get overdue tasks; Get run-of-show timeline; Get tasks with hierarchy; Get timeline summary; Get timeline view with filters; Get upcoming tasks; Search tasks
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.task.create
+      scope: EVENT
+      resources: event_id
+      description: Create task with subtasks
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: timeline.task.delete
+      scope: EVENT
+      resources: task_id
+      description: Delete task
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: timeline.task.position.update
+      scope: EVENT
+      resources: task_id
+      description: Update task position
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: timeline.task.read
+      scope: EVENT
+      resources: task_id
+      description: Get task by ID
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.task.update
+      scope: EVENT
+      resources: event_id,task_id
+      description: Bulk update tasks; Update task
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: timeline.workback.generate
+      scope: EVENT
+      resources: event_id
+      description: Generate workback schedule
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: auth.health
+      scope: PUBLIC
+      resources: null
+      description: Health check
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.login
+      scope: PUBLIC
+      resources: null
+      description: Login user
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.register
+      scope: PUBLIC
+      resources: null
+      description: Register new user
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: auth.validate
+      scope: PUBLIC
+      resources: null
+      description: Validate token
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: budget.categories.read
+      scope: PUBLIC
+      resources: null
+      description: Get standard categories
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: weather.geocode
+      scope: PUBLIC
+      resources: null
+      description: Geocode location name
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: weather.read
+      scope: PUBLIC
+      resources: null
+      description: Get weather forecast (coordinates); Get weather forecast (location name)
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+    -
+      name: weather.viability.read
+      scope: PUBLIC
+      resources: null
+      description: Check outdoor event viability
+      abac:
+        is_authenticated: false
+        owns_scope: false
+        is_member: false
+  roles:
+    system:
+      SUPER_ADMIN:
+        - admin.analytics.events
+        - admin.analytics.revenue
+        - admin.analytics.users
+        - admin.dashboard.read
+        - admin.events.filter
+        - admin.events.read
+        - admin.events.user
+        - admin.metrics.read
+        - admin.payments.event
+        - admin.payments.filter
+        - admin.payments.read
+        - admin.payments.refund
+        - admin.users.detail
+        - admin.users.read
+        - admin.users.update
+        - auth.logout
+        - auth.me
+        - auth.refresh
+        - event.create
+        - event.read
+        - organization.create
+        - organization.search
+        - payment.create
+        - payment.process
+        - payment.read
+        - payment.refund
+        - user.read
+        - user.sessions.read
+        - user.sessions.delete
+        - user.search
+        - user.update
+        - vendor.create
+        - vendor.read
+        - my.events.read
+        - my.events.search
+        - public.events.search
+        - vendor.search
+      ORGANIZER:
+        - auth.logout
+        - auth.me
+        - auth.refresh
+        - organization.create
+        - organization.search
+        - vendor.create
+        - vendor.read
+        - public.events.search
+        - vendor.search
+      USER:
+        - auth.logout
+        - auth.me
+        - auth.refresh
+        - event.create
+        - event.read
+        - organization.search
+        - payment.create
+        - payment.process
+        - payment.read
+        - user.read
+        - user.sessions.read
+        - user.sessions.delete
+        - user.search
+        - user.update
+        - my.events.read
+        - my.events.search
+        - public.events.search
+        - vendor.search
+    event:
+      ORGANIZER:
+        - attendee.analytics.read
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.create
+        - attendee.delete
+        - attendee.export
+        - attendee.import
+        - attendee.qrcode.read
+        - attendee.qrcode.regenerate
+        - attendee.qrcode.scan
+        - attendee.read
+        - attendee.update
+        - attendee.validate
+        - budget.analytics.read
+        - budget.approve
+        - budget.create
+        - budget.delete
+        - budget.lineitem.create
+        - budget.lineitem.delete
+        - budget.lineitem.read
+        - budget.lineitem.update
+        - budget.read
+        - budget.recalculate
+        - budget.reject
+        - budget.submit
+        - budget.update
+        - communication.read
+        - communication.send
+        - event.analytics.read
+        - event.assets.read
+        - event.assets.upload
+        - event.cancel
+        - event.complete
+        - event.coverimage.delete
+        - event.coverimage.update
+        - event.delete
+        - event.duplicate
+        - event.health.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - event.notification.read
+        - event.notification.update
+        - event.publish
+        - event.qrcode.delete
+        - event.qrcode.generate
+        - event.qrcode.regenerate
+        - event.read
+        - event.registration.close
+        - event.registration.open
+        - event.reminder.create
+        - event.reminder.delete
+        - event.reminder.read
+        - event.reminder.update
+        - event.update
+        - event.validate
+        - event.visibility.update
+        - role.assign
+        - role.read
+        - role.remove
+        - role.update
+        - timeline.create
+        - timeline.delete
+        - timeline.proof.upload
+        - timeline.read
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+        - timeline.task.read
+        - timeline.task.update
+        - timeline.workback.generate
+      COORDINATOR:
+        - attendee.analytics.read
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.create
+        - attendee.delete
+        - attendee.export
+        - attendee.import
+        - attendee.qrcode.read
+        - attendee.qrcode.regenerate
+        - attendee.qrcode.scan
+        - attendee.read
+        - attendee.update
+        - attendee.validate
+        - budget.analytics.read
+        - budget.approve
+        - budget.create
+        - budget.delete
+        - budget.lineitem.create
+        - budget.lineitem.delete
+        - budget.lineitem.read
+        - budget.lineitem.update
+        - budget.read
+        - budget.recalculate
+        - budget.reject
+        - budget.submit
+        - budget.update
+        - communication.read
+        - communication.send
+        - event.analytics.read
+        - event.assets.read
+        - event.assets.upload
+        - event.cancel
+        - event.complete
+        - event.coverimage.delete
+        - event.coverimage.update
+        - event.delete
+        - event.duplicate
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - event.notification.read
+        - event.notification.update
+        - event.publish
+        - event.qrcode.delete
+        - event.qrcode.generate
+        - event.qrcode.regenerate
+        - event.read
+        - event.registration.close
+        - event.registration.open
+        - event.reminder.create
+        - event.reminder.delete
+        - event.reminder.read
+        - event.reminder.update
+        - event.update
+        - event.validate
+        - event.visibility.update
+        - role.assign
+        - role.read
+        - role.remove
+        - role.update
+        - timeline.create
+        - timeline.delete
+        - timeline.proof.upload
+        - timeline.read
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+        - timeline.task.read
+        - timeline.task.update
+        - timeline.workback.generate
+      STAFF:
+        - attendee.analytics.read
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.create
+        - attendee.delete
+        - attendee.export
+        - attendee.import
+        - attendee.qrcode.read
+        - attendee.qrcode.regenerate
+        - attendee.qrcode.scan
+        - attendee.read
+        - attendee.update
+        - attendee.validate
+        - budget.analytics.read
+        - budget.approve
+        - budget.create
+        - budget.delete
+        - budget.lineitem.create
+        - budget.lineitem.delete
+        - budget.lineitem.read
+        - budget.lineitem.update
+        - budget.read
+        - budget.recalculate
+        - budget.reject
+        - budget.submit
+        - budget.update
+        - communication.read
+        - communication.send
+        - event.assets.read
+        - event.assets.upload
+        - event.cancel
+        - event.complete
+        - event.coverimage.delete
+        - event.coverimage.update
+        - event.delete
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - event.read
+        - event.update
+        - timeline.create
+        - timeline.delete
+        - timeline.proof.upload
+        - timeline.read
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+        - timeline.task.read
+        - timeline.task.update
+        - timeline.workback.generate
+      VOLUNTEER:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - event.read
+        - timeline.create
+        - timeline.delete
+        - timeline.read
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      SECURITY:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - event.read
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      TECHNICAL:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - event.read
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      CATERING:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - event.read
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      CLEANUP:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      REGISTRATION:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      PHOTOGRAPHER:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      VIDEOGRAPHER:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      DJ:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      MC:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      SPEAKER:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      MODERATOR:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      MEDIA:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
+        - timeline.create
+        - timeline.delete
+        - timeline.task.create
+        - timeline.task.delete
+        - timeline.task.position.update
+      GUEST:
+        - attendee.checkin
+        - attendee.checkout
+        - attendee.qrcode.scan
+        - attendee.read
+        - event.media.delete
+        - event.media.read
+        - event.media.update
+        - event.media.upload
