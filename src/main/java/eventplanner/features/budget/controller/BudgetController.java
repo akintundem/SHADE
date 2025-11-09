@@ -21,9 +21,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 
 /**
- * Budget Controller with filter-based RBAC authorization
+ * Budget Controller with authorization checks
  */
 @RestController
 @RequestMapping("/api/v1/budgets")
@@ -39,6 +41,7 @@ public class BudgetController {
 	// ==================== CORE BUDGET CRUD ====================
 
 	@GetMapping("/{eventId}")
+    @RequiresPermission(value = RbacPermissions.BUDGET_READ, resources = {"event_id=#eventId"})
 	@Operation(summary = "Get event budget", description = "Retrieve budget for a specific event")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget found", 
@@ -59,6 +62,7 @@ public class BudgetController {
 	}
 
 	@PostMapping
+    @RequiresPermission(value = RbacPermissions.BUDGET_CREATE, resources = {"event_id=#budget.eventId"})
 	@Operation(summary = "Create or update budget", description = "Create a new budget or update existing one")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget created/updated successfully"),
@@ -79,6 +83,7 @@ public class BudgetController {
 	}
 
 	@PutMapping("/{budgetId}")
+    @RequiresPermission(value = RbacPermissions.BUDGET_UPDATE, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Update budget details", description = "Update budget information including contingency settings")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget updated successfully"),
@@ -100,6 +105,7 @@ public class BudgetController {
 	}
 
 	@DeleteMapping("/{budgetId}")
+    @RequiresPermission(value = RbacPermissions.BUDGET_DELETE, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Delete budget", description = "Permanently delete a budget and all its line items")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "204", description = "Budget deleted successfully"),
@@ -118,6 +124,7 @@ public class BudgetController {
 	// ==================== LINE ITEM MANAGEMENT ====================
 
 	@PostMapping("/{budgetId}/line-items")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_CREATE, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Add budget line item", description = "Add a single line item to the budget")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Line item added successfully"),
@@ -146,6 +153,7 @@ public class BudgetController {
 	}
 
 	@PostMapping("/{budgetId}/line-items/bulk")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_CREATE, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Add multiple line items", description = "Add multiple line items to the budget in one operation")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Line items added successfully"),
@@ -170,6 +178,7 @@ public class BudgetController {
 	}
 
 	@GetMapping("/{budgetId}/line-items")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_READ, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Get all line items", description = "Retrieve all line items for a budget")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Line items retrieved successfully"),
@@ -189,6 +198,7 @@ public class BudgetController {
 	}
 
 	@GetMapping("/{budgetId}/line-items/{itemId}")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_READ, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Get specific line item", description = "Retrieve a specific line item by ID")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Line item found"),
@@ -209,6 +219,7 @@ public class BudgetController {
 	}
 
 	@PutMapping("/{budgetId}/line-items/{itemId}")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_UPDATE, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Update line item", description = "Update an existing line item")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Line item updated successfully"),
@@ -231,6 +242,7 @@ public class BudgetController {
 	}
 
 	@DeleteMapping("/{budgetId}/line-items/{itemId}")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_DELETE, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Delete line item", description = "Remove a line item from the budget")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "204", description = "Line item deleted successfully"),
@@ -253,6 +265,7 @@ public class BudgetController {
 	// ==================== ANALYSIS ENDPOINTS ====================
 
 	@GetMapping("/{budgetId}/summary")
+    @RequiresPermission(value = RbacPermissions.BUDGET_READ, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Get budget summary", description = "Get comprehensive budget summary with key metrics")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Summary retrieved successfully"),
@@ -271,6 +284,7 @@ public class BudgetController {
 	}
 
 	@GetMapping("/{budgetId}/variance-analysis")
+    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Get variance analysis", description = "Get detailed variance analysis by category")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Analysis retrieved successfully"),
@@ -289,6 +303,7 @@ public class BudgetController {
 	}
 
 	@GetMapping("/{budgetId}/contingency-analysis")
+    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Get contingency analysis", description = "Get contingency usage and recommendations")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Analysis retrieved successfully"),
@@ -307,6 +322,7 @@ public class BudgetController {
 	}
 
 	@GetMapping("/{budgetId}/category-breakdown")
+    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Get category breakdown", description = "Get spending breakdown by category")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Breakdown retrieved successfully"),
@@ -327,6 +343,7 @@ public class BudgetController {
 	// ==================== APPROVAL WORKFLOW ====================
 
 	@PostMapping("/{budgetId}/submit-for-approval")
+    @RequiresPermission(value = RbacPermissions.BUDGET_SUBMIT, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Submit budget for approval", description = "Submit budget for approval workflow")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget submitted for approval"),
@@ -350,6 +367,7 @@ public class BudgetController {
 	}
 
 	@PostMapping("/{budgetId}/approve")
+    @RequiresPermission(value = RbacPermissions.BUDGET_APPROVE, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Approve budget", description = "Approve the budget")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget approved successfully"),
@@ -375,6 +393,7 @@ public class BudgetController {
 	}
 
 	@PostMapping("/{budgetId}/reject")
+    @RequiresPermission(value = RbacPermissions.BUDGET_REJECT, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Reject budget", description = "Reject the budget with reason")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget rejected successfully"),
@@ -402,6 +421,7 @@ public class BudgetController {
 	// ==================== UTILITY ENDPOINTS ====================
 
 	@GetMapping("/{budgetId}/rollup")
+    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Compute rollup total", description = "Compute total rollup for a budget")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Rollup computed successfully"),
@@ -417,6 +437,7 @@ public class BudgetController {
 	}
 
 	@PostMapping("/{budgetId}/recalculate")
+    @RequiresPermission(value = RbacPermissions.BUDGET_RECALCULATE, resources = {"budget_id=#budgetId"})
 	@Operation(summary = "Recalculate totals", description = "Force recalculation of budget totals and variance")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Totals recalculated successfully"),
@@ -435,6 +456,7 @@ public class BudgetController {
 	}
 
 	@GetMapping("/categories")
+    @RequiresPermission(RbacPermissions.BUDGET_READ)
 	@Operation(summary = "Get standard budget categories", description = "Get list of standard budget categories")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Categories retrieved successfully")

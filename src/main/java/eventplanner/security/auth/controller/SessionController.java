@@ -3,6 +3,8 @@ package eventplanner.security.auth.controller;
 import eventplanner.security.auth.dto.res.UserSessionResponse;
 import eventplanner.security.auth.service.SessionManagementService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.common.dto.ApiMessageResponse;
 import eventplanner.common.exception.UnauthorizedException;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +27,7 @@ public class SessionController {
     }
 
     @GetMapping
+    @RequiresPermission(value = RbacPermissions.USER_SESSIONS_READ, resources = {"user_id=#principal.id"})
     public List<UserSessionResponse> listSessions(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
             throw new UnauthorizedException("Unauthorized");
@@ -33,6 +36,7 @@ public class SessionController {
     }
 
     @DeleteMapping("/all")
+    @RequiresPermission(value = RbacPermissions.USER_SESSIONS_DELETE, resources = {"user_id=#principal.id"})
     public ResponseEntity<ApiMessageResponse> terminateAll(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
             throw new UnauthorizedException("Unauthorized");

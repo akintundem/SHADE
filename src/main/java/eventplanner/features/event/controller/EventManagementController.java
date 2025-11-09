@@ -32,6 +32,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -60,7 +61,7 @@ public class EventManagementController {
     // ==================== 1. USER-EVENT RELATIONSHIP ENDPOINTS ====================
 
     @GetMapping("/user/{userId}")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#userId"})
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get all events for a user", description = "Retrieve all events a user has a relationship with")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Events retrieved successfully",
@@ -69,9 +70,12 @@ public class EventManagementController {
         @ApiResponse(responseCode = "401", description = "Unauthorized")
     })
     public ResponseEntity<List<UserEventRelationshipResponse>> getUserEvents(
-            @Parameter(description = "User ID") @PathVariable UUID userId) {
+            @Parameter(description = "User ID") @PathVariable UUID userId,
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            List<Event> events = eventService.getEventsByUser(userId);
+            UUID requesterId = requireCurrentUser(principal);
+            assertSameUser(userId, requesterId);
+            List<Event> events = eventService.getEventsByUser(requesterId);
             List<UserEventRelationshipResponse> responses = events.stream()
                     .map(event -> convertToUserEventRelationship(event))
                     .toList();
@@ -82,12 +86,15 @@ public class EventManagementController {
     }
 
     @GetMapping("/user/{userId}/owned")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#userId"})
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get events owned by user", description = "Retrieve events owned by a specific user")
     public ResponseEntity<List<UserEventRelationshipResponse>> getEventsOwnedByUser(
-            @Parameter(description = "User ID") @PathVariable UUID userId) {
+            @Parameter(description = "User ID") @PathVariable UUID userId,
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            List<Event> events = eventService.getEventsOwnedByUser(userId);
+            UUID requesterId = requireCurrentUser(principal);
+            assertSameUser(userId, requesterId);
+            List<Event> events = eventService.getEventsOwnedByUser(requesterId);
             List<UserEventRelationshipResponse> responses = events.stream()
                     .map(event -> convertToUserEventRelationship(event))
                     .toList();
@@ -98,12 +105,15 @@ public class EventManagementController {
     }
 
     @GetMapping("/user/{userId}/upcoming")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#userId"})
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get upcoming events for user", description = "Retrieve upcoming events for a specific user")
     public ResponseEntity<List<UserEventRelationshipResponse>> getUpcomingEventsByUser(
-            @Parameter(description = "User ID") @PathVariable UUID userId) {
+            @Parameter(description = "User ID") @PathVariable UUID userId,
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            List<Event> events = eventService.getUpcomingEventsByUser(userId);
+            UUID requesterId = requireCurrentUser(principal);
+            assertSameUser(userId, requesterId);
+            List<Event> events = eventService.getUpcomingEventsByUser(requesterId);
             List<UserEventRelationshipResponse> responses = events.stream()
                     .map(event -> convertToUserEventRelationship(event))
                     .toList();
@@ -114,12 +124,15 @@ public class EventManagementController {
     }
 
     @GetMapping("/user/{userId}/past")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#userId"})
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get past events for user", description = "Retrieve past events for a specific user")
     public ResponseEntity<List<UserEventRelationshipResponse>> getPastEventsByUser(
-            @Parameter(description = "User ID") @PathVariable UUID userId) {
+            @Parameter(description = "User ID") @PathVariable UUID userId,
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            List<Event> events = eventService.getPastEventsByUser(userId);
+            UUID requesterId = requireCurrentUser(principal);
+            assertSameUser(userId, requesterId);
+            List<Event> events = eventService.getPastEventsByUser(requesterId);
             List<UserEventRelationshipResponse> responses = events.stream()
                     .map(event -> convertToUserEventRelationship(event))
                     .toList();
@@ -130,13 +143,12 @@ public class EventManagementController {
     }
 
     @GetMapping("/my-events")
-    @RequiresPermission(RbacPermissions.MY_EVENTS_READ)
+    @RequiresPermission(value = RbacPermissions.MY_EVENTS_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get current user's events", description = "Retrieve all events for the current authenticated user")
     public ResponseEntity<UserEventsSummaryResponse> getMyEvents(
-            @Parameter(description = "Gateway injected user identifier")
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            UUID userId = resolveUserId(userIdHeader);
+            UUID userId = requireCurrentUser(principal);
             UserEventsSummaryResponse summary = eventService.getUserEventsSummary(userId);
             return ResponseEntity.ok(summary);
         } catch (Exception ex) {
@@ -145,13 +157,12 @@ public class EventManagementController {
     }
 
     @GetMapping("/my-events/owned")
-    @RequiresPermission(RbacPermissions.MY_EVENTS_READ)
+    @RequiresPermission(value = RbacPermissions.MY_EVENTS_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get current user's owned events", description = "Retrieve events owned by the current user")
     public ResponseEntity<List<UserEventRelationshipResponse>> getMyOwnedEvents(
-            @Parameter(description = "Gateway injected user identifier")
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            UUID userId = resolveUserId(userIdHeader);
+            UUID userId = requireCurrentUser(principal);
             List<Event> events = eventService.getEventsOwnedByUser(userId);
             List<UserEventRelationshipResponse> responses = events.stream()
                     .map(event -> convertToUserEventRelationship(event))
@@ -163,13 +174,12 @@ public class EventManagementController {
     }
 
     @GetMapping("/my-events/upcoming")
-    @RequiresPermission(RbacPermissions.MY_EVENTS_READ)
+    @RequiresPermission(value = RbacPermissions.MY_EVENTS_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get current user's upcoming events", description = "Retrieve upcoming events for the current user")
     public ResponseEntity<List<UserEventRelationshipResponse>> getMyUpcomingEvents(
-            @Parameter(description = "Gateway injected user identifier")
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            UUID userId = resolveUserId(userIdHeader);
+            UUID userId = requireCurrentUser(principal);
             List<Event> events = eventService.getUpcomingEventsByUser(userId);
             List<UserEventRelationshipResponse> responses = events.stream()
                     .map(event -> convertToUserEventRelationship(event))
@@ -181,13 +191,12 @@ public class EventManagementController {
     }
 
     @GetMapping("/my-events/past")
-    @RequiresPermission(RbacPermissions.MY_EVENTS_READ)
+    @RequiresPermission(value = RbacPermissions.MY_EVENTS_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get current user's past events", description = "Retrieve past events for the current user")
     public ResponseEntity<List<UserEventRelationshipResponse>> getMyPastEvents(
-            @Parameter(description = "Gateway injected user identifier")
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            UUID userId = resolveUserId(userIdHeader);
+            UUID userId = requireCurrentUser(principal);
             List<Event> events = eventService.getPastEventsByUser(userId);
             List<UserEventRelationshipResponse> responses = events.stream()
                     .map(event -> convertToUserEventRelationship(event))
@@ -716,14 +725,19 @@ public class EventManagementController {
 
     // ==================== HELPER METHODS ====================
 
-    private UUID resolveUserId(String userIdHeader) {
-        if (userIdHeader == null || userIdHeader.trim().isEmpty()) {
-            throw new IllegalArgumentException("User ID is required");
+    private UUID requireCurrentUser(UserPrincipal principal) {
+        if (principal == null || principal.getId() == null) {
+            throw new AccessDeniedException("Authentication required");
         }
-        try {
-            return UUID.fromString(userIdHeader);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid user ID format: " + userIdHeader);
+        return principal.getId();
+    }
+
+    private void assertSameUser(UUID requestedUserId, UUID actualUserId) {
+        if (requestedUserId == null || actualUserId == null) {
+            throw new AccessDeniedException("Invalid user reference");
+        }
+        if (!requestedUserId.equals(actualUserId)) {
+            throw new AccessDeniedException("Cannot access other users' records");
         }
     }
 

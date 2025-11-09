@@ -4,6 +4,8 @@ import eventplanner.security.auth.dto.req.OrganizationRegisterRequest;
 import eventplanner.security.auth.dto.res.OrganizationResponse;
 import eventplanner.security.auth.dto.req.OrganizationUpdateRequest;
 import eventplanner.security.auth.service.OrganizationManagementService;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -32,18 +34,21 @@ public class OrganizationController {
     }
 
     @PostMapping("/register")
+    @RequiresPermission(RbacPermissions.ORGANIZATION_CREATE)
     public ResponseEntity<OrganizationResponse> registerOrganization(@Valid @RequestBody OrganizationRegisterRequest request) {
         OrganizationResponse response = organizationManagementService.registerOrganization(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{organizationId}")
+    @RequiresPermission(value = RbacPermissions.ORGANIZATION_READ, resources = {"organization_id=#organizationId"})
     public ResponseEntity<OrganizationResponse> getOrganization(@PathVariable UUID organizationId) {
         OrganizationResponse response = organizationManagementService.getOrganization(organizationId);
         return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{organizationId}")
+    @RequiresPermission(value = RbacPermissions.ORGANIZATION_UPDATE, resources = {"organization_id=#organizationId"})
     public ResponseEntity<OrganizationResponse> updateOrganization(@PathVariable UUID organizationId,
                                                     @Valid @RequestBody OrganizationUpdateRequest request) {
         OrganizationResponse response = organizationManagementService.updateOrganization(organizationId, request);
@@ -51,6 +56,7 @@ public class OrganizationController {
     }
 
     @GetMapping("/search")
+    @RequiresPermission(RbacPermissions.ORGANIZATION_SEARCH)
     public ResponseEntity<Page<OrganizationResponse>> searchOrganizations(@RequestParam(defaultValue = "") String searchTerm,
                                                           @PageableDefault(size = 10) Pageable pageable) {
         Page<OrganizationResponse> response = organizationManagementService.searchOrganizations(searchTerm, pageable);

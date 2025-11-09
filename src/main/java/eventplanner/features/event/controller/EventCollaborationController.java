@@ -3,6 +3,8 @@ package eventplanner.features.event.controller;
 import eventplanner.features.event.dto.request.EventCollaboratorRequest;
 import eventplanner.features.event.dto.response.EventCollaboratorResponse;
 import eventplanner.features.event.service.EventCollaboratorService;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -38,6 +40,7 @@ public class EventCollaborationController {
     }
 
     @GetMapping("/{id}/collaborators")
+    @RequiresPermission(value = RbacPermissions.ROLE_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get event collaborators", description = "Get list of event collaborators")
     public ResponseEntity<List<EventCollaboratorResponse>> getCollaborators(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -48,6 +51,7 @@ public class EventCollaborationController {
     }
 
     @PostMapping("/{id}/collaborators")
+    @RequiresPermission(value = RbacPermissions.ROLE_ASSIGN, resources = {"event_id=#id"})
     @Operation(summary = "Add event collaborator", description = "Add a new collaborator to an event")
     public ResponseEntity<EventCollaboratorResponse> addCollaborator(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -57,6 +61,7 @@ public class EventCollaborationController {
     }
 
     @PutMapping("/{id}/collaborators/{collaboratorId}")
+    @RequiresPermission(value = RbacPermissions.ROLE_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Update event collaborator", description = "Update collaborator information")
     public ResponseEntity<EventCollaboratorResponse> updateCollaborator(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -67,6 +72,7 @@ public class EventCollaborationController {
     }
 
     @DeleteMapping("/{id}/collaborators/{collaboratorId}")
+    @RequiresPermission(value = RbacPermissions.ROLE_REMOVE, resources = {"event_id=#id"})
     @Operation(summary = "Remove event collaborator", description = "Remove a collaborator from an event")
     public ResponseEntity<Void> removeCollaborator(
             @Parameter(description = "Event ID") @PathVariable UUID id,

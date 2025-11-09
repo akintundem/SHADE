@@ -27,6 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.UUID;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 
 @RestController
 @RequestMapping("/api/v1/events")
@@ -41,6 +43,7 @@ public class EventMediaController {
     }
 
     @GetMapping("/{id}/media")
+    @RequiresPermission(value = RbacPermissions.EVENT_MEDIA_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get event media", description = "Get all media associated with an event")
     public ResponseEntity<List<EventMediaResponse>> getEventMedia(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -52,6 +55,7 @@ public class EventMediaController {
     }
 
     @PostMapping("/{id}/media")
+    @RequiresPermission(value = RbacPermissions.EVENT_MEDIA_UPLOAD, resources = {"event_id=#id"})
     @Operation(summary = "Upload event media", description = "Upload media for an event")
     public ResponseEntity<EventPresignedUploadResponse> uploadMedia(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -62,6 +66,7 @@ public class EventMediaController {
     }
 
     @GetMapping("/{id}/media/{mediaId}")
+    @RequiresPermission(value = RbacPermissions.EVENT_MEDIA_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get specific media", description = "Get details of specific media")
     public ResponseEntity<EventMediaResponse> getMedia(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -72,6 +77,7 @@ public class EventMediaController {
     }
 
     @PutMapping("/{id}/media/{mediaId}")
+    @RequiresPermission(value = RbacPermissions.EVENT_MEDIA_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Update media", description = "Update media information")
     public ResponseEntity<EventMediaResponse> updateMedia(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -83,6 +89,7 @@ public class EventMediaController {
     }
 
     @DeleteMapping("/{id}/media/{mediaId}")
+    @RequiresPermission(value = RbacPermissions.EVENT_MEDIA_DELETE, resources = {"event_id=#id"})
     @Operation(summary = "Delete media", description = "Delete media from event")
     public ResponseEntity<ApiMessageResponse> deleteMedia(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -93,6 +100,7 @@ public class EventMediaController {
     }
 
     @GetMapping("/{id}/assets")
+    @RequiresPermission(value = RbacPermissions.EVENT_ASSETS_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get event assets", description = "Get all assets associated with an event")
     public ResponseEntity<List<EventMediaResponse>> getEventAssets(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -102,6 +110,7 @@ public class EventMediaController {
     }
 
     @PostMapping("/{id}/assets")
+    @RequiresPermission(value = RbacPermissions.EVENT_ASSETS_UPLOAD, resources = {"event_id=#id"})
     @Operation(summary = "Upload event asset", description = "Upload an asset for an event")
     public ResponseEntity<EventPresignedUploadResponse> uploadAsset(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -112,6 +121,7 @@ public class EventMediaController {
     }
 
     @PutMapping("/{id}/cover-image")
+    @RequiresPermission(value = RbacPermissions.EVENT_COVER_IMAGE_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Update cover image", description = "Update the cover image for an event")
     public ResponseEntity<EventPresignedUploadResponse> updateCoverImage(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -122,6 +132,7 @@ public class EventMediaController {
     }
 
     @DeleteMapping("/{id}/cover-image")
+    @RequiresPermission(value = RbacPermissions.EVENT_COVER_IMAGE_DELETE, resources = {"event_id=#id"})
     @Operation(summary = "Remove cover image", description = "Remove the cover image from an event")
     public ResponseEntity<EventCoverImageResponse> removeCoverImage(
             @Parameter(description = "Event ID") @PathVariable UUID id,

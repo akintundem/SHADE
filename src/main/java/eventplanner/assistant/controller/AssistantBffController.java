@@ -4,14 +4,15 @@ import eventplanner.assistant.dto.ChatRequest;
 import eventplanner.assistant.dto.AssistantChatResponse;
 import eventplanner.assistant.service.ShadeAssistantService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -22,14 +23,14 @@ public class AssistantBffController {
     private final ShadeAssistantService shadeAssistantService;
 
     @PostMapping("/chat")
+    @RequiresPermission(value = RbacPermissions.AUTH_ME, resources = {"user_id=#principal.id"})
     public ResponseEntity<AssistantChatResponse> chat(
             @Valid @RequestBody ChatRequest request,
-            @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId
+            @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
+            @AuthenticationPrincipal UserPrincipal principal
     ) {
-        // Extract authenticated user id from SecurityContext; ignore any userId in body
-        UUID userId = getCurrentUserId().orElseThrow(() -> new RuntimeException("Unauthenticated"));
+        UUID userId = requireUserId(principal);
 
-        // Forward to Python assistant with internal auth headers and correlation id
         AssistantChatResponse response = shadeAssistantService.sendMessage(
                 request.getMessage(),
                 userId.toString(),
@@ -40,14 +41,11 @@ public class AssistantBffController {
         return ResponseEntity.ok(response);
     }
 
-    private Optional<UUID> getCurrentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal)) {
-            return Optional.empty();
+    private UUID requireUserId(UserPrincipal principal) {
+        if (principal == null || principal.getId() == null) {
+            throw new AccessDeniedException("Authentication required");
         }
-        UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
-        return Optional.ofNullable(principal.getUser().getId());
+        return principal.getId();
     }
 }
-
 

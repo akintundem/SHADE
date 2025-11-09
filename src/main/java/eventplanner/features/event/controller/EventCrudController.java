@@ -7,6 +7,8 @@ import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.service.EventService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -46,6 +48,7 @@ public class EventCrudController {
 
 
     @GetMapping("/{id}")
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get event by ID", description = "Retrieve a specific event by its unique identifier. Only accessible if event is public, user is owner, or user has appropriate role.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event found",
@@ -65,6 +68,7 @@ public class EventCrudController {
     }
 
     @PostMapping
+    @RequiresPermission(RbacPermissions.EVENT_CREATE)
     @Operation(summary = "Create new event", description = "Create a new event with the provided details")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "201", description = "Event created successfully",
@@ -88,6 +92,7 @@ public class EventCrudController {
     }
 
     @PutMapping("/{id}")
+    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Update event", description = "Update an existing event with new details")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event updated successfully",
@@ -114,6 +119,7 @@ public class EventCrudController {
     }
 
     @DeleteMapping("/{id}")
+    @RequiresPermission(value = RbacPermissions.EVENT_DELETE, resources = {"event_id=#id"})
     @Operation(summary = "Delete event", description = "Delete an event by its unique identifier")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event deleted successfully",

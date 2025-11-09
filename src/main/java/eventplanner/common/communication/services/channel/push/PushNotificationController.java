@@ -14,7 +14,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
+
+import java.util.UUID;
 
 /**
  * REST Controller for Push Notification operations
@@ -53,9 +60,13 @@ public class PushNotificationController {
             )
     })
     @PostMapping("/devices/register")
+    @RequiresPermission(value = RbacPermissions.COMMUNICATION_SEND, resources = {"user_id=#principal.id"})
     public ResponseEntity<DeviceToken> registerDeviceToken(
-            @Valid @RequestBody RegisterDeviceTokenRequest request) {
-        log.info("Registering device token for user: {}", request.getUserId());
+            @Valid @RequestBody RegisterDeviceTokenRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UUID userId = requireUserId(principal);
+        request.setUserId(userId);
+        log.info("Registering device token for user: {}", userId);
         DeviceToken token = pushNotificationService.registerDeviceToken(request);
         if (token == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
@@ -85,14 +96,24 @@ public class PushNotificationController {
             )
     })
     @PostMapping("/refresh-device-token")
+    @RequiresPermission(value = RbacPermissions.COMMUNICATION_SEND, resources = {"user_id=#principal.id"})
     public ResponseEntity<DeviceToken> refreshDeviceToken(
-            @Valid @RequestBody RefreshDeviceTokenRequest request) {
-        log.info("Refreshing device token for user: {}", request.getUserId());
+            @Valid @RequestBody RefreshDeviceTokenRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UUID userId = requireUserId(principal);
+        request.setUserId(userId);
+        log.info("Refreshing device token for user: {}", userId);
         DeviceToken token = pushNotificationService.refreshDeviceToken(request);
         if (token == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(token);
     }
-}
 
+    private UUID requireUserId(UserPrincipal principal) {
+        if (principal == null || principal.getId() == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        return principal.getId();
+    }
+}

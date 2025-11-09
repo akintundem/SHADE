@@ -13,6 +13,8 @@ import reactor.core.publisher.Mono;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 
 @RestController
 @RequestMapping("/api/v1/weather")
@@ -26,6 +28,7 @@ public class WeatherController {
     }
 
     @GetMapping("/forecast")
+    @RequiresPermission(RbacPermissions.WEATHER_READ)
     @Operation(summary = "Get weather forecast for coordinates", 
                description = "Get current weather and 7-day forecast for given latitude and longitude")
     public Mono<ResponseEntity<WeatherForecastResponse>> getForecast(
@@ -98,6 +101,7 @@ public class WeatherController {
     }
 
     @GetMapping("/forecast/location")
+    @RequiresPermission(RbacPermissions.WEATHER_READ)
     @Operation(summary = "Get weather forecast for location name", 
                description = "Get current weather and forecast for a location by name (e.g., 'New York, NY')")
     public Mono<ResponseEntity<WeatherForecastResponse>> getForecastByLocation(
@@ -164,6 +168,7 @@ public class WeatherController {
     }
 
     @GetMapping("/event-viability")
+    @RequiresPermission(RbacPermissions.WEATHER_VIABILITY_READ)
     @Operation(summary = "Check outdoor event viability", 
                description = "Analyze weather conditions for outdoor event planning")
     public Mono<ResponseEntity<EventViabilityResponse>> checkEventViability(
@@ -234,6 +239,7 @@ public class WeatherController {
     }
 
     @GetMapping("/geocode")
+    @RequiresPermission(RbacPermissions.WEATHER_GEOCODE)
     @Operation(summary = "Geocode location name to coordinates", 
                description = "Convert location name to latitude and longitude coordinates")
     public Mono<ResponseEntity<Map<String, Object>>> geocodeLocation(
@@ -246,5 +252,3 @@ public class WeatherController {
                 .doOnError(error -> System.out.println("Geocoding controller error: " + error.getMessage()));
     }
 }
-
-

@@ -28,6 +28,8 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 
 /**
  * Comprehensive Timeline Task Controller - FAANG-level implementation
@@ -47,6 +49,7 @@ public class TimelineTaskController {
     // ==================== Timeline View Endpoints ====================
     
     @GetMapping("/{eventId}/view")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_READ, resources = {"event_id=#eventId"})
     @Operation(
         summary = "Get timeline view",
         description = "Get optimized timeline view data for visualization with filters"
@@ -93,6 +96,7 @@ public class TimelineTaskController {
     }
     
     @GetMapping("/{eventId}/tasks")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_TASK_READ, resources = {"event_id=#eventId"})
     @Operation(
         summary = "Get tasks with hierarchy",
         description = "Get all tasks for an event with hierarchical structure (parent/child)"
@@ -128,6 +132,7 @@ public class TimelineTaskController {
     }
     
     @GetMapping("/{eventId}/summary")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_READ, resources = {"event_id=#eventId"})
     @Operation(
         summary = "Get timeline summary",
         description = "Get comprehensive timeline summary with statistics, upcoming tasks, and overdue items"
@@ -149,6 +154,7 @@ public class TimelineTaskController {
     }
     
     @GetMapping("/{eventId}/upcoming")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_READ, resources = {"event_id=#eventId"})
     @Operation(
         summary = "Get upcoming tasks",
         description = "Get tasks due in the next N days (default 7 days)"
@@ -167,6 +173,7 @@ public class TimelineTaskController {
     }
     
     @GetMapping("/{eventId}/overdue")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_READ, resources = {"event_id=#eventId"})
     @Operation(
         summary = "Get overdue tasks",
         description = "Get all overdue tasks for an event"
@@ -182,6 +189,7 @@ public class TimelineTaskController {
     }
     
     @GetMapping("/{eventId}/search")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_READ, resources = {"event_id=#eventId"})
     @Operation(
         summary = "Search tasks",
         description = "Search tasks by title or description"
@@ -202,6 +210,7 @@ public class TimelineTaskController {
     // ==================== Task CRUD Endpoints ====================
     
     @PostMapping("/{eventId}/tasks")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_TASK_CREATE, resources = {"event_id=#eventId"})
     @Operation(
         summary = "Create task",
         description = "Create a new task with optional subtasks"
@@ -229,6 +238,7 @@ public class TimelineTaskController {
     }
     
     @GetMapping("/tasks/{taskId}")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_TASK_READ, resources = {"task_id=#taskId"})
     @Operation(
         summary = "Get task by ID",
         description = "Get a specific task with its subtasks"
@@ -251,6 +261,7 @@ public class TimelineTaskController {
     }
     
     @PutMapping("/tasks/{taskId}")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_TASK_UPDATE, resources = {"task_id=#taskId"})
     @Operation(
         summary = "Update task",
         description = "Update an existing task"
@@ -275,6 +286,7 @@ public class TimelineTaskController {
     }
     
     @PutMapping("/tasks/{taskId}/position")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_TASK_POSITION_UPDATE, resources = {"task_id=#taskId"})
     @Operation(
         summary = "Update task position",
         description = "Update task position on timeline (drag-and-drop operation)"
@@ -299,6 +311,7 @@ public class TimelineTaskController {
     }
     
     @PutMapping("/{eventId}/tasks/bulk")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_TASK_UPDATE, resources = {"event_id=#eventId"})
     @Operation(
         summary = "Bulk update tasks",
         description = "Update multiple tasks in a single request (max 50 tasks)"
@@ -323,6 +336,7 @@ public class TimelineTaskController {
     }
     
     @DeleteMapping("/tasks/{taskId}")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_TASK_DELETE, resources = {"task_id=#taskId"})
     @Operation(
         summary = "Delete task",
         description = "Delete a task and all its subtasks"
@@ -345,6 +359,7 @@ public class TimelineTaskController {
     // ==================== Proof Image Endpoints ====================
     
     @PostMapping("/tasks/{taskId}/proof/upload-url")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_PROOF_UPLOAD, resources = {"task_id=#taskId"})
     @Operation(
         summary = "Get presigned URL for proof image upload",
         description = "Get a presigned URL to upload proof image for a task. Only assigned users or owners can upload."
@@ -375,6 +390,7 @@ public class TimelineTaskController {
     }
     
     @PostMapping("/tasks/{taskId}/proof")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_PROOF_UPLOAD, resources = {"task_id=#taskId"})
     @Operation(
         summary = "Upload proof image",
         description = "Mark a proof image as uploaded for a task. Only assigned users or owners can upload."
@@ -397,4 +413,3 @@ public class TimelineTaskController {
         return ResponseEntity.ok(task);
     }
 }
-

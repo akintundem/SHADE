@@ -3,8 +3,12 @@ package eventplanner.assistant.controller;
 import eventplanner.assistant.entity.AssistantSessionEntity;
 import eventplanner.assistant.service.AssistantSessionService;
 import eventplanner.common.domain.enums.SessionStatus;
+import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,13 +32,13 @@ public class AssistantSessionController {
      * Get or create session for event
      */
     @PostMapping("/event/{eventId}")
+    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#eventId"})
     public ResponseEntity<AssistantSessionEntity> getOrCreateSessionForEvent(
             @PathVariable UUID eventId,
             @RequestParam String eventName,
-            Authentication authentication) {
+            @AuthenticationPrincipal UserPrincipal principal) {
         
-        // Get organizer ID from authentication
-        UUID organizerId = getOrganizerIdFromAuthentication(authentication);
+        UUID organizerId = requireUserId(principal);
         
         AssistantSessionEntity session = assistantSessionService.getOrCreateSessionForEvent(
                 eventId, organizerId, eventName);
@@ -46,6 +50,7 @@ public class AssistantSessionController {
      * Get session for event
      */
     @GetMapping("/event/{eventId}")
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#eventId"})
     public ResponseEntity<AssistantSessionEntity> getSessionForEvent(@PathVariable UUID eventId) {
         Optional<AssistantSessionEntity> session = assistantSessionService.getSessionForEvent(eventId);
         
@@ -60,6 +65,7 @@ public class AssistantSessionController {
      * Check if session exists for event
      */
     @GetMapping("/event/{eventId}/exists")
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#eventId"})
     public ResponseEntity<Boolean> hasSessionForEvent(@PathVariable UUID eventId) {
         boolean exists = assistantSessionService.hasSessionForEvent(eventId);
         return ResponseEntity.ok(exists);
@@ -69,13 +75,14 @@ public class AssistantSessionController {
      * Create new session for event (fails if already exists)
      */
     @PostMapping("/event/{eventId}/create")
+    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#eventId"})
     public ResponseEntity<AssistantSessionEntity> createSessionForEvent(
             @PathVariable UUID eventId,
             @RequestParam String eventName,
-            Authentication authentication) {
+            @AuthenticationPrincipal UserPrincipal principal) {
         
         try {
-            UUID organizerId = getOrganizerIdFromAuthentication(authentication);
+            UUID organizerId = requireUserId(principal);
             AssistantSessionEntity session = assistantSessionService.createSessionForEvent(
                     eventId, organizerId, eventName);
             return ResponseEntity.ok(session);
@@ -88,6 +95,7 @@ public class AssistantSessionController {
      * Update session
      */
     @PutMapping("/{sessionId}")
+    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#session.eventId"})
     public ResponseEntity<AssistantSessionEntity> updateSession(
             @PathVariable UUID sessionId,
             @RequestBody AssistantSessionEntity session) {
@@ -101,8 +109,9 @@ public class AssistantSessionController {
      * Get sessions by organizer
      */
     @GetMapping("/organizer")
-    public ResponseEntity<List<AssistantSessionEntity>> getSessionsByOrganizer(Authentication authentication) {
-        UUID organizerId = getOrganizerIdFromAuthentication(authentication);
+    @RequiresPermission(value = RbacPermissions.MY_EVENTS_READ, resources = {"user_id=#principal.id"})
+    public ResponseEntity<List<AssistantSessionEntity>> getSessionsByOrganizer(@AuthenticationPrincipal UserPrincipal principal) {
+        UUID organizerId = requireUserId(principal);
         List<AssistantSessionEntity> sessions = assistantSessionService.getSessionsByOrganizer(organizerId);
         return ResponseEntity.ok(sessions);
     }
@@ -111,6 +120,7 @@ public class AssistantSessionController {
      * Delete session for event
      */
     @DeleteMapping("/event/{eventId}")
+    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#eventId"})
     public ResponseEntity<Void> deleteSessionForEvent(@PathVariable UUID eventId) {
         assistantSessionService.deleteSessionForEvent(eventId);
         return ResponseEntity.noContent().build();
@@ -120,6 +130,7 @@ public class AssistantSessionController {
      * Update session status
      */
     @PutMapping("/event/{eventId}/status")
+    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#eventId"})
     public ResponseEntity<AssistantSessionEntity> updateSessionStatus(
             @PathVariable UUID eventId,
             @RequestParam SessionStatus status) {
@@ -132,33 +143,10 @@ public class AssistantSessionController {
         }
     }
     
-    /**
-     * Extract organizer ID from authentication
-     */
-    private UUID getOrganizerIdFromAuthentication(Authentication authentication) {
-        if (authentication == null || authentication.getPrincipal() == null) {
-            throw new IllegalArgumentException("Authentication is required");
+    private UUID requireUserId(UserPrincipal principal) {
+        if (principal == null || principal.getId() == null) {
+            throw new AccessDeniedException("Authentication required");
         }
-        
-        // Extract user ID from authentication principal
-        Object principal = authentication.getPrincipal();
-        if (principal instanceof eventplanner.security.auth.service.UserPrincipal) {
-            eventplanner.security.auth.service.UserPrincipal userPrincipal = (eventplanner.security.auth.service.UserPrincipal) principal;
-            return userPrincipal.getUser().getId();
-        }
-        
-        // Fallback: try to get from name (for basic auth or other auth types)
-        String name = authentication.getName();
-        if (name != null && !name.isEmpty()) {
-            try {
-                return UUID.fromString(name);
-            } catch (IllegalArgumentException e) {
-                // If name is not a UUID, we need to look up the user
-                // For now, throw an exception to indicate this needs proper implementation
-                throw new IllegalArgumentException("Unable to extract user ID from authentication");
-            }
-        }
-        
-        throw new IllegalArgumentException("Unable to extract user ID from authentication");
+        return principal.getId();
     }
 }

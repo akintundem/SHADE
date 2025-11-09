@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,17 +35,20 @@ public class UserManagementController {
     }
 
     @GetMapping("/{userId}")
-    @RequiresPermission(value = RbacPermissions.USER_READ, resources = {"user_id=#userId"})
-    public SecureUserResponse getUser(@PathVariable UUID userId) {
-        return userAccountService.getSecureUser(userId);
+    @RequiresPermission(value = RbacPermissions.USER_READ, resources = {"user_id=#principal.id"})
+    public SecureUserResponse getUser(@PathVariable UUID userId,
+                                      @AuthenticationPrincipal UserPrincipal principal) {
+        UUID subjectId = requireSelf(principal, userId);
+        return userAccountService.getSecureUser(subjectId);
     }
 
     @PutMapping("/{userId}")
-    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#userId"})
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
     public SecureUserResponse updateUser(@AuthenticationPrincipal UserPrincipal principal,
                                    @PathVariable UUID userId,
                                    @Valid @RequestBody UpdateUserProfileRequest request) {
-        return userAccountService.updateSecureUser(userId, principal.getUser(), request);
+        UUID subjectId = requireSelf(principal, userId);
+        return userAccountService.updateSecureUser(subjectId, principal.getUser(), request);
     }
 
     @GetMapping("/search")
@@ -56,5 +60,15 @@ public class UserManagementController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "searchTerm must be provided");
         }
         return userAccountService.searchSecureUsers(sanitizedTerm, pageable);
+    }
+
+    private UUID requireSelf(UserPrincipal principal, UUID requestedUserId) {
+        if (principal == null || principal.getId() == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        if (!principal.getId().equals(requestedUserId)) {
+            throw new AccessDeniedException("Cannot act on another user");
+        }
+        return principal.getId();
     }
 }

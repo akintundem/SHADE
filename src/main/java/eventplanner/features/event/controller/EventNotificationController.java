@@ -29,6 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.UUID;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 
 /**
  * Event Notifications and Reminders Controller
@@ -55,6 +57,7 @@ public class EventNotificationController {
     // ==================== EVENT NOTIFICATION ENDPOINTS ====================
 
     @GetMapping("/{id}/notifications")
+    @RequiresPermission(value = RbacPermissions.EVENT_NOTIFICATION_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get event notification settings", description = "Get notification settings for an event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Notification settings retrieved successfully"),
@@ -67,6 +70,7 @@ public class EventNotificationController {
     }
 
     @PutMapping("/{id}/notifications")
+    @RequiresPermission(value = RbacPermissions.EVENT_NOTIFICATION_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Update event notification settings", description = "Update notification settings for an event")
     public ResponseEntity<EventNotificationSettingsResponse> updateNotificationSettings(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -75,6 +79,7 @@ public class EventNotificationController {
     }
 
     @PostMapping("/{id}/notifications/send")
+    @RequiresPermission(value = RbacPermissions.EVENT_NOTIFICATION_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Send event notification", description = "Send a notification for an event")
     public ResponseEntity<EventNotificationResponse> sendNotification(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -85,6 +90,7 @@ public class EventNotificationController {
     // ==================== EVENT REMINDER ENDPOINTS ====================
 
     @GetMapping("/{id}/reminders")
+    @RequiresPermission(value = RbacPermissions.EVENT_REMINDER_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get event reminders", description = "Get all reminders for an event")
     public ResponseEntity<List<EventReminderResponse>> getReminders(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -94,6 +100,7 @@ public class EventNotificationController {
     }
 
     @PostMapping("/{id}/reminders")
+    @RequiresPermission(value = RbacPermissions.EVENT_REMINDER_CREATE, resources = {"event_id=#id"})
     @Operation(summary = "Create event reminder", description = "Create a new reminder for an event")
     public ResponseEntity<EventReminderResponse> createReminder(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -102,6 +109,7 @@ public class EventNotificationController {
     }
 
     @PutMapping("/{id}/reminders/{reminderId}")
+    @RequiresPermission(value = RbacPermissions.EVENT_REMINDER_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Update event reminder", description = "Update an existing reminder")
     public ResponseEntity<EventReminderResponse> updateReminder(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -111,6 +119,7 @@ public class EventNotificationController {
     }
 
     @DeleteMapping("/{id}/reminders/{reminderId}")
+    @RequiresPermission(value = RbacPermissions.EVENT_REMINDER_DELETE, resources = {"event_id=#id"})
     @Operation(summary = "Delete event reminder", description = "Delete a reminder")
     public ResponseEntity<Void> deleteReminder(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -120,6 +129,7 @@ public class EventNotificationController {
     }
 
     @GetMapping("/{id}/reminders/{reminderId}")
+    @RequiresPermission(value = RbacPermissions.EVENT_REMINDER_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get specific reminder", description = "Get details of a specific reminder")
     public ResponseEntity<EventReminderResponse> getReminder(
             @Parameter(description = "Event ID") @PathVariable UUID id,

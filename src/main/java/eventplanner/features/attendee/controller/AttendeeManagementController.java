@@ -3,6 +3,8 @@ package eventplanner.features.attendee.controller;
 import eventplanner.features.attendee.dto.request.*;
 import eventplanner.features.attendee.dto.response.*;
 import eventplanner.features.attendee.service.AttendeeManagementService;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -29,6 +31,7 @@ public class AttendeeManagementController {
     
     // Core Attendance Management
     @PostMapping("/attendances")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_CREATE, resources = {"event_id=#eventId"})
     @Operation(summary = "Register for event", description = "Register a user for an event with full attendance details")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "201", description = "Successfully registered for event"),
@@ -48,6 +51,7 @@ public class AttendeeManagementController {
     }
     
     @PostMapping("/attendances/bulk")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_CREATE, resources = {"event_id=#eventId"})
     @Operation(summary = "Bulk register attendees", description = "Register multiple attendees for an event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "201", description = "Successfully registered attendees"),
@@ -66,6 +70,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/attendances")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get all attendees for event", description = "Retrieve all attendees registered for an event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved attendees"),
@@ -81,6 +86,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/attendances/{attendanceId}")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"attendance_id=#attendanceId"})
     @Operation(summary = "Get specific attendance", description = "Retrieve details for a specific attendance")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved attendance"),
@@ -98,6 +104,7 @@ public class AttendeeManagementController {
     }
     
     @PutMapping("/attendances/{attendanceId}")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_UPDATE, resources = {"attendance_id=#attendanceId"})
     @Operation(summary = "Update attendance details", description = "Update attendance information")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully updated attendance"),
@@ -117,6 +124,7 @@ public class AttendeeManagementController {
     }
     
     @DeleteMapping("/attendances/{attendanceId}")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_DELETE, resources = {"attendance_id=#attendanceId"})
     @Operation(summary = "Cancel attendance", description = "Cancel a user's attendance for an event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "204", description = "Successfully cancelled attendance"),
@@ -135,6 +143,7 @@ public class AttendeeManagementController {
     
     // Check-in/Check-out Management
     @PostMapping("/attendances/{attendanceId}/check-in")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_CHECKIN, resources = {"attendance_id=#attendanceId"})
     @Operation(summary = "Check in attendee", description = "Check in an attendee for the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully checked in"),
@@ -154,6 +163,7 @@ public class AttendeeManagementController {
     }
     
     @PostMapping("/attendances/{attendanceId}/check-out")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_CHECKOUT, resources = {"attendance_id=#attendanceId"})
     @Operation(summary = "Check out attendee", description = "Check out an attendee from the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully checked out"),
@@ -171,6 +181,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/attendances/checked-in")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get checked-in attendees", description = "Retrieve all attendees who have checked in")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved checked-in attendees")
@@ -181,6 +192,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/attendances/attendance-stats")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get attendance statistics", description = "Get comprehensive attendance statistics for the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved attendance statistics")
@@ -196,6 +208,7 @@ public class AttendeeManagementController {
     
     // QR Code Management
     @GetMapping("/attendances/{attendanceId}/qr-code")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_READ, resources = {"attendance_id=#attendanceId"})
     @Operation(summary = "Get attendee QR code", description = "Retrieve QR code for a specific attendee")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved QR code"),
@@ -209,6 +222,7 @@ public class AttendeeManagementController {
     }
     
     @PostMapping("/attendances/scan-qr")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_SCAN, resources = {"event_id=#eventId"})
     @Operation(summary = "Scan QR code for check-in", description = "Scan and validate QR code for attendee check-in")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully scanned QR code"),
@@ -226,6 +240,7 @@ public class AttendeeManagementController {
     }
     
     @PostMapping("/attendances/{attendanceId}/regenerate-qr")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_REGENERATE, resources = {"attendance_id=#attendanceId"})
     @Operation(summary = "Regenerate QR code", description = "Generate a new QR code for an attendee")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully regenerated QR code"),
@@ -240,6 +255,7 @@ public class AttendeeManagementController {
     
     // User-Event Relationship Management
     @PostMapping("/users")
+    @RequiresPermission(value = RbacPermissions.ROLE_ASSIGN, resources = {"event_id=#eventId"})
     @Operation(summary = "Add user to event", description = "Add a user to an event with specific user type")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "201", description = "Successfully added user to event"),
@@ -258,6 +274,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/users")
+    @RequiresPermission(value = RbacPermissions.ROLE_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get all event users", description = "Retrieve all users associated with an event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved event users")
@@ -268,6 +285,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/users/{userId}")
+    @RequiresPermission(value = RbacPermissions.ROLE_READ, resources = {"user_id=#userId"})
     @Operation(summary = "Get specific event user", description = "Retrieve details for a specific event user")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved event user"),
@@ -281,6 +299,7 @@ public class AttendeeManagementController {
     }
     
     @PutMapping("/users/{userId}")
+    @RequiresPermission(value = RbacPermissions.ROLE_UPDATE, resources = {"user_id=#userId"})
     @Operation(summary = "Update event user details", description = "Update event user information")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully updated event user"),
@@ -295,6 +314,7 @@ public class AttendeeManagementController {
     }
     
     @DeleteMapping("/users/{userId}")
+    @RequiresPermission(value = RbacPermissions.ROLE_REMOVE, resources = {"user_id=#userId"})
     @Operation(summary = "Remove user from event", description = "Remove a user from an event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "204", description = "Successfully removed user from event"),
@@ -309,6 +329,7 @@ public class AttendeeManagementController {
     
     // Role Management
     @PostMapping("/users/{userId}/roles")
+    @RequiresPermission(value = RbacPermissions.ROLE_ASSIGN, resources = {"user_id=#userId"})
     @Operation(summary = "Assign role to user", description = "Assign a specific role to a user for the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "201", description = "Successfully assigned role"),
@@ -327,6 +348,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/users/{userId}/roles")
+    @RequiresPermission(value = RbacPermissions.ROLE_READ, resources = {"user_id=#userId"})
     @Operation(summary = "Get user roles", description = "Retrieve all roles assigned to a user for the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved user roles")
@@ -339,6 +361,7 @@ public class AttendeeManagementController {
     }
     
     @PutMapping("/users/{userId}/roles/{roleId}")
+    @RequiresPermission(value = RbacPermissions.ROLE_UPDATE, resources = {"user_id=#userId"})
     @Operation(summary = "Update user role", description = "Update role details for a user")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully updated role"),
@@ -354,6 +377,7 @@ public class AttendeeManagementController {
     }
     
     @DeleteMapping("/users/{userId}/roles/{roleId}")
+    @RequiresPermission(value = RbacPermissions.ROLE_REMOVE, resources = {"user_id=#userId"})
     @Operation(summary = "Remove user role", description = "Remove a role from a user")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "204", description = "Successfully removed role"),
@@ -369,6 +393,7 @@ public class AttendeeManagementController {
     
     // Analytics and Reporting
     @GetMapping("/analytics/attendance")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get attendance analytics", description = "Get comprehensive attendance analytics and insights")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved attendance analytics")
@@ -383,6 +408,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/analytics/check-in-timeline")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get check-in timeline", description = "Get timeline of check-ins for the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved check-in timeline")
@@ -393,6 +419,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/analytics/attendance-by-type")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get attendance by user type", description = "Get attendance breakdown by user type")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved attendance by type")
@@ -403,6 +430,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/analytics/no-shows")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get no-show analytics", description = "Get analytics for attendees who did not show up")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved no-show analytics")
@@ -413,6 +441,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/analytics/registration-timeline")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get registration timeline", description = "Get timeline of registrations for the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved registration timeline")
@@ -424,6 +453,7 @@ public class AttendeeManagementController {
     
     // Communication and Notifications
     @PostMapping("/attendances/bulk-email")
+    @RequiresPermission(value = RbacPermissions.COMMUNICATION_SEND, resources = {"event_id=#eventId"})
     @Operation(summary = "Send bulk email to attendees", description = "Send email to multiple attendees")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully sent bulk email"),
@@ -437,6 +467,7 @@ public class AttendeeManagementController {
     }
     
     @PostMapping("/attendances/{attendanceId}/notify")
+    @RequiresPermission(value = RbacPermissions.COMMUNICATION_SEND, resources = {"attendance_id=#attendanceId"})
     @Operation(summary = "Send notification to attendee", description = "Send notification to a specific attendee")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully sent notification"),
@@ -451,6 +482,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/attendances/communication-history")
+    @RequiresPermission(value = RbacPermissions.COMMUNICATION_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get communication history", description = "Get history of communications sent to attendees")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved communication history")
@@ -461,6 +493,7 @@ public class AttendeeManagementController {
     }
     
     @PostMapping("/invitations/send")
+    @RequiresPermission(value = RbacPermissions.COMMUNICATION_SEND, resources = {"event_id=#eventId"})
     @Operation(summary = "Send invitations", description = "Send invitations to potential attendees")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully sent invitations"),
@@ -474,6 +507,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/invitations")
+    @RequiresPermission(value = RbacPermissions.COMMUNICATION_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get sent invitations", description = "Retrieve all invitations sent for the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved invitations")
@@ -485,6 +519,7 @@ public class AttendeeManagementController {
     
     // Export and Import
     @GetMapping("/attendances/export/csv")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_EXPORT, resources = {"event_id=#eventId"})
     @Operation(summary = "Export attendees to CSV", description = "Export attendee data to CSV format")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully exported to CSV")
@@ -499,6 +534,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/attendances/export/excel")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_EXPORT, resources = {"event_id=#eventId"})
     @Operation(summary = "Export attendees to Excel", description = "Export attendee data to Excel format")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully exported to Excel")
@@ -513,6 +549,7 @@ public class AttendeeManagementController {
     }
     
     @PostMapping("/attendances/import/csv")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_IMPORT, resources = {"event_id=#eventId"})
     @Operation(summary = "Import attendees from CSV", description = "Import attendee data from CSV file")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "201", description = "Successfully imported from CSV"),
@@ -527,6 +564,7 @@ public class AttendeeManagementController {
     
     // Search and Filtering
     @GetMapping("/attendances/search")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Search attendees", description = "Search attendees by various criteria")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully searched attendees")
@@ -541,6 +579,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/attendances/filter")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Filter attendees", description = "Filter attendees by specific criteria")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully filtered attendees")
@@ -556,6 +595,7 @@ public class AttendeeManagementController {
     
     // Bulk Operations
     @PostMapping("/attendances/bulk-update")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_UPDATE, resources = {"event_id=#eventId"})
     @Operation(summary = "Bulk update attendees", description = "Update multiple attendees at once")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully updated attendees"),
@@ -569,6 +609,7 @@ public class AttendeeManagementController {
     }
     
     @PostMapping("/attendances/bulk-delete")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_DELETE, resources = {"event_id=#eventId"})
     @Operation(summary = "Bulk delete attendees", description = "Delete multiple attendees at once")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "204", description = "Successfully deleted attendees"),
@@ -583,6 +624,7 @@ public class AttendeeManagementController {
     
     // Health and Validation
     @GetMapping("/attendances/validate")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_VALIDATE, resources = {"event_id=#eventId"})
     @Operation(summary = "Validate attendee data", description = "Validate attendee data for completeness and accuracy")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully validated attendee data")
@@ -593,6 +635,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/attendances/duplicates")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Find duplicate attendees", description = "Find potential duplicate attendee records")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully found duplicates")
@@ -603,6 +646,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/attendances/incomplete")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Find incomplete attendee profiles", description = "Find attendees with incomplete profile information")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully found incomplete profiles")
@@ -613,6 +657,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/attendances/capacity-status")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get capacity status", description = "Get current capacity status for the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved capacity status")
@@ -623,6 +668,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/attendances/waitlist-status")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get waitlist status", description = "Get current waitlist status for the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved waitlist status")

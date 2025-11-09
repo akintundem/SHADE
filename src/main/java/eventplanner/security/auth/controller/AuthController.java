@@ -10,6 +10,8 @@ import eventplanner.security.auth.dto.res.TokenValidationResponse;
 import eventplanner.security.util.AuthMapper;
 import eventplanner.security.auth.service.AuthService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.common.dto.ApiMessageResponse;
 import eventplanner.common.exception.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -60,6 +62,7 @@ public class AuthController {
     }
 
     @GetMapping("/me")
+    @RequiresPermission(value = RbacPermissions.AUTH_ME, resources = {"user_id=#principal.id"})
     public ResponseEntity<SecureUserResponse> currentUser(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
             throw new ResourceNotFoundException("User not found");
@@ -68,6 +71,7 @@ public class AuthController {
     }
 
     @PostMapping("/refresh-token")
+    @RequiresPermission(value = RbacPermissions.AUTH_REFRESH, resources = {"user_id=#principal.id"})
     public ResponseEntity<SecureAuthResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request,
                                                           @AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
@@ -79,12 +83,14 @@ public class AuthController {
     }
 
     @PostMapping("/validate-token")
+    @RequiresPermission(RbacPermissions.AUTH_VALIDATE)
     public ResponseEntity<TokenValidationResponse> validateToken(@RequestParam("token") String token) {
         TokenValidationResponse response = authService.validateToken(token);
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/logout")
+    @RequiresPermission(value = RbacPermissions.AUTH_LOGOUT, resources = {"user_id=#principal.id"})
     public ResponseEntity<ApiMessageResponse> logout(
             @Valid @RequestBody LogoutRequest request,
             @AuthenticationPrincipal UserPrincipal principal,

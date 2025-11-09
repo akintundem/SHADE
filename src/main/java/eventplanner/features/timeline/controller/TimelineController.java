@@ -5,6 +5,8 @@ import eventplanner.features.timeline.dto.request.WorkbackRequest;
 import eventplanner.features.timeline.dto.response.WorkbackMilestone;
 import eventplanner.features.timeline.entity.TimelineItem;
 import eventplanner.features.timeline.service.TimelineService;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -26,12 +28,14 @@ public class TimelineController {
     }
 
     @GetMapping("/{eventId}")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_READ, resources = {"event_id=#eventId"})
     @Operation(summary = "Get run-of-show timeline")
     public ResponseEntity<List<TimelineItem>> getTimeline(@PathVariable("eventId") String eventId) {
         return ResponseEntity.ok(timelineService.list(java.util.UUID.fromString(eventId)));
     }
 
     @PostMapping("/{eventId}/workback")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_WORKBACK_GENERATE, resources = {"event_id=#eventId"})
     @Operation(summary = "Generate workback schedule from event date")
     public ResponseEntity<List<WorkbackMilestone>> generateWorkback(
             @PathVariable("eventId") String eventId,
@@ -63,6 +67,7 @@ public class TimelineController {
     }
 
     @PostMapping
+    @RequiresPermission(value = RbacPermissions.TIMELINE_CREATE, resources = {"event_id=#item.eventId"})
     @Operation(summary = "Create timeline item")
     public ResponseEntity<TimelineItem> create(@Valid @RequestBody TimelineItemCreateRequest item) {
         TimelineItem entity = new TimelineItem();
@@ -77,10 +82,11 @@ public class TimelineController {
     }
 
     @DeleteMapping("/{id}")
+    @RequiresPermission(value = RbacPermissions.TIMELINE_DELETE, resources = {"event_id=#eventId"})
     @Operation(summary = "Delete timeline item")
-    public ResponseEntity<Void> delete(@PathVariable("id") String id) {
+    public ResponseEntity<Void> delete(@PathVariable("id") String id,
+                                       @RequestParam("eventId") String eventId) {
         timelineService.delete(java.util.UUID.fromString(id));
         return ResponseEntity.noContent().build();
     }
 }
-

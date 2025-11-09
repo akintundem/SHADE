@@ -6,6 +6,8 @@ import eventplanner.features.vendor.service.VendorSearchService;
 import eventplanner.security.auth.dto.req.OrganizationRegisterRequest;
 import eventplanner.security.auth.dto.res.OrganizationResponse;
 import eventplanner.security.auth.service.OrganizationManagementService;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -32,6 +34,7 @@ public class VendorController {
     private final OrganizationManagementService organizationManagementService;
 
     @GetMapping
+    @RequiresPermission(RbacPermissions.VENDOR_SEARCH)
     public ResponseEntity<List<VendorSearchResult>> searchVendors(@RequestParam(required = false) String query,
                                                                   @RequestParam(required = false) OrganizationType type,
                                                                   @RequestParam(required = false) String location,
@@ -42,9 +45,9 @@ public class VendorController {
     }
 
     @PostMapping
+    @RequiresPermission(RbacPermissions.VENDOR_CREATE)
     public ResponseEntity<OrganizationResponse> registerVendor(@RequestBody @Valid OrganizationRegisterRequest request) {
         OrganizationResponse response = organizationManagementService.registerOrganization(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }
-

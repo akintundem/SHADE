@@ -5,6 +5,8 @@ import eventplanner.security.auth.dto.req.ForgotPasswordRequest;
 import eventplanner.security.auth.dto.req.ResetPasswordRequest;
 import eventplanner.security.auth.service.AccountRecoveryService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.common.dto.ApiMessageResponse;
 import eventplanner.common.exception.UnauthorizedException;
 import jakarta.validation.Valid;
@@ -41,6 +43,7 @@ public class PasswordController {
     }
 
     @PostMapping("/change-password")
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
     public ResponseEntity<ApiMessageResponse> changePassword(@AuthenticationPrincipal UserPrincipal principal,
                                                            @Valid @RequestBody ChangePasswordRequest request) {
         if (principal == null) {

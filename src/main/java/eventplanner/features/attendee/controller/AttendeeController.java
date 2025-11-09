@@ -5,6 +5,8 @@ import eventplanner.features.attendee.dto.request.SendInvitesRequest;
 import eventplanner.features.attendee.dto.response.SendInvitesResponse;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.service.AttendeeService;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -27,6 +29,7 @@ public class AttendeeController {
 
     @PostMapping
     @Operation(summary = "Add attendees")
+    @RequiresPermission(RbacPermissions.ATTENDEE_CREATE)
     public ResponseEntity<List<Attendee>> add(@Valid @RequestBody List<AttendeeCreateRequest> attendees) {
         // Validate input list
         if (attendees == null || attendees.isEmpty()) {
@@ -50,6 +53,7 @@ public class AttendeeController {
 
 	@PostMapping("/invites/send")
 	@Operation(summary = "Send invitations")
+    @RequiresPermission(RbacPermissions.ATTENDEE_CREATE)
 	public ResponseEntity<SendInvitesResponse> sendInvites(@Valid @RequestBody SendInvitesRequest request) {
 		SendInvitesResponse response = new SendInvitesResponse();
 		response.setStatus("queued");
@@ -62,6 +66,7 @@ public class AttendeeController {
 
 	@GetMapping("/event/{eventId}")
 	@Operation(summary = "List attendees by event")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId"})
 	public ResponseEntity<List<Attendee>> listByEvent(@PathVariable String eventId) {
 		try {
 			java.util.UUID uuid = java.util.UUID.fromString(eventId);
@@ -73,6 +78,7 @@ public class AttendeeController {
 
 	@PatchMapping("/{attendeeId}/rsvp")
 	@Operation(summary = "Update RSVP status")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_UPDATE, resources = {"attendance_id=#attendeeId"})
 	public ResponseEntity<Attendee> updateRsvp(@PathVariable String attendeeId, @RequestParam String status) {
 		try {
 			java.util.UUID uuid = java.util.UUID.fromString(attendeeId);
@@ -90,6 +96,7 @@ public class AttendeeController {
 
 	@PostMapping("/{attendeeId}/check-in")
 	@Operation(summary = "Check-in attendee")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_CHECKIN, resources = {"attendance_id=#attendeeId"})
 	public ResponseEntity<Attendee> checkIn(@PathVariable String attendeeId) {
 		try {
 			java.util.UUID uuid = java.util.UUID.fromString(attendeeId);
@@ -101,4 +108,3 @@ public class AttendeeController {
 		}
 	}
 }
-
