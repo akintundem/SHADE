@@ -131,16 +131,12 @@ public class AccountRecoveryService {
 
     public String resendVerification(ResendEmailVerificationRequest request) {
         String normalizedEmail = normalizeEmail(request.getEmail());
-        final String genericResponse = "If an account exists for that email, a verification link has been sent.";
-        UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
-        if (user == null) {
-            log.debug("Verification resend requested for non-existent email {}", normalizedEmail);
-            return genericResponse;
-        }
-
+        UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizedEmail)
+                .orElseThrow(() -> new IllegalArgumentException("Email not found. Please check your email address."));
+        log.debug("Resend verification requested for {} (verified={})", normalizedEmail, user.isEmailVerified());
+        
         if (user.isEmailVerified()) {
-            log.debug("Verification resend skipped because email is already verified: {}", normalizedEmail);
-            return genericResponse;
+            throw new IllegalArgumentException("Email is already verified. You can log in directly.");
         }
         
         // Invalidate existing unused tokens for this user
@@ -191,7 +187,7 @@ public class AccountRecoveryService {
             log.debug("Skipping verification email in dev mode for user: {}", user.getEmail());
         }
         
-        return genericResponse;
+        return "Verification email sent. Please check your inbox and verify your email before logging in.";
     }
 
     public boolean verifyEmailToken(String tokenValue) {

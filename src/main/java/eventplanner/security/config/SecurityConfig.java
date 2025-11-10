@@ -109,8 +109,8 @@ public class SecurityConfig {
             .formLogin(formLogin -> formLogin.disable())
             .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationErrorHandler))
             .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(rateLimitingFilter, JwtAuthenticationFilter.class)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(rateLimitingFilter, JwtAuthenticationFilter.class)
             .addFilterAfter(rbacContextFilter, JwtAuthenticationFilter.class)
             .addFilterBefore(deviceValidationFilter, UsernamePasswordAuthenticationFilter.class);
 
