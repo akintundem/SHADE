@@ -3,7 +3,6 @@ package eventplanner.security.authorization.rbac;
 import lombok.Builder;
 import lombok.Value;
 
-import java.util.Collections;
 import java.util.List;
 
 /**
