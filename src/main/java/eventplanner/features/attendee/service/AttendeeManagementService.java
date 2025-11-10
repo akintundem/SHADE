@@ -121,7 +121,8 @@ public class AttendeeManagementService {
         attendance.setQrCodeUsed(true);
         attendance.setQrCodeUsedAt(LocalDateTime.now());
         if (request.getNotes() != null) {
-            attendance.setNotes(attendance.getNotes() + "\nCheck-in: " + request.getNotes());
+            String existingNotes = attendance.getNotes() != null ? attendance.getNotes() : "";
+            attendance.setNotes(existingNotes + "\nCheck-in: " + request.getNotes());
         }
         
         EventAttendance saved = attendanceRepository.save(attendance);
@@ -191,14 +192,34 @@ public class AttendeeManagementService {
     }
     
     public EventUserResponse assignRole(UUID eventId, AssignRoleRequest request) {
-        EventRole role = new EventRole();
-        role.setEventId(eventId);
-        role.setUserId(request.getUserId());
-        role.setRoleName(request.getRoleName());
-        role.setPermissions(request.getPermissions());
-        role.setIsActive(true);
-        role.setAssignedAt(LocalDateTime.now());
+        // Check if role already exists and is active
+        Optional<EventRole> existingRole = eventRoleRepository
+                .findByEventIdAndUserIdAndRoleName(eventId, request.getUserId(), request.getRoleName());
         
+        EventRole role;
+        if (existingRole.isPresent() && Boolean.TRUE.equals(existingRole.get().getIsActive())) {
+            throw new RuntimeException("User already has this role for the event");
+        } else if (existingRole.isPresent()) {
+            // Reactivate existing role
+            role = existingRole.get();
+            role.setIsActive(true);
+            role.setAssignedAt(LocalDateTime.now());
+            if (request.getPermissions() != null) {
+                role.setPermissions(request.getPermissions());
+            }
+        } else {
+            // Create new role
+            role = new EventRole();
+            role.setEventId(eventId);
+            role.setUserId(request.getUserId());
+            role.setRoleName(request.getRoleName());
+            role.setPermissions(request.getPermissions());
+            role.setIsActive(true);
+            role.setAssignedAt(LocalDateTime.now());
+        }
+        
+        // Save the EventRole
+        eventRoleRepository.save(role);
         
         // Update EventUser if needed
         EventUser eventUser = eventUserRepository.findByEventIdAndUserId(eventId, request.getUserId())
