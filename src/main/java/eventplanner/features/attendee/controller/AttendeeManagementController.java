@@ -5,6 +5,7 @@ import eventplanner.features.attendee.dto.response.*;
 import eventplanner.features.attendee.service.AttendeeManagementService;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
+import eventplanner.common.domain.enums.EventUserType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -78,15 +80,15 @@ public class AttendeeManagementController {
     })
     public ResponseEntity<List<AttendanceDetailResponse>> getAllAttendees(@PathVariable UUID eventId) {
         try {
-            // This would need to be implemented in the service
-            return ResponseEntity.ok().build();
+            List<AttendanceDetailResponse> responses = attendeeManagementService.getAllAttendances(eventId);
+            return ResponseEntity.ok(responses);
         } catch (RuntimeException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         }
     }
     
     @GetMapping("/attendances/{attendanceId}")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"attendance_id=#attendanceId"})
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
     @Operation(summary = "Get specific attendance", description = "Retrieve details for a specific attendance")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved attendance"),
@@ -96,15 +98,15 @@ public class AttendeeManagementController {
             @PathVariable UUID eventId,
             @PathVariable UUID attendanceId) {
         try {
-            // This would need to be implemented in the service
-            return ResponseEntity.ok().build();
+            AttendanceDetailResponse response = attendeeManagementService.getAttendanceById(attendanceId);
+            return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         }
     }
     
     @PutMapping("/attendances/{attendanceId}")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_UPDATE, resources = {"attendance_id=#attendanceId"})
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_UPDATE, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
     @Operation(summary = "Update attendance details", description = "Update attendance information")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully updated attendance"),
@@ -124,7 +126,7 @@ public class AttendeeManagementController {
     }
     
     @DeleteMapping("/attendances/{attendanceId}")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_DELETE, resources = {"attendance_id=#attendanceId"})
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_DELETE, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
     @Operation(summary = "Cancel attendance", description = "Cancel a user's attendance for an event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "204", description = "Successfully cancelled attendance"),
@@ -143,7 +145,7 @@ public class AttendeeManagementController {
     
     // Check-in/Check-out Management
     @PostMapping("/attendances/{attendanceId}/check-in")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_CHECKIN, resources = {"attendance_id=#attendanceId"})
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_CHECKIN, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
     @Operation(summary = "Check in attendee", description = "Check in an attendee for the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully checked in"),
@@ -163,7 +165,7 @@ public class AttendeeManagementController {
     }
     
     @PostMapping("/attendances/{attendanceId}/check-out")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_CHECKOUT, resources = {"attendance_id=#attendanceId"})
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_CHECKOUT, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
     @Operation(summary = "Check out attendee", description = "Check out an attendee from the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully checked out"),
@@ -187,8 +189,12 @@ public class AttendeeManagementController {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved checked-in attendees")
     })
     public ResponseEntity<List<AttendanceDetailResponse>> getCheckedInAttendees(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            List<AttendanceDetailResponse> responses = attendeeManagementService.getCheckedInAttendees(eventId);
+            return ResponseEntity.ok(responses);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/attendances/attendance-stats")
@@ -208,7 +214,7 @@ public class AttendeeManagementController {
     
     // QR Code Management
     @GetMapping("/attendances/{attendanceId}/qr-code")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_READ, resources = {"attendance_id=#attendanceId"})
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_READ, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
     @Operation(summary = "Get attendee QR code", description = "Retrieve QR code for a specific attendee")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved QR code"),
@@ -217,8 +223,12 @@ public class AttendeeManagementController {
     public ResponseEntity<String> getAttendeeQRCode(
             @PathVariable UUID eventId,
             @PathVariable UUID attendanceId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            String qrCode = attendeeManagementService.getAttendeeQRCode(attendanceId);
+            return ResponseEntity.ok(qrCode);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
     }
     
     @PostMapping("/attendances/scan-qr")
@@ -240,7 +250,7 @@ public class AttendeeManagementController {
     }
     
     @PostMapping("/attendances/{attendanceId}/regenerate-qr")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_REGENERATE, resources = {"attendance_id=#attendanceId"})
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_REGENERATE, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
     @Operation(summary = "Regenerate QR code", description = "Generate a new QR code for an attendee")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully regenerated QR code"),
@@ -249,8 +259,12 @@ public class AttendeeManagementController {
     public ResponseEntity<String> regenerateQRCode(
             @PathVariable UUID eventId,
             @PathVariable UUID attendanceId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            String newQrCode = attendeeManagementService.regenerateQRCode(attendanceId);
+            return ResponseEntity.ok(newQrCode);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
     }
     
     // User-Event Relationship Management
@@ -266,8 +280,11 @@ public class AttendeeManagementController {
             @RequestParam UUID userId,
             @RequestParam String userType) {
         try {
-            // This would need to be implemented in the service
-            return ResponseEntity.status(HttpStatus.CREATED).build();
+            EventUserType userTypeEnum = EventUserType.valueOf(userType.toUpperCase());
+            EventUserResponse response = attendeeManagementService.addUserToEvent(eventId, userId, userTypeEnum);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid user type: " + userType, e);
         } catch (RuntimeException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         }
@@ -280,12 +297,16 @@ public class AttendeeManagementController {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved event users")
     })
     public ResponseEntity<List<EventUserResponse>> getAllEventUsers(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            List<EventUserResponse> responses = attendeeManagementService.getAllEventUsers(eventId);
+            return ResponseEntity.ok(responses);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/users/{userId}")
-    @RequiresPermission(value = RbacPermissions.ROLE_READ, resources = {"user_id=#userId"})
+    @RequiresPermission(value = RbacPermissions.ROLE_READ, resources = {"user_id=#userId", "event_id=#eventId"})
     @Operation(summary = "Get specific event user", description = "Retrieve details for a specific event user")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved event user"),
@@ -294,12 +315,16 @@ public class AttendeeManagementController {
     public ResponseEntity<EventUserResponse> getEventUser(
             @PathVariable UUID eventId,
             @PathVariable UUID userId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            EventUserResponse response = attendeeManagementService.getEventUser(eventId, userId);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
     }
     
     @PutMapping("/users/{userId}")
-    @RequiresPermission(value = RbacPermissions.ROLE_UPDATE, resources = {"user_id=#userId"})
+    @RequiresPermission(value = RbacPermissions.ROLE_UPDATE, resources = {"user_id=#userId", "event_id=#eventId"})
     @Operation(summary = "Update event user details", description = "Update event user information")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully updated event user"),
@@ -309,12 +334,16 @@ public class AttendeeManagementController {
             @PathVariable UUID eventId,
             @PathVariable UUID userId,
             @Valid @RequestBody UpdateProfileRequest request) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            EventUserResponse response = attendeeManagementService.updateEventUser(eventId, userId, request);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
     }
     
     @DeleteMapping("/users/{userId}")
-    @RequiresPermission(value = RbacPermissions.ROLE_REMOVE, resources = {"user_id=#userId"})
+    @RequiresPermission(value = RbacPermissions.ROLE_REMOVE, resources = {"user_id=#userId", "event_id=#eventId"})
     @Operation(summary = "Remove user from event", description = "Remove a user from an event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "204", description = "Successfully removed user from event"),
@@ -323,8 +352,12 @@ public class AttendeeManagementController {
     public ResponseEntity<Void> removeUserFromEvent(
             @PathVariable UUID eventId,
             @PathVariable UUID userId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.noContent().build();
+        try {
+            attendeeManagementService.removeUserFromEvent(eventId, userId);
+            return ResponseEntity.noContent().build();
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
     }
     
     // Role Management
@@ -348,7 +381,7 @@ public class AttendeeManagementController {
     }
     
     @GetMapping("/users/{userId}/roles")
-    @RequiresPermission(value = RbacPermissions.ROLE_READ, resources = {"user_id=#userId"})
+    @RequiresPermission(value = RbacPermissions.ROLE_READ, resources = {"user_id=#userId", "event_id=#eventId"})
     @Operation(summary = "Get user roles", description = "Retrieve all roles assigned to a user for the event")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved user roles")
@@ -356,12 +389,16 @@ public class AttendeeManagementController {
     public ResponseEntity<List<EventUserResponse.EventRoleResponse>> getUserRoles(
             @PathVariable UUID eventId,
             @PathVariable UUID userId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            List<EventUserResponse.EventRoleResponse> roles = attendeeManagementService.getUserRoles(eventId, userId);
+            return ResponseEntity.ok(roles);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @PutMapping("/users/{userId}/roles/{roleId}")
-    @RequiresPermission(value = RbacPermissions.ROLE_UPDATE, resources = {"user_id=#userId"})
+    @RequiresPermission(value = RbacPermissions.ROLE_UPDATE, resources = {"user_id=#userId", "event_id=#eventId"})
     @Operation(summary = "Update user role", description = "Update role details for a user")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully updated role"),
@@ -372,12 +409,16 @@ public class AttendeeManagementController {
             @PathVariable UUID userId,
             @PathVariable UUID roleId,
             @Valid @RequestBody AssignRoleRequest request) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            EventUserResponse.EventRoleResponse response = attendeeManagementService.updateUserRole(eventId, userId, roleId, request);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
     }
     
     @DeleteMapping("/users/{userId}/roles/{roleId}")
-    @RequiresPermission(value = RbacPermissions.ROLE_REMOVE, resources = {"user_id=#userId"})
+    @RequiresPermission(value = RbacPermissions.ROLE_REMOVE, resources = {"user_id=#userId", "event_id=#eventId"})
     @Operation(summary = "Remove user role", description = "Remove a role from a user")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "204", description = "Successfully removed role"),
@@ -387,8 +428,12 @@ public class AttendeeManagementController {
             @PathVariable UUID eventId,
             @PathVariable UUID userId,
             @PathVariable UUID roleId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.noContent().build();
+        try {
+            attendeeManagementService.removeUserRole(eventId, userId, roleId);
+            return ResponseEntity.noContent().build();
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
     }
     
     // Analytics and Reporting
@@ -414,8 +459,12 @@ public class AttendeeManagementController {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved check-in timeline")
     })
     public ResponseEntity<List<AttendanceAnalyticsResponse.CheckInTimeline>> getCheckInTimeline(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            List<AttendanceAnalyticsResponse.CheckInTimeline> timeline = attendeeManagementService.getCheckInTimeline(eventId);
+            return ResponseEntity.ok(timeline);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/analytics/attendance-by-type")
@@ -424,9 +473,13 @@ public class AttendeeManagementController {
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved attendance by type")
     })
-    public ResponseEntity<Object> getAttendanceByType(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+    public ResponseEntity<Map<String, Long>> getAttendanceByType(@PathVariable UUID eventId) {
+        try {
+            Map<String, Long> attendanceByType = attendeeManagementService.getAttendanceByType(eventId);
+            return ResponseEntity.ok(attendanceByType);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/analytics/no-shows")
@@ -436,8 +489,12 @@ public class AttendeeManagementController {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved no-show analytics")
     })
     public ResponseEntity<List<AttendanceAnalyticsResponse.NoShowAnalysis>> getNoShowAnalytics(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            List<AttendanceAnalyticsResponse.NoShowAnalysis> analysis = attendeeManagementService.getNoShowAnalytics(eventId);
+            return ResponseEntity.ok(analysis);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/analytics/registration-timeline")
@@ -447,8 +504,12 @@ public class AttendeeManagementController {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved registration timeline")
     })
     public ResponseEntity<List<AttendanceAnalyticsResponse.RegistrationTimeline>> getRegistrationTimeline(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            List<AttendanceAnalyticsResponse.RegistrationTimeline> timeline = attendeeManagementService.getRegistrationTimeline(eventId);
+            return ResponseEntity.ok(timeline);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     // Communication and Notifications
@@ -459,26 +520,34 @@ public class AttendeeManagementController {
         @ApiResponse(responseCode = "200", description = "Successfully sent bulk email"),
         @ApiResponse(responseCode = "400", description = "Invalid request data")
     })
-    public ResponseEntity<Object> sendBulkEmail(
+    public ResponseEntity<Map<String, Object>> sendBulkEmail(
             @PathVariable UUID eventId,
             @Valid @RequestBody SendInvitationRequest request) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            Map<String, Object> result = attendeeManagementService.sendBulkEmail(eventId, request);
+            return ResponseEntity.ok(result);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
     
     @PostMapping("/attendances/{attendanceId}/notify")
-    @RequiresPermission(value = RbacPermissions.COMMUNICATION_SEND, resources = {"attendance_id=#attendanceId"})
+    @RequiresPermission(value = RbacPermissions.COMMUNICATION_SEND, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
     @Operation(summary = "Send notification to attendee", description = "Send notification to a specific attendee")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully sent notification"),
         @ApiResponse(responseCode = "404", description = "Attendance not found")
     })
-    public ResponseEntity<Object> sendNotification(
+    public ResponseEntity<Map<String, Object>> sendNotification(
             @PathVariable UUID eventId,
             @PathVariable UUID attendanceId,
             @Valid @RequestBody SendInvitationRequest request) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            Map<String, Object> result = attendeeManagementService.sendNotification(eventId, attendanceId, request);
+            return ResponseEntity.ok(result);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/attendances/communication-history")
@@ -487,9 +556,13 @@ public class AttendeeManagementController {
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved communication history")
     })
-    public ResponseEntity<Object> getCommunicationHistory(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+    public ResponseEntity<List<Map<String, Object>>> getCommunicationHistory(@PathVariable UUID eventId) {
+        try {
+            List<Map<String, Object>> history = attendeeManagementService.getCommunicationHistory(eventId);
+            return ResponseEntity.ok(history);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @PostMapping("/invitations/send")
@@ -502,8 +575,12 @@ public class AttendeeManagementController {
     public ResponseEntity<InvitationResponse> sendInvitations(
             @PathVariable UUID eventId,
             @Valid @RequestBody SendInvitationRequest request) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            InvitationResponse response = attendeeManagementService.sendInvitations(eventId, request);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/invitations")
@@ -513,8 +590,12 @@ public class AttendeeManagementController {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved invitations")
     })
     public ResponseEntity<List<InvitationResponse>> getSentInvitations(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            List<InvitationResponse> invitations = attendeeManagementService.getSentInvitations(eventId);
+            return ResponseEntity.ok(invitations);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     // Export and Import
@@ -558,8 +639,12 @@ public class AttendeeManagementController {
     public ResponseEntity<List<AttendanceDetailResponse>> importAttendeesCSV(
             @PathVariable UUID eventId,
             @RequestBody String csvData) {
-        // This would need to be implemented in the service
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+        try {
+            List<AttendanceDetailResponse> results = attendeeManagementService.importAttendeesCSV(eventId, csvData);
+            return ResponseEntity.status(HttpStatus.CREATED).body(results);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
     
     // Search and Filtering
@@ -574,8 +659,12 @@ public class AttendeeManagementController {
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String email,
             @RequestParam(required = false) String status) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            List<AttendanceDetailResponse> results = attendeeManagementService.searchAttendees(eventId, name, email, status);
+            return ResponseEntity.ok(results);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/attendances/filter")
@@ -589,8 +678,12 @@ public class AttendeeManagementController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String ticketType,
             @RequestParam(required = false) Boolean hasDietaryRestrictions) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            List<AttendanceDetailResponse> results = attendeeManagementService.filterAttendees(eventId, status, ticketType, hasDietaryRestrictions);
+            return ResponseEntity.ok(results);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     // Bulk Operations
@@ -604,8 +697,13 @@ public class AttendeeManagementController {
     public ResponseEntity<List<AttendanceDetailResponse>> bulkUpdateAttendees(
             @PathVariable UUID eventId,
             @Valid @RequestBody BulkUpdateRequest request) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            request.setEventId(eventId);
+            List<AttendanceDetailResponse> results = attendeeManagementService.bulkUpdateAttendees(eventId, request);
+            return ResponseEntity.ok(results);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
     
     @PostMapping("/attendances/bulk-delete")
@@ -618,8 +716,13 @@ public class AttendeeManagementController {
     public ResponseEntity<Void> bulkDeleteAttendees(
             @PathVariable UUID eventId,
             @Valid @RequestBody BulkUpdateRequest request) {
-        // This would need to be implemented in the service
-        return ResponseEntity.noContent().build();
+        try {
+            request.setEventId(eventId);
+            attendeeManagementService.bulkDeleteAttendees(eventId, request);
+            return ResponseEntity.noContent().build();
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
     
     // Health and Validation
@@ -629,9 +732,13 @@ public class AttendeeManagementController {
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully validated attendee data")
     })
-    public ResponseEntity<Object> validateAttendeeData(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+    public ResponseEntity<Map<String, Object>> validateAttendeeData(@PathVariable UUID eventId) {
+        try {
+            Map<String, Object> validation = attendeeManagementService.validateAttendeeData(eventId);
+            return ResponseEntity.ok(validation);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/attendances/duplicates")
@@ -641,8 +748,12 @@ public class AttendeeManagementController {
         @ApiResponse(responseCode = "200", description = "Successfully found duplicates")
     })
     public ResponseEntity<List<AttendanceDetailResponse>> findDuplicateAttendees(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            List<AttendanceDetailResponse> duplicates = attendeeManagementService.findDuplicateAttendees(eventId);
+            return ResponseEntity.ok(duplicates);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/attendances/incomplete")
@@ -652,8 +763,12 @@ public class AttendeeManagementController {
         @ApiResponse(responseCode = "200", description = "Successfully found incomplete profiles")
     })
     public ResponseEntity<List<AttendanceDetailResponse>> findIncompleteProfiles(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+        try {
+            List<AttendanceDetailResponse> incomplete = attendeeManagementService.findIncompleteProfiles(eventId);
+            return ResponseEntity.ok(incomplete);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/attendances/capacity-status")
@@ -662,9 +777,13 @@ public class AttendeeManagementController {
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved capacity status")
     })
-    public ResponseEntity<Object> getCapacityStatus(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+    public ResponseEntity<Map<String, Object>> getCapacityStatus(@PathVariable UUID eventId) {
+        try {
+            Map<String, Object> status = attendeeManagementService.getCapacityStatus(eventId);
+            return ResponseEntity.ok(status);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
     
     @GetMapping("/attendances/waitlist-status")
@@ -673,8 +792,12 @@ public class AttendeeManagementController {
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved waitlist status")
     })
-    public ResponseEntity<Object> getWaitlistStatus(@PathVariable UUID eventId) {
-        // This would need to be implemented in the service
-        return ResponseEntity.ok().build();
+    public ResponseEntity<Map<String, Object>> getWaitlistStatus(@PathVariable UUID eventId) {
+        try {
+            Map<String, Object> status = attendeeManagementService.getWaitlistStatus(eventId);
+            return ResponseEntity.ok(status);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
+        }
     }
 }

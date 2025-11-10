@@ -12,6 +12,7 @@ import eventplanner.features.attendee.service.AttendeeService;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,16 +38,19 @@ public class AttendeeController {
 	private final AuthorizationService authorizationService;
 	private final NotificationService notificationService;
 	private final AttendeeRepository attendeeRepository;
+	private final UserAccountRepository userAccountRepository;
 
 	public AttendeeController(
 			AttendeeService attendeeService,
 			AuthorizationService authorizationService,
 			NotificationService notificationService,
-			AttendeeRepository attendeeRepository) {
+			AttendeeRepository attendeeRepository,
+			UserAccountRepository userAccountRepository) {
 		this.attendeeService = attendeeService;
 		this.authorizationService = authorizationService;
 		this.notificationService = notificationService;
 		this.attendeeRepository = attendeeRepository;
+		this.userAccountRepository = userAccountRepository;
 	}
 
     @PostMapping
@@ -155,7 +159,70 @@ public class AttendeeController {
 			}
 		}
 		
-		// TODO: Implement push notification sending if request.getSendPush() is true
+		// Send push notifications if requested
+		// if (Boolean.TRUE.equals(request.getSendPush())) {
+		// 	for (Attendee attendee : eventAttendees) {
+		// 		if (attendee.getEmail() == null || attendee.getEmail().trim().isEmpty()) {
+		// 			// Skip push notification if no email (can't look up user)
+		// 			continue;
+		// 		}
+				
+		// 		try {
+		// 			// Look up user by email to get userId for push notification
+		// 			UserAccount user = userAccountRepository.findByEmailIgnoreCase(attendee.getEmail().trim())
+		// 				.orElse(null);
+					
+		// 			if (user == null) {
+		// 				// User not registered - can't send push notification
+		// 				// This is not a failure, just skip this attendee for push notifications
+		// 				continue;
+		// 			}
+					
+		// 			// Prepare push notification data
+		// 			Map<String, Object> pushData = new HashMap<>();
+		// 			pushData.put("attendeeName", attendee.getName() != null ? attendee.getName() : "Guest");
+		// 			pushData.put("eventId", request.getEventId().toString());
+		// 			if (request.getCustomMessage() != null && !request.getCustomMessage().trim().isEmpty()) {
+		// 				pushData.put("customMessage", request.getCustomMessage());
+		// 			}
+		// 			pushData.put("body", request.getCustomMessage() != null && !request.getCustomMessage().trim().isEmpty()
+		// 				? request.getCustomMessage()
+		// 				: "You're invited to an event!");
+					
+		// 			// Send push notification
+		// 			NotificationRequest notificationRequest = NotificationRequest.builder()
+		// 				.type(CommunicationType.PUSH_NOTIFICATION)
+		// 				.to(user.getId().toString()) // userId as string for push notifications
+		// 				.subject("You're Invited to an Event")
+		// 				.templateId(null) // Not needed for push notifications
+		// 				.templateVariables(pushData)
+		// 				.eventId(request.getEventId())
+		// 				.build();
+					
+		// 			var notificationResponse = notificationService.send(notificationRequest);
+					
+		// 			if (notificationResponse.isSuccess()) {
+		// 				// Only count as queued if not already counted from email
+		// 				if (!queuedAttendeeIds.contains(attendee.getId())) {
+		// 					queuedCount++;
+		// 					queuedAttendeeIds.add(attendee.getId());
+		// 				}
+		// 			} else {
+		// 				// Only count as failed if not already counted
+		// 				if (!failedAttendeeIds.contains(attendee.getId()) && !queuedAttendeeIds.contains(attendee.getId())) {
+		// 					failedCount++;
+		// 					failedAttendeeIds.add(attendee.getId());
+		// 				}
+		// 			}
+		// 		} catch (Exception e) {
+		// 			// Only count as failed if not already counted
+		// 			if (!failedAttendeeIds.contains(attendee.getId()) && !queuedAttendeeIds.contains(attendee.getId())) {
+		// 				failedCount++;
+		// 				failedAttendeeIds.add(attendee.getId());
+		// 			}
+		// 		}
+		// 	}
+		// }
 		
 		SendInvitesResponse response = new SendInvitesResponse();
 		response.setStatus(queuedCount > 0 ? "completed" : "failed");

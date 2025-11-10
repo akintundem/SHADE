@@ -423,11 +423,15 @@ The application includes Spring Boot Actuator for monitoring:
 
 ## Security
 
-- JWT-based authentication
-- Role-based authorization
-- CORS configuration
-- Input validation
-- SQL injection protection
+- **JWT-based authentication**: Stateless token-based authentication with refresh tokens
+- **Role-based authorization (RBAC)**: Comprehensive permission system with event, organization, and system-level scopes
+  - Policy defined in `src/main/resources/rbac/RBAC_policy.yml`
+  - Implementation details: See `src/main/resources/rbac/RBAC_IMPLEMENTATION_NOTES.md`
+  - Automatic role resolution for event owners (ORGANIZER) and organization owners (OWNER)
+  - Membership checks include ownership verification
+- **CORS configuration**: Configurable cross-origin resource sharing
+- **Input validation**: Request validation using Bean Validation (JSR-303)
+- **SQL injection protection**: Parameterized queries via JPA/Hibernate
 
 ## Differences from Microservices
 

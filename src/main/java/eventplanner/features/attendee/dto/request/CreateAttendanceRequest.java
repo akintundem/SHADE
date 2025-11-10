@@ -16,7 +16,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class CreateAttendanceRequest {
     
-    @NotNull(message = "Event ID is required")
+    // Event ID is set by controller from path variable, so it's optional in request
     private UUID eventId;
     
     @NotNull(message = "User ID is required")

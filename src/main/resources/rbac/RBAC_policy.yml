@@ -1,3 +1,9 @@
+# RBAC Policy Configuration
+# 
+# This file defines the RBAC (Role-Based Access Control) policy for the application.
+# For implementation details and behavioral notes (e.g., automatic role resolution
+# for event owners), see: RBAC_IMPLEMENTATION_NOTES.md
+#
 policy:
   name: SHDE RBAC
   version: 2025-11-09T17:27:33Z

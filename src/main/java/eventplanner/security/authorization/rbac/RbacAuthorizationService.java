@@ -92,7 +92,9 @@ public class RbacAuthorizationService {
             }
             case EVENT -> {
                 roles.addAll(resolveEventRoles(context, resources));
-                if (roles.isEmpty() && principal != null) {
+                // Always check if user is event owner and add ORGANIZER role
+                // This ensures event owners have access even if context doesn't have the role yet
+                if (principal != null) {
                     UUID eventId = extractUuid(resources, "event_id");
                     if (eventId != null && authorizationService.isEventOwner(principal, eventId)) {
                         roles.add("ORGANIZER");
@@ -171,6 +173,10 @@ public class RbacAuthorizationService {
                     yield false;
                 }
                 if (!resolveEventRoles(context, resources).isEmpty()) {
+                    yield true;
+                }
+                // Event owner is automatically a member
+                if (authorizationService.isEventOwner(principal, eventId)) {
                     yield true;
                 }
                 yield authorizationService.hasEventMembership(principal, eventId);
