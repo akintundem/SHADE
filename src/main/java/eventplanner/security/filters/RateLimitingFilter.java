@@ -15,11 +15,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Filter to implement rate limiting per user (authenticated) or IP (unauthenticated)
@@ -29,6 +32,9 @@ import java.util.UUID;
 @Order(3)
 @RequiredArgsConstructor
 public class RateLimitingFilter implements Filter {
+
+    private static final Pattern UUID_PATTERN = Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+    private static final Pattern DIGIT_PATTERN = Pattern.compile("^\\d+$");
 
     private final RateLimitingService rateLimitingService;
 
@@ -58,17 +64,19 @@ public class RateLimitingFilter implements Filter {
             return;
         }
 
+        String endpointKey = determineEndpointKey(httpRequest);
+
         // Determine rate limit key based on authentication status
         String rateLimitKey = determineRateLimitKey(httpRequest);
         
         // Check rate limit
-        if (!rateLimitingService.isWithinRateLimit(rateLimitKey, requestPath)) {
-            sendRateLimitExceededResponse(httpResponse, rateLimitKey, requestPath);
+        if (!rateLimitingService.isWithinRateLimit(rateLimitKey, endpointKey)) {
+            sendRateLimitExceededResponse(httpResponse, rateLimitKey, endpointKey);
             return;
         }
 
         // Add rate limit headers
-        RateLimitingService.RateLimitInfo rateLimitInfo = rateLimitingService.getRateLimitInfo(rateLimitKey, requestPath);
+        RateLimitingService.RateLimitInfo rateLimitInfo = rateLimitingService.getRateLimitInfo(rateLimitKey, endpointKey);
         httpResponse.setHeader("X-RateLimit-Limit-Minute", String.valueOf(rateLimitInfo.limitMinute));
         httpResponse.setHeader("X-RateLimit-Remaining-Minute", String.valueOf(rateLimitInfo.limitMinute - rateLimitInfo.currentMinute));
         httpResponse.setHeader("X-RateLimit-Limit-Hour", String.valueOf(rateLimitInfo.limitHour));
@@ -114,25 +122,45 @@ public class RateLimitingFilter implements Filter {
         return null;
     }
     
-    /**
-     * Extract client IP address from request
-     */
+    private boolean isExcludedPath(String path) {
+        return EXCLUDED_PATHS.stream().anyMatch(path::startsWith);
+    }
+
     private String getClientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
+        if (StringUtils.hasText(forwarded)) {
             return forwarded.split(",")[0].trim();
         }
-        
         String realIp = request.getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp;
+        if (StringUtils.hasText(realIp)) {
+            return realIp.trim();
         }
-        
         return request.getRemoteAddr();
     }
 
-    private boolean isExcludedPath(String path) {
-        return EXCLUDED_PATHS.stream().anyMatch(path::startsWith);
+    private String determineEndpointKey(HttpServletRequest request) {
+        String canonicalPath = canonicalizePath(request.getRequestURI());
+        return request.getMethod().toUpperCase(Locale.US) + ":" + canonicalPath;
+    }
+
+    private String canonicalizePath(String path) {
+        if (!StringUtils.hasText(path)) {
+            return "/";
+        }
+        StringBuilder builder = new StringBuilder();
+        String[] segments = path.split("/");
+        for (String segment : segments) {
+            if (segment.isEmpty()) {
+                continue;
+            }
+            builder.append('/');
+            if (UUID_PATTERN.matcher(segment).matches() || DIGIT_PATTERN.matcher(segment).matches()) {
+                builder.append("{id}");
+            } else {
+                builder.append(segment);
+            }
+        }
+        return builder.length() == 0 ? "/" : builder.toString();
     }
 
     private void sendRateLimitExceededResponse(HttpServletResponse response, String rateLimitKey, String endpoint) 
