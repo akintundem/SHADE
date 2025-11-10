@@ -181,17 +181,7 @@ public class TimelineTaskService {
      * Check if user is event owner
      */
     private boolean isEventOwner(UserPrincipal user, UUID eventId) {
-        return authorizationService.isOwner(user, 
-            new eventplanner.security.authorization.rbac.PermissionCheck(
-                eventplanner.security.authorization.rbac.PermissionDescriptor.builder()
-                    .permission("event.update")
-                    .scope(eventplanner.security.authorization.rbac.AccessScope.EVENT)
-                    .allowOwner(true)
-                    .allowAuthenticated(false)
-                    .build(),
-                eventId,
-                eventId != null ? eventId.toString() : null
-            ));
+        return authorizationService.isEventOwner(user, eventId);
     }
     
     /**

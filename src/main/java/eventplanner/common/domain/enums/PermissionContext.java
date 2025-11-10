@@ -1,7 +1,7 @@
 package eventplanner.common.domain.enums;
 
 /**
- * Permission contexts for RBAC
+ * Permission contexts for authorization
  */
 public enum PermissionContext {
     SYSTEM,         // System-wide permissions

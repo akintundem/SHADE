@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Enhanced service for managing event roles with RBAC
+ * Enhanced service for managing event roles
  */
 @Service
 @RequiredArgsConstructor

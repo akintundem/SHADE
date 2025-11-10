@@ -17,7 +17,7 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 /**
- * Role-Permission mapping for RBAC
+ * Role-Permission mapping for authorization
  */
 @Entity
 @Table(name = "role_permissions")

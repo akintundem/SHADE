@@ -813,7 +813,7 @@ async def _check_event_permission(event_id: str, user_id: Optional[str] = None) 
     
     event = event_result.get("event", {})
     
-    # Check ownership via Java API (it will enforce RBAC on the backend)
+    # Check ownership via Java API (it will enforce authorization on the backend)
     # For now, we rely on the Java backend to enforce permissions via headers
     # But we can do a pre-check by verifying the event exists and is accessible
     

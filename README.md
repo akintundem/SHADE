@@ -2,6 +2,18 @@
 
 This is the monolithic version of the AI-powered Event Planner application, consolidating all microservices into a single deployable unit.
 
+
+
+
+
+
+
+
+
+
+
+
+
 ## Architecture
 
 The monolith includes all the functionality from the original microservices:
@@ -36,13 +48,11 @@ The application follows a comprehensive security and processing pipeline for eve
    ↓
 6. JWT Authentication Filter
    ↓
-7. RBAC Authorization Filter
+7. Controller Layer
    ↓
-8. Controller Layer
+8. Service Layer
    ↓
-9. Service Layer
-   ↓
-10. Repository Layer
+9. Repository Layer
     ↓
 11. Database Operations
     ↓
@@ -92,38 +102,31 @@ The application follows a comprehensive security and processing pipeline for eve
 - **Loads User Details** including roles and permissions
 - **Sets Security Context** with authenticated user
 
-#### **7. RBAC Authorization Filter** (`RbacAuthorizationFilter`)
-- **URL Pattern Matching**: Maps request URL to required permissions
-- **HTTP Method Validation**: Checks if method is allowed for the endpoint
-- **Permission Checking**: Validates user has required permissions
-- **Context-Aware Authorization**: Considers organization and event context
-- **Multi-Level RBAC**: System, Organization, and Event-specific roles
-
-#### **8. Controller Layer**
+#### **7. Controller Layer**
 - **Spring MVC Controllers** handle HTTP requests
 - **Request Mapping**: Routes to appropriate controller method
 - **Input Validation**: Validates request body and parameters
 - **Response Mapping**: Converts service responses to HTTP responses
 
-#### **9. Service Layer**
+#### **8. Service Layer**
 - **Business Logic**: Implements core application functionality
 - **Transaction Management**: Handles database transactions
 - **External API Integration**: Calls third-party services
 - **Data Transformation**: Converts between DTOs and entities
 
-#### **10. Repository Layer**
+#### **9. Repository Layer**
 - **JPA Repositories**: Database access layer
 - **Query Execution**: Runs SQL queries against PostgreSQL
 - **Entity Management**: Handles entity lifecycle
 - **Caching**: Redis caching for frequently accessed data
 
-#### **11. Database Operations**
+#### **10. Database Operations**
 - **PostgreSQL Database**: Primary data storage
 - **ACID Transactions**: Ensures data consistency
 - **Connection Pooling**: Manages database connections
 - **Query Optimization**: Optimized queries for performance
 
-#### **12. Response Processing**
+#### **11. Response Processing**
 - **JSON Serialization**: Converts objects to JSON
 - **CORS Headers**: Adds CORS headers for web clients
 - **Security Headers**: Adds security headers to response
@@ -151,8 +154,8 @@ The application follows a comprehensive security and processing pipeline for eve
 1. Request includes JWT token
 2. JWT Authentication Filter validates token
 3. UserPrincipal loaded with roles/permissions
-4. RBAC Filter checks required permissions
-5. Request allowed/denied based on permissions
+4. Authorization checks performed in service layer
+5. Request allowed/denied based on ownership and roles
 ```
 
 #### **CORS Flow**
@@ -179,7 +182,7 @@ POST /api/v1/events
 #### **Budget Management Flow**
 ```
 PUT /api/v1/budgets/{id}
-1. RBAC checks "budget.update" permission
+1. Authorization checks ownership/permissions
 2. BudgetController validates request
 3. BudgetService updates budget
 4. Database transaction commits
@@ -421,7 +424,7 @@ The application includes Spring Boot Actuator for monitoring:
 ## Security
 
 - JWT-based authentication
-- Role-based access control (RBAC)
+- Role-based authorization
 - CORS configuration
 - Input validation
 - SQL injection protection

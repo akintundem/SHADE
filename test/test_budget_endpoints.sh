@@ -808,7 +808,7 @@ main() {
     run_test "Get Standard Categories" "GET" "/api/v1/budgets/categories" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get standard budget categories"
     
     # Test invalid budget ID format
-    run_test "Invalid Budget ID Format" "GET" "/api/v1/budgets/invalid-id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "403" "Get budget with invalid ID format (blocked by RBAC pattern)"
+    run_test "Invalid Budget ID Format" "GET" "/api/v1/budgets/invalid-id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "403" "Get budget with invalid ID format"
     echo ""
     
     # Step 10: Clean up test data

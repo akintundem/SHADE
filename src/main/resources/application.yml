@@ -173,3 +173,7 @@ springdoc:
 rbac:
   policy:
     location: classpath:rbac/RBAC_policy.yml
+
+security:
+  device-validation:
+    require-header: ${SECURITY_DEVICE_VALIDATION_REQUIRE_HEADER:true}
