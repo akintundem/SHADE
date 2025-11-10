@@ -83,7 +83,6 @@ public class AuthController {
     }
 
     @PostMapping("/validate-token")
-    @RequiresPermission(RbacPermissions.AUTH_VALIDATE)
     public ResponseEntity<TokenValidationResponse> validateToken(@RequestParam("token") String token) {
         TokenValidationResponse response = authService.validateToken(token);
         return ResponseEntity.ok(response);

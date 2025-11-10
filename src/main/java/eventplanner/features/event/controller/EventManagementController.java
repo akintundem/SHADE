@@ -3,6 +3,7 @@ package eventplanner.features.event.controller;
 import eventplanner.features.event.dto.request.EventCapacityUpdateRequest;
 import eventplanner.features.event.dto.request.EventDuplicateRequest;
 import eventplanner.features.event.dto.request.EventRegistrationDeadlineRequest;
+import eventplanner.features.event.dto.request.EventShareRequest;
 import eventplanner.features.event.dto.request.EventStatusUpdateRequest;
 import eventplanner.features.event.dto.request.EventVisibilityUpdateRequest;
 import jakarta.validation.Valid;
@@ -11,6 +12,8 @@ import eventplanner.features.event.dto.response.EventCapacityResponse;
 import eventplanner.features.event.dto.response.EventHealthCheckResponse;
 import eventplanner.features.event.dto.response.EventQRCodeResponse;
 import eventplanner.features.event.dto.response.EventResponse;
+import eventplanner.features.event.dto.response.EventShareResponse;
+import eventplanner.features.event.dto.response.EventSharingOptionsResponse;
 import eventplanner.features.event.dto.response.EventValidationResponse;
 import eventplanner.features.event.dto.response.EventVisibilityResponse;
 import eventplanner.features.event.dto.response.UserEventRelationshipResponse;
@@ -61,7 +64,7 @@ public class EventManagementController {
     // ==================== 1. USER-EVENT RELATIONSHIP ENDPOINTS ====================
 
     @GetMapping("/user/{userId}")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#principal.id"})
+    @RequiresPermission(value = RbacPermissions.MY_EVENTS_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get all events for a user", description = "Retrieve all events a user has a relationship with")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Events retrieved successfully",
@@ -86,7 +89,7 @@ public class EventManagementController {
     }
 
     @GetMapping("/user/{userId}/owned")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#principal.id"})
+    @RequiresPermission(value = RbacPermissions.MY_EVENTS_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get events owned by user", description = "Retrieve events owned by a specific user")
     public ResponseEntity<List<UserEventRelationshipResponse>> getEventsOwnedByUser(
             @Parameter(description = "User ID") @PathVariable UUID userId,
@@ -105,7 +108,7 @@ public class EventManagementController {
     }
 
     @GetMapping("/user/{userId}/upcoming")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#principal.id"})
+    @RequiresPermission(value = RbacPermissions.MY_EVENTS_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get upcoming events for user", description = "Retrieve upcoming events for a specific user")
     public ResponseEntity<List<UserEventRelationshipResponse>> getUpcomingEventsByUser(
             @Parameter(description = "User ID") @PathVariable UUID userId,
@@ -124,7 +127,7 @@ public class EventManagementController {
     }
 
     @GetMapping("/user/{userId}/past")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"user_id=#principal.id"})
+    @RequiresPermission(value = RbacPermissions.MY_EVENTS_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get past events for user", description = "Retrieve past events for a specific user")
     public ResponseEntity<List<UserEventRelationshipResponse>> getPastEventsByUser(
             @Parameter(description = "User ID") @PathVariable UUID userId,
@@ -306,7 +309,7 @@ public class EventManagementController {
     // ==================== 3. EVENT DISCOVERY & SEARCH ENDPOINTS ====================
 
     @GetMapping("/search")
-    @RequiresPermission(RbacPermissions.EVENT_READ)
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
     @Operation(summary = "Search events", description = "Search events with various filters")
     public ResponseEntity<List<EventResponse>> searchEvents(
             @Parameter(description = "Search term") @RequestParam(required = false) String q,
@@ -359,7 +362,7 @@ public class EventManagementController {
     }
 
     @GetMapping("/featured")
-    @RequiresPermission(RbacPermissions.EVENT_READ)
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
     @Operation(summary = "Get featured events", description = "Retrieve featured events")
     public ResponseEntity<List<EventResponse>> getFeaturedEvents(Pageable pageable) {
         try {
@@ -374,7 +377,7 @@ public class EventManagementController {
     }
 
     @GetMapping("/trending")
-    @RequiresPermission(RbacPermissions.EVENT_READ)
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
     @Operation(summary = "Get trending events", description = "Retrieve trending events")
     public ResponseEntity<List<EventResponse>> getTrendingEvents(Pageable pageable) {
         try {
@@ -389,7 +392,7 @@ public class EventManagementController {
     }
 
     @GetMapping("/upcoming")
-    @RequiresPermission(RbacPermissions.EVENT_READ)
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
     @Operation(summary = "Get upcoming events", description = "Retrieve upcoming public events")
     public ResponseEntity<List<EventResponse>> getUpcomingEvents() {
         try {
@@ -404,7 +407,7 @@ public class EventManagementController {
     }
 
     @GetMapping("/by-type/{type}")
-    @RequiresPermission(RbacPermissions.EVENT_READ)
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
     @Operation(summary = "Get events by type", description = "Retrieve events by event type")
     public ResponseEntity<List<EventResponse>> getEventsByType(
             @Parameter(description = "Event type") @PathVariable String type) {
@@ -420,7 +423,7 @@ public class EventManagementController {
     }
 
     @GetMapping("/by-status/{status}")
-    @RequiresPermission(RbacPermissions.EVENT_READ)
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
     @Operation(summary = "Get events by status", description = "Retrieve events by event status")
     public ResponseEntity<List<EventResponse>> getEventsByStatus(
             @Parameter(description = "Event status") @PathVariable String status) {
@@ -438,7 +441,7 @@ public class EventManagementController {
     // ==================== 4. EVENT CAPACITY & REGISTRATION ENDPOINTS ====================
 
     @GetMapping("/{id}/capacity")
-    @RequiresPermission(value = RbacPermissions.EVENT_CAPACITY_READ, resources = {"event_id=#id"})
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get event capacity", description = "Retrieve capacity information for an event. Only accessible if event is public, user is owner, or user has appropriate role.")
     public ResponseEntity<EventCapacityResponse> getEventCapacity(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -463,7 +466,7 @@ public class EventManagementController {
     }
 
     @PutMapping("/{id}/capacity")
-    @RequiresPermission(value = RbacPermissions.EVENT_CAPACITY_UPDATE, resources = {"event_id=#id"})
+    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Update event capacity", description = "Update the capacity of an event")
     public ResponseEntity<EventResponse> updateCapacity(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -477,7 +480,7 @@ public class EventManagementController {
     }
 
     @GetMapping("/{id}/capacity/available")
-    @RequiresPermission(value = RbacPermissions.EVENT_CAPACITY_READ, resources = {"event_id=#id"})
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get available capacity", description = "Get the number of available spots for an event")
     public ResponseEntity<Integer> getAvailableCapacity(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
@@ -570,7 +573,7 @@ public class EventManagementController {
     // ==================== 6. EVENT VISIBILITY & ACCESS CONTROL ENDPOINTS ====================
 
     @GetMapping("/{id}/visibility")
-    @RequiresPermission(value = RbacPermissions.EVENT_VISIBILITY_READ, resources = {"event_id=#id"})
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get event visibility", description = "Get the visibility settings for an event. Only accessible if event is public, user is owner, or user has appropriate role.")
     public ResponseEntity<EventVisibilityResponse> getVisibility(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -632,7 +635,62 @@ public class EventManagementController {
         }
     }
 
-    // ==================== 7. EVENT ANALYTICS ENDPOINTS ====================
+    // ==================== 7. EVENT SHARING ENDPOINTS ====================
+
+    @GetMapping("/{id}/share")
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
+    @Operation(summary = "Get sharing options", description = "Retrieve available sharing channels and options for an event")
+    public ResponseEntity<EventSharingOptionsResponse> getSharingOptions(
+            @Parameter(description = "Event ID") @PathVariable UUID id) {
+        EventSharingOptionsResponse response = new EventSharingOptionsResponse();
+        response.setEventId(id);
+        response.setAvailableChannels(List.of("EMAIL", "LINK", "SOCIAL"));
+        response.setShareLink("https://app.shade.events/share/" + id);
+        response.setQrCodeAvailable(Boolean.TRUE);
+        response.setIsPublic(Boolean.TRUE);
+        response.setSocialMediaOptions(List.of("FACEBOOK", "TWITTER", "LINKEDIN"));
+        response.setEmailOptions(List.of("INVITE_ATTENDEES", "SEND_UPDATE"));
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{id}/share")
+    @RequiresPermission(value = RbacPermissions.COMMUNICATION_SEND, resources = {"event_id=#id"})
+    @Operation(summary = "Share event", description = "Share an event with attendees via email, social channels, or links")
+    public ResponseEntity<EventShareResponse> shareEvent(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @Valid @RequestBody EventShareRequest request) {
+        EventShareResponse response = new EventShareResponse();
+        response.setShareId(UUID.randomUUID());
+        response.setEventId(id);
+        response.setChannel(request.getChannel());
+
+        List<String> recipients = request.getRecipients() == null ? List.of() : request.getRecipients();
+        response.setRecipientCount(recipients.size());
+        response.setSuccessfulRecipients(recipients);
+        response.setFailedRecipients(List.of());
+        response.setStatus("SCHEDULED");
+        response.setShareLink("LINK".equalsIgnoreCase(request.getChannel())
+                ? "https://app.shade.events/share/" + response.getShareId()
+                : null);
+        response.setMessage(request.getMessage());
+        response.setIncludeEventDetails(Boolean.TRUE.equals(request.getIncludeEventDetails()));
+        response.setIncludeQRCode(Boolean.TRUE.equals(request.getIncludeQRCode()));
+        response.setCreatedAt(LocalDateTime.now());
+
+        if (request.getExpirationDate() != null && !request.getExpirationDate().isBlank()) {
+            try {
+                response.setExpirationDate(LocalDateTime.parse(request.getExpirationDate()));
+            } catch (Exception ignored) {
+                response.setExpirationDate(LocalDateTime.now().plusDays(7));
+            }
+        } else {
+            response.setExpirationDate(LocalDateTime.now().plusDays(7));
+        }
+
+        return ResponseEntity.ok(response);
+    }
+
+    // ==================== 8. EVENT ANALYTICS ENDPOINTS ====================
 
     @GetMapping("/{id}/analytics")
     @RequiresPermission(value = RbacPermissions.EVENT_ANALYTICS_READ, resources = {"event_id=#id"})

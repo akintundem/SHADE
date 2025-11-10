@@ -11,7 +11,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -46,9 +45,6 @@ public class DeviceValidationFilter extends OncePerRequestFilter {
 
     private final UserSessionRepository sessionRepository;
     private final ObjectMapper objectMapper;
-    
-    @Value("${security.device-validation.require-header:true}")
-    private boolean requireDeviceHeader;
 
     // Endpoints that don't require deviceId validation
     private static final List<String> PUBLIC_PATHS = Arrays.asList(
@@ -96,14 +92,9 @@ public class DeviceValidationFilter extends OncePerRequestFilter {
         
         // Validate header present
         if (!StringUtils.hasText(headerDeviceId)) {
-            if (requireDeviceHeader) {
-                log.warn("Missing X-Device-ID header for authenticated request: {} from user: {}", 
-                        requestURI, user.getId());
-                sendErrorResponse(response, "X-Device-ID header is required", HttpStatus.BAD_REQUEST, requestURI);
-                return;
-            }
-            // When optional, skip device validation entirely
-            filterChain.doFilter(request, response);
+            log.warn("Missing X-Device-ID header for authenticated request: {} from user: {}", 
+                    requestURI, user.getId());
+            sendErrorResponse(response, "X-Device-ID header is required", HttpStatus.BAD_REQUEST, requestURI);
             return;
         }
         String sanitizedDeviceId = headerDeviceId.trim();

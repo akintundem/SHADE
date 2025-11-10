@@ -1,6 +1,5 @@
 package eventplanner.features.event.controller;
 
-import eventplanner.common.dto.ApiMessageResponse;
 import eventplanner.features.event.dto.request.CreateEventRequest;
 import eventplanner.features.event.dto.request.UpdateEventRequest;
 import eventplanner.features.event.dto.response.EventResponse;
@@ -48,7 +47,7 @@ public class EventCrudController {
 
 
     @GetMapping("/{id}")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
     @Operation(summary = "Get event by ID", description = "Retrieve a specific event by its unique identifier. Only accessible if event is public, user is owner, or user has appropriate role.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event found",
@@ -122,16 +121,15 @@ public class EventCrudController {
     @RequiresPermission(value = RbacPermissions.EVENT_DELETE, resources = {"event_id=#id"})
     @Operation(summary = "Delete event", description = "Delete an event by its unique identifier")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Event deleted successfully",
-                content = @Content(schema = @Schema(implementation = ApiMessageResponse.class))),
+        @ApiResponse(responseCode = "204", description = "Event deleted successfully"),
         @ApiResponse(responseCode = "404", description = "Event not found"),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token")
     })
-    public ResponseEntity<ApiMessageResponse> delete(
+    public ResponseEntity<Void> delete(
             @Parameter(description = "Event ID") @PathVariable UUID id) {
         try {
             eventService.delete(id);
-            return ResponseEntity.ok(ApiMessageResponse.success("Event deleted successfully"));
+            return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }

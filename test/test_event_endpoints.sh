@@ -132,7 +132,6 @@ get_testing_environment() {
 get_testing_environment "$@"
 
 # Configuration
-CLIENT_ID="web-app"
 REPORT_FILE="reports/event_test_report_$(date +%Y%m%d_%H%M%S).md"
 TEST_USER_EMAIL="testuser@example.com"
 TEST_USER_PASSWORD="Password123!"
@@ -152,6 +151,14 @@ EVENT_ID=""
 MEDIA_ID=""
 COLLABORATOR_ID=""
 REMINDER_ID=""
+DEVICE_ID=""
+
+verify_email_in_database() {
+    local email="$1"
+    if command -v docker >/dev/null 2>&1; then
+        docker compose exec -T postgres psql -U postgres -d eventplanner -c "UPDATE auth_users SET email_verified = true WHERE lower(email) = lower('${email}');" >/dev/null 2>&1
+    fi
+}
 
 # Create report file
 mkdir -p reports
@@ -160,7 +167,6 @@ cat > "$REPORT_FILE" << EOF
 
 **Test Started:** $(date)
 **Base URL:** $BASE_URL
-**Client ID:** $CLIENT_ID
 **Report File:** $REPORT_FILE
 
 ## Test Summary
@@ -195,18 +201,16 @@ run_test() {
     
     echo -e "${BLUE}🧪 Running: $test_name${NC}"
     
-    # Build curl command - always include Client-ID if not already present
+    # Build curl command
     local curl_cmd="curl -s -w '%{http_code}' -X $method"
     local temp_data_file=""
     
-    # Ensure X-Client-ID header is always included for API requests
-    if [[ "$endpoint" == /api/* ]]; then
-        if [[ "$headers" != *"X-Client-ID"* ]]; then
-            if [ -n "$headers" ]; then
-                headers="-H 'X-Client-ID: $CLIENT_ID' $headers"
-            else
-                headers="-H 'X-Client-ID: $CLIENT_ID'"
-            fi
+    # Automatically attach X-Device-ID header for authenticated requests
+    if [[ -n "$DEVICE_ID" && "$headers" != *"X-Device-ID"* ]]; then
+        if [ -n "$headers" ]; then
+            headers="$headers -H 'X-Device-ID: $DEVICE_ID'"
+        else
+            headers="-H 'X-Device-ID: $DEVICE_ID'"
         fi
     fi
     
@@ -378,14 +382,11 @@ authenticate_user() {
         "dateOfBirth": "1990-01-01",
         "acceptTerms": true,
         "acceptPrivacy": true,
-        "marketingOptIn": false,
-        "deviceId": "test-device-123",
-        "clientId": "'$CLIENT_ID'"
+        "marketingOptIn": false
     }'
     
     local response=$(curl -s -w '%{http_code}' -X POST \
-        -H "X-Client-ID: $CLIENT_ID" \
-        -H "Content-Type: application/json" \
+                -H "Content-Type: application/json" \
         -d "$registration_data" \
         "$BASE_URL/api/v1/auth/register")
     
@@ -393,19 +394,37 @@ authenticate_user() {
     local response_body="${response%???}"
     
     if [ "$http_code" = "201" ]; then
-        # Extract tokens
-        ACCESS_TOKEN=$(echo "$response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
-        REFRESH_TOKEN=$(echo "$response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
+        echo -e "${GREEN}✅ User registered${NC}"
+        verify_email_in_database "$TEST_USER_EMAIL"
+    elif [ "$http_code" != "400" ]; then
+        echo -e "${RED}❌ Failed to register user${NC}"
+        return 1
+    fi
+    
+    local login_data='{
+        "email": "'$TEST_USER_EMAIL'",
+        "password": "'$TEST_USER_PASSWORD'",
+        "rememberMe": false
+    }'
+    
+    local login_response=$(curl -s -w '%{http_code}' -X POST \
+        -H "Content-Type: application/json" \
+        -d "$login_data" \
+        "$BASE_URL/api/v1/auth/login")
+    
+    local login_http_code="${login_response: -3}"
+    local login_response_body="${login_response%???}"
+    
+    if [ "$login_http_code" = "200" ]; then
+        ACCESS_TOKEN=$(echo "$login_response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
+        REFRESH_TOKEN=$(echo "$login_response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
+        DEVICE_ID=$(echo "$login_response_body" | grep -o '"deviceId":"[^"]*"' | cut -d'"' -f4)
         
-        # Extract user ID from JWT token (subject claim)
         if [ -n "$ACCESS_TOKEN" ]; then
-            # JWT format: header.payload.signature
             local jwt_payload=$(echo "$ACCESS_TOKEN" | cut -d'.' -f2)
-            # Base64 decode and extract 'sub' (user ID)
             if command -v python3 &> /dev/null; then
                 USER_ID=$(echo "$jwt_payload" | python3 -c "import sys, base64, json; data=sys.stdin.read().strip(); padding=4-len(data)%4; data+=('='*padding if padding<4 else ''); print(json.loads(base64.b64decode(data)).get('sub', ''))" 2>/dev/null)
             elif command -v jq &> /dev/null; then
-                # Add padding for base64
                 local padding=$((4 - ${#jwt_payload} % 4))
                 if [ $padding -ne 4 ]; then
                     jwt_payload="${jwt_payload}$(printf '%*s' $padding | tr ' ' '=')"
@@ -414,48 +433,8 @@ authenticate_user() {
             fi
         fi
         
-        echo -e "${GREEN}✅ User registered and authenticated${NC}"
+        echo -e "${GREEN}✅ User logged in successfully${NC}"
         return 0
-    elif [ "$http_code" = "400" ]; then
-        # User might already exist, try to login
-        local login_data='{
-            "email": "'$TEST_USER_EMAIL'",
-            "password": "'$TEST_USER_PASSWORD'",
-            "rememberMe": false,
-            "deviceId": "test-device-123",
-            "clientId": "'$CLIENT_ID'"
-        }'
-        
-        local login_response=$(curl -s -w '%{http_code}' -X POST \
-            -H "X-Client-ID: $CLIENT_ID" \
-            -H "Content-Type: application/json" \
-            -d "$login_data" \
-            "$BASE_URL/api/v1/auth/login")
-        
-        local login_http_code="${login_response: -3}"
-        local login_response_body="${login_response%???}"
-        
-        if [ "$login_http_code" = "200" ]; then
-            ACCESS_TOKEN=$(echo "$login_response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
-            REFRESH_TOKEN=$(echo "$login_response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
-            
-            # Extract user ID from JWT token (subject claim)
-            if [ -n "$ACCESS_TOKEN" ]; then
-                local jwt_payload=$(echo "$ACCESS_TOKEN" | cut -d'.' -f2)
-                if command -v python3 &> /dev/null; then
-                    USER_ID=$(echo "$jwt_payload" | python3 -c "import sys, base64, json; data=sys.stdin.read().strip(); padding=4-len(data)%4; data+=('='*padding if padding<4 else ''); print(json.loads(base64.b64decode(data)).get('sub', ''))" 2>/dev/null)
-                elif command -v jq &> /dev/null; then
-                    local padding=$((4 - ${#jwt_payload} % 4))
-                    if [ $padding -ne 4 ]; then
-                        jwt_payload="${jwt_payload}$(printf '%*s' $padding | tr ' ' '=')"
-                    fi
-                    USER_ID=$(echo "$jwt_payload" | base64 -d 2>/dev/null | jq -r '.sub // empty' 2>/dev/null)
-                fi
-            fi
-            
-            echo -e "${GREEN}✅ User logged in successfully${NC}"
-            return 0
-        fi
     fi
     
     echo -e "${RED}❌ Failed to authenticate user${NC}"
@@ -490,9 +469,8 @@ create_test_event() {
     echo -e "${CYAN}   Debug: User ID: $USER_ID${NC}"
     
     local response=$(curl -s -w '%{http_code}' -X POST \
-        -H "X-Client-ID: $CLIENT_ID" \
         -H "Authorization: Bearer $ACCESS_TOKEN" \
-        -H "X-User-Id: $USER_ID" \
+        -H "X-Device-ID: $DEVICE_ID" \
         -H "Content-Type: application/json" \
         -d "$event_data" \
         "$BASE_URL/api/v1/events")
@@ -583,7 +561,7 @@ main() {
     echo "=================================="
     
     # Test get event by ID
-    run_test "Get Event by ID" "GET" "/api/v1/events/$EVENT_ID" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event by ID"
+    run_test "Get Event by ID" "GET" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event by ID"
     
     # Test update event
     local update_start_date=$(date -u -v+2d '+%Y-%m-%dT%H:%M:%S')
@@ -599,10 +577,10 @@ main() {
         "isPublic": false,
         "requiresApproval": true
     }'
-    run_test "Update Event" "PUT" "/api/v1/events/$EVENT_ID" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_data" "200" "Update event details"
+    run_test "Update Event" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_data" "200" "Update event details"
     
     # Test get non-existent event
-    run_test "Get Non-existent Event" "GET" "/api/v1/events/00000000-0000-0000-0000-000000000000" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "404" "Get non-existent event"
+    run_test "Get Non-existent Event" "GET" "/api/v1/events/00000000-0000-0000-0000-000000000000" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "404" "Get non-existent event"
     echo ""
     
     # Step 5: Event Management Tests
@@ -610,99 +588,107 @@ main() {
     echo "=================================="
     
     # User-Event Relationship Tests
-    run_test "Get User Events" "GET" "/api/v1/events/user/$USER_ID" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all events for user"
-    run_test "Get User Owned Events" "GET" "/api/v1/events/user/$USER_ID/owned" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events owned by user"
-    run_test "Get User Upcoming Events" "GET" "/api/v1/events/user/$USER_ID/upcoming" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get upcoming events for user"
-    run_test "Get User Past Events" "GET" "/api/v1/events/user/$USER_ID/past" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get past events for user"
+    run_test "Get User Events" "GET" "/api/v1/events/user/$USER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all events for user"
+    run_test "Get User Owned Events" "GET" "/api/v1/events/user/$USER_ID/owned" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events owned by user"
+    run_test "Get User Upcoming Events" "GET" "/api/v1/events/user/$USER_ID/upcoming" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get upcoming events for user"
+    run_test "Get User Past Events" "GET" "/api/v1/events/user/$USER_ID/past" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get past events for user"
     
     # My Events Tests
-    run_test "Get My Events" "GET" "/api/v1/events/my-events" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'X-User-Id: $USER_ID'" "" "200" "Get current user's events"
-    run_test "Get My Owned Events" "GET" "/api/v1/events/my-events/owned" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'X-User-Id: $USER_ID'" "" "200" "Get current user's owned events"
-    run_test "Get My Upcoming Events" "GET" "/api/v1/events/my-events/upcoming" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'X-User-Id: $USER_ID'" "" "200" "Get current user's upcoming events"
-    run_test "Get My Past Events" "GET" "/api/v1/events/my-events/past" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'X-User-Id: $USER_ID'" "" "200" "Get current user's past events"
+    run_test "Get My Events" "GET" "/api/v1/events/my-events" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's events"
+    run_test "Get My Owned Events" "GET" "/api/v1/events/my-events/owned" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's owned events"
+    run_test "Get My Upcoming Events" "GET" "/api/v1/events/my-events/upcoming" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's upcoming events"
+    run_test "Get My Past Events" "GET" "/api/v1/events/my-events/past" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's past events"
     
     # Event Status & Lifecycle Tests
-    run_test "Get Event Status" "GET" "/api/v1/events/$EVENT_ID/status" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event status"
+    run_test "Get Event Status" "GET" "/api/v1/events/$EVENT_ID/status" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event status"
     
     local status_update_data='{
         "eventStatus": "PUBLISHED"
     }'
-    run_test "Update Event Status" "PUT" "/api/v1/events/$EVENT_ID/status" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$status_update_data" "200" "Update event status"
+    run_test "Update Event Status" "PUT" "/api/v1/events/$EVENT_ID/status" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$status_update_data" "200" "Update event status"
     
-    run_test "Publish Event" "POST" "/api/v1/events/$EVENT_ID/publish" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Publish event"
-    run_test "Open Registration" "POST" "/api/v1/events/$EVENT_ID/open-registration" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Open event registration"
-    run_test "Close Registration" "POST" "/api/v1/events/$EVENT_ID/close-registration" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Close event registration"
+    run_test "Publish Event" "POST" "/api/v1/events/$EVENT_ID/publish" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Publish event"
+    run_test "Open Registration" "POST" "/api/v1/events/$EVENT_ID/open-registration" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Open event registration"
+    run_test "Close Registration" "POST" "/api/v1/events/$EVENT_ID/close-registration" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Close event registration"
     
     # Event Discovery & Search Tests
-    run_test "Search Events" "GET" "/api/v1/events/search?q=test" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search events with query"
-    run_test "Get Public Events" "GET" "/api/v1/events/public" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get public events"
-    run_test "Get Featured Events" "GET" "/api/v1/events/featured" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get featured events"
-    run_test "Get Trending Events" "GET" "/api/v1/events/trending" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get trending events"
-    run_test "Get Upcoming Events" "GET" "/api/v1/events/upcoming" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get upcoming events"
-    run_test "Get Events by Type" "GET" "/api/v1/events/by-type/WORKSHOP" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by type"
-    run_test "Get Events by Status" "GET" "/api/v1/events/by-status/PUBLISHED" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by status"
+    run_test "Search Events" "GET" "/api/v1/events/search?q=test" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search events with query"
+    run_test "Get Public Events" "GET" "/api/v1/events/public" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get public events"
+    run_test "Get Featured Events" "GET" "/api/v1/events/featured" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get featured events"
+    run_test "Get Trending Events" "GET" "/api/v1/events/trending" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get trending events"
+    run_test "Get Upcoming Events" "GET" "/api/v1/events/upcoming" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get upcoming events"
+    run_test "Get Events by Type" "GET" "/api/v1/events/by-type/WORKSHOP" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by type"
+    run_test "Get Events by Status" "GET" "/api/v1/events/by-status/PUBLISHED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by status"
     
     # Event Capacity & Registration Tests
-    run_test "Get Event Capacity" "GET" "/api/v1/events/$EVENT_ID/capacity" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event capacity information"
+    run_test "Get Event Capacity" "GET" "/api/v1/events/$EVENT_ID/capacity" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event capacity information"
     
     local capacity_update_data='{
         "capacity": 200
     }'
-    run_test "Update Event Capacity" "PUT" "/api/v1/events/$EVENT_ID/capacity" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$capacity_update_data" "200" "Update event capacity"
+    run_test "Update Event Capacity" "PUT" "/api/v1/events/$EVENT_ID/capacity" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$capacity_update_data" "200" "Update event capacity"
     
-    run_test "Get Available Capacity" "GET" "/api/v1/events/$EVENT_ID/capacity/available" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get available capacity"
+    run_test "Get Available Capacity" "GET" "/api/v1/events/$EVENT_ID/capacity/available" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get available capacity"
     
     local deadline_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
     local deadline_data='{
         "deadline": "'$deadline_date'"
     }'
-    run_test "Update Registration Deadline" "PUT" "/api/v1/events/$EVENT_ID/registration-deadline" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$deadline_data" "200" "Update registration deadline"
+    run_test "Update Registration Deadline" "PUT" "/api/v1/events/$EVENT_ID/registration-deadline" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$deadline_data" "200" "Update registration deadline"
     
     # QR Code Tests
-    run_test "Get Event QR Code" "GET" "/api/v1/events/$EVENT_ID/qr-code" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event QR code"
-    run_test "Generate QR Code" "POST" "/api/v1/events/$EVENT_ID/qr-code/generate" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Generate QR code for event"
-    run_test "Regenerate QR Code" "POST" "/api/v1/events/$EVENT_ID/qr-code/regenerate" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Regenerate QR code"
-    run_test "Disable QR Code" "DELETE" "/api/v1/events/$EVENT_ID/qr-code" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Disable QR code"
+    run_test "Get Event QR Code" "GET" "/api/v1/events/$EVENT_ID/qr-code" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event QR code"
+    run_test "Generate QR Code" "POST" "/api/v1/events/$EVENT_ID/qr-code/generate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Generate QR code for event"
+    run_test "Regenerate QR Code" "POST" "/api/v1/events/$EVENT_ID/qr-code/regenerate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Regenerate QR code"
+    run_test "Disable QR Code" "DELETE" "/api/v1/events/$EVENT_ID/qr-code" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Disable QR code"
     
     # Visibility & Access Control Tests
-    run_test "Get Event Visibility" "GET" "/api/v1/events/$EVENT_ID/visibility" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event visibility settings"
+    run_test "Get Event Visibility" "GET" "/api/v1/events/$EVENT_ID/visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event visibility settings"
     
     local visibility_data='{
         "isPublic": true
     }'
-    run_test "Update Event Visibility" "PUT" "/api/v1/events/$EVENT_ID/visibility" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_data" "200" "Update event visibility"
+    run_test "Update Event Visibility" "PUT" "/api/v1/events/$EVENT_ID/visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_data" "200" "Update event visibility"
     
-    run_test "Make Event Public" "POST" "/api/v1/events/$EVENT_ID/make-public" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Make event public"
-    run_test "Make Event Private" "POST" "/api/v1/events/$EVENT_ID/make-private" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Make event private"
+    run_test "Make Event Public" "POST" "/api/v1/events/$EVENT_ID/make-public" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Make event public"
+    run_test "Make Event Private" "POST" "/api/v1/events/$EVENT_ID/make-private" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Make event private"
     
     # Analytics Tests
-    run_test "Get Event Analytics" "GET" "/api/v1/events/$EVENT_ID/analytics" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event analytics"
-    run_test "Get Attendance Analytics" "GET" "/api/v1/events/$EVENT_ID/analytics/attendance" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get attendance analytics"
+    run_test "Get Event Analytics" "GET" "/api/v1/events/$EVENT_ID/analytics" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event analytics"
+    run_test "Get Attendance Analytics" "GET" "/api/v1/events/$EVENT_ID/analytics/attendance" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get attendance analytics"
     
     # Duplication Tests
     local duplicate_data='{
         "newEventName": "Duplicated Test Event"
     }'
-    run_test "Duplicate Event" "POST" "/api/v1/events/$EVENT_ID/duplicate" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$duplicate_data" "200" "Duplicate event"
+    run_test "Duplicate Event" "POST" "/api/v1/events/$EVENT_ID/duplicate" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$duplicate_data" "200" "Duplicate event"
     
     # Validation & Health Check Tests
-    run_test "Validate Event" "GET" "/api/v1/events/$EVENT_ID/validation" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Validate event"
-    run_test "Event Health Check" "GET" "/api/v1/events/$EVENT_ID/health" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Event health check"
+    run_test "Validate Event" "GET" "/api/v1/events/$EVENT_ID/validation" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Validate event"
+    run_test "Event Health Check" "GET" "/api/v1/events/$EVENT_ID/health" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Event health check"
     echo ""
     
     # Step 6: Media Management Tests
     echo -e "${CYAN}📸 Step 6: Media Management Tests${NC}"
     echo "=================================="
     
-    # Media Tests (Note: These will return mock responses since file upload is simulated)
-    run_test "Get Event Media" "GET" "/api/v1/events/$EVENT_ID/media" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event media"
+    # Media Tests (Note: These will return mock responses since upload is presigned)
+    run_test "Get Event Media" "GET" "/api/v1/events/$EVENT_ID/media" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event media"
     
-    # Simulate media upload (this would normally be a multipart form)
-    run_test "Upload Event Media" "POST" "/api/v1/events/$EVENT_ID/media" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -F 'file=@/dev/null' -F 'mediaType=image' -F 'mediaName=test-image.jpg' -F 'description=Test image' -F 'category=gallery' -F 'isPublic=true'" "" "200" "Upload event media"
+    # Request presigned media upload
+    local media_upload_request='{
+        "fileName": "test-image.jpg",
+        "contentType": "image/jpeg",
+        "category": "gallery",
+        "isPublic": true,
+        "description": "Test image upload"
+    }'
+    run_test "Upload Event Media" "POST" "/api/v1/events/$EVENT_ID/media" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$media_upload_request" "200" "Upload event media"
     
-    # Get specific media (using a mock media ID)
+    # Get specific media (using captured media ID when available)
     local mock_media_id="12345678-1234-1234-1234-123456789012"
-    run_test "Get Specific Media" "GET" "/api/v1/events/$EVENT_ID/media/$mock_media_id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific media"
+    local media_identifier="${MEDIA_ID:-$mock_media_id}"
+    run_test "Get Specific Media" "GET" "/api/v1/events/$EVENT_ID/media/$media_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific media"
     
     # Update media
     local media_update_data='{
@@ -713,18 +699,32 @@ main() {
         "isPublic": false,
         "tags": "test,event"
     }'
-    run_test "Update Media" "PUT" "/api/v1/events/$EVENT_ID/media/$mock_media_id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$media_update_data" "200" "Update media information"
+    run_test "Update Media" "PUT" "/api/v1/events/$EVENT_ID/media/$media_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$media_update_data" "200" "Update media information"
     
     # Delete media
-    run_test "Delete Media" "DELETE" "/api/v1/events/$EVENT_ID/media/$mock_media_id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete media"
+    run_test "Delete Media" "DELETE" "/api/v1/events/$EVENT_ID/media/$media_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete media"
     
     # Assets Tests
-    run_test "Get Event Assets" "GET" "/api/v1/events/$EVENT_ID/assets" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event assets"
-    run_test "Upload Event Asset" "POST" "/api/v1/events/$EVENT_ID/assets" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -F 'file=@/dev/null' -F 'assetName=test-document.pdf' -F 'description=Test document' -F 'category=document'" "" "200" "Upload event asset"
+    run_test "Get Event Assets" "GET" "/api/v1/events/$EVENT_ID/assets" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event assets"
+    local asset_upload_request='{
+        "fileName": "test-document.pdf",
+        "contentType": "application/pdf",
+        "category": "documents",
+        "isPublic": false,
+        "description": "Test document upload"
+    }'
+    run_test "Upload Event Asset" "POST" "/api/v1/events/$EVENT_ID/assets" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$asset_upload_request" "200" "Upload event asset"
     
     # Cover Image Tests
-    run_test "Update Cover Image" "PUT" "/api/v1/events/$EVENT_ID/cover-image" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -F 'file=@/dev/null'" "" "200" "Update cover image"
-    run_test "Remove Cover Image" "DELETE" "/api/v1/events/$EVENT_ID/cover-image" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Remove cover image"
+    local cover_image_request='{
+        "fileName": "cover-image.png",
+        "contentType": "image/png",
+        "category": "cover",
+        "isPublic": true,
+        "description": "Cover image upload"
+    }'
+    run_test "Update Cover Image" "PUT" "/api/v1/events/$EVENT_ID/cover-image" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cover_image_request" "200" "Update cover image"
+    run_test "Remove Cover Image" "DELETE" "/api/v1/events/$EVENT_ID/cover-image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Remove cover image"
     echo ""
     
     # Step 7: Collaboration Tests
@@ -732,7 +732,7 @@ main() {
     echo "==============================="
     
     # Sharing Tests
-    run_test "Get Sharing Options" "GET" "/api/v1/events/$EVENT_ID/share" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event sharing options"
+    run_test "Get Sharing Options" "GET" "/api/v1/events/$EVENT_ID/share" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event sharing options"
     
     local share_data='{
         "channel": "email",
@@ -741,10 +741,10 @@ main() {
         "includeEventDetails": true,
         "includeQRCode": false
     }'
-    run_test "Share Event" "POST" "/api/v1/events/$EVENT_ID/share" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$share_data" "200" "Share event via email"
+    run_test "Share Event" "POST" "/api/v1/events/$EVENT_ID/share" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$share_data" "200" "Share event via email"
     
     # Collaboration Tests
-    run_test "Get Event Collaborators" "GET" "/api/v1/events/$EVENT_ID/collaborators" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event collaborators"
+    run_test "Get Event Collaborators" "GET" "/api/v1/events/$EVENT_ID/collaborators" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event collaborators"
     
     local collaborator_data='{
         "userId": "87654321-4321-4321-4321-210987654321",
@@ -754,10 +754,11 @@ main() {
         "notes": "Test collaborator",
         "sendInvitation": true
     }'
-    run_test "Add Event Collaborator" "POST" "/api/v1/events/$EVENT_ID/collaborators" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$collaborator_data" "200" "Add event collaborator"
+    run_test "Add Event Collaborator" "POST" "/api/v1/events/$EVENT_ID/collaborators" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$collaborator_data" "200" "Add event collaborator"
     
-    # Update collaborator (using mock collaborator ID)
+    # Update collaborator (using captured ID when available)
     local mock_collaborator_id="87654321-4321-4321-4321-210987654321"
+    local collaborator_identifier="${COLLABORATOR_ID:-$mock_collaborator_id}"
     local collaborator_update_data='{
         "userId": "87654321-4321-4321-4321-210987654321",
         "email": "updated-collaborator@example.com",
@@ -765,9 +766,9 @@ main() {
         "permissions": ["read", "write", "delete"],
         "notes": "Updated collaborator"
     }'
-    run_test "Update Event Collaborator" "PUT" "/api/v1/events/$EVENT_ID/collaborators/$mock_collaborator_id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$collaborator_update_data" "200" "Update event collaborator"
+    run_test "Update Event Collaborator" "PUT" "/api/v1/events/$EVENT_ID/collaborators/$collaborator_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$collaborator_update_data" "200" "Update event collaborator"
     
-    run_test "Remove Event Collaborator" "DELETE" "/api/v1/events/$EVENT_ID/collaborators/$mock_collaborator_id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Remove event collaborator"
+    run_test "Remove Event Collaborator" "DELETE" "/api/v1/events/$EVENT_ID/collaborators/$collaborator_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Remove event collaborator"
     echo ""
     
     # Step 8: Notification Tests
@@ -775,31 +776,29 @@ main() {
     echo "==============================="
     
     # Notification Settings Tests
-    run_test "Get Notification Settings" "GET" "/api/v1/events/$EVENT_ID/notifications" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event notification settings"
+    run_test "Get Notification Settings" "GET" "/api/v1/events/$EVENT_ID/notifications" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event notification settings"
     
     local notification_settings='{
-        "emailNotifications": true,
-        "smsNotifications": false,
-        "pushNotifications": true,
+        "enabledChannels": ["EMAIL", "PUSH"],
         "reminderEnabled": true,
-        "defaultReminderTime": "48h"
+        "defaultReminderMinutes": 1440
     }'
-    run_test "Update Notification Settings" "PUT" "/api/v1/events/$EVENT_ID/notifications" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_settings" "200" "Update notification settings"
+    run_test "Update Notification Settings" "PUT" "/api/v1/events/$EVENT_ID/notifications" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_settings" "200" "Update notification settings"
     
     # Send Notification Tests
     local notification_data='{
-        "channel": "email",
+        "channel": "EMAIL",
         "subject": "Event Update",
         "content": "This is a test notification",
         "recipientUserIds": ["'$USER_ID'"],
         "recipientEmails": ["test@example.com"],
         "scheduledAt": null,
-        "priority": "normal"
+        "priority": "NORMAL"
     }'
-    run_test "Send Event Notification" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_data" "200" "Send event notification"
+    run_test "Send Event Notification" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_data" "200" "Send event notification"
     
     # Reminder Tests
-    run_test "Get Event Reminders" "GET" "/api/v1/events/$EVENT_ID/reminders" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event reminders"
+    run_test "Get Event Reminders" "GET" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event reminders"
     
     local reminder_time=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
     local reminder_data
@@ -817,10 +816,11 @@ main() {
 }
 EOF
 )
-    run_test "Create Event Reminder" "POST" "/api/v1/events/$EVENT_ID/reminders" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$reminder_data" "200" "Create event reminder"
+    run_test "Create Event Reminder" "POST" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$reminder_data" "200" "Create event reminder"
     
-    # Update reminder (using mock reminder ID)
+    # Update reminder (using captured ID when available)
     local mock_reminder_id="12345678-1234-1234-1234-123456789012"
+    local reminder_identifier="${REMINDER_ID:-$mock_reminder_id}"
     local reminder_update_time=$(date -u -v+2d '+%Y-%m-%dT%H:%M:%S')
     local reminder_update_data
     reminder_update_data=$(cat <<EOF
@@ -837,11 +837,11 @@ EOF
 }
 EOF
 )
-    run_test "Update Event Reminder" "PUT" "/api/v1/events/$EVENT_ID/reminders/$mock_reminder_id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$reminder_update_data" "200" "Update event reminder"
+    run_test "Update Event Reminder" "PUT" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$reminder_update_data" "200" "Update event reminder"
     
-    run_test "Get Specific Reminder" "GET" "/api/v1/events/$EVENT_ID/reminders/$mock_reminder_id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific reminder"
+    run_test "Get Specific Reminder" "GET" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific reminder"
     
-    run_test "Delete Event Reminder" "DELETE" "/api/v1/events/$EVENT_ID/reminders/$mock_reminder_id" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete event reminder"
+    run_test "Delete Event Reminder" "DELETE" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete event reminder"
     echo ""
     
     # Step 9: Clean up test data
@@ -849,7 +849,7 @@ EOF
     echo "==============================="
     
     if [ -n "$EVENT_ID" ]; then
-        run_test "Delete Test Event" "DELETE" "/api/v1/events/$EVENT_ID" "-H 'X-Client-ID: $CLIENT_ID' -H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete test event"
+        run_test "Delete Test Event" "DELETE" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete test event"
     fi
     echo ""
     

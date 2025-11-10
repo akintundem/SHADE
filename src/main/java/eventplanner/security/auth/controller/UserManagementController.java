@@ -35,24 +35,24 @@ public class UserManagementController {
     }
 
     @GetMapping("/{userId}")
-    @RequiresPermission(value = RbacPermissions.USER_READ, resources = {"user_id=#principal.id"})
-    public SecureUserResponse getUser(@PathVariable UUID userId,
-                                      @AuthenticationPrincipal UserPrincipal principal) {
-        UUID subjectId = requireSelf(principal, userId);
-        return userAccountService.getSecureUser(subjectId);
+    @RequiresPermission(RbacPermissions.ADMIN_USERS_DETAIL)
+    public SecureUserResponse getUser(@PathVariable UUID userId) {
+        return userAccountService.getSecureUser(userId);
     }
 
     @PutMapping("/{userId}")
-    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#userId"})
     public SecureUserResponse updateUser(@AuthenticationPrincipal UserPrincipal principal,
-                                   @PathVariable UUID userId,
-                                   @Valid @RequestBody UpdateUserProfileRequest request) {
-        UUID subjectId = requireSelf(principal, userId);
-        return userAccountService.updateSecureUser(subjectId, principal.getUser(), request);
+                                         @PathVariable UUID userId,
+                                         @Valid @RequestBody UpdateUserProfileRequest request) {
+        if (principal == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        return userAccountService.updateSecureUser(userId, principal.getUser(), request);
     }
 
     @GetMapping("/search")
-    @RequiresPermission(RbacPermissions.USER_SEARCH)
+    @RequiresPermission(RbacPermissions.ADMIN_USERS_READ)
     public Page<SecureUserResponse> searchUsers(@RequestParam(defaultValue = "") String searchTerm,
                                           @PageableDefault(size = 10) Pageable pageable) {
         String sanitizedTerm = searchTerm != null ? searchTerm.trim() : "";
@@ -62,13 +62,4 @@ public class UserManagementController {
         return userAccountService.searchSecureUsers(sanitizedTerm, pageable);
     }
 
-    private UUID requireSelf(UserPrincipal principal, UUID requestedUserId) {
-        if (principal == null || principal.getId() == null) {
-            throw new AccessDeniedException("Authentication required");
-        }
-        if (!principal.getId().equals(requestedUserId)) {
-            throw new AccessDeniedException("Cannot act on another user");
-        }
-        return principal.getId();
-    }
 }

@@ -1,7 +1,6 @@
 package eventplanner.features.event.controller;
 
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.common.dto.ApiMessageResponse;
 import eventplanner.features.event.dto.request.EventMediaRequest;
 import eventplanner.features.event.dto.request.EventMediaUploadRequest;
 import eventplanner.features.event.dto.response.EventCoverImageResponse;
@@ -91,12 +90,12 @@ public class EventMediaController {
     @DeleteMapping("/{id}/media/{mediaId}")
     @RequiresPermission(value = RbacPermissions.EVENT_MEDIA_DELETE, resources = {"event_id=#id"})
     @Operation(summary = "Delete media", description = "Delete media from event")
-    public ResponseEntity<ApiMessageResponse> deleteMedia(
+    public ResponseEntity<Void> deleteMedia(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Parameter(description = "Media ID") @PathVariable UUID mediaId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        ApiMessageResponse response = mediaService.deleteMedia(id, mediaId, principal);
-        return ResponseEntity.ok(response);
+        mediaService.deleteMedia(id, mediaId, principal);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/assets")
