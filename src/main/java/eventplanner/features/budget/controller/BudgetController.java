@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.UUID;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
+import eventplanner.security.auth.service.UserPrincipal;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 /**
  * Budget Controller with authorization checks
@@ -47,13 +49,23 @@ public class BudgetController {
 		@ApiResponse(responseCode = "200", description = "Budget found", 
 			content = @Content(schema = @Schema(implementation = BudgetDetailResponse.class))),
 		@ApiResponse(responseCode = "404", description = "Budget not found"),
-		@ApiResponse(responseCode = "400", description = "Invalid event ID format")
+		@ApiResponse(responseCode = "400", description = "Invalid event ID format"),
+		@ApiResponse(responseCode = "401", description = "Unauthorized - user not authenticated")
 	})
-	public ResponseEntity<BudgetDetailResponse> getBudget(@PathVariable String eventId) {
+	public ResponseEntity<BudgetDetailResponse> getBudget(
+			@PathVariable String eventId,
+			@AuthenticationPrincipal UserPrincipal user) {
+		if (user == null || user.getUser() == null) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not authenticated");
+		}
+		
 		try {
 			UUID uuid = UUID.fromString(eventId);
 			return budgetService.getByEventId(uuid)
-				.map(this::convertToDetailResponse)
+				.map(budget -> {
+					// Verify the user has access to this budget (ownership check already handled by RBAC)
+					return convertToDetailResponse(budget);
+				})
 				.map(ResponseEntity::ok)
 				.orElseGet(() -> ResponseEntity.notFound().build());
 		} catch (IllegalArgumentException e) {
@@ -66,15 +78,23 @@ public class BudgetController {
 	@Operation(summary = "Create or update budget", description = "Create a new budget or update existing one")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget created/updated successfully"),
-		@ApiResponse(responseCode = "400", description = "Invalid request data")
+		@ApiResponse(responseCode = "400", description = "Invalid request data"),
+		@ApiResponse(responseCode = "401", description = "Unauthorized - user not authenticated")
 	})
-	public ResponseEntity<BudgetDetailResponse> upsert(@Valid @RequestBody BudgetUpsertRequest budget) {
+	public ResponseEntity<BudgetDetailResponse> upsert(
+			@Valid @RequestBody BudgetUpsertRequest budget,
+			@AuthenticationPrincipal UserPrincipal user) {
 		if (budget == null) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Budget data is required");
 		}
 		
+		if (user == null || user.getUser() == null) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not authenticated");
+		}
+		
 		Budget entity = new Budget();
 		entity.setEventId(budget.getEventId());
+		entity.setOwnerId(user.getUser().getId());
 		entity.setTotalBudget(budget.getTotalBudget());
 		entity.setCurrency(budget.getCurrency());
 		
@@ -88,19 +108,37 @@ public class BudgetController {
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget updated successfully"),
 		@ApiResponse(responseCode = "404", description = "Budget not found"),
-		@ApiResponse(responseCode = "400", description = "Invalid request data")
+		@ApiResponse(responseCode = "400", description = "Invalid request data"),
+		@ApiResponse(responseCode = "401", description = "Unauthorized - user not authenticated")
 	})
 	public ResponseEntity<BudgetDetailResponse> updateBudget(
 			@PathVariable String budgetId,
-			@Valid @RequestBody UpdateBudgetRequest request) {
+			@Valid @RequestBody UpdateBudgetRequest request,
+			@AuthenticationPrincipal UserPrincipal user) {
+		if (user == null || user.getUser() == null) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not authenticated");
+		}
+		
 		try {
 			UUID uuid = UUID.fromString(budgetId);
+			
+			// Verify ownership before updating
+			Budget existing = budgetService.getById(uuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
+			
+			if (!existing.getOwnerId().equals(user.getUser().getId())) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to update this budget");
+			}
+			
 			Budget updated = budgetService.updateBudget(uuid, request);
 			return ResponseEntity.ok(convertToDetailResponse(updated));
 		} catch (IllegalArgumentException e) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format", e);
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format or data", e);
 		} catch (RuntimeException e) {
-			throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+			if (e.getMessage().contains("not found")) {
+				throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+			}
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
 		}
 	}
 
@@ -109,11 +147,28 @@ public class BudgetController {
 	@Operation(summary = "Delete budget", description = "Permanently delete a budget and all its line items")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "204", description = "Budget deleted successfully"),
-		@ApiResponse(responseCode = "404", description = "Budget not found")
+		@ApiResponse(responseCode = "404", description = "Budget not found"),
+		@ApiResponse(responseCode = "401", description = "Unauthorized - user not authenticated"),
+		@ApiResponse(responseCode = "403", description = "Forbidden - not the budget owner")
 	})
-	public ResponseEntity<Void> deleteBudget(@PathVariable String budgetId) {
+	public ResponseEntity<Void> deleteBudget(
+			@PathVariable String budgetId,
+			@AuthenticationPrincipal UserPrincipal user) {
+		if (user == null || user.getUser() == null) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not authenticated");
+		}
+		
 		try {
 			UUID uuid = UUID.fromString(budgetId);
+			
+			// Verify ownership before deleting
+			Budget existing = budgetService.getById(uuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
+			
+			if (!existing.getOwnerId().equals(user.getUser().getId())) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to delete this budget");
+			}
+			
 			budgetService.deleteBudget(uuid);
 			return ResponseEntity.noContent().build();
 		} catch (IllegalArgumentException e) {

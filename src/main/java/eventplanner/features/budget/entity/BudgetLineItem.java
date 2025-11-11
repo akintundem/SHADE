@@ -1,13 +1,14 @@
 package eventplanner.features.budget.entity;
 
+import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.PlanningStatus;
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
@@ -15,10 +16,8 @@ import java.util.UUID;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class BudgetLineItem {
-    @Id
-    @Column(name = "id", nullable = false)
-    private UUID id;
+@EqualsAndHashCode(callSuper = true)
+public class BudgetLineItem extends BaseEntity {
 
     @Column(name = "budget_id", nullable = false)
     private UUID budgetId;
@@ -66,26 +65,12 @@ public class BudgetLineItem {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-
     @PrePersist
     public void prePersist() {
-        if (id == null) id = UUID.randomUUID();
         if (quantity == null) quantity = 1;
         if (planningStatus == null) planningStatus = PlanningStatus.PLANNED;
         if (isEssential == null) isEssential = false;
         if (priority == null) priority = "MEDIUM";
-        if (createdAt == null) createdAt = LocalDateTime.now();
-        if (updatedAt == null) updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    public void preUpdate() {
-        updatedAt = LocalDateTime.now();
     }
 }
 
