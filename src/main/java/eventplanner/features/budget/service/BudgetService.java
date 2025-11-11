@@ -1,5 +1,7 @@
 package eventplanner.features.budget.service;
 
+import eventplanner.common.audit.service.AuditLogService;
+import eventplanner.common.domain.enums.ActionType;
 import eventplanner.features.budget.dto.request.UpdateBudgetRequest;
 import eventplanner.features.budget.dto.request.UpdateBudgetLineItemRequest;
 import eventplanner.features.budget.dto.request.BudgetApprovalRequest;
@@ -23,10 +25,14 @@ import java.util.stream.Collectors;
 public class BudgetService {
     private final BudgetRepository budgetRepository;
     private final BudgetLineItemRepository lineItemRepository;
+    private final AuditLogService auditLogService;
 
-    public BudgetService(BudgetRepository budgetRepository, BudgetLineItemRepository lineItemRepository) {
+    public BudgetService(BudgetRepository budgetRepository, 
+                        BudgetLineItemRepository lineItemRepository,
+                        AuditLogService auditLogService) {
         this.budgetRepository = budgetRepository;
         this.lineItemRepository = lineItemRepository;
+        this.auditLogService = auditLogService;
     }
 
     public Optional<Budget> getByEventId(UUID eventId) {
@@ -40,38 +46,76 @@ public class BudgetService {
     public Budget createOrUpdate(Budget budget) {
         validateBudget(budget);
         
+        boolean isNew = budget.getId() == null;
+        Budget oldBudget = null;
+        
+        if (!isNew) {
+            oldBudget = budgetRepository.findById(budget.getId()).orElse(null);
+        }
+        
         if (budget.getContingencyPercentage() != null && budget.getTotalBudget() != null) {
             budget.setContingencyAmount(budget.getTotalBudget().multiply(budget.getContingencyPercentage()).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP));
         }
-        return budgetRepository.save(budget);
+        
+        Budget saved = budgetRepository.save(budget);
+        
+        // Audit log
+        if (isNew) {
+            auditLogService.logWithChanges("Budget", saved.getId(), ActionType.CREATE,
+                saved.getOwnerId(), null, 
+                String.format("Budget created with total: %s %s", saved.getTotalBudget(), saved.getCurrency()),
+                null, saved, saved.getEventId());
+        } else {
+            auditLogService.logWithChanges("Budget", saved.getId(), ActionType.UPDATE,
+                saved.getOwnerId(), null,
+                "Budget updated",
+                oldBudget, saved, saved.getEventId());
+        }
+        
+        return saved;
     }
 
     public Budget updateBudget(UUID budgetId, UpdateBudgetRequest request) {
-        Budget budget = budgetRepository.findById(budgetId)
+        Budget oldBudget = budgetRepository.findById(budgetId)
                 .orElseThrow(() -> new RuntimeException("Budget not found"));
+        
+        // Create a snapshot of old values
+        Budget oldSnapshot = new Budget();
+        oldSnapshot.setTotalBudget(oldBudget.getTotalBudget());
+        oldSnapshot.setContingencyPercentage(oldBudget.getContingencyPercentage());
+        oldSnapshot.setCurrency(oldBudget.getCurrency());
+        oldSnapshot.setNotes(oldBudget.getNotes());
         
         if (request.getTotalBudget() != null) {
             validatePositiveAmount(request.getTotalBudget(), "Total budget");
-            budget.setTotalBudget(request.getTotalBudget());
+            oldBudget.setTotalBudget(request.getTotalBudget());
         }
         if (request.getContingencyPercentage() != null) {
             validatePercentage(request.getContingencyPercentage(), "Contingency percentage");
-            budget.setContingencyPercentage(request.getContingencyPercentage());
+            oldBudget.setContingencyPercentage(request.getContingencyPercentage());
         }
         if (request.getCurrency() != null) {
             validateCurrency(request.getCurrency());
-            budget.setCurrency(request.getCurrency());
+            oldBudget.setCurrency(request.getCurrency());
         }
         if (request.getNotes() != null) {
-            budget.setNotes(request.getNotes());
+            oldBudget.setNotes(request.getNotes());
         }
         
         // Recalculate contingency amount
-        if (budget.getContingencyPercentage() != null && budget.getTotalBudget() != null) {
-            budget.setContingencyAmount(budget.getTotalBudget().multiply(budget.getContingencyPercentage()).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP));
+        if (oldBudget.getContingencyPercentage() != null && oldBudget.getTotalBudget() != null) {
+            oldBudget.setContingencyAmount(oldBudget.getTotalBudget().multiply(oldBudget.getContingencyPercentage()).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP));
         }
         
-        return budgetRepository.save(budget);
+        Budget saved = budgetRepository.save(oldBudget);
+        
+        // Audit log
+        auditLogService.logWithChanges("Budget", saved.getId(), ActionType.UPDATE,
+            saved.getOwnerId(), null,
+            "Budget details updated",
+            oldSnapshot, saved, saved.getEventId());
+        
+        return saved;
     }
 
     public BudgetLineItem addLineItem(BudgetLineItem item) {
@@ -154,6 +198,8 @@ public class BudgetService {
         Budget budget = budgetRepository.findById(budgetId)
                 .orElseThrow(() -> new RuntimeException("Budget not found"));
         
+        String oldStatus = budget.getBudgetStatus();
+        
         if (!"DRAFT".equals(budget.getBudgetStatus()) && !"SUBMITTED".equals(budget.getBudgetStatus())) {
             throw new RuntimeException("Budget cannot be approved in current status: " + budget.getBudgetStatus());
         }
@@ -165,12 +211,21 @@ public class BudgetService {
             budget.setNotes(request.getNotes());
         }
         
-        return budgetRepository.save(budget);
+        Budget saved = budgetRepository.save(budget);
+        
+        // Audit log
+        auditLogService.log("Budget", budgetId, ActionType.APPROVE,
+            budget.getOwnerId(), request.getApprovedBy(),
+            String.format("Budget approved. Status changed from %s to APPROVED", oldStatus));
+        
+        return saved;
     }
 
     public Budget rejectBudget(UUID budgetId, BudgetApprovalRequest request) {
         Budget budget = budgetRepository.findById(budgetId)
                 .orElseThrow(() -> new RuntimeException("Budget not found"));
+        
+        String oldStatus = budget.getBudgetStatus();
         
         if (!"SUBMITTED".equals(budget.getBudgetStatus())) {
             throw new RuntimeException("Budget cannot be rejected in current status: " + budget.getBudgetStatus());
@@ -183,7 +238,15 @@ public class BudgetService {
             budget.setNotes(request.getNotes());
         }
         
-        return budgetRepository.save(budget);
+        Budget saved = budgetRepository.save(budget);
+        
+        // Audit log
+        auditLogService.log("Budget", budgetId, ActionType.REJECT,
+            budget.getOwnerId(), request.getApprovedBy(),
+            String.format("Budget rejected. Status changed from %s to REJECTED. Reason: %s", 
+                oldStatus, request.getNotes() != null ? request.getNotes() : "No reason provided"));
+        
+        return saved;
     }
 
     public Budget submitForApproval(UUID budgetId) {
@@ -195,7 +258,14 @@ public class BudgetService {
         }
         
         budget.setBudgetStatus("SUBMITTED");
-        return budgetRepository.save(budget);
+        Budget saved = budgetRepository.save(budget);
+        
+        // Audit log
+        auditLogService.log("Budget", budgetId, ActionType.SUBMIT,
+            budget.getOwnerId(), null,
+            "Budget submitted for approval");
+        
+        return saved;
     }
 
     public BudgetSummaryResponse getBudgetSummary(UUID budgetId) {
@@ -426,14 +496,28 @@ public class BudgetService {
         Budget budget = budgetRepository.findById(budgetId)
                 .orElseThrow(() -> new RuntimeException("Budget not found"));
         
+        UUID ownerId = budget.getOwnerId();
+        UUID eventId = budget.getEventId();
+        
         // Explicitly delete all line items first (cascade should handle this, but being explicit)
         List<BudgetLineItem> lineItems = lineItemRepository.findByBudgetId(budgetId);
         if (!lineItems.isEmpty()) {
             lineItemRepository.deleteAll(lineItems);
+            
+            // Audit log for line items deletion
+            auditLogService.log("BudgetLineItem", budgetId, ActionType.DELETE,
+                ownerId, null,
+                String.format("Deleted %d line items associated with budget", lineItems.size()));
         }
         
-        // Now delete the budget
+        // Now delete the budget (soft delete due to @SQLDelete annotation)
         budgetRepository.delete(budget);
+        
+        // Audit log
+        auditLogService.logWithChanges("Budget", budgetId, ActionType.DELETE,
+            ownerId, null,
+            String.format("Budget deleted (soft delete) for event %s", eventId),
+            budget, null, eventId);
     }
 
     public Budget recalculateTotals(UUID budgetId) {

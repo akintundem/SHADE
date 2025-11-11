@@ -17,6 +17,8 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
+@org.hibernate.annotations.SQLDelete(sql = "UPDATE budget_line_items SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND version = ?")
+@org.hibernate.annotations.SQLRestriction("deleted_at IS NULL")
 public class BudgetLineItem extends BaseEntity {
 
     @Column(name = "budget_id", nullable = false)

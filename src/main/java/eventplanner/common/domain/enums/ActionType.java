@@ -13,6 +13,7 @@ public enum ActionType {
     REMOVE,
     APPROVE,
     REJECT,
+    SUBMIT,
     PUBLISH,
     ARCHIVE
 }

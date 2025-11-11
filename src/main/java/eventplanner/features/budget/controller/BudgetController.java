@@ -88,7 +88,7 @@ public class BudgetController {
 				.map(budget -> {
 					// Verify the user has access to this budget (ownership check already handled by RBAC)
 					BudgetDetailResponse response = convertToDetailResponse(budget);
-					return withETag(budget, response);
+					return withCacheHeaders(withETag(budget, response), budget);
 				})
 				.orElseGet(() -> ResponseEntity.notFound().build());
 		} catch (IllegalArgumentException e) {
@@ -353,7 +353,12 @@ public class BudgetController {
 			List<BudgetLineItemResponse> responses = items.stream()
 					.map(this::convertToLineItemResponse)
 					.toList();
-			return ResponseEntity.ok(responses);
+			
+			// Add cache control headers
+			return ResponseEntity.ok()
+					.cacheControl(org.springframework.http.CacheControl.maxAge(60, java.util.concurrent.TimeUnit.SECONDS)
+							.cachePrivate())
+					.body(responses);
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format", e);
 		}
@@ -442,7 +447,12 @@ public class BudgetController {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
 			BudgetSummaryResponse summary = budgetService.getBudgetSummary(uuid);
-			return ResponseEntity.ok(summary);
+			
+			// Add cache control - summary data can be cached for short period
+			return ResponseEntity.ok()
+					.cacheControl(org.springframework.http.CacheControl.maxAge(30, java.util.concurrent.TimeUnit.SECONDS)
+							.cachePrivate())
+					.body(summary);
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format", e);
 		} catch (RuntimeException e) {
@@ -463,7 +473,12 @@ public class BudgetController {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
 			BudgetVarianceAnalysisResponse analysis = budgetService.getVarianceAnalysis(uuid);
-			return ResponseEntity.ok(analysis);
+			
+			// Analytics can be cached for a short period
+			return ResponseEntity.ok()
+					.cacheControl(org.springframework.http.CacheControl.maxAge(30, java.util.concurrent.TimeUnit.SECONDS)
+							.cachePrivate())
+					.body(analysis);
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format", e);
 		} catch (RuntimeException e) {
@@ -901,5 +916,21 @@ public class BudgetController {
 		return ResponseEntity.ok()
 				.eTag(generateETag(budget))
 				.body(response);
+	}
+	
+	/**
+	 * Add cache control and Last-Modified headers to response
+	 */
+	private ResponseEntity<BudgetDetailResponse> withCacheHeaders(
+			ResponseEntity<BudgetDetailResponse> response, Budget budget) {
+		return ResponseEntity.status(response.getStatusCode())
+				.headers(response.getHeaders())
+				.cacheControl(org.springframework.http.CacheControl.maxAge(60, java.util.concurrent.TimeUnit.SECONDS)
+						.mustRevalidate()
+						.cachePrivate())
+				.lastModified(budget.getUpdatedAt() != null ? 
+						budget.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant() :
+						budget.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant())
+				.body(response.getBody());
 	}
 }
