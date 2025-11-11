@@ -16,11 +16,21 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
- * Service for creating and managing audit logs
- * Operations are async and use separate transactions to avoid impacting main business logic
+ * Unified Audit Log Service - Centralized audit logging for ALL domains
+ * 
+ * Replaces: SecurityAuditService, AttendeeAuditService, and other domain-specific audit services
+ * 
+ * Features:
+ * - Async, non-blocking audit logging
+ * - Separate transactions to ensure logs are saved even if main transaction fails
+ * - Support for all domains: Security, Budget, Attendee, Event, Vendor, etc.
+ * - Rich context capture: user, IP, device, session, idempotency
+ * - JSON serialization for old/new values and metadata
+ * - Comprehensive query methods
  */
 @Service
 public class AuditLogService {
@@ -33,6 +43,188 @@ public class AuditLogService {
     public AuditLogService(AuditLogRepository auditLogRepository, ObjectMapper objectMapper) {
         this.auditLogRepository = auditLogRepository;
         this.objectMapper = objectMapper;
+    }
+    
+    // ==================== BUILDER PATTERN FOR FLUENT API ====================
+    
+    /**
+     * Create an audit log builder for fluent API
+     */
+    public AuditLogBuilder builder() {
+        return new AuditLogBuilder(this);
+    }
+    
+    /**
+     * Fluent builder for audit logs
+     */
+    public static class AuditLogBuilder {
+        private final AuditLogService service;
+        private String domain;
+        private String entityType;
+        private UUID entityId;
+        private ActionType actionType;
+        private String status;
+        private UUID userId;
+        private String username;
+        private String email;
+        private String description;
+        private Object oldValues;
+        private Object newValues;
+        private String ipAddress;
+        private String userAgent;
+        private String deviceId;
+        private String riskLevel;
+        private UUID sessionId;
+        private String idempotencyKey;
+        private Map<String, Object> metadata;
+        private UUID eventId;
+        
+        private AuditLogBuilder(AuditLogService service) {
+            this.service = service;
+        }
+        
+        public AuditLogBuilder domain(String domain) {
+            this.domain = domain;
+            return this;
+        }
+        
+        public AuditLogBuilder entityType(String entityType) {
+            this.entityType = entityType;
+            return this;
+        }
+        
+        public AuditLogBuilder entityId(UUID entityId) {
+            this.entityId = entityId;
+            return this;
+        }
+        
+        public AuditLogBuilder action(ActionType actionType) {
+            this.actionType = actionType;
+            return this;
+        }
+        
+        public AuditLogBuilder status(String status) {
+            this.status = status;
+            return this;
+        }
+        
+        public AuditLogBuilder user(UUID userId, String username, String email) {
+            this.userId = userId;
+            this.username = username;
+            this.email = email;
+            return this;
+        }
+        
+        public AuditLogBuilder description(String description) {
+            this.description = description;
+            return this;
+        }
+        
+        public AuditLogBuilder changes(Object oldValues, Object newValues) {
+            this.oldValues = oldValues;
+            this.newValues = newValues;
+            return this;
+        }
+        
+        public AuditLogBuilder oldValue(Object oldValue) {
+            this.oldValues = oldValue;
+            return this;
+        }
+        
+        public AuditLogBuilder newValue(Object newValue) {
+            this.newValues = newValue;
+            return this;
+        }
+        
+        public AuditLogBuilder request(String ipAddress, String userAgent, String deviceId) {
+            this.ipAddress = ipAddress;
+            this.userAgent = userAgent;
+            this.deviceId = deviceId;
+            return this;
+        }
+        
+        public AuditLogBuilder security(String riskLevel, UUID sessionId) {
+            this.riskLevel = riskLevel;
+            this.sessionId = sessionId;
+            return this;
+        }
+        
+        public AuditLogBuilder riskLevel(String riskLevel) {
+            this.riskLevel = riskLevel;
+            return this;
+        }
+        
+        public AuditLogBuilder idempotency(String idempotencyKey) {
+            this.idempotencyKey = idempotencyKey;
+            return this;
+        }
+        
+        public AuditLogBuilder idempotencyKey(String idempotencyKey) {
+            this.idempotencyKey = idempotencyKey;
+            return this;
+        }
+        
+        public AuditLogBuilder metadata(Map<String, Object> metadata) {
+            this.metadata = metadata;
+            return this;
+        }
+        
+        public AuditLogBuilder eventId(UUID eventId) {
+            this.eventId = eventId;
+            return this;
+        }
+        
+        public void log() {
+            service.logWithBuilder(this);
+        }
+    }
+    
+    /**
+     * Internal method to handle builder-based logging
+     */
+    @Async
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    private void logWithBuilder(AuditLogBuilder builder) {
+        try {
+            AuditLog auditLog = AuditLog.builder()
+                    .domain(builder.domain)
+                    .entityType(builder.entityType)
+                    .entityId(builder.entityId)
+                    .actionType(builder.actionType)
+                    .status(builder.status)
+                    .userId(builder.userId)
+                    .username(builder.username)
+                    .email(builder.email)
+                    .description(builder.description)
+                    .oldValues(serializeValue(builder.oldValues))
+                    .newValues(serializeValue(builder.newValues))
+                    .ipAddress(builder.ipAddress)
+                    .userAgent(builder.userAgent)
+                    .deviceId(builder.deviceId)
+                    .riskLevel(builder.riskLevel)
+                    .sessionId(builder.sessionId)
+                    .idempotencyKey(builder.idempotencyKey)
+                    .metadata(serializeValue(builder.metadata))
+                    .eventId(builder.eventId)
+                    .build();
+            
+            auditLogRepository.save(auditLog);
+            logger.debug("Audit log created: {} {} in {} domain", 
+                builder.actionType, builder.entityType, builder.domain);
+        } catch (Exception e) {
+            logger.error("Failed to create audit log: {}", e.getMessage(), e);
+        }
+    }
+    
+    private String serializeValue(Object value) {
+        if (value == null) return null;
+        if (value instanceof String) return (String) value;
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            logger.warn("Failed to serialize value: {}", e.getMessage());
+            return value.toString();
+        }
     }
     
     /**

@@ -9,7 +9,8 @@ import eventplanner.features.attendee.dto.response.SendInvitesResponse;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.entity.AttendeeStatus;
 import eventplanner.features.attendee.repository.AttendeeRepository;
-import eventplanner.features.attendee.service.AttendeeAuditService;
+import eventplanner.common.audit.service.AuditLogService;
+import eventplanner.common.domain.enums.ActionType;
 import eventplanner.features.attendee.service.AttendeeIdempotencyService;
 import eventplanner.features.attendee.service.AttendeeInvitationService;
 import eventplanner.features.attendee.service.AttendeeService;
@@ -54,7 +55,7 @@ public class AttendeeController {
 	private final AuthorizationService authorizationService;
 	private final AttendeeInvitationService attendeeInvitationService;
 	private final AttendeeRepository attendeeRepository;
-	private final AttendeeAuditService attendeeAuditService;
+	private final AuditLogService auditLogService;
 	private final AttendeeIdempotencyService idempotencyService;
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -142,17 +143,18 @@ public class AttendeeController {
 				result.getName(), result.getEmail(), result.getPhone(), result.getRsvpStatus());
 			
 			// Audit log
-			attendeeAuditService.logAttendeeUpdated(
-				attendeeId, 
-				existing.getEventId(), 
-				principal.getUser().getId(), 
-				principal.getUser().getEmail(),
-				getClientIp(httpRequest),
-				httpRequest.getHeader("User-Agent"),
-				oldValue,
-				newValue,
-				null
-			);
+			auditLogService.builder()
+				.domain("ATTENDEE")
+				.entityType("Attendee")
+				.entityId(attendeeId)
+				.action(ActionType.UPDATE)
+				.user(principal.getUser().getId(), null, principal.getUser().getEmail())
+				.description("Attendee updated")
+				.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), null)
+				.eventId(existing.getEventId())
+				.oldValue(oldValue)
+				.newValue(newValue)
+				.log();
 			
 			AttendeeResponse response = attendeeService.toResponse(result);
 			return ResponseEntity.ok(response);
@@ -197,15 +199,17 @@ public class AttendeeController {
 			metadata.put("attendeeName", attendee.getName());
 			metadata.put("attendeeEmail", attendee.getEmail());
 			
-			attendeeAuditService.logAttendeeDeleted(
-				attendeeId, 
-				attendee.getEventId(), 
-				principal.getUser().getId(), 
-				principal.getUser().getEmail(),
-				getClientIp(httpRequest),
-				httpRequest.getHeader("User-Agent"),
-				metadata
-			);
+			auditLogService.builder()
+				.domain("ATTENDEE")
+				.entityType("Attendee")
+				.entityId(attendeeId)
+				.action(ActionType.DELETE)
+				.user(principal.getUser().getId(), null, principal.getUser().getEmail())
+				.description("Attendee deleted")
+				.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), null)
+				.eventId(attendee.getEventId())
+				.metadata(metadata)
+				.log();
 			
 			return ResponseEntity.noContent().build();
 			
@@ -252,15 +256,19 @@ public class AttendeeController {
 		List<Attendee> saved = attendeeService.addAll(toSave);
 		
 		// Audit log
-		attendeeAuditService.logBulkImport(
-			request.getEventId(),
-			principal.getUser().getId(),
-			principal.getUser().getEmail(),
-			getClientIp(httpRequest),
-			httpRequest.getHeader("User-Agent"),
-			saved.size(),
-			null
-		);
+		Map<String, Object> bulkMetadata = new HashMap<>();
+		bulkMetadata.put("attendeeCount", saved.size());
+		
+		auditLogService.builder()
+			.domain("ATTENDEE")
+			.entityType("Attendee")
+			.action(ActionType.BULK_IMPORT)
+			.user(principal.getUser().getId(), null, principal.getUser().getEmail())
+			.description(String.format("Bulk imported %d attendees", saved.size()))
+			.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), null)
+			.eventId(request.getEventId())
+			.metadata(bulkMetadata)
+			.log();
 		
 		// Convert to DTOs
 		List<AttendeeResponse> responses = attendeeService.toResponseList(saved);
@@ -386,17 +394,18 @@ public class AttendeeController {
 			}
 			
 			// Audit log
-			attendeeAuditService.logRsvpUpdated(
-				attendeeUuid,
-				eventUuid,
-				principal.getUser().getId(),
-				principal.getUser().getEmail(),
-				getClientIp(httpRequest),
-				httpRequest.getHeader("User-Agent"),
-				oldStatus != null ? oldStatus.name() : null,
-				attendeeStatus.name(),
-				null
-			);
+			auditLogService.builder()
+				.domain("ATTENDEE")
+				.entityType("Attendee")
+				.entityId(attendeeUuid)
+				.action(ActionType.RSVP_UPDATED)
+				.user(principal.getUser().getId(), null, principal.getUser().getEmail())
+				.description("RSVP status updated")
+				.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), null)
+				.eventId(eventUuid)
+				.oldValue(oldStatus != null ? oldStatus.name() : null)
+				.newValue(attendeeStatus.name())
+				.log();
 			
 			AttendeeResponse response = attendeeService.toResponse(updated.get());
 			return ResponseEntity.ok(response);
@@ -461,17 +470,18 @@ public class AttendeeController {
 				metadata.put("attendeeName", result.getName());
 				metadata.put("attendeeEmail", result.getEmail());
 				
-				attendeeAuditService.logCheckIn(
-					attendeeUuid,
-					eventUuid,
-					principal.getUser().getId(),
-					principal.getUser().getEmail(),
-					getClientIp(httpRequest),
-					httpRequest.getHeader("User-Agent"),
-					deviceId,
-					idempotencyKey,
-					metadata
-				);
+				auditLogService.builder()
+					.domain("ATTENDEE")
+					.entityType("Attendee")
+					.entityId(attendeeUuid)
+					.action(ActionType.CHECK_IN)
+					.user(principal.getUser().getId(), null, principal.getUser().getEmail())
+					.description("Attendee checked in")
+					.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), deviceId)
+					.eventId(eventUuid)
+					.idempotencyKey(idempotencyKey)
+					.metadata(metadata)
+					.log();
 				
 				AttendeeResponse response = attendeeService.toResponse(result);
 				
@@ -582,15 +592,17 @@ public class AttendeeController {
 			metadata.put("sendEmail", sendEmail);
 			metadata.put("sendPush", sendPush);
 			
-			attendeeAuditService.logInvitationQueued(
-				request.getEventId(),
-				principal.getUser().getId(),
-				principal.getUser().getEmail(),
-				getClientIp(httpRequest),
-				httpRequest.getHeader("User-Agent"),
-				idempotencyKey,
-				metadata
-			);
+			auditLogService.builder()
+				.domain("ATTENDEE")
+				.entityType("Attendee")
+				.action(ActionType.INVITATION_QUEUED)
+				.user(principal.getUser().getId(), null, principal.getUser().getEmail())
+				.description(String.format("Queued %d invitations", request.getAttendeeIds().size()))
+				.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), null)
+				.eventId(request.getEventId())
+				.idempotencyKey(idempotencyKey)
+				.metadata(metadata)
+				.log();
 			
 			// Return immediately with queued status
 			SendInvitesResponse response = new SendInvitesResponse();

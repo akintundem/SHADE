@@ -59,17 +59,29 @@ public class BudgetService {
         
         Budget saved = budgetRepository.save(budget);
         
-        // Audit log
+        // Audit log with unified audit system
         if (isNew) {
-            auditLogService.logWithChanges("Budget", saved.getId(), ActionType.CREATE,
-                saved.getOwnerId(), null, 
-                String.format("Budget created with total: %s %s", saved.getTotalBudget(), saved.getCurrency()),
-                null, saved, saved.getEventId());
+            auditLogService.builder()
+                .domain("BUDGET")
+                .entityType("Budget")
+                .entityId(saved.getId())
+                .action(ActionType.CREATE)
+                .user(saved.getOwnerId(), null, null)
+                .description(String.format("Budget created with total: %s %s", saved.getTotalBudget(), saved.getCurrency()))
+                .changes(null, saved)
+                .eventId(saved.getEventId())
+                .log();
         } else {
-            auditLogService.logWithChanges("Budget", saved.getId(), ActionType.UPDATE,
-                saved.getOwnerId(), null,
-                "Budget updated",
-                oldBudget, saved, saved.getEventId());
+            auditLogService.builder()
+                .domain("BUDGET")
+                .entityType("Budget")
+                .entityId(saved.getId())
+                .action(ActionType.UPDATE)
+                .user(saved.getOwnerId(), null, null)
+                .description("Budget updated")
+                .changes(oldBudget, saved)
+                .eventId(saved.getEventId())
+                .log();
         }
         
         return saved;
@@ -109,11 +121,17 @@ public class BudgetService {
         
         Budget saved = budgetRepository.save(oldBudget);
         
-        // Audit log
-        auditLogService.logWithChanges("Budget", saved.getId(), ActionType.UPDATE,
-            saved.getOwnerId(), null,
-            "Budget details updated",
-            oldSnapshot, saved, saved.getEventId());
+        // Audit log with unified audit system
+        auditLogService.builder()
+            .domain("BUDGET")
+            .entityType("Budget")
+            .entityId(saved.getId())
+            .action(ActionType.UPDATE)
+            .user(saved.getOwnerId(), null, null)
+            .description("Budget details updated")
+            .changes(oldSnapshot, saved)
+            .eventId(saved.getEventId())
+            .log();
         
         return saved;
     }
@@ -213,10 +231,16 @@ public class BudgetService {
         
         Budget saved = budgetRepository.save(budget);
         
-        // Audit log
-        auditLogService.log("Budget", budgetId, ActionType.APPROVE,
-            budget.getOwnerId(), request.getApprovedBy(),
-            String.format("Budget approved. Status changed from %s to APPROVED", oldStatus));
+        // Audit log with unified audit system
+        auditLogService.builder()
+            .domain("BUDGET")
+            .entityType("Budget")
+            .entityId(budgetId)
+            .action(ActionType.APPROVE)
+            .user(budget.getOwnerId(), request.getApprovedBy(), null)
+            .description(String.format("Budget approved. Status changed from %s to APPROVED", oldStatus))
+            .eventId(budget.getEventId())
+            .log();
         
         return saved;
     }
@@ -240,11 +264,17 @@ public class BudgetService {
         
         Budget saved = budgetRepository.save(budget);
         
-        // Audit log
-        auditLogService.log("Budget", budgetId, ActionType.REJECT,
-            budget.getOwnerId(), request.getApprovedBy(),
-            String.format("Budget rejected. Status changed from %s to REJECTED. Reason: %s", 
-                oldStatus, request.getNotes() != null ? request.getNotes() : "No reason provided"));
+        // Audit log with unified audit system
+        auditLogService.builder()
+            .domain("BUDGET")
+            .entityType("Budget")
+            .entityId(budgetId)
+            .action(ActionType.REJECT)
+            .user(budget.getOwnerId(), request.getApprovedBy(), null)
+            .description(String.format("Budget rejected. Status changed from %s to REJECTED. Reason: %s", 
+                oldStatus, request.getNotes() != null ? request.getNotes() : "No reason provided"))
+            .eventId(budget.getEventId())
+            .log();
         
         return saved;
     }
@@ -260,10 +290,16 @@ public class BudgetService {
         budget.setBudgetStatus("SUBMITTED");
         Budget saved = budgetRepository.save(budget);
         
-        // Audit log
-        auditLogService.log("Budget", budgetId, ActionType.SUBMIT,
-            budget.getOwnerId(), null,
-            "Budget submitted for approval");
+        // Audit log with unified audit system
+        auditLogService.builder()
+            .domain("BUDGET")
+            .entityType("Budget")
+            .entityId(budgetId)
+            .action(ActionType.SUBMIT)
+            .user(budget.getOwnerId(), null, null)
+            .description("Budget submitted for approval")
+            .eventId(budget.getEventId())
+            .log();
         
         return saved;
     }
@@ -505,19 +541,31 @@ public class BudgetService {
             lineItemRepository.deleteAll(lineItems);
             
             // Audit log for line items deletion
-            auditLogService.log("BudgetLineItem", budgetId, ActionType.DELETE,
-                ownerId, null,
-                String.format("Deleted %d line items associated with budget", lineItems.size()));
+            auditLogService.builder()
+                .domain("BUDGET")
+                .entityType("BudgetLineItem")
+                .entityId(budgetId)
+                .action(ActionType.BULK_DELETE)
+                .user(ownerId, null, null)
+                .description(String.format("Deleted %d line items associated with budget", lineItems.size()))
+                .eventId(eventId)
+                .log();
         }
         
         // Now delete the budget (soft delete due to @SQLDelete annotation)
         budgetRepository.delete(budget);
         
-        // Audit log
-        auditLogService.logWithChanges("Budget", budgetId, ActionType.DELETE,
-            ownerId, null,
-            String.format("Budget deleted (soft delete) for event %s", eventId),
-            budget, null, eventId);
+        // Audit log with unified audit system
+        auditLogService.builder()
+            .domain("BUDGET")
+            .entityType("Budget")
+            .entityId(budgetId)
+            .action(ActionType.DELETE)
+            .user(ownerId, null, null)
+            .description(String.format("Budget deleted (soft delete) for event %s", eventId))
+            .changes(budget, null)
+            .eventId(eventId)
+            .log();
     }
 
     public Budget recalculateTotals(UUID budgetId) {
