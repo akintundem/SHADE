@@ -450,7 +450,7 @@ main() {
         "totalBudget": 50000.00,
         "currency": "USD"
     }'
-    run_test "Create Budget" "POST" "/api/v1/budgets" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$budget_data" "200" "Create a new budget for the event"
+    run_test "Create Budget" "POST" "/api/v1/budgets" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$budget_data" "201" "Create a new budget for the event"
     
     # Get budget by event ID
     run_test "Get Budget by Event ID" "GET" "/api/v1/budgets/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Retrieve budget for event"
@@ -463,12 +463,12 @@ main() {
             "currency": "USD",
             "notes": "Updated budget"
         }'
-        run_test "Update Budget" "PUT" "/api/v1/budgets/$BUDGET_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_budget_data" "200" "Update budget details"
+        run_test "Update Budget" "PUT" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_budget_data" "200" "Update budget details"
     fi
     
     # Recalculate totals
     if [ -n "$BUDGET_ID" ]; then
-        run_test "Recalculate Totals" "POST" "/api/v1/budgets/$BUDGET_ID/recalculate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Force recalculation of budget totals"
+        run_test "Recalculate Totals" "POST" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/recalculate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Force recalculation of budget totals"
     fi
     echo ""
     
@@ -485,7 +485,7 @@ main() {
             "actualCost": 9500.00,
             "quantity": 1
         }'
-        run_test "Add Line Item" "POST" "/api/v1/budgets/$BUDGET_ID/line-items" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$line_item_data" "200" "Add a single line item"
+        run_test "Add Line Item" "POST" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$line_item_data" "200" "Add a single line item"
     fi
     
     # Add bulk line items
@@ -506,17 +506,17 @@ main() {
                 }
             ]
         }'
-        run_test "Add Bulk Line Items" "POST" "/api/v1/budgets/$BUDGET_ID/line-items/bulk" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$bulk_line_items" "200" "Add multiple line items"
+        run_test "Add Bulk Line Items" "POST" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items/bulk" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$bulk_line_items" "200" "Add multiple line items"
     fi
     
     # Get all line items
     if [ -n "$BUDGET_ID" ]; then
-        run_test "Get All Line Items" "GET" "/api/v1/budgets/$BUDGET_ID/line-items" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all line items"
+        run_test "Get All Line Items" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all line items"
     fi
     
     # Get specific line item
     if [ -n "$BUDGET_ID" ] && [ -n "$LINE_ITEM_ID" ]; then
-        run_test "Get Specific Line Item" "GET" "/api/v1/budgets/$BUDGET_ID/line-items/$LINE_ITEM_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get line item details"
+        run_test "Get Specific Line Item" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items/$LINE_ITEM_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get line item details"
     fi
     
     # Update line item
@@ -526,7 +526,7 @@ main() {
             "actualCost": 9800.00,
             "notes": "Final cost after negotiation"
         }'
-        run_test "Update Line Item" "PUT" "/api/v1/budgets/$BUDGET_ID/line-items/$LINE_ITEM_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_line_item" "200" "Update line item details"
+        run_test "Update Line Item" "PUT" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items/$LINE_ITEM_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_line_item" "200" "Update line item details"
     fi
     echo ""
     
@@ -535,15 +535,15 @@ main() {
     echo "==============================="
     
     if [ -n "$BUDGET_ID" ]; then
-        run_test "Get Budget Summary" "GET" "/api/v1/budgets/$BUDGET_ID/summary" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get comprehensive budget summary"
+        run_test "Get Budget Summary" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/summary" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get comprehensive budget summary"
         
-        run_test "Get Variance Analysis" "GET" "/api/v1/budgets/$BUDGET_ID/variance-analysis" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get variance analysis by category"
+        run_test "Get Variance Analysis" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/variance-analysis" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get variance analysis by category"
         
-        run_test "Get Contingency Analysis" "GET" "/api/v1/budgets/$BUDGET_ID/contingency-analysis" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get contingency usage and recommendations"
+        run_test "Get Contingency Analysis" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/contingency-analysis" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get contingency usage and recommendations"
         
-        run_test "Get Category Breakdown" "GET" "/api/v1/budgets/$BUDGET_ID/category-breakdown" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get spending breakdown by category"
+        run_test "Get Category Breakdown" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/category-breakdown" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get spending breakdown by category"
         
-        run_test "Get Rollup Total" "GET" "/api/v1/budgets/$BUDGET_ID/rollup" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Compute rollup total"
+        run_test "Get Rollup Total" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/rollup" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Compute rollup total"
     fi
     
     run_test "Get Standard Categories" "GET" "/api/v1/budgets/categories" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get list of standard budget categories"
@@ -554,13 +554,13 @@ main() {
     echo "=============================="
     
     if [ -n "$BUDGET_ID" ]; then
-        run_test "Submit for Approval" "POST" "/api/v1/budgets/$BUDGET_ID/submit-for-approval" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Submit budget for approval"
+        run_test "Submit for Approval" "POST" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/submit-for-approval" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Submit budget for approval"
         
         local approval_data='{
             "approvedBy": "Budget Manager",
             "notes": "Approved with recommendations"
         }'
-        run_test "Approve Budget" "POST" "/api/v1/budgets/$BUDGET_ID/approve" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$approval_data" "200" "Approve the budget"
+        run_test "Approve Budget" "POST" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/approve" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$approval_data" "200" "Approve the budget"
     fi
     echo ""
     
@@ -589,7 +589,7 @@ main() {
         local invalid_contingency='{
             "contingencyPercentage": 150.00
         }'
-        run_test "Update with Invalid Contingency (Should Fail)" "PUT" "/api/v1/budgets/$BUDGET_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invalid_contingency" "400" "Attempt to set contingency > 100%"
+        run_test "Update with Invalid Contingency (Should Fail)" "PUT" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invalid_contingency" "400" "Attempt to set contingency > 100%"
     fi
     
     # Test unauthenticated access (should fail)
@@ -602,12 +602,12 @@ main() {
     
     # Delete line item
     if [ -n "$BUDGET_ID" ] && [ -n "$LINE_ITEM_ID" ]; then
-        run_test "Delete Line Item" "DELETE" "/api/v1/budgets/$BUDGET_ID/line-items/$LINE_ITEM_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete a line item"
+        run_test "Delete Line Item" "DELETE" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items/$LINE_ITEM_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete a line item"
     fi
     
     # Delete budget
     if [ -n "$BUDGET_ID" ]; then
-        run_test "Delete Budget" "DELETE" "/api/v1/budgets/$BUDGET_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete the budget"
+        run_test "Delete Budget" "DELETE" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete the budget"
     fi
     
     # Delete event

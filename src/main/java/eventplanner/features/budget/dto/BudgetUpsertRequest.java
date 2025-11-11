@@ -1,10 +1,16 @@
 package eventplanner.features.budget.dto;
 
 import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
 import java.math.BigDecimal;
 import java.util.UUID;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class BudgetUpsertRequest {
     @NotNull
     private UUID eventId;
@@ -14,13 +20,8 @@ public class BudgetUpsertRequest {
 
     private String currency;
 
-    public UUID getEventId() { return eventId; }
-    public void setEventId(UUID eventId) { this.eventId = eventId; }
+    private BigDecimal contingencyPercentage;
 
-    public BigDecimal getTotalBudget() { return totalBudget; }
-    public void setTotalBudget(BigDecimal totalBudget) { this.totalBudget = totalBudget; }
-
-    public String getCurrency() { return currency; }
-    public void setCurrency(String currency) { this.currency = currency; }
+    private String notes;
 }
 

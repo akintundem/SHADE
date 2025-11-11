@@ -25,4 +25,6 @@ public class UpdateBudgetRequest {
     private String currency;
     
     private String notes;
+    
+    private String budgetStatus;
 }

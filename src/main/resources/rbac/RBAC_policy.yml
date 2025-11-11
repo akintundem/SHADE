@@ -138,22 +138,22 @@ policy:
     -
       name: budget.analytics.read
       scope: EVENT
-      resources: null
+      resources: event_id,budget_id
       description: Get budget summary; Get category breakdown; Get contingency analysis; Get variance analysis
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.approve
       scope: EVENT
-      resources: null
+      resources: event_id,budget_id
       description: Approve budget
       conditions: "Approver ≠ submitter (SoD); audited"
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.create
       scope: EVENT
@@ -162,99 +162,99 @@ policy:
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.delete
       scope: EVENT
-      resources: null
+      resources: event_id,budget_id
       description: Delete budget
       conditions: "Owner only; audited"
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.lineitem.create
       scope: EVENT
-      resources: null
+      resources: event_id,budget_id
       description: Add budget line item; Add multiple line items
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.lineitem.delete
       scope: EVENT
-      resources: null
+      resources: event_id,budget_id,item_id
       description: Delete line item
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.lineitem.read
       scope: EVENT
-      resources: null
+      resources: event_id,budget_id
       description: Get all line items; Get specific line item
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.lineitem.update
       scope: EVENT
-      resources: null
+      resources: event_id,budget_id,item_id
       description: Update line item
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.read
       scope: EVENT
-      resources: null
+      resources: event_id
       description: Compute rollup total; Get event budget
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.recalculate
       scope: EVENT
-      resources: null
+      resources: event_id,budget_id
       description: Recalculate totals
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.reject
       scope: EVENT
-      resources: null
+      resources: event_id,budget_id
       description: Reject budget
       conditions: "Approver ≠ submitter (SoD); audited"
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.submit
       scope: EVENT
-      resources: null
+      resources: event_id,budget_id
       description: Submit budget for approval
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: budget.update
       scope: EVENT
-      resources: null
+      resources: event_id,budget_id
       description: Update budget details
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: false
+        is_member: true
     -
       name: communication.read
       scope: EVENT

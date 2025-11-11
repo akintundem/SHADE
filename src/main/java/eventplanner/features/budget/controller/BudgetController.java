@@ -7,6 +7,14 @@ import eventplanner.features.budget.dto.response.*;
 import eventplanner.features.budget.entity.Budget;
 import eventplanner.features.budget.entity.BudgetLineItem;
 import eventplanner.features.budget.service.BudgetService;
+import eventplanner.features.budget.service.BudgetIdempotencyService;
+import eventplanner.features.budget.service.BudgetRateLimitService;
+import eventplanner.features.budget.service.BudgetExportService;
+import eventplanner.features.budget.service.BudgetImportService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.multipart.MultipartFile;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -35,9 +43,24 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 public class BudgetController {
 
 	private final BudgetService budgetService;
+	private final BudgetIdempotencyService idempotencyService;
+	private final BudgetRateLimitService rateLimitService;
+	private final BudgetExportService exportService;
+	private final BudgetImportService importService;
+	private final ObjectMapper objectMapper;
 
-	public BudgetController(BudgetService budgetService) {
+	public BudgetController(BudgetService budgetService, 
+	                        BudgetIdempotencyService idempotencyService,
+	                        BudgetRateLimitService rateLimitService,
+	                        BudgetExportService exportService,
+	                        BudgetImportService importService,
+	                        ObjectMapper objectMapper) {
 		this.budgetService = budgetService;
+		this.idempotencyService = idempotencyService;
+		this.rateLimitService = rateLimitService;
+		this.exportService = exportService;
+		this.importService = importService;
+		this.objectMapper = objectMapper;
 	}
 
 	// ==================== CORE BUDGET CRUD ====================
@@ -64,9 +87,9 @@ public class BudgetController {
 			return budgetService.getByEventId(uuid)
 				.map(budget -> {
 					// Verify the user has access to this budget (ownership check already handled by RBAC)
-					return convertToDetailResponse(budget);
+					BudgetDetailResponse response = convertToDetailResponse(budget);
+					return withETag(budget, response);
 				})
-				.map(ResponseEntity::ok)
 				.orElseGet(() -> ResponseEntity.notFound().build());
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid event ID format", e);
@@ -75,13 +98,14 @@ public class BudgetController {
 
 	@PostMapping
     @RequiresPermission(value = RbacPermissions.BUDGET_CREATE, resources = {"event_id=#budget.eventId"})
-	@Operation(summary = "Create or update budget", description = "Create a new budget or update existing one")
+	@Operation(summary = "Create budget", description = "Create a new budget for an event")
 	@ApiResponses(value = {
-		@ApiResponse(responseCode = "200", description = "Budget created/updated successfully"),
+		@ApiResponse(responseCode = "201", description = "Budget created successfully"),
 		@ApiResponse(responseCode = "400", description = "Invalid request data"),
-		@ApiResponse(responseCode = "401", description = "Unauthorized - user not authenticated")
+		@ApiResponse(responseCode = "401", description = "Unauthorized - user not authenticated"),
+		@ApiResponse(responseCode = "409", description = "Budget already exists for this event")
 	})
-	public ResponseEntity<BudgetDetailResponse> upsert(
+	public ResponseEntity<BudgetDetailResponse> createBudget(
 			@Valid @RequestBody BudgetUpsertRequest budget,
 			@AuthenticationPrincipal UserPrincipal user) {
 		if (budget == null) {
@@ -92,28 +116,42 @@ public class BudgetController {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not authenticated");
 		}
 		
+		// Check if budget already exists for this event
+		if (budgetService.getByEventId(budget.getEventId()).isPresent()) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, 
+				"Budget already exists for this event. Use PUT to update.");
+		}
+		
 		Budget entity = new Budget();
 		entity.setEventId(budget.getEventId());
 		entity.setOwnerId(user.getUser().getId());
 		entity.setTotalBudget(budget.getTotalBudget());
 		entity.setCurrency(budget.getCurrency());
+		entity.setContingencyPercentage(budget.getContingencyPercentage());
+		entity.setNotes(budget.getNotes());
 		
 		Budget saved = budgetService.createOrUpdate(entity);
-		return ResponseEntity.ok(convertToDetailResponse(saved));
+		return ResponseEntity.status(HttpStatus.CREATED)
+				.header("Location", "/api/v1/budgets/events/" + saved.getEventId() + "/budgets/" + saved.getId())
+				.body(convertToDetailResponse(saved));
 	}
 
-	@PutMapping("/{budgetId}")
-    @RequiresPermission(value = RbacPermissions.BUDGET_UPDATE, resources = {"budget_id=#budgetId"})
+	@PutMapping("/events/{eventId}/budgets/{budgetId}")
+    @RequiresPermission(value = RbacPermissions.BUDGET_UPDATE, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Update budget details", description = "Update budget information including contingency settings")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget updated successfully"),
 		@ApiResponse(responseCode = "404", description = "Budget not found"),
 		@ApiResponse(responseCode = "400", description = "Invalid request data"),
-		@ApiResponse(responseCode = "401", description = "Unauthorized - user not authenticated")
+		@ApiResponse(responseCode = "401", description = "Unauthorized - user not authenticated"),
+		@ApiResponse(responseCode = "409", description = "Conflict - invalid status transition or version mismatch"),
+		@ApiResponse(responseCode = "412", description = "Precondition Failed - ETag mismatch")
 	})
 	public ResponseEntity<BudgetDetailResponse> updateBudget(
+			@PathVariable String eventId,
 			@PathVariable String budgetId,
 			@Valid @RequestBody UpdateBudgetRequest request,
+			@RequestHeader(value = "If-Match", required = false) String ifMatch,
 			@AuthenticationPrincipal UserPrincipal user) {
 		if (user == null || user.getUser() == null) {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not authenticated");
@@ -129,9 +167,21 @@ public class BudgetController {
 			if (!existing.getOwnerId().equals(user.getUser().getId())) {
 				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to update this budget");
 			}
+
+			// Validate ETag if provided
+			if (ifMatch != null && !ifMatch.equals(generateETag(existing))) {
+				throw new ResponseStatusException(HttpStatus.PRECONDITION_FAILED, 
+					"Budget has been modified. Please refresh and try again.");
+			}
+
+			// Validate status transition if status is being changed
+			if (request.getBudgetStatus() != null) {
+				validateStatusTransition(existing.getBudgetStatus(), request.getBudgetStatus());
+			}
 			
 			Budget updated = budgetService.updateBudget(uuid, request);
-			return ResponseEntity.ok(convertToDetailResponse(updated));
+			BudgetDetailResponse response = convertToDetailResponse(updated);
+			return withETag(updated, response);
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format or data", e);
 		} catch (RuntimeException e) {
@@ -142,8 +192,8 @@ public class BudgetController {
 		}
 	}
 
-	@DeleteMapping("/{budgetId}")
-    @RequiresPermission(value = RbacPermissions.BUDGET_DELETE, resources = {"budget_id=#budgetId"})
+	@DeleteMapping("/events/{eventId}/budgets/{budgetId}")
+    @RequiresPermission(value = RbacPermissions.BUDGET_DELETE, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Delete budget", description = "Permanently delete a budget and all its line items")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "204", description = "Budget deleted successfully"),
@@ -152,6 +202,7 @@ public class BudgetController {
 		@ApiResponse(responseCode = "403", description = "Forbidden - not the budget owner")
 	})
 	public ResponseEntity<Void> deleteBudget(
+			@PathVariable String eventId,
 			@PathVariable String budgetId,
 			@AuthenticationPrincipal UserPrincipal user) {
 		if (user == null || user.getUser() == null) {
@@ -178,8 +229,8 @@ public class BudgetController {
 
 	// ==================== LINE ITEM MANAGEMENT ====================
 
-	@PostMapping("/{budgetId}/line-items")
-    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_CREATE, resources = {"budget_id=#budgetId"})
+	@PostMapping("/events/{eventId}/budgets/{budgetId}/line-items")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_CREATE, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Add budget line item", description = "Add a single line item to the budget")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Line item added successfully"),
@@ -187,6 +238,7 @@ public class BudgetController {
 		@ApiResponse(responseCode = "400", description = "Invalid request data")
 	})
 	public ResponseEntity<BudgetLineItemResponse> addLineItem(
+			@PathVariable String eventId,
 			@PathVariable String budgetId,
 			@Valid @RequestBody BudgetLineItemCreateRequest payload) {
 		try {
@@ -199,6 +251,7 @@ public class BudgetController {
             item.setEstimatedCost(payload.getEstimatedCost());
             item.setActualCost(payload.getActualCost());
             item.setVendorId(payload.getVendorId());
+            item.setQuantity(payload.getQuantity());
 			
 			BudgetLineItem saved = budgetService.addLineItem(item);
 			return ResponseEntity.ok(convertToLineItemResponse(saved));
@@ -207,18 +260,50 @@ public class BudgetController {
 		}
 	}
 
-	@PostMapping("/{budgetId}/line-items/bulk")
-    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_CREATE, resources = {"budget_id=#budgetId"})
-	@Operation(summary = "Add multiple line items", description = "Add multiple line items to the budget in one operation")
+	@PostMapping("/events/{eventId}/budgets/{budgetId}/line-items/bulk")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_CREATE, resources = {"event_id=#eventId", "budget_id=#budgetId"})
+	@Operation(summary = "Add multiple line items", description = "Add multiple line items to the budget in one operation with idempotency support")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Line items added successfully"),
 		@ApiResponse(responseCode = "404", description = "Budget not found"),
-		@ApiResponse(responseCode = "400", description = "Invalid request data")
+		@ApiResponse(responseCode = "400", description = "Invalid request data or size exceeded"),
+		@ApiResponse(responseCode = "429", description = "Too many requests - rate limit exceeded")
 	})
 	public ResponseEntity<List<BudgetLineItemResponse>> addBulkLineItems(
+			@PathVariable String eventId,
 			@PathVariable String budgetId,
-			@Valid @RequestBody BulkLineItemRequest request) {
+			@Valid @RequestBody BulkLineItemRequest request,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@AuthenticationPrincipal UserPrincipal user) {
 		try {
+			// Validate request size
+			if (!rateLimitService.validateBulkSize(request.getLineItems().size())) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+					String.format("Bulk request size exceeds maximum allowed (%d items)", 
+						rateLimitService.getMaxBulkSize()));
+			}
+			
+			// Check idempotency - return cached result if available
+			if (idempotencyKey != null) {
+				var cachedResult = idempotencyService.getProcessedResult(idempotencyKey);
+				if (cachedResult.isPresent()) {
+					List<BudgetLineItemResponse> cached = objectMapper.readValue(
+						cachedResult.get(), 
+						objectMapper.getTypeFactory().constructCollectionType(List.class, BudgetLineItemResponse.class)
+					);
+					return ResponseEntity.ok()
+							.header("X-Idempotency-Replay", "true")
+							.body(cached);
+				}
+			}
+			
+			// Check rate limit
+			if (user != null && !rateLimitService.isAllowed(user.getUser().getId().toString())) {
+				int remaining = rateLimitService.getRemainingRequests(user.getUser().getId().toString());
+				throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, 
+					String.format("Rate limit exceeded. Try again later. Remaining requests: %d", remaining));
+			}
+			
 			UUID budgetUuid = UUID.fromString(budgetId);
 			request.setBudgetId(budgetUuid);
 			
@@ -226,20 +311,42 @@ public class BudgetController {
 			List<BudgetLineItemResponse> responses = saved.stream()
 					.map(this::convertToLineItemResponse)
 					.toList();
-			return ResponseEntity.ok(responses);
+			
+			// Store result for idempotency
+			if (idempotencyKey != null) {
+				try {
+					String resultJson = objectMapper.writeValueAsString(responses);
+					idempotencyService.storeResult(idempotencyKey, resultJson);
+				} catch (Exception e) {
+					// Log but don't fail the request
+					System.err.println("Failed to store idempotency result: " + e.getMessage());
+				}
+			}
+			
+			return ResponseEntity.ok()
+					.header("X-RateLimit-Remaining", 
+						String.valueOf(rateLimitService.getRemainingRequests(user.getUser().getId().toString())))
+					.body(responses);
+		} catch (ResponseStatusException e) {
+			throw e; // Re-throw status exceptions
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format", e);
+		} catch (Exception e) {
+			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, 
+				"Failed to process bulk line items", e);
 		}
 	}
 
-	@GetMapping("/{budgetId}/line-items")
-    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_READ, resources = {"budget_id=#budgetId"})
+	@GetMapping("/events/{eventId}/budgets/{budgetId}/line-items")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_READ, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Get all line items", description = "Retrieve all line items for a budget")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Line items retrieved successfully"),
 		@ApiResponse(responseCode = "404", description = "Budget not found")
 	})
-	public ResponseEntity<List<BudgetLineItemResponse>> getLineItems(@PathVariable String budgetId) {
+	public ResponseEntity<List<BudgetLineItemResponse>> getLineItems(
+			@PathVariable String eventId,
+			@PathVariable String budgetId) {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
 			List<BudgetLineItem> items = budgetService.listLineItems(uuid);
@@ -252,14 +359,15 @@ public class BudgetController {
 		}
 	}
 
-	@GetMapping("/{budgetId}/line-items/{itemId}")
-    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_READ, resources = {"budget_id=#budgetId"})
+	@GetMapping("/events/{eventId}/budgets/{budgetId}/line-items/{itemId}")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_READ, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Get specific line item", description = "Retrieve a specific line item by ID")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Line item found"),
 		@ApiResponse(responseCode = "404", description = "Line item not found")
 	})
 	public ResponseEntity<BudgetLineItemResponse> getLineItem(
+			@PathVariable String eventId,
 			@PathVariable String budgetId,
 			@PathVariable String itemId) {
 		try {
@@ -273,8 +381,8 @@ public class BudgetController {
 		}
 	}
 
-	@PutMapping("/{budgetId}/line-items/{itemId}")
-    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_UPDATE, resources = {"budget_id=#budgetId"})
+	@PutMapping("/events/{eventId}/budgets/{budgetId}/line-items/{itemId}")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_UPDATE, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Update line item", description = "Update an existing line item")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Line item updated successfully"),
@@ -282,6 +390,7 @@ public class BudgetController {
 		@ApiResponse(responseCode = "400", description = "Invalid request data")
 	})
 	public ResponseEntity<BudgetLineItemResponse> updateLineItem(
+			@PathVariable String eventId,
 			@PathVariable String budgetId,
 			@PathVariable String itemId,
 			@Valid @RequestBody UpdateBudgetLineItemRequest request) {
@@ -296,14 +405,15 @@ public class BudgetController {
 		}
 	}
 
-	@DeleteMapping("/{budgetId}/line-items/{itemId}")
-    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_DELETE, resources = {"budget_id=#budgetId"})
+	@DeleteMapping("/events/{eventId}/budgets/{budgetId}/line-items/{itemId}")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_DELETE, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Delete line item", description = "Remove a line item from the budget")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "204", description = "Line item deleted successfully"),
 		@ApiResponse(responseCode = "404", description = "Line item not found")
 	})
 	public ResponseEntity<Void> deleteLineItem(
+			@PathVariable String eventId,
 			@PathVariable String budgetId,
 			@PathVariable String itemId) {
 		try {
@@ -319,14 +429,16 @@ public class BudgetController {
 
 	// ==================== ANALYSIS ENDPOINTS ====================
 
-	@GetMapping("/{budgetId}/summary")
-    @RequiresPermission(value = RbacPermissions.BUDGET_READ, resources = {"budget_id=#budgetId"})
+	@GetMapping("/events/{eventId}/budgets/{budgetId}/summary")
+    @RequiresPermission(value = RbacPermissions.BUDGET_READ, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Get budget summary", description = "Get comprehensive budget summary with key metrics")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Summary retrieved successfully"),
 		@ApiResponse(responseCode = "404", description = "Budget not found")
 	})
-	public ResponseEntity<BudgetSummaryResponse> getBudgetSummary(@PathVariable String budgetId) {
+	public ResponseEntity<BudgetSummaryResponse> getBudgetSummary(
+			@PathVariable String eventId,
+			@PathVariable String budgetId) {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
 			BudgetSummaryResponse summary = budgetService.getBudgetSummary(uuid);
@@ -338,14 +450,16 @@ public class BudgetController {
 		}
 	}
 
-	@GetMapping("/{budgetId}/variance-analysis")
-    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"budget_id=#budgetId"})
+	@GetMapping("/events/{eventId}/budgets/{budgetId}/variance-analysis")
+    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Get variance analysis", description = "Get detailed variance analysis by category")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Analysis retrieved successfully"),
 		@ApiResponse(responseCode = "404", description = "Budget not found")
 	})
-	public ResponseEntity<BudgetVarianceAnalysisResponse> getVarianceAnalysis(@PathVariable String budgetId) {
+	public ResponseEntity<BudgetVarianceAnalysisResponse> getVarianceAnalysis(
+			@PathVariable String eventId,
+			@PathVariable String budgetId) {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
 			BudgetVarianceAnalysisResponse analysis = budgetService.getVarianceAnalysis(uuid);
@@ -357,14 +471,16 @@ public class BudgetController {
 		}
 	}
 
-	@GetMapping("/{budgetId}/contingency-analysis")
-    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"budget_id=#budgetId"})
+	@GetMapping("/events/{eventId}/budgets/{budgetId}/contingency-analysis")
+    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Get contingency analysis", description = "Get contingency usage and recommendations")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Analysis retrieved successfully"),
 		@ApiResponse(responseCode = "404", description = "Budget not found")
 	})
-	public ResponseEntity<BudgetContingencyResponse> getContingencyAnalysis(@PathVariable String budgetId) {
+	public ResponseEntity<BudgetContingencyResponse> getContingencyAnalysis(
+			@PathVariable String eventId,
+			@PathVariable String budgetId) {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
 			BudgetContingencyResponse analysis = budgetService.getContingencyAnalysis(uuid);
@@ -376,14 +492,16 @@ public class BudgetController {
 		}
 	}
 
-	@GetMapping("/{budgetId}/category-breakdown")
-    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"budget_id=#budgetId"})
+	@GetMapping("/events/{eventId}/budgets/{budgetId}/category-breakdown")
+    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Get category breakdown", description = "Get spending breakdown by category")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Breakdown retrieved successfully"),
 		@ApiResponse(responseCode = "404", description = "Budget not found")
 	})
-	public ResponseEntity<CategoryBreakdownResponse> getCategoryBreakdown(@PathVariable String budgetId) {
+	public ResponseEntity<CategoryBreakdownResponse> getCategoryBreakdown(
+			@PathVariable String eventId,
+			@PathVariable String budgetId) {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
 			CategoryBreakdownResponse breakdown = budgetService.getCategoryBreakdown(uuid);
@@ -397,21 +515,32 @@ public class BudgetController {
 
 	// ==================== APPROVAL WORKFLOW ====================
 
-	@PostMapping("/{budgetId}/submit-for-approval")
-    @RequiresPermission(value = RbacPermissions.BUDGET_SUBMIT, resources = {"budget_id=#budgetId"})
+	@PostMapping("/events/{eventId}/budgets/{budgetId}/submit-for-approval")
+    @RequiresPermission(value = RbacPermissions.BUDGET_SUBMIT, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Submit budget for approval", description = "Submit budget for approval workflow")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget submitted for approval"),
 		@ApiResponse(responseCode = "404", description = "Budget not found"),
 		@ApiResponse(responseCode = "409", description = "Budget cannot be submitted in current status")
 	})
-	public ResponseEntity<BudgetDetailResponse> submitForApproval(@PathVariable String budgetId) {
+	public ResponseEntity<BudgetDetailResponse> submitForApproval(
+			@PathVariable String eventId,
+			@PathVariable String budgetId) {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
+			
+			// Validate status transition before attempting
+			Budget existing = budgetService.getById(uuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
+			validateStatusTransition(existing.getBudgetStatus(), "SUBMITTED");
+			
 			Budget updated = budgetService.submitForApproval(uuid);
-			return ResponseEntity.ok(convertToDetailResponse(updated));
+			BudgetDetailResponse response = convertToDetailResponse(updated);
+			return withETag(updated, response);
         } catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format", e);
+		} catch (ResponseStatusException e) {
+			throw e; // Re-throw status exceptions
 		} catch (RuntimeException e) {
 			if (e.getMessage().contains("not found")) {
 				throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
@@ -421,8 +550,8 @@ public class BudgetController {
 		}
 	}
 
-	@PostMapping("/{budgetId}/approve")
-    @RequiresPermission(value = RbacPermissions.BUDGET_APPROVE, resources = {"budget_id=#budgetId"})
+	@PostMapping("/events/{eventId}/budgets/{budgetId}/approve")
+    @RequiresPermission(value = RbacPermissions.BUDGET_APPROVE, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Approve budget", description = "Approve the budget")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget approved successfully"),
@@ -430,14 +559,24 @@ public class BudgetController {
 		@ApiResponse(responseCode = "409", description = "Budget cannot be approved in current status")
 	})
 	public ResponseEntity<BudgetDetailResponse> approveBudget(
+			@PathVariable String eventId,
 			@PathVariable String budgetId,
 			@Valid @RequestBody BudgetApprovalRequest request) {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
+			
+			// Validate status transition before attempting
+			Budget existing = budgetService.getById(uuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
+			validateStatusTransition(existing.getBudgetStatus(), "APPROVED");
+			
 			Budget updated = budgetService.approveBudget(uuid, request);
-			return ResponseEntity.ok(convertToDetailResponse(updated));
+			BudgetDetailResponse response = convertToDetailResponse(updated);
+			return withETag(updated, response);
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format", e);
+		} catch (ResponseStatusException e) {
+			throw e; // Re-throw status exceptions
 		} catch (RuntimeException e) {
 			if (e.getMessage().contains("not found")) {
 				throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
@@ -447,8 +586,8 @@ public class BudgetController {
 		}
 	}
 
-	@PostMapping("/{budgetId}/reject")
-    @RequiresPermission(value = RbacPermissions.BUDGET_REJECT, resources = {"budget_id=#budgetId"})
+	@PostMapping("/events/{eventId}/budgets/{budgetId}/reject")
+    @RequiresPermission(value = RbacPermissions.BUDGET_REJECT, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Reject budget", description = "Reject the budget with reason")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Budget rejected successfully"),
@@ -456,14 +595,24 @@ public class BudgetController {
 		@ApiResponse(responseCode = "409", description = "Budget cannot be rejected in current status")
 	})
 	public ResponseEntity<BudgetDetailResponse> rejectBudget(
+			@PathVariable String eventId,
 			@PathVariable String budgetId,
 			@Valid @RequestBody BudgetApprovalRequest request) {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
+			
+			// Validate status transition before attempting
+			Budget existing = budgetService.getById(uuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
+			validateStatusTransition(existing.getBudgetStatus(), "REJECTED");
+			
 			Budget updated = budgetService.rejectBudget(uuid, request);
-			return ResponseEntity.ok(convertToDetailResponse(updated));
+			BudgetDetailResponse response = convertToDetailResponse(updated);
+			return withETag(updated, response);
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format", e);
+		} catch (ResponseStatusException e) {
+			throw e; // Re-throw status exceptions
 		} catch (RuntimeException e) {
 			if (e.getMessage().contains("not found")) {
 				throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
@@ -473,16 +622,133 @@ public class BudgetController {
 		}
 	}
 
+	// ==================== EXPORT/IMPORT ENDPOINTS ====================
+
+	@GetMapping("/events/{eventId}/budgets/{budgetId}/export/csv")
+    @RequiresPermission(value = RbacPermissions.BUDGET_READ, resources = {"event_id=#eventId", "budget_id=#budgetId"})
+	@Operation(summary = "Export budget to CSV", description = "Export budget and all line items to CSV format")
+	@ApiResponses(value = {
+		@ApiResponse(responseCode = "200", description = "Budget exported successfully"),
+		@ApiResponse(responseCode = "404", description = "Budget not found")
+	})
+	public ResponseEntity<byte[]> exportToCSV(
+			@PathVariable String eventId,
+			@PathVariable String budgetId) {
+		try {
+			UUID uuid = UUID.fromString(budgetId);
+			Budget budget = budgetService.getById(uuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
+			
+			byte[] csvData = exportService.exportToCSV(budget);
+			
+			HttpHeaders headers = new HttpHeaders();
+			headers.setContentType(MediaType.parseMediaType("text/csv"));
+			headers.setContentDispositionFormData("attachment", "budget_" + budgetId + ".csv");
+			
+			return ResponseEntity.ok()
+					.headers(headers)
+					.body(csvData);
+					
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format", e);
+		}
+	}
+
+	@GetMapping("/events/{eventId}/budgets/{budgetId}/export/pdf")
+    @RequiresPermission(value = RbacPermissions.BUDGET_READ, resources = {"event_id=#eventId", "budget_id=#budgetId"})
+	@Operation(summary = "Export budget to PDF", description = "Export budget and all line items to PDF format")
+	@ApiResponses(value = {
+		@ApiResponse(responseCode = "200", description = "Budget exported successfully"),
+		@ApiResponse(responseCode = "404", description = "Budget not found"),
+		@ApiResponse(responseCode = "501", description = "PDF export not yet implemented")
+	})
+	public ResponseEntity<byte[]> exportToPDF(
+			@PathVariable String eventId,
+			@PathVariable String budgetId) {
+		// PDF export requires additional dependencies (e.g., iText, Apache PDFBox)
+		// For now, return CSV data with PDF mime type as placeholder
+		throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, 
+			"PDF export requires additional configuration. Please use CSV export.");
+	}
+
+	@PostMapping("/events/{eventId}/budgets/{budgetId}/import")
+    @RequiresPermission(value = RbacPermissions.BUDGET_UPDATE, resources = {"event_id=#eventId", "budget_id=#budgetId"})
+	@Operation(summary = "Import line items from CSV", description = "Import budget line items from CSV file")
+	@ApiResponses(value = {
+		@ApiResponse(responseCode = "200", description = "Line items imported successfully"),
+		@ApiResponse(responseCode = "400", description = "Invalid file format or data"),
+		@ApiResponse(responseCode = "404", description = "Budget not found")
+	})
+	public ResponseEntity<List<BudgetLineItemResponse>> importFromCSV(
+			@PathVariable String eventId,
+			@PathVariable String budgetId,
+			@RequestParam("file") MultipartFile file,
+			@AuthenticationPrincipal UserPrincipal user) {
+		try {
+			if (file.isEmpty()) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is empty");
+			}
+			
+			if (!file.getOriginalFilename().endsWith(".csv")) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+					"Only CSV files are supported");
+			}
+			
+			UUID budgetUuid = UUID.fromString(budgetId);
+			
+			// Verify budget exists
+			budgetService.getById(budgetUuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
+			
+			// Import line items
+			BulkLineItemRequest request = importService.importFromCSV(file, budgetUuid);
+			List<BudgetLineItem> saved = budgetService.addBulkLineItems(request);
+			
+			List<BudgetLineItemResponse> responses = saved.stream()
+					.map(this::convertToLineItemResponse)
+					.toList();
+			
+			return ResponseEntity.ok(responses);
+			
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid budget ID format", e);
+		} catch (ResponseStatusException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+				"Failed to import line items: " + e.getMessage(), e);
+		}
+	}
+
+	@GetMapping("/template")
+	@Operation(summary = "Download import template", description = "Download CSV template with standardized categories for importing budget line items")
+	@ApiResponses(value = {
+		@ApiResponse(responseCode = "200", description = "Template downloaded successfully")
+	})
+	public ResponseEntity<byte[]> downloadImportTemplate() {
+		byte[] template = exportService.generateImportTemplate();
+		
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.parseMediaType("text/csv"));
+		headers.setContentDispositionFormData("attachment", "budget_import_template.csv");
+		
+		return ResponseEntity.ok()
+				.headers(headers)
+				.body(template);
+	}
+
 	// ==================== UTILITY ENDPOINTS ====================
 
-	@GetMapping("/{budgetId}/rollup")
-    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"budget_id=#budgetId"})
+	@GetMapping("/events/{eventId}/budgets/{budgetId}/rollup")
+    @RequiresPermission(value = RbacPermissions.BUDGET_ANALYTICS_READ, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Compute rollup total", description = "Compute total rollup for a budget")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Rollup computed successfully"),
 		@ApiResponse(responseCode = "400", description = "Invalid budget ID format")
 	})
-	public ResponseEntity<java.math.BigDecimal> rollup(@PathVariable String budgetId) {
+	public ResponseEntity<java.math.BigDecimal> rollup(
+			@PathVariable String eventId,
+			@PathVariable String budgetId) {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
 			return ResponseEntity.ok(budgetService.computeRollup(uuid));
@@ -491,14 +757,16 @@ public class BudgetController {
 		}
 	}
 
-	@PostMapping("/{budgetId}/recalculate")
-    @RequiresPermission(value = RbacPermissions.BUDGET_RECALCULATE, resources = {"budget_id=#budgetId"})
+	@PostMapping("/events/{eventId}/budgets/{budgetId}/recalculate")
+    @RequiresPermission(value = RbacPermissions.BUDGET_RECALCULATE, resources = {"event_id=#eventId", "budget_id=#budgetId"})
 	@Operation(summary = "Recalculate totals", description = "Force recalculation of budget totals and variance")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Totals recalculated successfully"),
 		@ApiResponse(responseCode = "404", description = "Budget not found")
 	})
-	public ResponseEntity<BudgetDetailResponse> recalculateTotals(@PathVariable String budgetId) {
+	public ResponseEntity<BudgetDetailResponse> recalculateTotals(
+			@PathVariable String eventId,
+			@PathVariable String budgetId) {
 		try {
 			UUID uuid = UUID.fromString(budgetId);
 			Budget updated = budgetService.recalculateTotals(uuid);
@@ -511,8 +779,7 @@ public class BudgetController {
 	}
 
 	@GetMapping("/categories")
-    @RequiresPermission(RbacPermissions.BUDGET_READ)
-	@Operation(summary = "Get standard budget categories", description = "Get list of standard budget categories")
+	@Operation(summary = "Get standard budget categories", description = "Get list of standard budget categories (accessible to all authenticated users)")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "Categories retrieved successfully")
 	})
@@ -585,5 +852,63 @@ public class BudgetController {
 		response.setCreatedAt(entity.getCreatedAt());
 		response.setUpdatedAt(entity.getUpdatedAt());
 		return response;
+	}
+
+	// ==================== UTILITY METHODS ====================
+
+	/**
+	 * Generate ETag from entity version and update timestamp
+	 */
+	private String generateETag(Budget budget) {
+		if (budget.getVersion() == null) {
+			return String.valueOf(budget.getUpdatedAt().hashCode());
+		}
+		return String.valueOf(budget.getVersion()) + "-" + budget.getUpdatedAt().hashCode();
+	}
+
+	/**
+	 * Generate ETag for line item
+	 */
+	private String generateLineItemETag(BudgetLineItem item) {
+		if (item.getVersion() == null) {
+			return String.valueOf(item.getUpdatedAt().hashCode());
+		}
+		return String.valueOf(item.getVersion()) + "-" + item.getUpdatedAt().hashCode();
+	}
+
+	/**
+	 * Validate budget status transitions
+	 * DRAFT -> SUBMITTED -> APPROVED/REJECTED
+	 * APPROVED -> DRAFT (reopen)
+	 * REJECTED -> DRAFT (reopen)
+	 */
+	private void validateStatusTransition(String currentStatus, String newStatus) {
+		if (currentStatus == null) {
+			currentStatus = "DRAFT";
+		}
+		if (newStatus == null || currentStatus.equals(newStatus)) {
+			return; // No transition
+		}
+
+		boolean isValid = switch (currentStatus) {
+			case "DRAFT" -> "SUBMITTED".equals(newStatus);
+			case "SUBMITTED" -> "APPROVED".equals(newStatus) || "REJECTED".equals(newStatus);
+			case "APPROVED", "REJECTED" -> "DRAFT".equals(newStatus); // Allow reopening
+			default -> false;
+		};
+
+		if (!isValid) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT,
+				String.format("Invalid status transition from %s to %s", currentStatus, newStatus));
+		}
+	}
+
+	/**
+	 * Apply ETag header to response
+	 */
+	private ResponseEntity<BudgetDetailResponse> withETag(Budget budget, BudgetDetailResponse response) {
+		return ResponseEntity.ok()
+				.eTag(generateETag(budget))
+				.body(response);
 	}
 }

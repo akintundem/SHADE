@@ -1,14 +1,19 @@
 package eventplanner.features.budget.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
 import java.math.BigDecimal;
 import java.util.UUID;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class BudgetLineItemCreateRequest {
 
-    @NotNull
+    // Optional - will be set by controller from path parameter
     private UUID budgetId;
 
     @NotBlank
@@ -22,22 +27,6 @@ public class BudgetLineItemCreateRequest {
 
     private UUID vendorId;
 
-    public UUID getBudgetId() { return budgetId; }
-    public void setBudgetId(UUID budgetId) { this.budgetId = budgetId; }
-
-    public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category; }
-
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-
-    public BigDecimal getEstimatedCost() { return estimatedCost; }
-    public void setEstimatedCost(BigDecimal estimatedCost) { this.estimatedCost = estimatedCost; }
-
-    public BigDecimal getActualCost() { return actualCost; }
-    public void setActualCost(BigDecimal actualCost) { this.actualCost = actualCost; }
-
-    public UUID getVendorId() { return vendorId; }
-    public void setVendorId(UUID vendorId) { this.vendorId = vendorId; }
+    private Integer quantity;
 }
 
