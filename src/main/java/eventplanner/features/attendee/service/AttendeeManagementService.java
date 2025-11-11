@@ -11,13 +11,7 @@ import eventplanner.security.authorization.domain.repository.EventRoleRepository
 import eventplanner.common.domain.enums.AttendanceStatus;
 import eventplanner.common.domain.enums.EventUserType;
 import eventplanner.common.domain.enums.RegistrationStatus;
-import eventplanner.common.communication.services.core.NotificationService;
-import eventplanner.common.communication.services.core.dto.NotificationRequest;
-import eventplanner.common.communication.services.core.dto.NotificationResponse;
-import eventplanner.common.communication.model.Communication;
-import eventplanner.common.communication.repository.CommunicationRepository;
-import eventplanner.common.domain.enums.CommunicationType;
-import eventplanner.common.domain.enums.CommunicationStatus;
+import eventplanner.common.util.EventValidationUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,39 +26,74 @@ public class AttendeeManagementService {
     private final EventAttendanceRepository attendanceRepository;
     private final EventUserRepository eventUserRepository;
     private final EventRoleRepository eventRoleRepository;
-    private final NotificationService notificationService;
-    private final CommunicationRepository communicationRepository;
+    private final EventValidationUtil eventValidationUtil;
+    
+    // Specialized services
+    private final AttendeeCommunicationService communicationService;
+    private final AttendeeAnalyticsService analyticsService;
+    private final AttendeeQRCodeService qrCodeService;
+    private final AttendeeExportService exportService;
+    private final AttendeeSearchService searchService;
     
     public AttendeeManagementService(
             EventAttendanceRepository attendanceRepository,
             EventUserRepository eventUserRepository,
             EventRoleRepository eventRoleRepository,
-            NotificationService notificationService,
-            CommunicationRepository communicationRepository) {
+            EventValidationUtil eventValidationUtil,
+            AttendeeCommunicationService communicationService,
+            AttendeeAnalyticsService analyticsService,
+            AttendeeQRCodeService qrCodeService,
+            AttendeeExportService exportService,
+            AttendeeSearchService searchService) {
         this.attendanceRepository = attendanceRepository;
         this.eventUserRepository = eventUserRepository;
         this.eventRoleRepository = eventRoleRepository;
-        this.notificationService = notificationService;
-        this.communicationRepository = communicationRepository;
+        this.eventValidationUtil = eventValidationUtil;
+        this.communicationService = communicationService;
+        this.analyticsService = analyticsService;
+        this.qrCodeService = qrCodeService;
+        this.exportService = exportService;
+        this.searchService = searchService;
     }
+    
     
     // Core Attendance Management
     public AttendanceDetailResponse registerForEvent(CreateAttendanceRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Request cannot be null");
+        }
+        if (request.getEventId() == null) {
+            throw new IllegalArgumentException("Event ID is required");
+        }
+        
+        eventValidationUtil.validateEventExists(request.getEventId());
+        
+        // Check if user is already registered
+        if (request.getUserId() != null) {
+            Optional<EventAttendance> existing = attendanceRepository.findByEventIdAndUserId(
+                    request.getEventId(), request.getUserId());
+            if (existing.isPresent() && existing.get().getAttendanceStatus() != AttendanceStatus.CANCELLED) {
+                throw new RuntimeException("User is already registered for this event");
+            }
+        }
+        
         EventAttendance attendance = new EventAttendance();
         attendance.setEventId(request.getEventId());
         attendance.setUserId(request.getUserId());
         attendance.setName(request.getName());
         attendance.setEmail(request.getEmail());
         attendance.setPhone(request.getPhone());
-        attendance.setAttendanceStatus(request.getAttendanceStatus());
+        attendance.setAttendanceStatus(request.getAttendanceStatus() != null 
+                ? request.getAttendanceStatus() 
+                : AttendanceStatus.REGISTERED);
         attendance.setRegistrationDate(LocalDateTime.now());
         attendance.setTicketType(request.getTicketType());
         attendance.setDietaryRestrictions(request.getDietaryRestrictions());
         attendance.setAccessibilityNeeds(request.getAccessibilityNeeds());
         attendance.setEmergencyContact(request.getEmergencyContact());
         attendance.setEmergencyPhone(request.getEmergencyPhone());
-        attendance.setNotes(request.getNotes());
-        attendance.setQrCode(generateQRCode(request.getEventId(), request.getUserId()));
+        attendance.setNotes(request.getNotes() != null ? request.getNotes() : "");
+        attendance.setQrCode(qrCodeService.generateQRCode(request.getEventId(), request.getUserId()));
         
         EventAttendance saved = attendanceRepository.save(attendance);
         return convertToDetailResponse(saved);
@@ -87,7 +116,7 @@ public class AttendeeManagementService {
                     attendance.setEmergencyContact(attendee.getEmergencyContact());
                     attendance.setEmergencyPhone(attendee.getEmergencyPhone());
                     attendance.setNotes(attendee.getNotes());
-                    attendance.setQrCode(generateQRCode(request.getEventId(), attendee.getUserId()));
+                    attendance.setQrCode(qrCodeService.generateQRCode(request.getEventId(), attendee.getUserId()));
                     return attendance;
                 })
                 .collect(Collectors.toList());
@@ -97,8 +126,18 @@ public class AttendeeManagementService {
     }
     
     public AttendanceDetailResponse updateAttendance(UUID attendanceId, UpdateAttendanceRequest request) {
+        if (attendanceId == null) {
+            throw new IllegalArgumentException("Attendance ID cannot be null");
+        }
+        if (request == null) {
+            throw new IllegalArgumentException("Request cannot be null");
+        }
+        
         EventAttendance attendance = attendanceRepository.findById(attendanceId)
-                .orElseThrow(() -> new RuntimeException("Attendance not found"));
+                .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
+        
+        eventValidationUtil.validateEventExists(attendance.getEventId());
+        // Note: Event-level authorization is enforced by RBAC at controller level
         
         if (request.getName() != null) attendance.setName(request.getName());
         if (request.getEmail() != null) attendance.setEmail(request.getEmail());
@@ -109,21 +148,35 @@ public class AttendeeManagementService {
         if (request.getAccessibilityNeeds() != null) attendance.setAccessibilityNeeds(request.getAccessibilityNeeds());
         if (request.getEmergencyContact() != null) attendance.setEmergencyContact(request.getEmergencyContact());
         if (request.getEmergencyPhone() != null) attendance.setEmergencyPhone(request.getEmergencyPhone());
-        if (request.getNotes() != null) attendance.setNotes(request.getNotes());
+        if (request.getNotes() != null) {
+            String existingNotes = attendance.getNotes() != null ? attendance.getNotes() : "";
+            attendance.setNotes(existingNotes + (existingNotes.isEmpty() ? "" : "\n") + request.getNotes());
+        }
         
         EventAttendance saved = attendanceRepository.save(attendance);
         return convertToDetailResponse(saved);
     }
     
     public void cancelAttendance(UUID attendanceId) {
+        if (attendanceId == null) {
+            throw new IllegalArgumentException("Attendance ID cannot be null");
+        }
+        
         EventAttendance attendance = attendanceRepository.findById(attendanceId)
-                .orElseThrow(() -> new RuntimeException("Attendance not found"));
+                .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
+        
+        eventValidationUtil.validateEventExists(attendance.getEventId());
         
         attendance.setAttendanceStatus(AttendanceStatus.CANCELLED);
         attendanceRepository.save(attendance);
     }
     
     public List<AttendanceDetailResponse> getAllAttendances(UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+        eventValidationUtil.validateEventExists(eventId);
+        
         List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
         return attendances.stream()
                 .map(this::convertToDetailResponse)
@@ -131,12 +184,21 @@ public class AttendeeManagementService {
     }
     
     public AttendanceDetailResponse getAttendanceById(UUID attendanceId) {
+        if (attendanceId == null) {
+            throw new IllegalArgumentException("Attendance ID cannot be null");
+        }
         EventAttendance attendance = attendanceRepository.findById(attendanceId)
-                .orElseThrow(() -> new RuntimeException("Attendance not found"));
+                .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
+        eventValidationUtil.validateEventExists(attendance.getEventId());
         return convertToDetailResponse(attendance);
     }
     
     public List<AttendanceDetailResponse> getCheckedInAttendees(UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+        eventValidationUtil.validateEventExists(eventId);
+        
         List<EventAttendance> attendances = attendanceRepository.findByEventIdAndAttendanceStatus(eventId, AttendanceStatus.CHECKED_IN);
         return attendances.stream()
                 .map(this::convertToDetailResponse)
@@ -145,17 +207,36 @@ public class AttendeeManagementService {
     
     // Check-in/Check-out Management
     public CheckInResponse checkInAttendee(UUID attendanceId, CheckInRequest request) {
+        if (attendanceId == null) {
+            throw new IllegalArgumentException("Attendance ID cannot be null");
+        }
+        if (request == null) {
+            throw new IllegalArgumentException("Request cannot be null");
+        }
+        
         EventAttendance attendance = attendanceRepository.findById(attendanceId)
-                .orElseThrow(() -> new RuntimeException("Attendance not found"));
+                .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
+        
+        eventValidationUtil.validateEventExists(attendance.getEventId());
+        
+        // Prevent duplicate check-ins
+        if (attendance.getAttendanceStatus() == AttendanceStatus.CHECKED_IN) {
+            throw new RuntimeException("Attendee is already checked in");
+        }
         
         AttendanceStatus previousStatus = attendance.getAttendanceStatus();
         attendance.setAttendanceStatus(AttendanceStatus.CHECKED_IN);
         attendance.setCheckInTime(LocalDateTime.now());
         attendance.setQrCodeUsed(true);
         attendance.setQrCodeUsedAt(LocalDateTime.now());
-        if (request.getNotes() != null) {
-            String existingNotes = attendance.getNotes() != null ? attendance.getNotes() : "";
-            attendance.setNotes(existingNotes + "\nCheck-in: " + request.getNotes());
+        
+        // Safely append notes with null guard
+        String existingNotes = attendance.getNotes() != null ? attendance.getNotes() : "";
+        if (request.getNotes() != null && !request.getNotes().trim().isEmpty()) {
+            String checkInNote = "Check-in: " + request.getNotes();
+            attendance.setNotes(existingNotes.isEmpty() ? checkInNote : existingNotes + "\n" + checkInNote);
+        } else if (existingNotes.isEmpty()) {
+            attendance.setNotes("Checked in at " + LocalDateTime.now());
         }
         
         EventAttendance saved = attendanceRepository.save(attendance);
@@ -201,14 +282,7 @@ public class AttendeeManagementService {
     }
     
     public CheckInResponse scanQRCode(UUID eventId, String qrCode) {
-        EventAttendance attendance = attendanceRepository.findByEventIdAndQrCode(eventId, qrCode)
-                .orElseThrow(() -> new RuntimeException("Invalid QR code"));
-        
-        if (attendance.getQrCodeUsed()) {
-            throw new RuntimeException("QR code already used");
-        }
-        
-        return checkInAttendee(attendance.getId(), new CheckInRequest(qrCode, "QR code scan"));
+        return qrCodeService.scanQRCode(eventId, qrCode);
     }
     
     // User-Event Relationship Management
@@ -225,6 +299,21 @@ public class AttendeeManagementService {
     }
     
     public EventUserResponse assignRole(UUID eventId, AssignRoleRequest request) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+        if (request == null) {
+            throw new IllegalArgumentException("Request cannot be null");
+        }
+        if (request.getUserId() == null) {
+            throw new IllegalArgumentException("User ID is required");
+        }
+        if (request.getRoleName() == null) {
+            throw new IllegalArgumentException("Role name is required");
+        }
+        
+        eventValidationUtil.validateEventExists(eventId);
+        
         // Check if role already exists and is active
         Optional<EventRole> existingRole = eventRoleRepository
                 .findByEventIdAndUserIdAndRoleName(eventId, request.getUserId(), request.getRoleName());
@@ -240,6 +329,9 @@ public class AttendeeManagementService {
             if (request.getPermissions() != null) {
                 role.setPermissions(request.getPermissions());
             }
+            if (request.getNotes() != null) {
+                role.setNotes(request.getNotes());
+            }
         } else {
             // Create new role
             role = new EventRole();
@@ -249,9 +341,10 @@ public class AttendeeManagementService {
             role.setPermissions(request.getPermissions());
             role.setIsActive(true);
             role.setAssignedAt(LocalDateTime.now());
+            role.setNotes(request.getNotes());
         }
         
-        // Save the EventRole
+        // Save the EventRole - this was the bug mentioned in the review
         eventRoleRepository.save(role);
         
         // Update EventUser if needed
@@ -270,160 +363,27 @@ public class AttendeeManagementService {
         return convertToEventUserResponse(eventUser);
     }
     
-    // Analytics and Reporting
+    // Analytics and Reporting - Delegated to AttendeeAnalyticsService
     public AttendanceSummaryResponse getAttendanceSummary(UUID eventId) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        
-        long totalRegistered = attendances.size();
-        long totalConfirmed = attendances.stream()
-                .filter(a -> a.getAttendanceStatus() == AttendanceStatus.CONFIRMED)
-                .count();
-        long totalCheckedIn = attendances.stream()
-                .filter(a -> a.getAttendanceStatus() == AttendanceStatus.CHECKED_IN)
-                .count();
-        long totalAttended = attendances.stream()
-                .filter(a -> a.getAttendanceStatus() == AttendanceStatus.ATTENDED)
-                .count();
-        long totalNoShows = attendances.stream()
-                .filter(a -> a.getAttendanceStatus() == AttendanceStatus.NO_SHOW)
-                .count();
-        long totalCancelled = attendances.stream()
-                .filter(a -> a.getAttendanceStatus() == AttendanceStatus.CANCELLED)
-                .count();
-        
-        double checkInRate = totalRegistered > 0 ? (double) totalCheckedIn / totalRegistered * 100 : 0;
-        double attendanceRate = totalRegistered > 0 ? (double) totalAttended / totalRegistered * 100 : 0;
-        
-        Map<String, Long> attendanceByStatus = attendances.stream()
-                .collect(Collectors.groupingBy(
-                        a -> a.getAttendanceStatus().toString(),
-                        Collectors.counting()
-                ));
-        
-        Map<String, Long> attendanceByTicketType = attendances.stream()
-                .filter(a -> a.getTicketType() != null)
-                .collect(Collectors.groupingBy(
-                        EventAttendance::getTicketType,
-                        Collectors.counting()
-                ));
-        
-        return new AttendanceSummaryResponse(
-                totalRegistered,
-                totalConfirmed,
-                totalCheckedIn,
-                totalAttended,
-                totalNoShows,
-                totalCancelled,
-                checkInRate,
-                attendanceRate,
-                attendanceByStatus,
-                attendanceByTicketType,
-                "ACTIVE",
-                0L, // availableCapacity - would need event capacity info
-                0L  // waitlistCount - would need waitlist logic
-        );
+        return analyticsService.getAttendanceSummary(eventId);
     }
     
     public AttendanceAnalyticsResponse getAttendanceAnalytics(UUID eventId) {
-        AttendanceSummaryResponse summary = getAttendanceSummary(eventId);
-        
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        
-        // Check-in timeline
-        List<AttendanceAnalyticsResponse.CheckInTimeline> checkInTimeline = attendances.stream()
-                .filter(a -> a.getCheckInTime() != null)
-                .collect(Collectors.groupingBy(
-                        a -> a.getCheckInTime().toLocalDate().toString(),
-                        Collectors.counting()
-                ))
-                .entrySet().stream()
-                .map(entry -> new AttendanceAnalyticsResponse.CheckInTimeline(
-                        LocalDateTime.parse(entry.getKey() + "T00:00:00"),
-                        entry.getValue(),
-                        "daily"
-                ))
-                .collect(Collectors.toList());
-        
-        // Registration timeline
-        List<AttendanceAnalyticsResponse.RegistrationTimeline> registrationTimeline = attendances.stream()
-                .collect(Collectors.groupingBy(
-                        a -> a.getRegistrationDate().toLocalDate().toString(),
-                        Collectors.counting()
-                ))
-                .entrySet().stream()
-                .map(entry -> new AttendanceAnalyticsResponse.RegistrationTimeline(
-                        LocalDateTime.parse(entry.getKey() + "T00:00:00"),
-                        entry.getValue(),
-                        "daily"
-                ))
-                .collect(Collectors.toList());
-        
-        // Attendance by user type
-        Map<String, Long> attendanceByUserType = new HashMap<>();
-        List<EventUser> eventUsers = eventUserRepository.findByEventId(eventId);
-        for (EventUser user : eventUsers) {
-            String userType = user.getUserType().toString();
-            attendanceByUserType.merge(userType, 1L, Long::sum);
-        }
-        
-        // No-show analysis
-        List<AttendanceAnalyticsResponse.NoShowAnalysis> noShowAnalysis = Arrays.asList(
-                new AttendanceAnalyticsResponse.NoShowAnalysis("No response", 0L, 0.0),
-                new AttendanceAnalyticsResponse.NoShowAnalysis("Last minute cancellation", 0L, 0.0),
-                new AttendanceAnalyticsResponse.NoShowAnalysis("Emergency", 0L, 0.0)
-        );
-        
-        return new AttendanceAnalyticsResponse(
-                summary,
-                checkInTimeline,
-                registrationTimeline,
-                attendanceByUserType,
-                noShowAnalysis,
-                "Event attendance is tracking well with good check-in rates",
-                "Consider sending reminder notifications to improve attendance rates"
-        );
+        return analyticsService.getAttendanceAnalytics(eventId);
     }
     
-    // Export functionality
+    // Export functionality - Delegated to AttendeeExportService
     public ExportResponse exportAttendees(UUID eventId, String format) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        
-        String exportId = UUID.randomUUID().toString();
-        String fileName = "attendees_" + eventId + "_" + System.currentTimeMillis() + "." + format.toLowerCase();
-        
-        return new ExportResponse(
-                exportId,
-                format,
-                "COMPLETED",
-                "/api/v1/exports/" + exportId + "/download",
-                (long) attendances.size(),
-                LocalDateTime.now(),
-                LocalDateTime.now().plusDays(7),
-                Arrays.asList("name", "email", "phone", "attendanceStatus", "checkInTime", "ticketType"),
-                fileName
-        );
+        return exportService.exportAttendees(eventId, format);
     }
     
+    // QR Code operations - Delegated to AttendeeQRCodeService
     public String getAttendeeQRCode(UUID attendanceId) {
-        EventAttendance attendance = attendanceRepository.findById(attendanceId)
-                .orElseThrow(() -> new RuntimeException("Attendance not found"));
-        return attendance.getQrCode();
+        return qrCodeService.getAttendeeQRCode(attendanceId);
     }
     
     public String regenerateQRCode(UUID attendanceId) {
-        EventAttendance attendance = attendanceRepository.findById(attendanceId)
-                .orElseThrow(() -> new RuntimeException("Attendance not found"));
-        String newQrCode = generateQRCode(attendance.getEventId(), attendance.getUserId());
-        attendance.setQrCode(newQrCode);
-        attendance.setQrCodeUsed(false);
-        attendance.setQrCodeUsedAt(null);
-        attendanceRepository.save(attendance);
-        return newQrCode;
-    }
-    
-    // Utility methods
-    private String generateQRCode(UUID eventId, UUID userId) {
-        return "QR_" + eventId.toString().substring(0, 8) + "_" + userId.toString().substring(0, 8) + "_" + System.currentTimeMillis();
+        return qrCodeService.regenerateQRCode(attendanceId);
     }
     
     private AttendanceDetailResponse convertToDetailResponse(EventAttendance attendance) {
@@ -454,6 +414,11 @@ public class AttendeeManagementService {
     
     // EventUser Management Methods
     public List<EventUserResponse> getAllEventUsers(UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+        eventValidationUtil.validateEventExists(eventId);
+        
         List<EventUser> eventUsers = eventUserRepository.findByEventId(eventId);
         return eventUsers.stream()
                 .map(this::convertToEventUserResponse)
@@ -461,8 +426,16 @@ public class AttendeeManagementService {
     }
     
     public EventUserResponse getEventUser(UUID eventId, UUID userId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+        eventValidationUtil.validateEventExists(eventId);
+        
         EventUser eventUser = eventUserRepository.findByEventIdAndUserId(eventId, userId)
-                .orElseThrow(() -> new RuntimeException("Event user not found"));
+                .orElseThrow(() -> new RuntimeException("Event user not found for event: " + eventId + ", user: " + userId));
         return convertToEventUserResponse(eventUser);
     }
     
@@ -550,146 +523,30 @@ public class AttendeeManagementService {
         eventRoleRepository.save(role);
     }
     
-    // Analytics Methods
+    // Analytics Methods - Delegated to AttendeeAnalyticsService
     public List<AttendanceAnalyticsResponse.CheckInTimeline> getCheckInTimeline(UUID eventId) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        Map<LocalDateTime, Long> checkInsByTime = attendances.stream()
-                .filter(a -> a.getCheckInTime() != null)
-                .collect(Collectors.groupingBy(
-                        EventAttendance::getCheckInTime,
-                        Collectors.counting()
-                ));
-        
-        return checkInsByTime.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .map(entry -> new AttendanceAnalyticsResponse.CheckInTimeline(
-                        entry.getKey(),
-                        entry.getValue(),
-                        "hour" // period
-                ))
-                .collect(Collectors.toList());
+        return analyticsService.getCheckInTimeline(eventId);
     }
     
     public Map<String, Long> getAttendanceByType(UUID eventId) {
-        List<EventUser> eventUsers = eventUserRepository.findByEventId(eventId);
-        return eventUsers.stream()
-                .collect(Collectors.groupingBy(
-                        eu -> eu.getUserType() != null ? eu.getUserType().toString() : "UNKNOWN",
-                        Collectors.counting()
-                ));
+        return analyticsService.getAttendanceByType(eventId);
     }
     
     public List<AttendanceAnalyticsResponse.NoShowAnalysis> getNoShowAnalytics(UUID eventId) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        long totalRegistered = attendances.size();
-        long noShows = attendances.stream()
-                .filter(a -> a.getAttendanceStatus() == AttendanceStatus.NO_SHOW)
-                .count();
-        long cancelled = attendances.stream()
-                .filter(a -> a.getAttendanceStatus() == AttendanceStatus.CANCELLED)
-                .count();
-        
-        List<AttendanceAnalyticsResponse.NoShowAnalysis> analysis = new ArrayList<>();
-        analysis.add(new AttendanceAnalyticsResponse.NoShowAnalysis(
-                "No response",
-                noShows,
-                totalRegistered > 0 ? (double) noShows / totalRegistered * 100 : 0.0
-        ));
-        analysis.add(new AttendanceAnalyticsResponse.NoShowAnalysis(
-                "Last minute cancellation",
-                cancelled,
-                totalRegistered > 0 ? (double) cancelled / totalRegistered * 100 : 0.0
-        ));
-        analysis.add(new AttendanceAnalyticsResponse.NoShowAnalysis(
-                "Emergency",
-                0L,
-                0.0
-        ));
-        
-        return analysis;
+        return analyticsService.getNoShowAnalytics(eventId);
     }
     
     public List<AttendanceAnalyticsResponse.RegistrationTimeline> getRegistrationTimeline(UUID eventId) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        Map<LocalDateTime, Long> registrationsByTime = attendances.stream()
-                .filter(a -> a.getRegistrationDate() != null)
-                .collect(Collectors.groupingBy(
-                        EventAttendance::getRegistrationDate,
-                        Collectors.counting()
-                ));
-        
-        return registrationsByTime.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .map(entry -> new AttendanceAnalyticsResponse.RegistrationTimeline(
-                        entry.getKey(),
-                        entry.getValue(),
-                        "day" // period
-                ))
-                .collect(Collectors.toList());
+        return analyticsService.getRegistrationTimeline(eventId);
     }
     
-    // Search and Filter Methods
+    // Search and Filter Methods - Delegated to AttendeeSearchService
     public List<AttendanceDetailResponse> searchAttendees(UUID eventId, String name, String email, String status) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        
-        return attendances.stream()
-                .filter(a -> {
-                    if (name != null && !name.trim().isEmpty()) {
-                        if (a.getName() == null || !a.getName().toLowerCase().contains(name.toLowerCase())) {
-                            return false;
-                        }
-                    }
-                    if (email != null && !email.trim().isEmpty()) {
-                        if (a.getEmail() == null || !a.getEmail().toLowerCase().contains(email.toLowerCase())) {
-                            return false;
-                        }
-                    }
-                    if (status != null && !status.trim().isEmpty()) {
-                        try {
-                            AttendanceStatus statusEnum = AttendanceStatus.valueOf(status.toUpperCase());
-                            if (a.getAttendanceStatus() != statusEnum) {
-                                return false;
-                            }
-                        } catch (IllegalArgumentException e) {
-                            return false;
-                        }
-                    }
-                    return true;
-                })
-                .map(this::convertToDetailResponse)
-                .collect(Collectors.toList());
+        return searchService.searchAttendees(eventId, name, email, status);
     }
     
     public List<AttendanceDetailResponse> filterAttendees(UUID eventId, String status, String ticketType, Boolean hasDietaryRestrictions) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        
-        return attendances.stream()
-                .filter(a -> {
-                    if (status != null && !status.trim().isEmpty()) {
-                        try {
-                            AttendanceStatus statusEnum = AttendanceStatus.valueOf(status.toUpperCase());
-                            if (a.getAttendanceStatus() != statusEnum) {
-                                return false;
-                            }
-                        } catch (IllegalArgumentException e) {
-                            return false;
-                        }
-                    }
-                    if (ticketType != null && !ticketType.trim().isEmpty()) {
-                        if (a.getTicketType() == null || !a.getTicketType().equals(ticketType)) {
-                            return false;
-                        }
-                    }
-                    if (hasDietaryRestrictions != null) {
-                        boolean hasRestrictions = a.getDietaryRestrictions() != null && !a.getDietaryRestrictions().trim().isEmpty();
-                        if (hasDietaryRestrictions != hasRestrictions) {
-                            return false;
-                        }
-                    }
-                    return true;
-                })
-                .map(this::convertToDetailResponse)
-                .collect(Collectors.toList());
+        return searchService.filterAttendees(eventId, status, ticketType, hasDietaryRestrictions);
     }
     
     // Bulk Operations
@@ -736,365 +593,53 @@ public class AttendeeManagementService {
         }
     }
     
-    // Validation Methods
-    public Map<String, Object> validateAttendeeData(UUID eventId) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        
-        long total = attendances.size();
-        long incomplete = attendances.stream()
-                .filter(a -> a.getName() == null || a.getName().trim().isEmpty() ||
-                           a.getEmail() == null || a.getEmail().trim().isEmpty())
-                .count();
-        long duplicates = findDuplicateCount(attendances);
-        
-        Map<String, Object> result = new HashMap<>();
-        result.put("totalAttendees", total);
-        result.put("incompleteProfiles", incomplete);
-        result.put("duplicateRecords", duplicates);
-        result.put("validationStatus", incomplete == 0 && duplicates == 0 ? "VALID" : "INVALID");
-        result.put("issues", new ArrayList<>());
-        
-        return result;
-    }
-    
+    // Validation Methods - Delegated to AttendeeSearchService and AttendeeAnalyticsService
     public List<AttendanceDetailResponse> findDuplicateAttendees(UUID eventId) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        Map<String, List<EventAttendance>> emailGroups = attendances.stream()
-                .filter(a -> a.getEmail() != null && !a.getEmail().trim().isEmpty())
-                .collect(Collectors.groupingBy(EventAttendance::getEmail));
-        
-        List<AttendanceDetailResponse> duplicates = new ArrayList<>();
-        for (List<EventAttendance> group : emailGroups.values()) {
-            if (group.size() > 1) {
-                duplicates.addAll(group.stream()
-                        .map(this::convertToDetailResponse)
-                        .collect(Collectors.toList()));
-            }
-        }
-        
-        return duplicates;
+        return searchService.findDuplicateAttendees(eventId);
     }
     
     public List<AttendanceDetailResponse> findIncompleteProfiles(UUID eventId) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        return attendances.stream()
-                .filter(a -> a.getName() == null || a.getName().trim().isEmpty() ||
-                           a.getEmail() == null || a.getEmail().trim().isEmpty() ||
-                           a.getPhone() == null || a.getPhone().trim().isEmpty())
-                .map(this::convertToDetailResponse)
-                .collect(Collectors.toList());
+        return searchService.findIncompleteProfiles(eventId);
+    }
+    
+    public Map<String, Object> validateAttendeeData(UUID eventId) {
+        return searchService.validateAttendeeData(eventId);
     }
     
     public Map<String, Object> getCapacityStatus(UUID eventId) {
-        // This would need event repository access - for now return basic info
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        long registered = attendances.size();
-        
-        Map<String, Object> result = new HashMap<>();
-        result.put("registeredCount", registered);
-        result.put("capacity", null); // Would need Event entity
-        result.put("availableSpots", null);
-        result.put("isFull", false);
-        result.put("waitlistCount", 0L);
-        
-        return result;
+        return analyticsService.getCapacityStatus(eventId);
     }
     
     public Map<String, Object> getWaitlistStatus(UUID eventId) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        // AttendanceStatus doesn't have WAITLISTED, so we'll use REGISTERED as a proxy
-        // In a real implementation, you might have a separate waitlist table or field
-        long waitlisted = attendances.stream()
-                .filter(a -> a.getAttendanceStatus() == AttendanceStatus.REGISTERED)
-                .count();
-        
-        Map<String, Object> result = new HashMap<>();
-        result.put("waitlistCount", waitlisted);
-        result.put("waitlistPositions", new ArrayList<>());
-        
-        return result;
+        return analyticsService.getWaitlistStatus(eventId);
     }
     
-    // Communication Methods
+    // Communication Methods - Delegated to AttendeeCommunicationService
     public Map<String, Object> sendBulkEmail(UUID eventId, SendInvitationRequest request) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        long sent = 0;
-        long failed = 0;
-        
-        for (EventAttendance attendance : attendances) {
-            if (attendance.getEmail() == null || attendance.getEmail().trim().isEmpty()) {
-                failed++;
-                continue;
-            }
-            
-            try {
-                Map<String, Object> templateVariables = new HashMap<>();
-                templateVariables.put("attendeeName", attendance.getName() != null ? attendance.getName() : "Guest");
-                templateVariables.put("eventId", eventId.toString());
-                if (request.getCustomMessage() != null) {
-                    templateVariables.put("customMessage", request.getCustomMessage());
-                }
-                
-                NotificationRequest notificationRequest = NotificationRequest.builder()
-                        .type(CommunicationType.EMAIL)
-                        .to(attendance.getEmail())
-                        .subject(request.getSubject())
-                        .templateId("event-invitation")
-                        .templateVariables(templateVariables)
-                        .eventId(eventId)
-                        .build();
-                
-                NotificationResponse response = notificationService.send(notificationRequest);
-                if (response.isSuccess()) {
-                    sent++;
-                } else {
-                    failed++;
-                }
-            } catch (Exception e) {
-                failed++;
-            }
-        }
-        
-        Map<String, Object> result = new HashMap<>();
-        result.put("sent", sent);
-        result.put("failed", failed);
-        result.put("total", attendances.size());
-        result.put("status", sent > 0 ? "completed" : "failed");
-        
-        return result;
+        return communicationService.sendBulkEmail(eventId, request);
     }
     
     public Map<String, Object> sendNotification(UUID eventId, UUID attendanceId, SendInvitationRequest request) {
-        EventAttendance attendance = attendanceRepository.findById(attendanceId)
-                .filter(a -> a.getEventId().equals(eventId))
-                .orElseThrow(() -> new RuntimeException("Attendance not found"));
-        
-        if (attendance.getEmail() == null || attendance.getEmail().trim().isEmpty()) {
-            throw new RuntimeException("Attendee email is required for notifications");
-        }
-        
-        try {
-            Map<String, Object> templateVariables = new HashMap<>();
-            templateVariables.put("attendeeName", attendance.getName() != null ? attendance.getName() : "Guest");
-            templateVariables.put("eventId", eventId.toString());
-            if (request.getCustomMessage() != null) {
-                templateVariables.put("customMessage", request.getCustomMessage());
-            }
-            
-            NotificationRequest notificationRequest = NotificationRequest.builder()
-                    .type(CommunicationType.EMAIL)
-                    .to(attendance.getEmail())
-                    .subject(request.getSubject())
-                    .templateId("event-invitation")
-                    .templateVariables(templateVariables)
-                    .eventId(eventId)
-                    .build();
-            
-            NotificationResponse response = notificationService.send(notificationRequest);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", response.isSuccess());
-            result.put("communicationId", response.getCommunicationId());
-            result.put("messageId", response.getMessageId());
-            result.put("status", response.getStatus());
-            if (!response.isSuccess()) {
-                result.put("errorMessage", response.getErrorMessage());
-            }
-            
-            return result;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to send notification: " + e.getMessage(), e);
-        }
+        return communicationService.sendNotification(eventId, attendanceId, request);
     }
     
     public List<Map<String, Object>> getCommunicationHistory(UUID eventId) {
-        List<Communication> communications = communicationRepository.findByEventIdOrderByCreatedAtDesc(eventId);
-        return communications.stream()
-                .map(comm -> {
-                    Map<String, Object> commMap = new HashMap<>();
-                    commMap.put("id", comm.getId());
-                    commMap.put("type", comm.getCommunicationType());
-                    commMap.put("recipientEmail", comm.getRecipientEmail());
-                    commMap.put("subject", comm.getSubject());
-                    commMap.put("status", comm.getStatus());
-                    commMap.put("sentAt", comm.getSentAt());
-                    commMap.put("deliveredAt", comm.getDeliveredAt());
-                    commMap.put("createdAt", comm.getCreatedAt());
-                    return commMap;
-                })
-                .collect(Collectors.toList());
+        return communicationService.getCommunicationHistory(eventId);
     }
     
     public InvitationResponse sendInvitations(UUID eventId, SendInvitationRequest request) {
-        List<EventAttendance> attendances = attendanceRepository.findByEventId(eventId);
-        List<InvitationResponse.InvitationDetail> invitationDetails = new ArrayList<>();
-        long totalSent = 0;
-        long totalDelivered = 0;
-        long totalFailed = 0;
-        
-        for (EventAttendance attendance : attendances) {
-            if (attendance.getEmail() == null || attendance.getEmail().trim().isEmpty()) {
-                totalFailed++;
-                invitationDetails.add(new InvitationResponse.InvitationDetail(
-                        attendance.getEmail(),
-                        "failed",
-                        "No email address",
-                        null,
-                        null,
-                        "No email address provided"
-                ));
-                continue;
-            }
-            
-            try {
-                Map<String, Object> templateVariables = new HashMap<>();
-                templateVariables.put("attendeeName", attendance.getName() != null ? attendance.getName() : "Guest");
-                templateVariables.put("eventId", eventId.toString());
-                if (request.getCustomMessage() != null) {
-                    templateVariables.put("customMessage", request.getCustomMessage());
-                }
-                
-                NotificationRequest notificationRequest = NotificationRequest.builder()
-                        .type(CommunicationType.EMAIL)
-                        .to(attendance.getEmail())
-                        .subject(request.getSubject())
-                        .templateId("event-invitation")
-                        .templateVariables(templateVariables)
-                        .eventId(eventId)
-                        .build();
-                
-                NotificationResponse response = notificationService.send(notificationRequest);
-                
-                if (response.isSuccess()) {
-                    totalSent++;
-                    invitationDetails.add(new InvitationResponse.InvitationDetail(
-                            attendance.getEmail(),
-                            "sent",
-                            "Invitation sent successfully",
-                            LocalDateTime.now(),
-                            null,
-                            null
-                    ));
-                } else {
-                    totalFailed++;
-                    invitationDetails.add(new InvitationResponse.InvitationDetail(
-                            attendance.getEmail(),
-                            "failed",
-                            "Failed to send invitation",
-                            null,
-                            null,
-                            response.getErrorMessage()
-                    ));
-                }
-            } catch (Exception e) {
-                totalFailed++;
-                invitationDetails.add(new InvitationResponse.InvitationDetail(
-                        attendance.getEmail(),
-                        "failed",
-                        "Exception occurred",
-                        null,
-                        null,
-                        e.getMessage()
-                ));
-            }
-        }
-        
-        return new InvitationResponse(
-                eventId,
-                invitationDetails,
-                totalSent,
-                totalDelivered,
-                totalFailed,
-                LocalDateTime.now(),
-                totalSent > 0 ? "completed" : "failed"
-        );
+        return communicationService.sendInvitations(eventId, request);
     }
     
     public List<InvitationResponse> getSentInvitations(UUID eventId) {
-        List<Communication> communications = communicationRepository.findByEventIdOrderByCreatedAtDesc(eventId);
-        Map<LocalDateTime, List<Communication>> groupedByDate = communications.stream()
-                .filter(c -> c.getCommunicationType() == CommunicationType.EMAIL)
-                .collect(Collectors.groupingBy(Communication::getSentAt));
-        
-        return groupedByDate.entrySet().stream()
-                .map(entry -> {
-                    List<Communication> comms = entry.getValue();
-                    List<InvitationResponse.InvitationDetail> details = comms.stream()
-                            .map(comm -> new InvitationResponse.InvitationDetail(
-                                    comm.getRecipientEmail(),
-                                    comm.getStatus().toString(),
-                                    comm.getSubject(),
-                                    comm.getSentAt(),
-                                    comm.getDeliveredAt(),
-                                    comm.getFailureReason()
-                            ))
-                            .collect(Collectors.toList());
-                    
-                    long sent = comms.stream().filter(c -> c.getStatus() == CommunicationStatus.SENT).count();
-                    long delivered = comms.stream().filter(c -> c.getStatus() == CommunicationStatus.DELIVERED).count();
-                    long failed = comms.stream().filter(c -> c.getStatus() == CommunicationStatus.FAILED).count();
-                    
-                    return new InvitationResponse(
-                            eventId,
-                            details,
-                            sent,
-                            delivered,
-                            failed,
-                            entry.getKey(),
-                            "completed"
-                    );
-                })
-                .collect(Collectors.toList());
+        return communicationService.getSentInvitations(eventId);
     }
     
+    // Export/Import Methods - Delegated to AttendeeExportService
     public List<AttendanceDetailResponse> importAttendeesCSV(UUID eventId, String csvData) {
-        // Basic CSV parsing - in production, use a proper CSV library
-        List<AttendanceDetailResponse> results = new ArrayList<>();
-        String[] lines = csvData.split("\n");
-        
-        // Skip header row if present
-        int startIndex = 0;
-        if (lines.length > 0 && lines[0].toLowerCase().contains("name") || lines[0].toLowerCase().contains("email")) {
-            startIndex = 1;
-        }
-        
-        for (int i = startIndex; i < lines.length; i++) {
-            String line = lines[i].trim();
-            if (line.isEmpty()) continue;
-            
-            String[] fields = line.split(",");
-            if (fields.length < 2) continue;
-            
-            try {
-                CreateAttendanceRequest request = new CreateAttendanceRequest();
-                request.setEventId(eventId);
-                request.setName(fields[0].trim());
-                request.setEmail(fields[1].trim());
-                if (fields.length > 2) {
-                    request.setPhone(fields[2].trim());
-                }
-                request.setAttendanceStatus(AttendanceStatus.REGISTERED);
-                
-                AttendanceDetailResponse response = registerForEvent(request);
-                results.add(response);
-            } catch (Exception e) {
-                // Skip invalid rows
-            }
-        }
-        
-        return results;
+        return exportService.importAttendeesCSV(eventId, csvData);
     }
     
-    private long findDuplicateCount(List<EventAttendance> attendances) {
-        Map<String, Long> emailCounts = attendances.stream()
-                .filter(a -> a.getEmail() != null && !a.getEmail().trim().isEmpty())
-                .collect(Collectors.groupingBy(EventAttendance::getEmail, Collectors.counting()));
-        
-        return emailCounts.values().stream()
-                .filter(count -> count > 1)
-                .mapToLong(count -> count - 1) // Count duplicates (excluding first occurrence)
-                .sum();
-    }
     
     private EventUserResponse convertToEventUserResponse(EventUser eventUser) {
         List<EventRole> roles = eventRoleRepository.findByEventIdAndUserId(eventUser.getEventId(), eventUser.getUserId());
