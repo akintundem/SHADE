@@ -133,6 +133,19 @@ public class Event extends BaseEntity {
     @Column(name = "payment_date")
     private LocalDateTime paymentDate;
 
+    // Timeline publication state
+    @Column(name = "timeline_published", nullable = false)
+    private Boolean timelinePublished = false;
+
+    @Column(name = "timeline_published_at")
+    private LocalDateTime timelinePublishedAt;
+
+    @Column(name = "timeline_published_by")
+    private UUID timelinePublishedBy;
+
+    @Column(name = "timeline_publish_message", columnDefinition = "TEXT")
+    private String timelinePublishMessage;
+
     // Archive/restore fields
     @Column(name = "is_archived", nullable = false)
     private Boolean isArchived = false;

@@ -1,5 +1,6 @@
 package eventplanner.features.timeline.dto.request;
 
+import eventplanner.common.domain.enums.TimelineStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -23,6 +24,10 @@ public class CreateTimelineItemRequest {
     private String description;
     
     private LocalDateTime scheduledAt;
+
+    private LocalDateTime startDate;
+
+    private LocalDateTime endTime;
     
     @Positive(message = "Duration must be positive")
     private Integer durationMinutes;
@@ -30,4 +35,10 @@ public class CreateTimelineItemRequest {
     private UUID assignedTo;
     
     private UUID[] dependencies;
+
+    private TimelineStatus status;
+
+    private String category;
+
+    private Integer taskOrder;
 }

@@ -109,6 +109,7 @@ public final class RbacPermissions {
     public static final String TIMELINE_CREATE = "timeline.create";
     public static final String TIMELINE_DELETE = "timeline.delete";
     public static final String TIMELINE_READ = "timeline.read";
+    public static final String TIMELINE_UPDATE = "timeline.update";
     public static final String TIMELINE_TASK_CREATE = "timeline.task.create";
     public static final String TIMELINE_TASK_DELETE = "timeline.task.delete";
     public static final String TIMELINE_TASK_POSITION_UPDATE = "timeline.task.position.update";

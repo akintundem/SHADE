@@ -36,6 +36,7 @@ public class TimelineTaskService {
     private final TimelineItemRepository repository;
     private final EventRepository eventRepository;
     private final AuthorizationService authorizationService;
+    private final TimelineHistoryService timelineHistoryService;
     
     private static final int MAX_BULK_OPERATIONS = 50;
     private static final int DEFAULT_UPCOMING_DAYS = 7;
@@ -534,6 +535,10 @@ public class TimelineTaskService {
             .totalDays(totalDays)
             .build();
         
+        // Get recent activity from centralized audit log
+        List<TimelineSummaryResponse.RecentActivity> recentActivity = 
+            timelineHistoryService.getRecentActivity(eventId, 10);
+        
         return TimelineSummaryResponse.builder()
             .eventId(eventId)
             .overallProgress(overallProgress)
@@ -542,7 +547,7 @@ public class TimelineTaskService {
             .overdueTasks(overdueTaskSummaries)
             .tasksByAssignee(tasksByAssignee)
             .timelineSpan(timelineSpan)
-            .recentActivity(Collections.emptyList()) // TODO: Implement activity tracking
+            .recentActivity(recentActivity)
             .build();
     }
     
