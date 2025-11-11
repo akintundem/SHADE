@@ -157,7 +157,7 @@ policy:
     -
       name: budget.create
       scope: EVENT
-      resources: null
+      resources: event_id
       description: Create or update budget
       abac:
         is_authenticated: true
@@ -171,7 +171,7 @@ policy:
       conditions: "Owner only; audited"
       abac:
         is_authenticated: true
-        owns_scope: true
+        owns_scope: false
         is_member: true
     -
       name: budget.lineitem.create
