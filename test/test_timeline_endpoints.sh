@@ -294,16 +294,32 @@ run_test() {
                 ;;
             "Create Event")
                 EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+                if [ -z "$EVENT_ID" ]; then
+                    # Try alternative format
+                    EVENT_ID=$(echo "$response_body" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+                fi
                 ;;
             "Create Timeline Item")
                 TIMELINE_ITEM_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+                if [ -z "$TIMELINE_ITEM_ID" ]; then
+                    # Try alternative format
+                    TIMELINE_ITEM_ID=$(echo "$response_body" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+                fi
                 ;;
             "Create Task")
                 TASK_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+                if [ -z "$TASK_ID" ]; then
+                    # Try alternative format
+                    TASK_ID=$(echo "$response_body" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+                fi
                 ;;
             "Create Second Task")
                 if [ -z "$TASK_ID_2" ]; then
                     TASK_ID_2=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+                    if [ -z "$TASK_ID_2" ]; then
+                        # Try alternative format
+                        TASK_ID_2=$(echo "$response_body" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+                    fi
                 fi
                 ;;
         esac
@@ -592,13 +608,16 @@ main() {
         run_test "Create Second Timeline Item" "POST" "/api/v1/timeline" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$timeline_item_2_data" "200" "Create second timeline item for reordering"
         
         # Test reorder timeline items
+        # Get the second timeline item ID if available
         if [ -n "$TIMELINE_ITEM_ID" ]; then
+            # Try to get all timeline items to find the second one, or use the first one
+            local second_item_id="$TIMELINE_ITEM_ID"
             local reorder_data='{
                 "items": [
                     {
                         "itemId": "'$TIMELINE_ITEM_ID'",
-                        "taskOrder": 2,
-                        "scheduledAt": "'$(date -u -v+1d -v+17H '+%Y-%m-%dT%H:%M:%S')'"
+                        "taskOrder": 1,
+                        "scheduledAt": "'$(date -u -v+1d -v+16H '+%Y-%m-%dT%H:%M:%S')'"
                     }
                 ]
             }'
@@ -663,7 +682,8 @@ main() {
             "dueDate": "'$(date -u -v+1d -v+15H '+%Y-%m-%dT%H:%M:%S')'",
             "priority": "HIGH",
             "category": "guest",
-            "status": "TO_DO"
+            "status": "TO_DO",
+            "durationMinutes": 60
         }'
         run_test "Create Task" "POST" "/api/v1/timeline/$EVENT_ID/tasks" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$task_data" "201" "Create a new task"
         
@@ -672,7 +692,8 @@ main() {
             local update_task_data='{
                 "title": "Updated Finalize Guest List",
                 "status": "IN_PROGRESS",
-                "progressPercentage": 50
+                "progressPercentage": 50,
+                "description": "Updated description for task"
             }'
             run_test "Update Task" "PUT" "/api/v1/timeline/tasks/$TASK_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_task_data" "200" "Update task details"
             
@@ -726,7 +747,8 @@ main() {
             "dueDate": "'$(date -u -v+1d -v+13H '+%Y-%m-%dT%H:%M:%S')'",
             "priority": "HIGH",
             "category": "vendor",
-            "status": "TO_DO"
+            "status": "TO_DO",
+            "durationMinutes": 60
         }'
         run_test "Create Second Task" "POST" "/api/v1/timeline/$EVENT_ID/tasks" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$task_2_data" "201" "Create second task for bulk operations"
         
@@ -737,12 +759,12 @@ main() {
                     {
                         "taskId": "'$TASK_ID'",
                         "status": "COMPLETED",
-                        "progressPercentage": 100
+                        "endDate": "'$(date -u -v+1d -v+15H '+%Y-%m-%dT%H:%M:%S')'"
                     },
                     {
                         "taskId": "'$TASK_ID_2'",
                         "status": "IN_PROGRESS",
-                        "progressPercentage": 50
+                        "startDate": "'$(date -u -v+1d -v+12H '+%Y-%m-%dT%H:%M:%S')'"
                     }
                 ]
             }'

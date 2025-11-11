@@ -613,6 +613,15 @@ policy:
         owns_scope: false
         is_member: true
     -
+      name: timeline.update
+      scope: EVENT
+      resources: event_id
+      description: Update timeline item; Reorder timeline items; Batch update dependencies; Publish/unpublish timeline
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
       name: timeline.proof.upload
       scope: EVENT
       resources: task_id
@@ -1253,6 +1262,7 @@ policy:
         - timeline.delete
         - timeline.proof.upload
         - timeline.read
+        - timeline.update
         - timeline.task.create
         - timeline.task.delete
         - timeline.task.position.update
@@ -1325,6 +1335,7 @@ policy:
         - timeline.delete
         - timeline.proof.upload
         - timeline.read
+        - timeline.update
         - timeline.task.create
         - timeline.task.delete
         - timeline.task.position.update
@@ -1377,6 +1388,7 @@ policy:
         - timeline.delete
         - timeline.proof.upload
         - timeline.read
+        - timeline.update
         - timeline.task.create
         - timeline.task.delete
         - timeline.task.position.update

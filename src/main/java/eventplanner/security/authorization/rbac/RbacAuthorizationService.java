@@ -1,5 +1,6 @@
 package eventplanner.security.authorization.rbac;
 
+import eventplanner.features.timeline.repository.TimelineItemRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
@@ -28,6 +29,7 @@ public class RbacAuthorizationService {
 
     private final RbacPolicyStore policyStore;
     private final AuthorizationService authorizationService;
+    private final TimelineItemRepository timelineItemRepository;
 
     public void assertAuthorized(UserPrincipal principal, String permissionName, Map<String, Object> resources) {
         if (!isAuthorized(principal, permissionName, resources)) {
@@ -91,12 +93,22 @@ public class RbacAuthorizationService {
                 }
             }
             case EVENT -> {
+                UUID eventId = extractUuid(resources, "event_id");
+                // If event_id is missing, try to resolve it from task_id
+                if (eventId == null) {
+                    UUID taskId = extractUuid(resources, "task_id");
+                    if (taskId != null) {
+                        eventId = resolveEventIdFromTaskId(taskId);
+                        if (eventId != null) {
+                            resources.put("event_id", eventId);
+                        }
+                    }
+                }
                 roles.addAll(resolveEventRoles(context, resources));
                 // Always check if user is event owner and add ORGANIZER role
                 // This ensures event owners have access even if context doesn't have the role yet
-                if (principal != null) {
-                    UUID eventId = extractUuid(resources, "event_id");
-                    if (eventId != null && authorizationService.isEventOwner(principal, eventId)) {
+                if (principal != null && eventId != null) {
+                    if (authorizationService.isEventOwner(principal, eventId)) {
                         roles.add("ORGANIZER");
                     }
                 }
@@ -150,6 +162,16 @@ public class RbacAuthorizationService {
             }
             case EVENT -> {
                 UUID eventId = extractUuid(resources, "event_id");
+                // If event_id is missing, try to resolve it from task_id
+                if (eventId == null) {
+                    UUID taskId = extractUuid(resources, "task_id");
+                    if (taskId != null) {
+                        eventId = resolveEventIdFromTaskId(taskId);
+                        if (eventId != null) {
+                            resources.put("event_id", eventId);
+                        }
+                    }
+                }
                 yield eventId != null && authorizationService.isEventOwner(principal, eventId);
             }
             case ORGANIZATION -> {
@@ -169,8 +191,19 @@ public class RbacAuthorizationService {
             case SYSTEM -> true;
             case EVENT -> {
                 UUID eventId = extractUuid(resources, "event_id");
+                // If event_id is missing, try to resolve it from task_id
+                if (eventId == null) {
+                    UUID taskId = extractUuid(resources, "task_id");
+                    if (taskId != null) {
+                        eventId = resolveEventIdFromTaskId(taskId);
+                    }
+                }
                 if (eventId == null) {
                     yield false;
+                }
+                // Update resources with resolved event_id for subsequent checks
+                if (eventId != null && !resources.containsKey("event_id")) {
+                    resources.put("event_id", eventId);
                 }
                 if (!resolveEventRoles(context, resources).isEmpty()) {
                     yield true;
@@ -214,5 +247,22 @@ public class RbacAuthorizationService {
             }
         }
         return null;
+    }
+
+    /**
+     * Resolve event_id from task_id by looking up the timeline item
+     */
+    private UUID resolveEventIdFromTaskId(UUID taskId) {
+        if (taskId == null) {
+            return null;
+        }
+        try {
+            return timelineItemRepository.findById(taskId)
+                    .map(item -> item.getEventId())
+                    .orElse(null);
+        } catch (Exception e) {
+            log.debug("Failed to resolve event_id from task_id {}: {}", taskId, e.getMessage());
+            return null;
+        }
     }
 }
