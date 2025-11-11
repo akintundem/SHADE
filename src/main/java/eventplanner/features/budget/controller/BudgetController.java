@@ -866,15 +866,6 @@ public class BudgetController {
 		return String.valueOf(budget.getVersion()) + "-" + budget.getUpdatedAt().hashCode();
 	}
 
-	/**
-	 * Generate ETag for line item
-	 */
-	private String generateLineItemETag(BudgetLineItem item) {
-		if (item.getVersion() == null) {
-			return String.valueOf(item.getUpdatedAt().hashCode());
-		}
-		return String.valueOf(item.getVersion()) + "-" + item.getUpdatedAt().hashCode();
-	}
 
 	/**
 	 * Validate budget status transitions

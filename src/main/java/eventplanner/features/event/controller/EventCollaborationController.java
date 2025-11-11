@@ -3,8 +3,13 @@ package eventplanner.features.event.controller;
 import eventplanner.features.event.dto.request.EventCollaboratorRequest;
 import eventplanner.features.event.dto.response.EventCollaboratorResponse;
 import eventplanner.features.event.service.EventCollaboratorService;
+import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
+import eventplanner.security.authorization.service.AuthorizationService;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.server.ResponseStatusException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -34,9 +39,12 @@ import java.util.UUID;
 public class EventCollaborationController {
 
     private final EventCollaboratorService collaboratorService;
+    private final AuthorizationService authorizationService;
 
-    public EventCollaborationController(EventCollaboratorService collaboratorService) {
+    public EventCollaborationController(EventCollaboratorService collaboratorService,
+                                       AuthorizationService authorizationService) {
         this.collaboratorService = collaboratorService;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping("/{id}/collaborators")
@@ -44,8 +52,16 @@ public class EventCollaborationController {
     @Operation(summary = "Get event collaborators", description = "Get list of event collaborators")
     public ResponseEntity<List<EventCollaboratorResponse>> getCollaborators(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user has access to the event
+        if (!authorizationService.canAccessEvent(principal, id)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event collaborators");
+        }
         List<EventCollaboratorResponse> collaborators = collaboratorService.getCollaborators(id, page, size);
         return ResponseEntity.ok(collaborators);
     }
@@ -55,7 +71,15 @@ public class EventCollaborationController {
     @Operation(summary = "Add event collaborator", description = "Add a new collaborator to an event")
     public ResponseEntity<EventCollaboratorResponse> addCollaborator(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventCollaboratorRequest request) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user is owner or admin
+        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can add collaborators");
+        }
         EventCollaboratorResponse response = collaboratorService.addCollaborator(id, request);
         return ResponseEntity.ok(response);
     }
@@ -66,7 +90,15 @@ public class EventCollaborationController {
     public ResponseEntity<EventCollaboratorResponse> updateCollaborator(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Parameter(description = "Collaborator ID") @PathVariable UUID collaboratorId,
+            @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventCollaboratorRequest request) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user is owner or admin
+        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update collaborators");
+        }
         EventCollaboratorResponse response = collaboratorService.updateCollaborator(id, collaboratorId, request);
         return ResponseEntity.ok(response);
     }
@@ -76,7 +108,15 @@ public class EventCollaborationController {
     @Operation(summary = "Remove event collaborator", description = "Remove a collaborator from an event")
     public ResponseEntity<Void> removeCollaborator(
             @Parameter(description = "Event ID") @PathVariable UUID id,
-            @Parameter(description = "Collaborator ID") @PathVariable UUID collaboratorId) {
+            @Parameter(description = "Collaborator ID") @PathVariable UUID collaboratorId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user is owner or admin
+        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can remove collaborators");
+        }
         collaboratorService.removeCollaborator(id, collaboratorId);
         return ResponseEntity.noContent().build();
     }

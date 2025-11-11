@@ -1,13 +1,17 @@
 package eventplanner.features.event.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.features.event.dto.request.CreateEventRequest;
+import eventplanner.features.event.dto.request.EventListRequest;
 import eventplanner.features.event.dto.request.UpdateEventRequest;
 import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.entity.Event;
+import eventplanner.features.event.service.EventIdempotencyService;
 import eventplanner.features.event.service.EventService;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
+import eventplanner.security.authorization.service.AuthorizationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -16,20 +20,19 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.net.URI;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -40,11 +43,40 @@ import java.util.UUID;
 public class EventCrudController {
 
     private final EventService eventService;
+    private final AuthorizationService authorizationService;
+    private final EventIdempotencyService idempotencyService;
+    private final ObjectMapper objectMapper;
 
-    public EventCrudController(EventService eventService) {
+    public EventCrudController(EventService eventService, 
+                              AuthorizationService authorizationService,
+                              EventIdempotencyService idempotencyService,
+                              ObjectMapper objectMapper) {
         this.eventService = eventService;
+        this.authorizationService = authorizationService;
+        this.idempotencyService = idempotencyService;
+        this.objectMapper = objectMapper;
     }
 
+
+    @GetMapping
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+    @Operation(summary = "List events", description = "List events with pagination, filtering, and search. Supports filtering by status, visibility, date range, and search by name/tag.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Events retrieved successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid query parameters"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    public ResponseEntity<Page<EventResponse>> list(
+            @Valid EventListRequest request,
+            @AuthenticationPrincipal UserPrincipal user) {
+        try {
+            Page<Event> events = eventService.listEvents(request, user);
+            Page<EventResponse> responses = events.map(eventService::toResponse);
+            return ResponseEntity.ok(responses);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
+    }
 
     @GetMapping("/{id}")
     @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
@@ -62,29 +94,87 @@ public class EventCrudController {
         Optional<Event> found = eventService.getByIdWithAccessControl(id, user);
         return found
                 .map(eventService::toResponse)
-                .map(ResponseEntity::ok)
+                .map(response -> {
+                    ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
+                    // Include ETag header with version for optimistic locking
+                    found.ifPresent(event -> {
+                        if (event.getVersion() != null) {
+                            builder.eTag(String.valueOf(event.getVersion()));
+                        }
+                    });
+                    return builder.body(response);
+                })
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping
     @RequiresPermission(RbacPermissions.EVENT_CREATE)
-    @Operation(summary = "Create new event", description = "Create a new event with the provided details")
+    @Operation(summary = "Create new event", description = "Create a new event with the provided details. Supports Idempotency-Key header to prevent duplicate creation on retries.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "201", description = "Event created successfully",
                 content = @Content(schema = @Schema(implementation = EventResponse.class))),
+        @ApiResponse(responseCode = "200", description = "Event already exists (idempotent replay)",
+                content = @Content(schema = @Schema(implementation = EventResponse.class))),
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token")
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
+        @ApiResponse(responseCode = "409", description = "Conflict - Operation already in progress")
     })
     public ResponseEntity<EventResponse> create(
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody CreateEventRequest request) {
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody CreateEventRequest request,
+            HttpServletRequest httpRequest) {
         try {
             if (principal == null) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
             }
-            Event created = eventService.create(request, principal.getId());
-            EventResponse response = eventService.toResponse(created);
-            return ResponseEntity.ok(response);
+            
+            // Check idempotency - return cached result if available
+            if (StringUtils.hasText(idempotencyKey)) {
+                Optional<String> cachedResult = idempotencyService.getProcessedResult(idempotencyKey);
+                if (cachedResult.isPresent()) {
+                    try {
+                        EventResponse cached = objectMapper.readValue(cachedResult.get(), EventResponse.class);
+                        return ResponseEntity.ok()
+                                .header("X-Idempotency-Replay", "true")
+                                .header(HttpHeaders.LOCATION, "/api/v1/events/" + cached.getId())
+                                .body(cached);
+                    } catch (Exception e) {
+                        // Log but continue with normal creation
+                    }
+                }
+                
+                // Mark as processing to prevent concurrent requests
+                if (!idempotencyService.markAsProcessing(idempotencyKey)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, 
+                            "Event creation already in progress. Please wait.");
+                }
+            }
+            
+            try {
+                Event created = eventService.create(request, principal.getId());
+                EventResponse response = eventService.toResponse(created);
+                
+                // Store result for idempotency
+                if (StringUtils.hasText(idempotencyKey)) {
+                    try {
+                        String resultJson = objectMapper.writeValueAsString(response);
+                        idempotencyService.storeResult(idempotencyKey, resultJson);
+                    } catch (Exception e) {
+                        // Log but don't fail the request
+                    }
+                }
+                
+                URI location = URI.create("/api/v1/events/" + created.getId());
+                return ResponseEntity.created(location)
+                        .header(HttpHeaders.LOCATION, location.toString())
+                        .body(response);
+            } finally {
+                // Release processing lock
+                if (StringUtils.hasText(idempotencyKey)) {
+                    idempotencyService.releaseProcessingLock(idempotencyKey);
+                }
+            }
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
@@ -92,46 +182,197 @@ public class EventCrudController {
 
     @PutMapping("/{id}")
     @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#id"})
-    @Operation(summary = "Update event", description = "Update an existing event with new details")
+    @Operation(summary = "Update event", description = "Update an existing event with new details. Supports If-Match header for optimistic locking.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event updated successfully",
                 content = @Content(schema = @Schema(implementation = EventResponse.class))),
         @ApiResponse(responseCode = "404", description = "Event not found"),
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token")
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions"),
+        @ApiResponse(responseCode = "409", description = "Conflict - Event version mismatch (optimistic locking)")
     })
     public ResponseEntity<EventResponse> update(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody UpdateEventRequest request) {
         try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            
             Optional<Event> existingEvent = eventService.getById(id);
             if (existingEvent.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
             
-            Event updated = eventService.update(id, request);
+            // Verify ownership or admin access
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new AccessDeniedException("Only event owners or admins can update events");
+            }
+            
+            // Parse version from If-Match header
+            Long expectedVersion = null;
+            if (StringUtils.hasText(ifMatch)) {
+                try {
+                    expectedVersion = Long.parseLong(ifMatch);
+                } catch (NumberFormatException e) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid If-Match header format");
+                }
+            }
+            
+            Event updated;
+            if (expectedVersion != null) {
+                updated = eventService.updateWithVersion(id, request, expectedVersion);
+            } else {
+                updated = eventService.update(id, request);
+            }
+            
             EventResponse response = eventService.toResponse(updated);
+            ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
+            // Include ETag with new version
+            if (updated.getVersion() != null) {
+                builder.eTag(String.valueOf(updated.getVersion()));
+            }
+            return builder.body(response);
+        } catch (org.springframework.orm.ObjectOptimisticLockingFailureException ex) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, 
+                    "Event has been modified by another user. Please refresh and try again.", ex);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        } catch (AccessDeniedException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
+        }
+    }
+
+    @PostMapping("/{id}/archive")
+    @RequiresPermission(value = RbacPermissions.EVENT_DELETE, resources = {"event_id=#id"})
+    @Operation(summary = "Archive event", description = "Archive an event (soft delete) with audit metadata. Use this instead of DELETE for recoverable removal.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Event archived successfully",
+                content = @Content(schema = @Schema(implementation = EventResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Event not found"),
+        @ApiResponse(responseCode = "400", description = "Event already archived"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions")
+    })
+    public ResponseEntity<EventResponse> archive(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(required = false) String reason) {
+        try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            
+            Optional<Event> existingEvent = eventService.getById(id);
+            if (existingEvent.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Verify ownership or admin access
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new AccessDeniedException("Only event owners or admins can archive events");
+            }
+            
+            Event archived = eventService.archiveEvent(id, principal.getId(), reason);
+            EventResponse response = eventService.toResponse(archived);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        } catch (AccessDeniedException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
+        }
+    }
+
+    @PostMapping("/{id}/restore")
+    @RequiresPermission(value = RbacPermissions.EVENT_DELETE, resources = {"event_id=#id"})
+    @Operation(summary = "Restore archived event", description = "Restore a previously archived event.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Event restored successfully",
+                content = @Content(schema = @Schema(implementation = EventResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Event not found"),
+        @ApiResponse(responseCode = "400", description = "Event is not archived"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions")
+    })
+    public ResponseEntity<EventResponse> restore(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            
+            Optional<Event> existingEvent = eventService.getById(id);
+            if (existingEvent.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Verify ownership or admin access
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new AccessDeniedException("Only event owners or admins can restore events");
+            }
+            
+            Event restored = eventService.restoreEvent(id, principal.getId());
+            EventResponse response = eventService.toResponse(restored);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        } catch (AccessDeniedException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
         }
     }
 
     @DeleteMapping("/{id}")
     @RequiresPermission(value = RbacPermissions.EVENT_DELETE, resources = {"event_id=#id"})
-    @Operation(summary = "Delete event", description = "Delete an event by its unique identifier")
+    @Operation(summary = "Delete event (hard delete)", description = "Permanently delete an event. Consider using archive endpoint instead for recoverable removal. Supports If-Match header for optimistic locking.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "204", description = "Event deleted successfully"),
         @ApiResponse(responseCode = "404", description = "Event not found"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token")
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions"),
+        @ApiResponse(responseCode = "409", description = "Conflict - Event version mismatch (optimistic locking)")
     })
     public ResponseEntity<Void> delete(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestHeader(value = "If-Match", required = false) String ifMatch) {
         try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            
+            Optional<Event> existingEvent = eventService.getById(id);
+            if (existingEvent.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Verify ownership or admin access
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new AccessDeniedException("Only event owners or admins can delete events");
+            }
+            
+            // Check version if If-Match header is provided
+            if (StringUtils.hasText(ifMatch)) {
+                try {
+                    Long expectedVersion = Long.parseLong(ifMatch);
+                    if (!expectedVersion.equals(existingEvent.get().getVersion())) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT, 
+                                "Event has been modified by another user. Please refresh and try again.");
+                    }
+                } catch (NumberFormatException e) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid If-Match header format");
+                }
+            }
+            
             eventService.delete(id);
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        } catch (AccessDeniedException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
         }
     }
 

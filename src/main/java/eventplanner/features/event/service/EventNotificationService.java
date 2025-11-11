@@ -121,17 +121,25 @@ public class EventNotificationService {
 
     private EventNotificationResponse toResponse(UUID eventId, EventNotificationRequest request, Communication communication) {
         EventNotificationResponse response = new EventNotificationResponse();
-        response.setNotificationId(communication.getId());
+        if (communication != null) {
+            response.setNotificationId(communication.getId());
+            response.setStatus(communication.getStatus() != null ? communication.getStatus().name().toLowerCase() : null);
+            response.setSentAt(communication.getSentAt());
+            response.setCreatedAt(communication.getCreatedAt());
+        } else {
+            // No communication record found - notification may have failed or not been persisted
+            response.setNotificationId(null);
+            response.setStatus("pending");
+            response.setSentAt(null);
+            response.setCreatedAt(null);
+        }
         response.setEventId(eventId);
         response.setChannel(request.getChannel());
         response.setSubject(request.getSubject());
         response.setContent(request.getContent());
-        response.setStatus(communication.getStatus() != null ? communication.getStatus().name().toLowerCase() : null);
         response.setRecipientCount(calculateRecipientCount(request));
         response.setScheduledAt(request.getScheduledAt());
-        response.setSentAt(communication.getSentAt());
         response.setPriority(request.getPriority());
-        response.setCreatedAt(communication.getCreatedAt());
         response.setSuccessfulRecipients(request.getRecipientEmails() != null ? request.getRecipientEmails() : new ArrayList<>());
         response.setFailedRecipients(new ArrayList<>());
         return response;

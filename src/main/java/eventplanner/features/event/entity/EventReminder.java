@@ -18,10 +18,6 @@ import java.util.UUID;
 @EqualsAndHashCode(callSuper = true)
 public class EventReminder extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
     @Column(name = "event_id", nullable = false)
     private UUID eventId;
 

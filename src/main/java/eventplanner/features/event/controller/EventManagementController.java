@@ -23,6 +23,7 @@ import eventplanner.features.event.service.EventService;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
+import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.common.domain.enums.EventStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -56,9 +57,12 @@ import java.util.UUID;
 public class EventManagementController {
 
     private final EventService eventService;
+    private final AuthorizationService authorizationService;
 
-    public EventManagementController(EventService eventService) {
+    public EventManagementController(EventService eventService, 
+                                     AuthorizationService authorizationService) {
         this.eventService = eventService;
+        this.authorizationService = authorizationService;
     }
 
     // ==================== 1. USER-EVENT RELATIONSHIP ENDPOINTS ====================
@@ -80,7 +84,7 @@ public class EventManagementController {
             assertSameUser(userId, requesterId);
             List<Event> events = eventService.getEventsByUser(requesterId);
             List<UserEventRelationshipResponse> responses = events.stream()
-                    .map(event -> convertToUserEventRelationship(event))
+                    .map(event -> convertToUserEventRelationship(event, requesterId))
                     .toList();
             return ResponseEntity.ok(responses);
         } catch (Exception ex) {
@@ -99,7 +103,7 @@ public class EventManagementController {
             assertSameUser(userId, requesterId);
             List<Event> events = eventService.getEventsOwnedByUser(requesterId);
             List<UserEventRelationshipResponse> responses = events.stream()
-                    .map(event -> convertToUserEventRelationship(event))
+                    .map(event -> convertToUserEventRelationship(event, requesterId))
                     .toList();
             return ResponseEntity.ok(responses);
         } catch (Exception ex) {
@@ -118,7 +122,7 @@ public class EventManagementController {
             assertSameUser(userId, requesterId);
             List<Event> events = eventService.getUpcomingEventsByUser(requesterId);
             List<UserEventRelationshipResponse> responses = events.stream()
-                    .map(event -> convertToUserEventRelationship(event))
+                    .map(event -> convertToUserEventRelationship(event, requesterId))
                     .toList();
             return ResponseEntity.ok(responses);
         } catch (Exception ex) {
@@ -137,7 +141,7 @@ public class EventManagementController {
             assertSameUser(userId, requesterId);
             List<Event> events = eventService.getPastEventsByUser(requesterId);
             List<UserEventRelationshipResponse> responses = events.stream()
-                    .map(event -> convertToUserEventRelationship(event))
+                    .map(event -> convertToUserEventRelationship(event, requesterId))
                     .toList();
             return ResponseEntity.ok(responses);
         } catch (Exception ex) {
@@ -168,7 +172,7 @@ public class EventManagementController {
             UUID userId = requireCurrentUser(principal);
             List<Event> events = eventService.getEventsOwnedByUser(userId);
             List<UserEventRelationshipResponse> responses = events.stream()
-                    .map(event -> convertToUserEventRelationship(event))
+                    .map(event -> convertToUserEventRelationship(event, userId))
                     .toList();
             return ResponseEntity.ok(responses);
         } catch (Exception ex) {
@@ -185,7 +189,7 @@ public class EventManagementController {
             UUID userId = requireCurrentUser(principal);
             List<Event> events = eventService.getUpcomingEventsByUser(userId);
             List<UserEventRelationshipResponse> responses = events.stream()
-                    .map(event -> convertToUserEventRelationship(event))
+                    .map(event -> convertToUserEventRelationship(event, userId))
                     .toList();
             return ResponseEntity.ok(responses);
         } catch (Exception ex) {
@@ -202,7 +206,7 @@ public class EventManagementController {
             UUID userId = requireCurrentUser(principal);
             List<Event> events = eventService.getPastEventsByUser(userId);
             List<UserEventRelationshipResponse> responses = events.stream()
-                    .map(event -> convertToUserEventRelationship(event))
+                    .map(event -> convertToUserEventRelationship(event, userId))
                     .toList();
             return ResponseEntity.ok(responses);
         } catch (Exception ex) {
@@ -232,11 +236,19 @@ public class EventManagementController {
     @Operation(summary = "Update event status", description = "Update the status of an event")
     public ResponseEntity<EventResponse> updateEventStatus(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventStatusUpdateRequest request) {
         try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            // Verify user is owner or admin
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update event status");
+            }
             Event updatedEvent = eventService.updateEventStatus(id, request.getEventStatus());
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
-        } catch (Exception ex) {
+        } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
     }
@@ -245,8 +257,16 @@ public class EventManagementController {
     @RequiresPermission(value = RbacPermissions.EVENT_PUBLISH, resources = {"event_id=#id"})
     @Operation(summary = "Publish event", description = "Publish an event to make it visible")
     public ResponseEntity<EventResponse> publishEvent(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            // Verify user is owner or admin
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can publish events");
+            }
             Event updatedEvent = eventService.publishEvent(id);
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
@@ -258,8 +278,16 @@ public class EventManagementController {
     @RequiresPermission(value = RbacPermissions.EVENT_CANCEL, resources = {"event_id=#id"})
     @Operation(summary = "Cancel event", description = "Cancel an event")
     public ResponseEntity<EventResponse> cancelEvent(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            // Verify user is owner or admin
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can cancel events");
+            }
             Event updatedEvent = eventService.cancelEvent(id);
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
@@ -271,8 +299,16 @@ public class EventManagementController {
     @RequiresPermission(value = RbacPermissions.EVENT_COMPLETE, resources = {"event_id=#id"})
     @Operation(summary = "Complete event", description = "Mark an event as completed")
     public ResponseEntity<EventResponse> completeEvent(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            // Verify user is owner or admin
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can complete events");
+            }
             Event updatedEvent = eventService.completeEvent(id);
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
@@ -284,8 +320,16 @@ public class EventManagementController {
     @RequiresPermission(value = RbacPermissions.EVENT_REGISTRATION_OPEN, resources = {"event_id=#id"})
     @Operation(summary = "Open registration", description = "Open registration for an event")
     public ResponseEntity<EventResponse> openRegistration(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            // Verify user is owner or admin
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can open registration");
+            }
             Event updatedEvent = eventService.openRegistration(id);
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
@@ -297,8 +341,16 @@ public class EventManagementController {
     @RequiresPermission(value = RbacPermissions.EVENT_REGISTRATION_CLOSE, resources = {"event_id=#id"})
     @Operation(summary = "Close registration", description = "Close registration for an event")
     public ResponseEntity<EventResponse> closeRegistration(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal) {
         try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            // Verify user is owner or admin
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can close registration");
+            }
             Event updatedEvent = eventService.closeRegistration(id);
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
@@ -470,8 +522,16 @@ public class EventManagementController {
     @Operation(summary = "Update event capacity", description = "Update the capacity of an event")
     public ResponseEntity<EventResponse> updateCapacity(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventCapacityUpdateRequest request) {
         try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            // Verify user is owner or admin
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update capacity");
+            }
             Event updatedEvent = eventService.updateCapacity(id, request.getCapacity());
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
@@ -497,8 +557,16 @@ public class EventManagementController {
     @Operation(summary = "Update registration deadline", description = "Update the registration deadline for an event")
     public ResponseEntity<EventResponse> updateRegistrationDeadline(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventRegistrationDeadlineRequest request) {
         try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            // Verify user is owner or admin
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update registration deadline");
+            }
             Event updatedEvent = eventService.updateRegistrationDeadline(id, request.getDeadline());
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
@@ -600,8 +668,16 @@ public class EventManagementController {
     @Operation(summary = "Update event visibility", description = "Update the visibility settings for an event")
     public ResponseEntity<EventResponse> updateVisibility(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventVisibilityUpdateRequest request) {
         try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            // Verify user is owner or admin
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update visibility");
+            }
             Event updatedEvent = eventService.updateVisibility(id, request.getIsPublic());
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
@@ -799,7 +875,7 @@ public class EventManagementController {
         }
     }
 
-    private UserEventRelationshipResponse convertToUserEventRelationship(Event event) {
+    private UserEventRelationshipResponse convertToUserEventRelationship(Event event, UUID userId) {
         UserEventRelationshipResponse response = new UserEventRelationshipResponse();
         response.setEventId(event.getId());
         response.setEventName(event.getName());
@@ -808,7 +884,11 @@ public class EventManagementController {
         response.setEventStatus(event.getEventStatus());
         response.setStartDateTime(event.getStartDateTime());
         response.setEndDateTime(event.getEndDateTime());
-        response.setIsOwner(true); // For owned events
+        
+        // Check actual ownership
+        boolean isOwner = event.getOwnerId() != null && event.getOwnerId().equals(userId);
+        response.setIsOwner(isOwner);
+        
         response.setCapacity(event.getCapacity());
         response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
         response.setIsPublic(event.getIsPublic());

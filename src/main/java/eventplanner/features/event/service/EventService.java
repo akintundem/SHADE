@@ -18,7 +18,10 @@ import eventplanner.security.authorization.domain.repository.EventRoleRepository
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -400,11 +403,138 @@ public class EventService {
     }
 
     /**
-     * Delete event by ID
+     * Delete event by ID (hard delete - use archive instead)
      * @param id The event ID
      */
     public void delete(UUID id) {
         eventRepository.deleteById(id);
+    }
+
+    /**
+     * List events with pagination and filtering
+     * @param request The list request with filters
+     * @param user The user principal for access control
+     * @return Page of events
+     */
+    public Page<Event> listEvents(eventplanner.features.event.dto.request.EventListRequest request, UserPrincipal user) {
+        // Enforce max page size
+        int page = Math.max(0, request.getPage() != null ? request.getPage() : 0);
+        int size = Math.min(100, Math.max(1, request.getSize() != null ? request.getSize() : 20));
+        
+        // Build sort
+        Sort.Direction direction = "DESC".equalsIgnoreCase(request.getSortDirection()) 
+                ? Sort.Direction.DESC 
+                : Sort.Direction.ASC;
+        Sort sort = Sort.by(direction, request.getSortBy() != null ? request.getSortBy() : "startDateTime");
+        Pageable pageable = PageRequest.of(page, size, sort);
+        
+        // Normalize search term
+        String search = request.getSearch() != null && !request.getSearch().trim().isEmpty() 
+                ? request.getSearch().trim() 
+                : null;
+        
+        // Default to non-archived events unless explicitly requested
+        Boolean isArchived = request.getIsArchived() != null ? request.getIsArchived() : false;
+        
+        // Query with filters
+        Page<Event> events = eventRepository.findEventsWithFilters(
+                request.getStatus(),
+                request.getIsPublic(),
+                request.getStartDateFrom(),
+                request.getStartDateTo(),
+                isArchived,
+                search,
+                pageable
+        );
+        
+        // Filter by access control if user is provided
+        if (user != null && authorizationService != null) {
+            // Filter events based on user access
+            List<Event> accessibleEvents = events.getContent().stream()
+                    .filter(event -> authorizationService.canAccessEvent(user, event.getId()))
+                    .collect(Collectors.toList());
+            
+            // Recreate page with filtered content
+            return new org.springframework.data.domain.PageImpl<>(
+                    accessibleEvents,
+                    pageable,
+                    accessibleEvents.size()
+            );
+        }
+        
+        return events;
+    }
+
+    /**
+     * Archive an event (soft delete)
+     * @param id The event ID
+     * @param archivedBy The user ID archiving the event
+     * @param reason Optional reason for archiving
+     * @return Archived event
+     */
+    public Event archiveEvent(UUID id, UUID archivedBy, String reason) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + id));
+        
+        if (Boolean.TRUE.equals(event.getIsArchived())) {
+            throw new IllegalArgumentException("Event is already archived");
+        }
+        
+        event.setIsArchived(true);
+        event.setArchivedAt(LocalDateTime.now());
+        event.setArchivedBy(archivedBy);
+        event.setArchiveReason(reason);
+        
+        return eventRepository.save(event);
+    }
+
+    /**
+     * Restore an archived event
+     * @param id The event ID
+     * @param restoredBy The user ID restoring the event
+     * @return Restored event
+     */
+    public Event restoreEvent(UUID id, UUID restoredBy) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + id));
+        
+        if (!Boolean.TRUE.equals(event.getIsArchived())) {
+            throw new IllegalArgumentException("Event is not archived");
+        }
+        
+        event.setIsArchived(false);
+        event.setRestoredAt(LocalDateTime.now());
+        event.setRestoredBy(restoredBy);
+        // Clear archive fields but keep for audit trail
+        // event.setArchivedAt(null);
+        // event.setArchivedBy(null);
+        // event.setArchiveReason(null);
+        
+        return eventRepository.save(event);
+    }
+
+    /**
+     * Update event with optimistic locking check
+     * @param id The event ID
+     * @param request The update request
+     * @param expectedVersion The expected version from If-Match header
+     * @return Updated event
+     * @throws org.springframework.orm.ObjectOptimisticLockingFailureException if version mismatch
+     */
+    public Event updateWithVersion(UUID id, UpdateEventRequest request, Long expectedVersion) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + id));
+        
+        // Check version if provided
+        if (expectedVersion != null && !expectedVersion.equals(event.getVersion())) {
+            throw new org.springframework.orm.ObjectOptimisticLockingFailureException(
+                    "Event has been modified by another user. Current version: " + event.getVersion(),
+                    event.getClass()
+            );
+        }
+        
+        // Update fields (same as regular update)
+        return update(id, request);
     }
 
     /**

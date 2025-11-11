@@ -83,4 +83,25 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     
     @Query("SELECT e FROM Event e WHERE e.isPublic = true AND e.eventStatus = 'PUBLISHED' ORDER BY e.currentAttendeeCount DESC")
     List<Event> findTrendingEvents(Pageable pageable);
+    
+    // Filtering with pagination
+    @Query("SELECT e FROM Event e WHERE " +
+           "(:status IS NULL OR e.eventStatus = :status) AND " +
+           "(:isPublic IS NULL OR e.isPublic = :isPublic) AND " +
+           "(:startDateFrom IS NULL OR e.startDateTime >= :startDateFrom) AND " +
+           "(:startDateTo IS NULL OR e.startDateTime <= :startDateTo) AND " +
+           "(:isArchived IS NULL OR e.isArchived = :isArchived) AND " +
+           "(:search IS NULL OR " +
+           "LOWER(e.name) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(e.description) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(e.hashtag) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(e.theme) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Event> findEventsWithFilters(
+            @Param("status") EventStatus status,
+            @Param("isPublic") Boolean isPublic,
+            @Param("startDateFrom") LocalDateTime startDateFrom,
+            @Param("startDateTo") LocalDateTime startDateTo,
+            @Param("isArchived") Boolean isArchived,
+            @Param("search") String search,
+            Pageable pageable);
 }

@@ -9,6 +9,11 @@ import eventplanner.features.event.dto.response.EventReminderResponse;
 import eventplanner.features.event.service.EventNotificationService;
 import eventplanner.features.event.service.EventNotificationSettingsService;
 import eventplanner.features.event.service.EventReminderService;
+import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.authorization.service.AuthorizationService;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.server.ResponseStatusException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -45,13 +50,16 @@ public class EventNotificationController {
     private final EventNotificationService notificationService;
     private final EventNotificationSettingsService settingsService;
     private final EventReminderService reminderService;
+    private final AuthorizationService authorizationService;
 
     public EventNotificationController(EventNotificationService notificationService,
                                        EventNotificationSettingsService settingsService,
-                                       EventReminderService reminderService) {
+                                       EventReminderService reminderService,
+                                       AuthorizationService authorizationService) {
         this.notificationService = notificationService;
         this.settingsService = settingsService;
         this.reminderService = reminderService;
+        this.authorizationService = authorizationService;
     }
 
     // ==================== EVENT NOTIFICATION ENDPOINTS ====================
@@ -62,28 +70,65 @@ public class EventNotificationController {
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Notification settings retrieved successfully"),
         @ApiResponse(responseCode = "404", description = "Event not found"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized")
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions")
     })
     public ResponseEntity<EventNotificationSettingsResponse> getNotificationSettings(
-            @Parameter(description = "Event ID") @PathVariable UUID id) {
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user has access to the event
+        if (!authorizationService.canAccessEvent(principal, id)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event notification settings");
+        }
         return ResponseEntity.ok(settingsService.getSettings(id));
     }
 
     @PutMapping("/{id}/notifications")
     @RequiresPermission(value = RbacPermissions.EVENT_NOTIFICATION_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Update event notification settings", description = "Update notification settings for an event")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Notification settings updated successfully"),
+        @ApiResponse(responseCode = "404", description = "Event not found"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions")
+    })
     public ResponseEntity<EventNotificationSettingsResponse> updateNotificationSettings(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventNotificationSettingsRequest request) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user is owner or admin
+        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update notification settings");
+        }
         return ResponseEntity.ok(settingsService.updateSettings(id, request));
     }
 
     @PostMapping("/{id}/notifications/send")
     @RequiresPermission(value = RbacPermissions.EVENT_NOTIFICATION_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Send event notification", description = "Send a notification for an event")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Notification sent successfully"),
+        @ApiResponse(responseCode = "404", description = "Event not found"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions")
+    })
     public ResponseEntity<EventNotificationResponse> sendNotification(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventNotificationRequest request) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user is owner or admin
+        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can send notifications");
+        }
         return ResponseEntity.ok(notificationService.sendNotification(id, request));
     }
 
@@ -94,8 +139,16 @@ public class EventNotificationController {
     @Operation(summary = "Get event reminders", description = "Get all reminders for an event")
     public ResponseEntity<List<EventReminderResponse>> getReminders(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user has access to the event
+        if (!authorizationService.canAccessEvent(principal, id)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event reminders");
+        }
         return ResponseEntity.ok(reminderService.list(id, page, size));
     }
 
@@ -104,7 +157,15 @@ public class EventNotificationController {
     @Operation(summary = "Create event reminder", description = "Create a new reminder for an event")
     public ResponseEntity<EventReminderResponse> createReminder(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventReminderRequest request) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user is owner or admin
+        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can create reminders");
+        }
         return ResponseEntity.ok(reminderService.create(id, request));
     }
 
@@ -114,7 +175,15 @@ public class EventNotificationController {
     public ResponseEntity<EventReminderResponse> updateReminder(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Parameter(description = "Reminder ID") @PathVariable UUID reminderId,
+            @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventReminderRequest request) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user is owner or admin
+        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update reminders");
+        }
         return ResponseEntity.ok(reminderService.update(id, reminderId, request));
     }
 
@@ -123,7 +192,15 @@ public class EventNotificationController {
     @Operation(summary = "Delete event reminder", description = "Delete a reminder")
     public ResponseEntity<Void> deleteReminder(
             @Parameter(description = "Event ID") @PathVariable UUID id,
-            @Parameter(description = "Reminder ID") @PathVariable UUID reminderId) {
+            @Parameter(description = "Reminder ID") @PathVariable UUID reminderId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user is owner or admin
+        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can delete reminders");
+        }
         reminderService.delete(id, reminderId);
         return ResponseEntity.noContent().build();
     }
@@ -133,7 +210,15 @@ public class EventNotificationController {
     @Operation(summary = "Get specific reminder", description = "Get details of a specific reminder")
     public ResponseEntity<EventReminderResponse> getReminder(
             @Parameter(description = "Event ID") @PathVariable UUID id,
-            @Parameter(description = "Reminder ID") @PathVariable UUID reminderId) {
+            @Parameter(description = "Reminder ID") @PathVariable UUID reminderId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        // Verify user has access to the event
+        if (!authorizationService.canAccessEvent(principal, id)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event reminder");
+        }
         return ResponseEntity.ok(reminderService.get(id, reminderId));
     }
 }

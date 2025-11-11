@@ -133,6 +133,25 @@ public class Event extends BaseEntity {
     @Column(name = "payment_date")
     private LocalDateTime paymentDate;
 
+    // Archive/restore fields
+    @Column(name = "is_archived", nullable = false)
+    private Boolean isArchived = false;
+
+    @Column(name = "archived_at")
+    private LocalDateTime archivedAt;
+
+    @Column(name = "archived_by")
+    private UUID archivedBy;
+
+    @Column(name = "archive_reason", columnDefinition = "TEXT")
+    private String archiveReason;
+
+    @Column(name = "restored_at")
+    private LocalDateTime restoredAt;
+
+    @Column(name = "restored_by")
+    private UUID restoredBy;
+
     public Event(String name, EventType eventType, UUID ownerId) {
         this.name = name;
         this.eventType = eventType;
