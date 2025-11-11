@@ -109,6 +109,9 @@ public class EventResponse {
 
     @Schema(description = "Venue identifier")
     private UUID venueId;
+    
+    @Schema(description = "Venue information with location details")
+    private eventplanner.features.event.dto.VenueDTO venue;
 
     @Schema(description = "Creation timestamp")
     private LocalDateTime createdAt;

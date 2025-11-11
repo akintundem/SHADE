@@ -35,6 +35,8 @@ public class EventCreationRequest {
     private Boolean requiresApproval = false;
     private Boolean qrCodeEnabled = false;
     
+    private eventplanner.features.event.dto.VenueDTO venue;
+    
     private List<VenueRequest> venues;
     
     @Data

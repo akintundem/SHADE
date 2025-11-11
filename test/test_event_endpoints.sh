@@ -449,20 +449,34 @@ create_test_event() {
     local start_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
     local end_date=$(date -u -v+1d -v+2H '+%Y-%m-%dT%H:%M:%S')
     
-    local event_data='{
-        "name": "Test Event",
-        "description": "This is a test event for endpoint testing",
-        "eventType": "CONFERENCE",
-        "startDateTime": "'$start_date'",
-        "endDateTime": "'$end_date'",
-        "venueRequirements": "Test Location - Conference Room A",
-        "capacity": 100,
-        "isPublic": true,
-        "requiresApproval": false,
-        "coverImageUrl": "https://example.com/cover.jpg",
-        "eventWebsiteUrl": "https://example.com/event",
-        "hashtag": "#TestEvent"
-    }'
+    local event_data=$(cat <<EOF
+{
+    "name": "Test Event",
+    "description": "This is a test event for endpoint testing",
+    "eventType": "CONFERENCE",
+    "startDateTime": "$start_date",
+    "endDateTime": "$end_date",
+    "venueRequirements": "Test Location - Conference Room A",
+    "capacity": 100,
+    "isPublic": true,
+    "requiresApproval": false,
+    "coverImageUrl": "https://example.com/cover.jpg",
+    "eventWebsiteUrl": "https://example.com/event",
+    "hashtag": "#TestEvent",
+    "venue": {
+        "address": "123 Main Street",
+        "city": "San Francisco",
+        "state": "California",
+        "country": "United States",
+        "zipCode": "94102",
+        "latitude": 37.7749,
+        "longitude": -122.4194,
+        "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+        "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
+    }
+}
+EOF
+)
     
     # Debug: Show what we're sending
     echo -e "${CYAN}   Debug: Creating event with token: ${ACCESS_TOKEN:0:20}...${NC}"
@@ -566,17 +580,31 @@ main() {
     # Test update event
     local update_start_date=$(date -u -v+2d '+%Y-%m-%dT%H:%M:%S')
     local update_end_date=$(date -u -v+2d -v+3H '+%Y-%m-%dT%H:%M:%S')
-    local update_data='{
-        "name": "Updated Test Event",
-        "description": "Updated description",
-        "eventType": "WORKSHOP",
-        "startDateTime": "'$update_start_date'",
-        "endDateTime": "'$update_end_date'",
-        "venueRequirements": "Updated Location - Workshop Room B",
-        "capacity": 150,
-        "isPublic": false,
-        "requiresApproval": true
-    }'
+    local update_data=$(cat <<EOF
+{
+    "name": "Updated Test Event",
+    "description": "Updated description",
+    "eventType": "WORKSHOP",
+    "startDateTime": "$update_start_date",
+    "endDateTime": "$update_end_date",
+    "venueRequirements": "Updated Location - Workshop Room B",
+    "capacity": 150,
+    "isPublic": false,
+    "requiresApproval": true,
+    "venue": {
+        "address": "456 Market Street",
+        "city": "San Francisco",
+        "state": "California",
+        "country": "United States",
+        "zipCode": "94105",
+        "latitude": 37.7849,
+        "longitude": -122.4094,
+        "googlePlaceId": "ChIJUpdatedPlaceID123",
+        "googlePlaceData": "{\"name\":\"Updated Venue\",\"rating\":4.8}"
+    }
+}
+EOF
+)
     run_test "Update Event" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_data" "200" "Update event details"
     
     # Test get non-existent event

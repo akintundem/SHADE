@@ -108,4 +108,7 @@ public class CreateEventRequest {
 
     @Schema(description = "Serialized metadata for the event")
     private String metadata;
+    
+    @Schema(description = "Venue information with location details")
+    private eventplanner.features.event.dto.VenueDTO venue;
 }

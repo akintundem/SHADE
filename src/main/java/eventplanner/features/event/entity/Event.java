@@ -4,6 +4,7 @@ import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.EventStatus;
 import eventplanner.common.domain.enums.EventType;
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -119,6 +120,9 @@ public class Event extends BaseEntity {
 
     @Column(name = "venue_id")
     private UUID venueId;
+    
+    @Embedded
+    private Venue venue;
     
     // Platform payment tracking
     @Column(name = "platform_payment_id")

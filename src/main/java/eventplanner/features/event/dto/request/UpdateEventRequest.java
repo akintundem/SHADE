@@ -108,6 +108,9 @@ public class UpdateEventRequest {
 
     @Schema(description = "Whether to remove the venue association")
     private Boolean venueCleared;
+    
+    @Schema(description = "Venue information with location details")
+    private eventplanner.features.event.dto.VenueDTO venue;
 
     public boolean isVenueCleared() {
         return Boolean.TRUE.equals(venueCleared);

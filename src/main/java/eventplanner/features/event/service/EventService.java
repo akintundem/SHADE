@@ -1,6 +1,7 @@
 package eventplanner.features.event.service;
 
 import eventplanner.common.domain.enums.EventType;
+import eventplanner.features.event.dto.VenueDTO;
 import eventplanner.features.event.dto.request.CreateEventRequest;
 import eventplanner.features.event.dto.request.UpdateEventRequest;
 import eventplanner.features.event.dto.request.EventCreationRequest;
@@ -9,6 +10,7 @@ import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.dto.response.UserEventRelationshipResponse;
 import eventplanner.features.event.dto.response.UserEventsSummaryResponse;
 import eventplanner.features.event.entity.Event;
+import eventplanner.features.event.entity.Venue;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.common.domain.enums.EventStatus;
 import eventplanner.common.domain.enums.EventUserType;
@@ -92,6 +94,11 @@ public class EventService {
             event.setRequiresApproval(request.getRequiresApproval() != null ? request.getRequiresApproval() : false);
             event.setQrCodeEnabled(request.getQrCodeEnabled() != null ? request.getQrCodeEnabled() : false);
             
+            // Set venue if provided
+            if (request.getVenue() != null) {
+                event.setVenue(toVenueEntity(request.getVenue()));
+            }
+            
             // Handle venue data if provided
             if (request.getVenues() != null && !request.getVenues().isEmpty()) {
                 EventCreationRequest.VenueRequest selectedVenue = request.getVenues().get(0);
@@ -156,6 +163,11 @@ public class EventService {
             }
             if (request.getQrCodeEnabled() != null) {
                 event.setQrCodeEnabled(request.getQrCodeEnabled());
+            }
+            
+            // Update venue if provided
+            if (request.getVenue() != null) {
+                event.setVenue(toVenueEntity(request.getVenue()));
             }
             
             // Save updated event
@@ -351,6 +363,15 @@ public class EventService {
         if (request.getVenueId() != null) {
             event.setVenueId(request.getVenueId());
         }
+        if (request.isVenueCleared()) {
+            event.setVenueId(null);
+            event.setVenue(null);
+        }
+        
+        // Update venue if provided
+        if (request.getVenue() != null) {
+            event.setVenue(toVenueEntity(request.getVenue()));
+        }
         
         return eventRepository.save(event);
     }
@@ -396,6 +417,11 @@ public class EventService {
         event.setRegistrationDeadline(request.getRegistrationDeadline());
         event.setCurrentAttendeeCount(request.getCurrentAttendeeCount() != null ? request.getCurrentAttendeeCount() : 0);
         event.setQrCode(request.getQrCode());
+        
+        // Set venue if provided
+        if (request.getVenue() != null) {
+            event.setVenue(toVenueEntity(request.getVenue()));
+        }
         
         Event savedEvent = eventRepository.save(event);
         assignOwnerOrganizerRole(savedEvent.getId(), ownerId);
@@ -554,6 +580,8 @@ public class EventService {
         response.setIsPublic(event.getIsPublic());
         response.setRequiresApproval(event.getRequiresApproval());
         response.setQrCodeEnabled(event.getQrCodeEnabled());
+        response.setVenueId(event.getVenueId());
+        response.setVenue(event.getVenue() != null ? toVenueDTO(event.getVenue()) : null);
         response.setCreatedAt(event.getCreatedAt());
         response.setUpdatedAt(event.getUpdatedAt());
         return response;
@@ -1097,6 +1125,24 @@ public class EventService {
         duplicatedEvent.setBackupPlan(originalEvent.getBackupPlan());
         duplicatedEvent.setPostEventTasks(originalEvent.getPostEventTasks());
         
+        // Copy venue
+        duplicatedEvent.setVenueId(originalEvent.getVenueId());
+        if (originalEvent.getVenue() != null) {
+            // Create a new Venue instance with copied values
+            Venue copiedVenue = new Venue();
+            Venue originalVenue = originalEvent.getVenue();
+            copiedVenue.setAddress(originalVenue.getAddress());
+            copiedVenue.setCity(originalVenue.getCity());
+            copiedVenue.setState(originalVenue.getState());
+            copiedVenue.setCountry(originalVenue.getCountry());
+            copiedVenue.setZipCode(originalVenue.getZipCode());
+            copiedVenue.setLatitude(originalVenue.getLatitude());
+            copiedVenue.setLongitude(originalVenue.getLongitude());
+            copiedVenue.setGooglePlaceId(originalVenue.getGooglePlaceId());
+            copiedVenue.setGooglePlaceData(originalVenue.getGooglePlaceData());
+            duplicatedEvent.setVenue(copiedVenue);
+        }
+        
         return eventRepository.save(duplicatedEvent);
     }
 
@@ -1231,6 +1277,46 @@ public class EventService {
         }
         
         return true;
+    }
+
+    /**
+     * Convert VenueDTO to Venue entity
+     */
+    private Venue toVenueEntity(VenueDTO dto) {
+        if (dto == null) {
+            return null;
+        }
+        Venue venue = new Venue();
+        venue.setAddress(dto.getAddress());
+        venue.setCity(dto.getCity());
+        venue.setState(dto.getState());
+        venue.setCountry(dto.getCountry());
+        venue.setZipCode(dto.getZipCode());
+        venue.setLatitude(dto.getLatitude());
+        venue.setLongitude(dto.getLongitude());
+        venue.setGooglePlaceId(dto.getGooglePlaceId());
+        venue.setGooglePlaceData(dto.getGooglePlaceData());
+        return venue;
+    }
+
+    /**
+     * Convert Venue entity to VenueDTO
+     */
+    private VenueDTO toVenueDTO(Venue venue) {
+        if (venue == null) {
+            return null;
+        }
+        VenueDTO dto = new VenueDTO();
+        dto.setAddress(venue.getAddress());
+        dto.setCity(venue.getCity());
+        dto.setState(venue.getState());
+        dto.setCountry(venue.getCountry());
+        dto.setZipCode(venue.getZipCode());
+        dto.setLatitude(venue.getLatitude());
+        dto.setLongitude(venue.getLongitude());
+        dto.setGooglePlaceId(venue.getGooglePlaceId());
+        dto.setGooglePlaceData(venue.getGooglePlaceData());
+        return dto;
     }
 
 }
