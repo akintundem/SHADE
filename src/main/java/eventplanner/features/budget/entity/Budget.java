@@ -1,9 +1,11 @@
 package eventplanner.features.budget.entity;
 
+import eventplanner.common.domain.entity.BaseEntity;
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -15,13 +17,14 @@ import java.util.UUID;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Budget {
-    @Id
-    @Column(name = "id", nullable = false)
-    private UUID id;
+@EqualsAndHashCode(callSuper = true)
+public class Budget extends BaseEntity {
 
     @Column(name = "event_id", nullable = false)
     private UUID eventId;
+
+    @Column(name = "owner_id", nullable = false)
+    private UUID ownerId;
 
     @Column(name = "total_budget", nullable = false)
     private BigDecimal totalBudget;
@@ -59,29 +62,15 @@ public class Budget {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-
     @OneToMany(mappedBy = "budgetId", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<BudgetLineItem> lineItems;
 
     @PrePersist
     public void prePersist() {
-        if (id == null) id = UUID.randomUUID();
         if (currency == null) currency = "USD";
         if (totalBudget == null) totalBudget = BigDecimal.ZERO;
         if (contingencyPercentage == null) contingencyPercentage = new BigDecimal("10.00");
         if (budgetStatus == null) budgetStatus = "DRAFT";
-        if (createdAt == null) createdAt = LocalDateTime.now();
-        if (updatedAt == null) updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    public void preUpdate() {
-        updatedAt = LocalDateTime.now();
     }
 }
 

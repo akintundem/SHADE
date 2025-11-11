@@ -1,11 +1,9 @@
 package eventplanner.features.attendee.service;
 
-import eventplanner.features.attendee.dto.request.CreateAttendanceRequest;
 import eventplanner.features.attendee.dto.response.AttendanceDetailResponse;
 import eventplanner.features.attendee.dto.response.ExportResponse;
 import eventplanner.features.attendee.entity.EventAttendance;
 import eventplanner.features.attendee.repository.EventAttendanceRepository;
-import eventplanner.features.attendee.service.AttendeeQRCodeService;
 import eventplanner.common.domain.enums.AttendanceStatus;
 import eventplanner.common.util.EventValidationUtil;
 import lombok.RequiredArgsConstructor;

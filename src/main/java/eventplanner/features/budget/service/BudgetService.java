@@ -38,6 +38,8 @@ public class BudgetService {
     }
 
     public Budget createOrUpdate(Budget budget) {
+        validateBudget(budget);
+        
         if (budget.getContingencyPercentage() != null && budget.getTotalBudget() != null) {
             budget.setContingencyAmount(budget.getTotalBudget().multiply(budget.getContingencyPercentage()).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP));
         }
@@ -49,12 +51,15 @@ public class BudgetService {
                 .orElseThrow(() -> new RuntimeException("Budget not found"));
         
         if (request.getTotalBudget() != null) {
+            validatePositiveAmount(request.getTotalBudget(), "Total budget");
             budget.setTotalBudget(request.getTotalBudget());
         }
         if (request.getContingencyPercentage() != null) {
+            validatePercentage(request.getContingencyPercentage(), "Contingency percentage");
             budget.setContingencyPercentage(request.getContingencyPercentage());
         }
         if (request.getCurrency() != null) {
+            validateCurrency(request.getCurrency());
             budget.setCurrency(request.getCurrency());
         }
         if (request.getNotes() != null) {
@@ -305,11 +310,46 @@ public class BudgetService {
                 .map(item -> item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         
-        BigDecimal contingencyUsed = budget.getTotalBudget().subtract(totalActual);
+        BigDecimal totalEstimated = lineItems.stream()
+                .map(item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal overBudgetAmount = totalActual.subtract(totalEstimated);
+        BigDecimal contingencyUsed = overBudgetAmount.max(BigDecimal.ZERO);
         BigDecimal contingencyRemaining = budget.getContingencyAmount() != null ? 
                 budget.getContingencyAmount().subtract(contingencyUsed) : BigDecimal.ZERO;
         
         String contingencyStatus = determineContingencyStatus(contingencyRemaining, budget.getContingencyAmount());
+        
+        // Create usage breakdown by category for over-budget items
+        List<BudgetContingencyResponse.ContingencyUsage> usageBreakdown = lineItems.stream()
+                .filter(item -> {
+                    BigDecimal variance = BigDecimal.ZERO;
+                    if (item.getActualCost() != null && item.getEstimatedCost() != null) {
+                        variance = item.getActualCost().subtract(item.getEstimatedCost());
+                    }
+                    return variance.compareTo(BigDecimal.ZERO) > 0;
+                })
+                .collect(Collectors.groupingBy(BudgetLineItem::getCategory))
+                .entrySet().stream()
+                .map(entry -> {
+                    String category = entry.getKey();
+                    List<BudgetLineItem> categoryItems = entry.getValue();
+                    BigDecimal categoryOverage = categoryItems.stream()
+                            .map(item -> {
+                                BigDecimal actual = item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO;
+                                BigDecimal estimated = item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO;
+                                return actual.subtract(estimated);
+                            })
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    
+                    String reason = "Over budget by " + categoryOverage + " across " + categoryItems.size() + " items";
+                    String date = LocalDateTime.now().toString();
+                    
+                    return new BudgetContingencyResponse.ContingencyUsage(category, categoryOverage, reason, date);
+                })
+                .sorted((a, b) -> b.getAmount().compareTo(a.getAmount()))
+                .collect(Collectors.toList());
         
         return new BudgetContingencyResponse(
                 budget.getContingencyAmount(),
@@ -317,26 +357,83 @@ public class BudgetService {
                 contingencyRemaining,
                 budget.getContingencyPercentage(),
                 contingencyStatus,
-                new ArrayList<>(), // TODO: Implement usage breakdown
+                usageBreakdown,
                 generateContingencyRecommendations(contingencyStatus, contingencyRemaining)
         );
     }
 
     public CategoryBreakdownResponse getCategoryBreakdown(UUID budgetId) {
         List<BudgetLineItem> lineItems = listLineItems(budgetId);
+        
+        Map<String, BigDecimal> estimatedByCategory = getCategoryBreakdown(lineItems);
+        Map<String, BigDecimal> actualByCategory = getCategoryActualBreakdown(lineItems);
+        Map<String, BigDecimal> varianceByCategory = getCategoryVarianceBreakdown(lineItems);
+        
+        BigDecimal grandTotalEstimated = lineItems.stream()
+                .map(item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        List<CategoryBreakdownResponse.CategorySummary> categorySummaries = lineItems.stream()
+                .collect(Collectors.groupingBy(BudgetLineItem::getCategory))
+                .entrySet().stream()
+                .map(entry -> {
+                    String category = entry.getKey();
+                    List<BudgetLineItem> items = entry.getValue();
+                    
+                    BigDecimal estimated = items.stream()
+                            .map(item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    
+                    BigDecimal actual = items.stream()
+                            .map(item -> item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    
+                    BigDecimal variance = actual.subtract(estimated);
+                    
+                    BigDecimal percentageOfTotal = grandTotalEstimated.compareTo(BigDecimal.ZERO) > 0 ?
+                            estimated.divide(grandTotalEstimated, 4, RoundingMode.HALF_UP)
+                                    .multiply(new BigDecimal("100")) : BigDecimal.ZERO;
+                    
+                    String status = variance.compareTo(BigDecimal.ZERO) > 0 ? "OVER_BUDGET" :
+                                  variance.compareTo(BigDecimal.ZERO) < 0 ? "UNDER_BUDGET" : "ON_BUDGET";
+                    
+                    return new CategoryBreakdownResponse.CategorySummary(category, estimated, actual, variance, percentageOfTotal, status);
+                })
+                .collect(Collectors.toList());
+        
+        BigDecimal totalEstimated = lineItems.stream()
+                .map(item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal totalActual = lineItems.stream()
+                .map(item -> item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal totalVariance = totalActual.subtract(totalEstimated);
+        
         return new CategoryBreakdownResponse(
-                getCategoryBreakdown(lineItems),
-                getCategoryBreakdown(lineItems),
-                getCategoryBreakdown(lineItems),
-                new ArrayList<>(), // TODO: Implement category summaries
-                BigDecimal.ZERO, // TODO: Calculate totals
-                BigDecimal.ZERO,
-                BigDecimal.ZERO
+                estimatedByCategory,
+                actualByCategory,
+                varianceByCategory,
+                categorySummaries,
+                totalEstimated,
+                totalActual,
+                totalVariance
         );
     }
 
     public void deleteBudget(UUID budgetId) {
-        budgetRepository.deleteById(budgetId);
+        Budget budget = budgetRepository.findById(budgetId)
+                .orElseThrow(() -> new RuntimeException("Budget not found"));
+        
+        // Explicitly delete all line items first (cascade should handle this, but being explicit)
+        List<BudgetLineItem> lineItems = lineItemRepository.findByBudgetId(budgetId);
+        if (!lineItems.isEmpty()) {
+            lineItemRepository.deleteAll(lineItems);
+        }
+        
+        // Now delete the budget
+        budgetRepository.delete(budget);
     }
 
     public Budget recalculateTotals(UUID budgetId) {
@@ -378,6 +475,30 @@ public class BudgetService {
                         BudgetLineItem::getCategory,
                         Collectors.reducing(BigDecimal.ZERO,
                                 item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO,
+                                BigDecimal::add)
+                ));
+    }
+
+    private Map<String, BigDecimal> getCategoryActualBreakdown(List<BudgetLineItem> lineItems) {
+        return lineItems.stream()
+                .collect(Collectors.groupingBy(
+                        BudgetLineItem::getCategory,
+                        Collectors.reducing(BigDecimal.ZERO,
+                                item -> item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO,
+                                BigDecimal::add)
+                ));
+    }
+
+    private Map<String, BigDecimal> getCategoryVarianceBreakdown(List<BudgetLineItem> lineItems) {
+        return lineItems.stream()
+                .collect(Collectors.groupingBy(
+                        BudgetLineItem::getCategory,
+                        Collectors.reducing(BigDecimal.ZERO,
+                                item -> {
+                                    BigDecimal actual = item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO;
+                                    BigDecimal estimated = item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO;
+                                    return actual.subtract(estimated);
+                                },
                                 BigDecimal::add)
                 ));
     }
@@ -440,6 +561,68 @@ public class BudgetService {
                 return "Contingency running low - monitor spending carefully";
             default:
                 return "Contingency levels are healthy";
+        }
+    }
+
+    // ==================== VALIDATION METHODS ====================
+
+    private void validateBudget(Budget budget) {
+        if (budget.getTotalBudget() != null) {
+            validatePositiveAmount(budget.getTotalBudget(), "Total budget");
+        }
+        
+        if (budget.getContingencyPercentage() != null) {
+            validatePercentage(budget.getContingencyPercentage(), "Contingency percentage");
+        }
+        
+        if (budget.getCurrency() != null) {
+            validateCurrency(budget.getCurrency());
+        }
+        
+        if (budget.getEventId() == null) {
+            throw new IllegalArgumentException("Event ID is required");
+        }
+        
+        if (budget.getOwnerId() == null) {
+            throw new IllegalArgumentException("Owner ID is required");
+        }
+    }
+
+    private void validatePositiveAmount(BigDecimal amount, String fieldName) {
+        if (amount != null && amount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException(fieldName + " cannot be negative");
+        }
+    }
+
+    private void validatePercentage(BigDecimal percentage, String fieldName) {
+        if (percentage != null) {
+            if (percentage.compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalArgumentException(fieldName + " cannot be negative");
+            }
+            if (percentage.compareTo(new BigDecimal("100")) > 0) {
+                throw new IllegalArgumentException(fieldName + " cannot exceed 100%");
+            }
+        }
+    }
+
+    private void validateCurrency(String currency) {
+        if (currency == null || currency.trim().isEmpty()) {
+            throw new IllegalArgumentException("Currency cannot be empty");
+        }
+        if (currency.length() != 3) {
+            throw new IllegalArgumentException("Currency must be a 3-letter ISO code (e.g., USD, EUR, GBP)");
+        }
+        // List of common ISO 4217 currency codes
+        List<String> validCurrencies = List.of(
+            "USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "NZD", 
+            "CNY", "INR", "BRL", "ZAR", "MXN", "SGD", "HKD", "SEK", 
+            "NOK", "DKK", "PLN", "THB", "IDR", "MYR", "PHP", "CZK", 
+            "HUF", "ILS", "CLP", "ARS", "COP", "PEN", "RUB", "TRY",
+            "KRW", "TWD", "SAR", "AED", "QAR", "KWD", "BHD", "OMR",
+            "EGP", "NGN", "KES", "GHS", "MAD", "TND", "XOF", "XAF"
+        );
+        if (!validCurrencies.contains(currency.toUpperCase())) {
+            throw new IllegalArgumentException("Invalid currency code: " + currency + ". Must be a valid ISO 4217 code.");
         }
     }
 }

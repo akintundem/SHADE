@@ -3,7 +3,6 @@ package eventplanner.features.budget.dto.request;
 import eventplanner.common.domain.enums.PlanningStatus;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -15,7 +14,7 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class UpdateBudgetLineItemRequest {
     
-    @NotBlank(message = "Category is required")
+    // All fields optional for partial updates
     private String category;
     
     private String subcategory;

@@ -3,7 +3,6 @@ package eventplanner.features.budget.dto.request;
 import eventplanner.features.budget.dto.BudgetLineItemCreateRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -15,7 +14,7 @@ import java.util.List;
 @AllArgsConstructor
 public class BulkLineItemRequest {
     
-    @NotNull(message = "Budget ID is required")
+    // Optional - will be set by controller from path parameter
     private java.util.UUID budgetId;
     
     @NotEmpty(message = "Line items list cannot be empty")
