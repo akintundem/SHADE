@@ -157,40 +157,35 @@ public class AttendeeController {
 		}
 	}
 
-	@PatchMapping("/{attendeeId}/rsvp")
+	@PatchMapping("/events/{eventId}/attendees/{attendeeId}/rsvp")
 	@Operation(summary = "Update RSVP status")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_UPDATE, resources = {"attendance_id=#attendeeId"})
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_UPDATE, resources = {"attendance_id=#attendeeId", "event_id=#eventId"})
 	public ResponseEntity<Attendee> updateRsvp(
+			@PathVariable String eventId,
 			@PathVariable String attendeeId, 
 			@RequestParam String status,
 			@AuthenticationPrincipal UserPrincipal principal) {
 		try {
-			UUID uuid = UUID.fromString(attendeeId);
+			UUID attendeeUuid = UUID.fromString(attendeeId);
+			UUID eventUuid = UUID.fromString(eventId);
 			
 			// Validate status parameter
 			if (status == null || status.trim().isEmpty()) {
 				return ResponseEntity.badRequest().build();
 			}
 			
-			// Verify attendee exists and user can access the event
-			// RBAC checks permission but we need to validate event access via attendee's eventId
-			// This prevents unauthorized access by guessing UUIDs
-			Attendee attendee = attendeeRepository.findById(uuid)
+			// Verify attendee exists and belongs to the specified event
+			Attendee attendee = attendeeRepository.findById(attendeeUuid)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
 					"Attendee not found: " + attendeeId));
 			
-			// Validate event ownership/membership - ensures user has proper access to the event
-			if (attendee.getEventId() == null) {
+			// Verify attendee belongs to the specified event
+			if (!eventUuid.equals(attendee.getEventId())) {
 				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-					"Attendee is not associated with an event");
+					"Attendee does not belong to the specified event");
 			}
 			
-			if (!authorizationService.canAccessEvent(principal, attendee.getEventId())) {
-				throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-					"Access denied to event: " + attendee.getEventId());
-			}
-			
-			return attendeeService.updateRsvp(uuid, status)
+			return attendeeService.updateRsvp(attendeeUuid, status)
 				.map(ResponseEntity::ok)
 				.orElseGet(() -> ResponseEntity.notFound().build());
 		} catch (IllegalArgumentException e) {
@@ -198,34 +193,29 @@ public class AttendeeController {
 		}
 	}
 
-	@PostMapping("/{attendeeId}/check-in")
+	@PostMapping("/events/{eventId}/attendees/{attendeeId}/check-in")
 	@Operation(summary = "Check-in attendee")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_CHECKIN, resources = {"attendance_id=#attendeeId"})
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_CHECKIN, resources = {"attendance_id=#attendeeId", "event_id=#eventId"})
 	public ResponseEntity<Attendee> checkIn(
+			@PathVariable String eventId,
 			@PathVariable String attendeeId,
 			@AuthenticationPrincipal UserPrincipal principal) {
 		try {
-			UUID uuid = UUID.fromString(attendeeId);
+			UUID attendeeUuid = UUID.fromString(attendeeId);
+			UUID eventUuid = UUID.fromString(eventId);
 			
-			// Verify attendee exists and user can access the event
-			// RBAC checks permission but we need to validate event access via attendee's eventId
-			// This prevents unauthorized access by guessing UUIDs
-			Attendee attendee = attendeeRepository.findById(uuid)
+			// Verify attendee exists and belongs to the specified event
+			Attendee attendee = attendeeRepository.findById(attendeeUuid)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
 					"Attendee not found: " + attendeeId));
 			
-			// Validate event ownership/membership - ensures user has proper access to the event
-			if (attendee.getEventId() == null) {
+			// Verify attendee belongs to the specified event
+			if (!eventUuid.equals(attendee.getEventId())) {
 				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-					"Attendee is not associated with an event");
+					"Attendee does not belong to the specified event");
 			}
 			
-			if (!authorizationService.canAccessEvent(principal, attendee.getEventId())) {
-				throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-					"Access denied to event: " + attendee.getEventId());
-			}
-			
-			return attendeeService.checkIn(uuid)
+			return attendeeService.checkIn(attendeeUuid)
 				.map(ResponseEntity::ok)
 				.orElseGet(() -> ResponseEntity.notFound().build());
 		} catch (IllegalArgumentException e) {

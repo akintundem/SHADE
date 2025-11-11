@@ -573,12 +573,12 @@ main() {
     
     # Test update RSVP status
     if [ -n "$ATTENDEE_ID" ]; then
-        run_test "Update RSVP Status" "PATCH" "/api/v1/attendees/$ATTENDEE_ID/rsvp?status=CONFIRMED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Update attendee RSVP status"
+        run_test "Update RSVP Status" "PATCH" "/api/v1/attendees/events/$EVENT_ID/attendees/$ATTENDEE_ID/rsvp?status=CONFIRMED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Update attendee RSVP status"
     fi
     
     # Test check-in attendee (basic)
     if [ -n "$ATTENDEE_ID" ]; then
-        run_test "Check-in Attendee (Basic)" "POST" "/api/v1/attendees/$ATTENDEE_ID/check-in" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Check-in attendee using basic endpoint"
+        run_test "Check-in Attendee (Basic)" "POST" "/api/v1/attendees/events/$EVENT_ID/attendees/$ATTENDEE_ID/check-in" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Check-in attendee using basic endpoint"
     fi
     echo ""
     

@@ -933,24 +933,6 @@ policy:
         owns_scope: false
         is_member: false
     -
-      name: attendee.update
-      scope: SYSTEM
-      resources: attendee_id
-      description: Update attendee RSVP status; Update basic attendee details
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: false
-    -
-      name: attendee.checkin
-      scope: SYSTEM
-      resources: attendee_id
-      description: Check-in attendee (basic operation)
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: false
-    -
       name: auth.logout
       scope: SYSTEM
       resources: null
