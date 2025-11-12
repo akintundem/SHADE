@@ -1,5 +1,8 @@
 package eventplanner.features.attendee.service;
 
+import eventplanner.common.qrcode.model.QRCodeGenerationResult;
+import eventplanner.common.qrcode.service.BrandedQRCodeService;
+import eventplanner.features.attendee.dto.response.AttendeeQRCodeResponse;
 import eventplanner.features.attendee.dto.response.CheckInResponse;
 import eventplanner.features.attendee.entity.EventAttendance;
 import eventplanner.features.attendee.repository.EventAttendanceRepository;
@@ -25,6 +28,7 @@ public class AttendeeQRCodeService {
     
     private final EventAttendanceRepository attendanceRepository;
     private final EventValidationUtil eventValidationUtil;
+    private final BrandedQRCodeService brandedQRCodeService;
     
     /**
      * Get QR code for a specific attendee.
@@ -34,24 +38,58 @@ public class AttendeeQRCodeService {
      * @return QR code string
      */
     public String getAttendeeQRCode(UUID attendanceId) {
-        if (attendanceId == null) {
-            throw new IllegalArgumentException("Attendance ID cannot be null");
-        }
+        EventAttendance attendance = loadAttendance(attendanceId);
+        return ensureQrCode(attendance);
+    }
+    
+    /**
+     * Render the attendee QR code as a branded PNG and Base64 payload.
+     */
+    public QRCodeGenerationResult getAttendeeQRCodeImage(UUID attendanceId) {
+        EventAttendance attendance = loadAttendance(attendanceId);
+        String qrCode = ensureQrCode(attendance);
+        return brandedQRCodeService.generateForAttendee(qrCode);
+    }
+
+    /**
+     * Convenience method that returns a full QR code response payload for API usage.
+     */
+    public AttendeeQRCodeResponse getAttendeeQRCodePayload(UUID attendanceId) {
+        EventAttendance attendance = loadAttendance(attendanceId);
+        String qrCode = ensureQrCode(attendance);
+        QRCodeGenerationResult rendered = brandedQRCodeService.generateForAttendee(qrCode);
         
-        EventAttendance attendance = attendanceRepository.findById(attendanceId)
-                .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
+        return AttendeeQRCodeResponse.builder()
+                .attendanceId(attendance.getId())
+                .eventId(attendance.getEventId())
+                .qrCode(qrCode)
+                .qrCodeImageBase64(rendered.getBase64DataUri())
+                .qrCodeUsed(attendance.getQrCodeUsed())
+                .generatedAt(attendance.getUpdatedAt())
+                .build();
+    }
+    
+    /**
+     * Regenerate the QR code and produce a full response payload.
+     */
+    public AttendeeQRCodeResponse regenerateQRCodePayload(UUID attendanceId) {
+        EventAttendance attendance = loadAttendance(attendanceId);
+        String newQrCode = generateQRCode(attendance.getEventId(), attendance.getUserId());
+        attendance.setQrCode(newQrCode);
+        attendance.setQrCodeUsed(false);
+        attendance.setQrCodeUsedAt(null);
+        attendanceRepository.save(attendance);
         
-        eventValidationUtil.validateEventExists(attendance.getEventId());
+        QRCodeGenerationResult rendered = brandedQRCodeService.generateForAttendee(newQrCode);
         
-        if (attendance.getQrCode() == null) {
-            // Generate QR code if it doesn't exist
-            String qrCode = generateQRCode(attendance.getEventId(), attendance.getUserId());
-            attendance.setQrCode(qrCode);
-            attendanceRepository.save(attendance);
-            return qrCode;
-        }
-        
-        return attendance.getQrCode();
+        return AttendeeQRCodeResponse.builder()
+                .attendanceId(attendance.getId())
+                .eventId(attendance.getEventId())
+                .qrCode(newQrCode)
+                .qrCodeImageBase64(rendered.getBase64DataUri())
+                .qrCodeUsed(attendance.getQrCodeUsed())
+                .generatedAt(attendance.getUpdatedAt())
+                .build();
     }
     
     /**
@@ -62,15 +100,7 @@ public class AttendeeQRCodeService {
      * @return New QR code string
      */
     public String regenerateQRCode(UUID attendanceId) {
-        if (attendanceId == null) {
-            throw new IllegalArgumentException("Attendance ID cannot be null");
-        }
-        
-        EventAttendance attendance = attendanceRepository.findById(attendanceId)
-                .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
-        
-        eventValidationUtil.validateEventExists(attendance.getEventId());
-        
+        EventAttendance attendance = loadAttendance(attendanceId);
         String newQrCode = generateQRCode(attendance.getEventId(), attendance.getUserId());
         attendance.setQrCode(newQrCode);
         attendance.setQrCodeUsed(false);
@@ -80,6 +110,39 @@ public class AttendeeQRCodeService {
         log.info("Regenerated QR code for attendance {} in event {}", attendanceId, attendance.getEventId());
         
         return newQrCode;
+    }
+    
+    /**
+     * Regenerate the QR code and return the rendered payload.
+     */
+    public QRCodeGenerationResult regenerateQRCodeImage(UUID attendanceId) {
+        String newQrCode = regenerateQRCode(attendanceId);
+        return brandedQRCodeService.generateForAttendee(newQrCode);
+    }
+    
+    private EventAttendance loadAttendance(UUID attendanceId) {
+        if (attendanceId == null) {
+            throw new IllegalArgumentException("Attendance ID cannot be null");
+        }
+        
+        EventAttendance attendance = attendanceRepository.findById(attendanceId)
+                .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
+        
+        eventValidationUtil.validateEventExists(attendance.getEventId());
+        return attendance;
+    }
+    
+    private String ensureQrCode(EventAttendance attendance) {
+        if (attendance.getQrCode() != null) {
+            return attendance.getQrCode();
+        }
+        
+        String qrCode = generateQRCode(attendance.getEventId(), attendance.getUserId());
+        attendance.setQrCode(qrCode);
+        attendance.setQrCodeUsed(false);
+        attendance.setQrCodeUsedAt(null);
+        attendanceRepository.save(attendance);
+        return qrCode;
     }
     
     /**

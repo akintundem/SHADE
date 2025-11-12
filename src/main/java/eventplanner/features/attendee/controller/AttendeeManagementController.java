@@ -11,7 +11,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -231,6 +234,46 @@ public class AttendeeManagementController {
         }
     }
     
+    @GetMapping("/attendances/{attendanceId}/qr-code/rendered")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_READ, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
+    @Operation(summary = "Get attendee QR code (rendered)", description = "Retrieve the attendee QR code along with a rendered image payload")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved rendered QR code"),
+        @ApiResponse(responseCode = "404", description = "Attendance not found")
+    })
+    public ResponseEntity<AttendeeQRCodeResponse> getAttendeeQRCodeRendered(
+            @PathVariable UUID eventId,
+            @PathVariable UUID attendanceId) {
+        try {
+            AttendeeQRCodeResponse response = attendeeManagementService.getAttendeeQRCodePayload(attendanceId);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
+    }
+    
+    @GetMapping(value = "/attendances/{attendanceId}/qr-code/image", produces = MediaType.IMAGE_PNG_VALUE)
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_READ, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
+    @Operation(summary = "Get attendee QR code image", description = "Retrieve the attendee QR code rendered as a PNG image")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved QR code image"),
+        @ApiResponse(responseCode = "404", description = "Attendance not found")
+    })
+    public ResponseEntity<byte[]> getAttendeeQRCodeImage(
+            @PathVariable UUID eventId,
+            @PathVariable UUID attendanceId) {
+        try {
+            var result = attendeeManagementService.getAttendeeQRCodeImage(attendanceId);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.IMAGE_PNG);
+            headers.setCacheControl(CacheControl.noStore().getHeaderValue());
+            headers.setContentLength(result.getPngData().length);
+            return new ResponseEntity<>(result.getPngData(), headers, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
+    }
+    
     @PostMapping("/attendances/scan-qr")
     @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_SCAN, resources = {"event_id=#eventId"})
     @Operation(summary = "Scan QR code for check-in", description = "Scan and validate QR code for attendee check-in")
@@ -262,6 +305,38 @@ public class AttendeeManagementController {
         try {
             String newQrCode = attendeeManagementService.regenerateQRCode(attendanceId);
             return ResponseEntity.ok(newQrCode);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
+    }
+    
+    @PostMapping("/attendances/{attendanceId}/regenerate-qr/rendered")
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_REGENERATE, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
+    @Operation(summary = "Regenerate QR code (rendered)", description = "Regenerate the attendee QR code and receive the rendered image payload")
+    public ResponseEntity<AttendeeQRCodeResponse> regenerateQRCodeRendered(
+            @PathVariable UUID eventId,
+            @PathVariable UUID attendanceId) {
+        try {
+            AttendeeQRCodeResponse response = attendeeManagementService.regenerateQRCodePayload(attendanceId);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
+    }
+    
+    @PostMapping(value = "/attendances/{attendanceId}/regenerate-qr/image", produces = MediaType.IMAGE_PNG_VALUE)
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_REGENERATE, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
+    @Operation(summary = "Regenerate QR code image", description = "Regenerate the attendee QR code and download the rendered PNG")
+    public ResponseEntity<byte[]> regenerateQRCodeImage(
+            @PathVariable UUID eventId,
+            @PathVariable UUID attendanceId) {
+        try {
+            var result = attendeeManagementService.regenerateQRCodeImage(attendanceId);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.IMAGE_PNG);
+            headers.setCacheControl(CacheControl.noStore().getHeaderValue());
+            headers.setContentLength(result.getPngData().length);
+            return new ResponseEntity<>(result.getPngData(), headers, HttpStatus.OK);
         } catch (RuntimeException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         }

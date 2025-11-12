@@ -590,8 +590,14 @@ public class EventManagementController {
             response.setEventId(id);
             response.setQrCode(event.getQrCode());
             response.setQrCodeEnabled(event.getQrCodeEnabled());
-            response.setQrCodeImageUrl(event.getQrCode() != null ? "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + event.getQrCode() : null);
-            response.setGeneratedAt(event.getUpdatedAt() != null ? event.getUpdatedAt().toString() : null);
+            
+            // Generate branded QR code image if QR code exists
+            if (event.getQrCode() != null && event.getQrCodeEnabled()) {
+                var qrImageResult = eventService.generateQRCodeImage(id);
+                response.setQrCodeImageBase64(qrImageResult.getBase64DataUri());
+            }
+            
+            response.setGeneratedAt(event.getUpdatedAt());
             
             return ResponseEntity.ok(response);
         } catch (Exception ex) {
@@ -620,6 +626,31 @@ public class EventManagementController {
         try {
             Event updatedEvent = eventService.regenerateQRCode(id);
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
+    }
+
+    @GetMapping("/{id}/qr-code/image")
+    @RequiresPermission(value = RbacPermissions.EVENT_QR_CODE_GENERATE, resources = {"event_id=#id"})
+    @Operation(summary = "Get event QR code image", description = "Retrieve the QR code image as PNG bytes for an event")
+    public ResponseEntity<byte[]> getQRCodeImage(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal user) {
+        try {
+            Event event = eventService.getByIdWithAccessControl(id, user)
+                    .orElseThrow(() -> new IllegalArgumentException("Event not found or access denied"));
+            
+            if (event.getQrCode() == null || !event.getQrCodeEnabled()) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "QR code not generated for this event");
+            }
+            
+            var qrImageResult = eventService.generateQRCodeImage(id);
+            
+            return ResponseEntity.ok()
+                    .header("Content-Type", "image/png")
+                    .header("Cache-Control", "public, max-age=3600")
+                    .body(qrImageResult.getPngData());
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }

@@ -19,6 +19,8 @@ import eventplanner.common.domain.enums.RoleName;
 import eventplanner.security.authorization.domain.repository.EventRoleRepository;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.common.qrcode.model.QRCodeGenerationResult;
+import eventplanner.common.qrcode.service.BrandedQRCodeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -50,6 +52,9 @@ public class EventService {
     
     @Autowired(required = false)
     private AuthorizationService authorizationService;
+    
+    @Autowired
+    private BrandedQRCodeService brandedQRCodeService;
 
     /**
      * Create a new event from structured DTO
@@ -982,18 +987,39 @@ public class EventService {
     // ==================== EVENT QR CODE METHODS ====================
 
     /**
-     * Generate QR code for event
+     * Generate QR code for event.
+     * Creates a unique QR code string and enables QR code functionality for the event.
      */
     public Event generateQRCode(UUID eventId) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
         
-        // Generate a simple QR code string (in real implementation, this would use a QR code library)
-        String qrCode = "EVENT_" + eventId.toString().replace("-", "").substring(0, 16);
+        // Generate unique QR code string: EVENT_<eventId_prefix>_<timestamp>
+        String eventPrefix = eventId.toString().replace("-", "").substring(0, 16);
+        long timestamp = System.currentTimeMillis();
+        String qrCode = "EVENT_" + eventPrefix + "_" + timestamp;
+        
         event.setQrCode(qrCode);
         event.setQrCodeEnabled(true);
         
         return eventRepository.save(event);
+    }
+    
+    /**
+     * Generate QR code image for event.
+     * Returns the rendered QR code image using the branded QR code service.
+     */
+    public QRCodeGenerationResult generateQRCodeImage(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+        
+        // Ensure QR code exists
+        if (event.getQrCode() == null) {
+            event = generateQRCode(eventId);
+        }
+        
+        // Generate branded QR code image
+        return brandedQRCodeService.generateForEvent(event.getQrCode());
     }
 
     /**

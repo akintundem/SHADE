@@ -125,6 +125,44 @@ app:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
   base-url: ${APP_BASE_URL:http://localhost:8080} 
 
+# Branded QR code rendering defaults
+qr-code:
+  defaults:
+    size: 320
+    foreground-color: "#111827"
+    background-color: "#ffffff"
+    gradient-enabled: false
+    gradient-start-color: "#111827"
+    gradient-end-color: "#1f2937"
+    gradient-vertical: true
+    dot-shape: ROUNDED
+    quiet-zone: 2
+    rounded-corners: true
+    corner-radius: 24
+    error-correction: H
+    logo:
+      enabled: true
+      path: static/images/shade_app_icon.png
+      size: 72
+      rounded: true
+      padding: 16
+      background-color: "#ffffff"
+      background-visible: true
+  event:
+    gradient-enabled: true
+    gradient-start-color: "#111827"
+    gradient-end-color: "#2563eb"
+    gradient-vertical: false
+    logo:
+      size: 80
+      padding: 20
+  attendee:
+    foreground-color: "#2563eb"
+    background-color: "#ffffff"
+    logo:
+      size: 64
+      padding: 12
+
 # External API Keys
 external:
   resend:

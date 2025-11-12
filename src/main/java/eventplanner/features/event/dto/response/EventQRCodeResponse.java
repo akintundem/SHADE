@@ -4,10 +4,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Response DTO for event QR code information
+ * Response DTO for event QR code information.
+ * Includes both the raw QR code value and the rendered Base64 image.
  */
 @Schema(description = "Event QR code information response")
 @Getter
@@ -23,9 +25,9 @@ public class EventQRCodeResponse {
     @Schema(description = "Whether QR code is enabled")
     private Boolean qrCodeEnabled;
 
-    @Schema(description = "QR code image URL")
-    private String qrCodeImageUrl;
+    @Schema(description = "Base64 data URI representing the QR code image")
+    private String qrCodeImageBase64;
 
     @Schema(description = "QR code generation timestamp")
-    private String generatedAt;
+    private LocalDateTime generatedAt;
 }

@@ -1,5 +1,6 @@
 package eventplanner.features.attendee.service;
 
+import eventplanner.common.qrcode.model.QRCodeGenerationResult;
 import eventplanner.features.attendee.dto.request.*;
 import eventplanner.features.attendee.dto.response.*;
 import eventplanner.features.attendee.entity.EventAttendance;
@@ -384,6 +385,22 @@ public class AttendeeManagementService {
     
     public String regenerateQRCode(UUID attendanceId) {
         return qrCodeService.regenerateQRCode(attendanceId);
+    }
+    
+    public AttendeeQRCodeResponse getAttendeeQRCodePayload(UUID attendanceId) {
+        return qrCodeService.getAttendeeQRCodePayload(attendanceId);
+    }
+    
+    public AttendeeQRCodeResponse regenerateQRCodePayload(UUID attendanceId) {
+        return qrCodeService.regenerateQRCodePayload(attendanceId);
+    }
+    
+    public QRCodeGenerationResult getAttendeeQRCodeImage(UUID attendanceId) {
+        return qrCodeService.getAttendeeQRCodeImage(attendanceId);
+    }
+    
+    public QRCodeGenerationResult regenerateQRCodeImage(UUID attendanceId) {
+        return qrCodeService.regenerateQRCodeImage(attendanceId);
     }
     
     private AttendanceDetailResponse convertToDetailResponse(EventAttendance attendance) {
