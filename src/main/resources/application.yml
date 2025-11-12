@@ -185,11 +185,13 @@ logging:
     console: ${LOG_PATTERN:%d{yyyy-MM-dd HH:mm:ss} - %msg%n}
 
 # Management endpoints
+# SECURITY: Removed 'env' from default exposure to prevent secret leakage
+# If needed for debugging, enable only in development and ensure proper authentication
 management:
   endpoints:
     web:
       exposure:
-        include: ${MANAGEMENT_ENDPOINTS:health,info,metrics,env}
+        include: ${MANAGEMENT_ENDPOINTS:health,info,metrics}
   endpoint:
     health:
       show-details: ${MANAGEMENT_HEALTH_DETAILS:always}

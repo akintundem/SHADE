@@ -21,7 +21,7 @@ public class ResendConfig {
     @PostConstruct
     public void logConfiguration() {
         if (isApiKeyConfigured()) {
-            log.info("Resend API key is configured (length: {} characters)", resendApiKey.length());
+            log.debug("Resend API key is configured");
             log.info("Resend default from email: {}", defaultFromEmail);
         } else {
             log.warn("Resend API key is not configured. Email sending will be disabled. Set RESEND_API_KEY environment variable to enable.");
