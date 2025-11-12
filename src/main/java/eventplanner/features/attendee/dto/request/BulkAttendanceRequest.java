@@ -1,11 +1,11 @@
 package eventplanner.features.attendee.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
 
 import java.util.List;
 import java.util.UUID;
@@ -15,10 +15,11 @@ import java.util.UUID;
 @AllArgsConstructor
 public class BulkAttendanceRequest {
     
-    @NotNull(message = "Event ID is required")
+    // eventId is injected from @PathVariable in the controller, so it can be null in the request body
     private UUID eventId;
     
     @NotEmpty(message = "Attendees list cannot be empty")
     @Valid
+    @JsonAlias({"attendances"})
     private List<CreateAttendanceRequest> attendees;
 }

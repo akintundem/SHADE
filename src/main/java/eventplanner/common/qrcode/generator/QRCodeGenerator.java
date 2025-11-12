@@ -266,6 +266,11 @@ public class QRCodeGenerator {
      * @param logoStyle the logo styling configuration
      */
     private void overlayLogo(BufferedImage canvas, QRCodeStyle.LogoStyle logoStyle) {
+        if (logoStyle == null) {
+            log.debug("Logo rendering skipped: logo style is null");
+            return;
+        }
+        
         if (logoStyle.getPath() == null || logoStyle.getPath().isBlank()) {
             log.debug("Logo rendering skipped: path not provided");
             return;
@@ -273,6 +278,7 @@ public class QRCodeGenerator {
 
         BufferedImage logoImage = loadLogo(logoStyle.getPath());
         if (logoImage == null) {
+            log.debug("Logo rendering skipped: logo image could not be loaded");
             return;
         }
 
@@ -282,39 +288,44 @@ public class QRCodeGenerator {
         BufferedImage scaledLogo = scaleImage(logoImage, targetSize, targetSize, logoStyle.isRounded());
 
         Graphics2D graphics = canvas.createGraphics();
-        applyQualityHints(graphics);
+        try {
+            applyQualityHints(graphics);
 
-        // Calculate capsule dimensions (logo + padding)
-        int capsuleSize = targetSize + (logoStyle.getPadding() * 2);
-        int capsuleX = (canvasSize - capsuleSize) / 2;
-        int capsuleY = (canvasSize - capsuleSize) / 2;
+            // Calculate capsule dimensions (logo + padding)
+            int padding = logoStyle.getPadding() > 0 ? logoStyle.getPadding() : 0;
+            int capsuleSize = targetSize + (padding * 2);
+            int capsuleX = (canvasSize - capsuleSize) / 2;
+            int capsuleY = (canvasSize - capsuleSize) / 2;
 
-        // Draw background capsule if enabled
-        if (logoStyle.isBackgroundVisible()) {
-            RoundRectangle2D.Double capsule = new RoundRectangle2D.Double(
-                    capsuleX,
-                    capsuleY,
-                    capsuleSize,
-                    capsuleSize,
-                    capsuleSize * 0.45,
-                    capsuleSize * 0.45
-            );
-            graphics.setColor(logoStyle.getBackgroundColor());
-            graphics.fill(capsule);
+            // Draw background capsule if enabled
+            if (logoStyle.isBackgroundVisible() && logoStyle.getBackgroundColor() != null) {
+                RoundRectangle2D.Double capsule = new RoundRectangle2D.Double(
+                        capsuleX,
+                        capsuleY,
+                        capsuleSize,
+                        capsuleSize,
+                        capsuleSize * 0.45,
+                        capsuleSize * 0.45
+                );
+                graphics.setColor(logoStyle.getBackgroundColor());
+                graphics.fill(capsule);
 
-            // Draw border if enabled
-            if (logoStyle.isBorderEnabled()) {
-                graphics.setStroke(new BasicStroke(Math.max(1, logoStyle.getBorderThickness())));
-                graphics.setColor(logoStyle.getBorderColor());
-                graphics.draw(capsule);
+                // Draw border if enabled
+                if (logoStyle.isBorderEnabled() && logoStyle.getBorderColor() != null) {
+                    int borderThickness = Math.max(1, logoStyle.getBorderThickness());
+                    graphics.setStroke(new BasicStroke(borderThickness));
+                    graphics.setColor(logoStyle.getBorderColor());
+                    graphics.draw(capsule);
+                }
             }
-        }
 
-        // Center the logo within the capsule
-        int logoX = (canvasSize - targetSize) / 2;
-        int logoY = (canvasSize - targetSize) / 2;
-        graphics.drawImage(scaledLogo, logoX, logoY, null);
-        graphics.dispose();
+            // Center the logo within the capsule
+            int logoX = (canvasSize - targetSize) / 2;
+            int logoY = (canvasSize - targetSize) / 2;
+            graphics.drawImage(scaledLogo, logoX, logoY, null);
+        } finally {
+            graphics.dispose();
+        }
     }
 
     /**
@@ -369,15 +380,28 @@ public class QRCodeGenerator {
      * @return the loaded BufferedImage, or null if loading fails
      */
     private BufferedImage loadLogo(String path) {
+        if (path == null || path.isBlank()) {
+            log.debug("Logo path is null or blank, skipping logo overlay");
+            return null;
+        }
+        
         ClassPathResource resource = new ClassPathResource(path);
         if (!resource.exists()) {
             log.warn("Logo resource '{}' not found on classpath, QR code will render without logo.", path);
             return null;
         }
         try (InputStream stream = resource.getInputStream()) {
-            return ImageIO.read(stream);
+            BufferedImage image = ImageIO.read(stream);
+            if (image == null) {
+                log.warn("Failed to decode logo image '{}' - ImageIO returned null", path);
+                return null;
+            }
+            return image;
         } catch (IOException ex) {
-            log.warn("Failed to load logo '{}' for QR code overlay: {}", path, ex.getMessage());
+            log.warn("Failed to load logo '{}' for QR code overlay: {}", path, ex.getMessage(), ex);
+            return null;
+        } catch (Exception ex) {
+            log.error("Unexpected error loading logo '{}': {}", path, ex.getMessage(), ex);
             return null;
         }
     }

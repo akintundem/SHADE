@@ -60,4 +60,7 @@ shade/venv/
 
 # Test reports (exclude from Git)
 test/reports/
-*.md
+
+# Test generated QR codes (exclude generated files)
+test/qr-codes/*.png
+test/qr-codes/*.txt

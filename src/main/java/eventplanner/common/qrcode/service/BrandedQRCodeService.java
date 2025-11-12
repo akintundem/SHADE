@@ -1,9 +1,16 @@
 package eventplanner.common.qrcode.service;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.WriterException;
+import com.google.zxing.client.j2se.MatrixToImageConfig;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 import eventplanner.common.qrcode.config.QRCodeProperties;
 import eventplanner.common.qrcode.enumeration.QRCodeDotShape;
 import eventplanner.common.qrcode.generator.QRCodeGenerator;
+import eventplanner.common.qrcode.exception.QRCodeGenerationException;
 import eventplanner.common.qrcode.model.QRCodeGenerationResult;
 import eventplanner.common.qrcode.model.QRCodeStyle;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.awt.Color;
+import java.awt.image.BufferedImage;
 
 /**
  * Facade that builds {@link QRCodeStyle} instances from configuration and delegates
@@ -27,6 +35,9 @@ public class BrandedQRCodeService {
     private static final Color DEFAULT_FOREGROUND = new Color(17, 24, 39);
     private static final Color DEFAULT_BACKGROUND = Color.WHITE;
     private static final int DEFAULT_PADDING = 16;
+    private static final QRCodeWriter SIMPLE_WRITER = new QRCodeWriter();
+    private static final MatrixToImageConfig FALLBACK_MATRIX_CONFIG =
+            new MatrixToImageConfig(DEFAULT_FOREGROUND.getRGB(), DEFAULT_BACKGROUND.getRGB());
 
     private final QRCodeGenerator generator;
     private final QRCodeProperties properties;
@@ -35,34 +46,68 @@ public class BrandedQRCodeService {
      * Generates a QR code using the global defaults defined in configuration.
      */
     public QRCodeGenerationResult generateDefault(String data) {
-        return generator.generate(data, buildStyle(properties.getDefaults(), null));
+        requireData(data);
+        QRCodeProperties.StyleProperties defaults = properties.getDefaults() != null
+                ? properties.getDefaults()
+                : new QRCodeProperties.StyleProperties();
+        return generateWithFallback("default", data, buildStyle(defaults, null));
     }
 
     /**
      * Generates a QR code using the "event" overrides defined in configuration.
      */
     public QRCodeGenerationResult generateForEvent(String data) {
-        return generator.generate(data, buildStyle(properties.getDefaults(), properties.getEvent()));
+        requireData(data);
+        QRCodeProperties.StyleProperties defaults = properties.getDefaults() != null
+                ? properties.getDefaults()
+                : new QRCodeProperties.StyleProperties();
+        QRCodeProperties.StyleProperties event = properties.getEvent() != null
+                ? properties.getEvent()
+                : new QRCodeProperties.StyleProperties();
+        return generateWithFallback("event", data, buildStyle(defaults, event));
     }
 
     /**
      * Generates a QR code using the "attendee" overrides defined in configuration.
      */
     public QRCodeGenerationResult generateForAttendee(String data) {
-        return generator.generate(data, buildStyle(properties.getDefaults(), properties.getAttendee()));
+        requireData(data);
+        if (properties == null) {
+            log.error("QRCodeProperties is null - configuration not loaded");
+            throw new IllegalStateException("QR code properties not initialized");
+        }
+        QRCodeProperties.StyleProperties defaults = properties.getDefaults() != null
+                ? properties.getDefaults()
+                : new QRCodeProperties.StyleProperties();
+        QRCodeProperties.StyleProperties attendee = properties.getAttendee() != null
+                ? properties.getAttendee()
+                : new QRCodeProperties.StyleProperties();
+        return generateWithFallback("attendee", data, buildStyle(defaults, attendee));
     }
 
     /**
      * Allows features to generate QR codes with custom styles without modifying configuration.
      */
     public QRCodeGenerationResult generate(String data, QRCodeStyle style) {
-        return generator.generate(data, style);
+        requireData(data);
+        if (style == null) {
+            throw new IllegalArgumentException("QR code style is required");
+        }
+        return generateWithFallback("custom", data, style);
     }
 
     private QRCodeStyle buildStyle(QRCodeProperties.StyleProperties base,
                                    QRCodeProperties.StyleProperties overrides) {
         QRCodeProperties.StyleProperties fallback = base != null ? base : new QRCodeProperties.StyleProperties();
         QRCodeProperties.StyleProperties target = overrides != null ? overrides : new QRCodeProperties.StyleProperties();
+
+        // Ensure logo properties are initialized
+        if (fallback.getLogo() == null) {
+            fallback.setLogo(new QRCodeProperties.LogoProperties());
+        }
+        if (target.getLogo() == null) {
+            target.setLogo(new QRCodeProperties.LogoProperties());
+        }
 
         int size = resolveInt(target.getSize(), fallback.getSize(), DEFAULT_SIZE);
         Color foreground = parseColor(firstNonBlank(target.getForegroundColor(), fallback.getForegroundColor()), DEFAULT_FOREGROUND);
@@ -116,18 +161,48 @@ public class BrandedQRCodeService {
         Color borderColor = parseColor(firstNonBlank(overrides.getBorderColor(), defaults.getBorderColor()), new Color(229, 231, 235));
         int borderThickness = resolveInt(overrides.getBorderThickness(), defaults.getBorderThickness(), 2);
 
+        // Ensure all required fields are set with non-null values
+        // Lombok builder requires all final fields to be set
         return QRCodeStyle.LogoStyle.builder()
                 .enabled(enabled)
-                .path(path)
+                .path(path != null ? path : "")
                 .size(size)
                 .rounded(rounded)
                 .padding(padding)
                 .backgroundVisible(backgroundVisible)
-                .backgroundColor(backgroundColor)
+                .backgroundColor(backgroundColor != null ? backgroundColor : Color.WHITE)
                 .borderEnabled(borderEnabled)
-                .borderColor(borderColor)
+                .borderColor(borderColor != null ? borderColor : new Color(229, 231, 235))
                 .borderThickness(borderThickness)
                 .build();
+    }
+
+    private QRCodeGenerationResult generateWithFallback(String context, String data, QRCodeStyle style) {
+        try {
+            return generator.generate(data, style);
+        } catch (IllegalArgumentException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("Failed to generate {} QR code using branded renderer: {}", context, ex.getMessage(), ex);
+            return fallbackGenerate(data, context, ex);
+        }
+    }
+
+    private QRCodeGenerationResult fallbackGenerate(String data, String context, Exception rootCause) {
+        try {
+            log.warn("Falling back to simplified QR code rendering for {} due to: {}", context, rootCause.getMessage());
+            BitMatrix matrix = SIMPLE_WRITER.encode(data, BarcodeFormat.QR_CODE, DEFAULT_SIZE, DEFAULT_SIZE);
+            BufferedImage image = MatrixToImageWriter.toBufferedImage(matrix, FALLBACK_MATRIX_CONFIG);
+            return new QRCodeGenerationResult(image);
+        } catch (WriterException | RuntimeException fallbackEx) {
+            throw new QRCodeGenerationException("Failed to generate QR code for " + context, fallbackEx);
+        }
+    }
+
+    private void requireData(String data) {
+        if (!StringUtils.hasText(data)) {
+            throw new IllegalArgumentException("QR code data cannot be null or empty");
+        }
     }
 
     private int resolveInt(Integer value, Integer fallback, int defaultValue) {
@@ -206,4 +281,3 @@ public class BrandedQRCodeService {
         }
     }
 }
-

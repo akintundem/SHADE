@@ -239,7 +239,8 @@ public class AttendeeManagementController {
     @Operation(summary = "Get attendee QR code (rendered)", description = "Retrieve the attendee QR code along with a rendered image payload")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved rendered QR code"),
-        @ApiResponse(responseCode = "404", description = "Attendance not found")
+        @ApiResponse(responseCode = "404", description = "Attendance not found"),
+        @ApiResponse(responseCode = "500", description = "Failed to generate QR code image")
     })
     public ResponseEntity<AttendeeQRCodeResponse> getAttendeeQRCodeRendered(
             @PathVariable UUID eventId,
@@ -247,8 +248,11 @@ public class AttendeeManagementController {
         try {
             AttendeeQRCodeResponse response = attendeeManagementService.getAttendeeQRCodePayload(attendanceId);
             return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, 
+                "Failed to generate QR code image: " + e.getMessage(), e);
         }
     }
     
@@ -257,7 +261,8 @@ public class AttendeeManagementController {
     @Operation(summary = "Get attendee QR code image", description = "Retrieve the attendee QR code rendered as a PNG image")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved QR code image"),
-        @ApiResponse(responseCode = "404", description = "Attendance not found")
+        @ApiResponse(responseCode = "404", description = "Attendance not found"),
+        @ApiResponse(responseCode = "500", description = "Failed to generate QR code image")
     })
     public ResponseEntity<byte[]> getAttendeeQRCodeImage(
             @PathVariable UUID eventId,
@@ -269,8 +274,11 @@ public class AttendeeManagementController {
             headers.setCacheControl(CacheControl.noStore().getHeaderValue());
             headers.setContentLength(result.getPngData().length);
             return new ResponseEntity<>(result.getPngData(), headers, HttpStatus.OK);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, 
+                "Failed to generate QR code image: " + e.getMessage(), e);
         }
     }
     

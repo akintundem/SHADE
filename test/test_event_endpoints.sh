@@ -131,8 +131,13 @@ get_testing_environment() {
 # Get testing environment from user
 get_testing_environment "$@"
 
+# Path configuration (always resolve relative to this script)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPORTS_DIR="${SCRIPT_DIR}/reports"
+QR_CODES_DIR="${SCRIPT_DIR}/qr-codes"
+
 # Configuration
-REPORT_FILE="reports/event_test_report_$(date +%Y%m%d_%H%M%S).md"
+REPORT_FILE="${REPORTS_DIR}/event_test_report_$(date +%Y%m%d_%H%M%S).md"
 TEST_USER_EMAIL="testuser@example.com"
 TEST_USER_PASSWORD="Password123!"
 TEST_USER_NAME="Test User"
@@ -160,8 +165,75 @@ verify_email_in_database() {
     fi
 }
 
+# Create directories for reports and QR codes
+mkdir -p "$REPORTS_DIR"
+mkdir -p "$QR_CODES_DIR"
+
+# Function to save QR code to file
+save_qr_code() {
+    local test_name="$1"
+    local endpoint="$2"
+    local response_body="$3"
+    local content_type="$4"
+    
+    # Create filename from test name and timestamp
+    local timestamp=$(date +%Y%m%d_%H%M%S_%N | cut -b1-23)
+    local safe_name=$(echo "$test_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g')
+    local filename="${QR_CODES_DIR}/${safe_name}_${timestamp}"
+    
+    # Determine file extension and save based on endpoint and content
+    if [[ "$endpoint" == *"/qr-code/image" ]]; then
+        # PNG image endpoint - response_body might be a temp file path or actual data
+        if [ -f "$response_body" ]; then
+            # It's a temp file, check if it's PNG or JSON error
+            local file_size=$(stat -f%z "$response_body" 2>/dev/null || stat -c%s "$response_body" 2>/dev/null || echo "0")
+            if [ "$file_size" -gt 100 ]; then
+                # Check PNG signature (first 4 bytes: 89 50 4E 47)
+                local first_bytes=$(head -c 4 "$response_body" 2>/dev/null | od -An -tx1 | tr -d ' ' | head -c 8)
+                if [ "$first_bytes" = "89504e47" ]; then
+                    cp "$response_body" "${filename}.png"
+                    echo -e "${GREEN}💾 Saved QR code PNG: ${filename}.png${NC}"
+                else
+                    # Might be JSON error response
+                    cp "$response_body" "${filename}.error.json"
+                    echo -e "${YELLOW}⚠️  Response is not PNG, saved as: ${filename}.error.json${NC}"
+                fi
+            fi
+        elif [ -n "$response_body" ] && [ ${#response_body} -gt 100 ]; then
+            # Direct binary data (shouldn't happen with our curl -o approach, but handle it)
+            echo -n "$response_body" > "${filename}.png"
+            echo -e "${GREEN}💾 Saved QR code PNG: ${filename}.png${NC}"
+        fi
+    elif [[ "$response_body" == *"data:image/png;base64,"* ]] || [[ "$response_body" == *"qrCodeImageBase64"* ]]; then
+        # Base64 encoded image in JSON response
+        local base64_data=""
+        if echo "$response_body" | grep -q "qrCodeImageBase64"; then
+            base64_data=$(echo "$response_body" | grep -o '"qrCodeImageBase64":"[^"]*"' | cut -d'"' -f4 | sed 's/data:image\/png;base64,//')
+        else
+            base64_data=$(echo "$response_body" | grep -o 'data:image/png;base64,[^"]*' | sed 's/data:image\/png;base64,//')
+        fi
+        
+        if [ -n "$base64_data" ]; then
+            echo "$base64_data" | base64 -d > "${filename}.png" 2>/dev/null
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}💾 Saved QR code PNG from base64: ${filename}.png${NC}"
+            fi
+        fi
+        
+        # Also save the QR code text if available
+        local qr_text=$(echo "$response_body" | grep -o '"qrCode":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$qr_text" ]; then
+            echo "$qr_text" > "${filename}.txt"
+            echo -e "${GREEN}💾 Saved QR code text: ${filename}.txt${NC}"
+        fi
+    elif [[ "$endpoint" == *"/qr-code" ]] && [[ "$endpoint" != *"/qr-code/image" ]] && [[ "$endpoint" != *"/qr-code/rendered" ]]; then
+        # Plain text QR code
+        echo "$response_body" > "${filename}.txt"
+        echo -e "${GREEN}💾 Saved QR code text: ${filename}.txt${NC}"
+    fi
+}
+
 # Create report file
-mkdir -p reports
 cat > "$REPORT_FILE" << EOF
 # Event Controller Endpoints Test Report
 
@@ -224,7 +296,15 @@ run_test() {
         curl_cmd="$curl_cmd --data-binary @$temp_data_file"
     fi
     
-    curl_cmd="$curl_cmd '$BASE_URL$endpoint'"
+    # Handle binary responses (PNG images) differently
+    local is_binary_response=false
+    if [[ "$endpoint" == *"/qr-code/image" ]]; then
+        is_binary_response=true
+        local temp_response_file=$(mktemp)
+        curl_cmd="$curl_cmd -o '$temp_response_file' '$BASE_URL$endpoint'"
+    else
+        curl_cmd="$curl_cmd '$BASE_URL$endpoint'"
+    fi
     
     # Execute the request
     local response
@@ -235,14 +315,28 @@ run_test() {
         if [ -n "$temp_data_file" ]; then
             rm -f "$temp_data_file"
         fi
+        if [ -n "$temp_response_file" ]; then
+            rm -f "$temp_response_file"
+        fi
         return 1
     fi
 
     if [ -n "$temp_data_file" ]; then
         rm -f "$temp_data_file"
     fi
-    local http_code="${response: -3}"
-    local response_body="${response%???}"
+    
+    local http_code
+    local response_body
+    
+    if [ "$is_binary_response" = true ]; then
+        # For binary responses, http_code is in the response variable, body is in temp file
+        http_code="${response: -3}"
+        # Keep the temp file for binary data handling in save_qr_code
+        response_body="$temp_response_file"
+    else
+        http_code="${response: -3}"
+        response_body="${response%???}"
+    fi
     
     # Check if test passed
     if [ "$http_code" = "$expected_status" ]; then
@@ -278,6 +372,16 @@ run_test() {
         echo "---"
         echo ""
     } >> "$REPORT_FILE"
+    
+    # Save QR codes if this is a QR code endpoint
+    if [[ "$endpoint" == *"/qr-code"* ]] && [ "$http_code" = "200" ]; then
+        save_qr_code "$test_name" "$endpoint" "$response_body" ""
+    fi
+    
+    # Clean up temp response file for binary responses
+    if [ "$is_binary_response" = true ] && [ -f "$response_body" ]; then
+        rm -f "$response_body"
+    fi
     
     # Extract IDs and tokens from successful responses
     if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
@@ -667,7 +771,15 @@ EOF
     # QR Code Tests
     run_test "Get Event QR Code" "GET" "/api/v1/events/$EVENT_ID/qr-code" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event QR code"
     run_test "Generate QR Code" "POST" "/api/v1/events/$EVENT_ID/qr-code/generate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Generate QR code for event"
+    
+    # Test get event QR code image (PNG)
+    run_test "Get Event QR Code Image" "GET" "/api/v1/events/$EVENT_ID/qr-code/image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event QR code as PNG image"
+    
     run_test "Regenerate QR Code" "POST" "/api/v1/events/$EVENT_ID/qr-code/regenerate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Regenerate QR code"
+    
+    # Test get regenerated QR code image
+    run_test "Get Regenerated Event QR Code Image" "GET" "/api/v1/events/$EVENT_ID/qr-code/image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get regenerated event QR code as PNG image"
+    
     run_test "Disable QR Code" "DELETE" "/api/v1/events/$EVENT_ID/qr-code" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Disable QR code"
     
     # Visibility & Access Control Tests

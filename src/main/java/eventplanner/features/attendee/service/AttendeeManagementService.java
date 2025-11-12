@@ -101,6 +101,17 @@ public class AttendeeManagementService {
     }
     
     public List<AttendanceDetailResponse> bulkRegister(BulkAttendanceRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Request cannot be null");
+        }
+        if (request.getEventId() == null) {
+            throw new IllegalArgumentException("Event ID is required");
+        }
+        if (request.getAttendees() == null || request.getAttendees().isEmpty()) {
+            throw new IllegalArgumentException("Attendees list cannot be empty");
+        }
+        eventValidationUtil.validateEventExists(request.getEventId());
+
         List<EventAttendance> attendances = request.getAttendees().stream()
                 .map(attendee -> {
                     EventAttendance attendance = new EventAttendance();
@@ -109,14 +120,17 @@ public class AttendeeManagementService {
                     attendance.setName(attendee.getName());
                     attendance.setEmail(attendee.getEmail());
                     attendance.setPhone(attendee.getPhone());
-                    attendance.setAttendanceStatus(attendee.getAttendanceStatus());
+                    AttendanceStatus status = attendee.getAttendanceStatus() != null
+                            ? attendee.getAttendanceStatus()
+                            : AttendanceStatus.REGISTERED;
+                    attendance.setAttendanceStatus(status);
                     attendance.setRegistrationDate(LocalDateTime.now());
                     attendance.setTicketType(attendee.getTicketType());
                     attendance.setDietaryRestrictions(attendee.getDietaryRestrictions());
                     attendance.setAccessibilityNeeds(attendee.getAccessibilityNeeds());
                     attendance.setEmergencyContact(attendee.getEmergencyContact());
                     attendance.setEmergencyPhone(attendee.getEmergencyPhone());
-                    attendance.setNotes(attendee.getNotes());
+                    attendance.setNotes(attendee.getNotes() != null ? attendee.getNotes() : "");
                     attendance.setQrCode(qrCodeService.generateQRCode(request.getEventId(), attendee.getUserId()));
                     return attendance;
                 })
@@ -228,17 +242,47 @@ public class AttendeeManagementService {
         AttendanceStatus previousStatus = attendance.getAttendanceStatus();
         attendance.setAttendanceStatus(AttendanceStatus.CHECKED_IN);
         attendance.setCheckInTime(LocalDateTime.now());
-        attendance.setQrCodeUsed(true);
-        attendance.setQrCodeUsedAt(LocalDateTime.now());
         
-        // Safely append notes with null guard
-        String existingNotes = attendance.getNotes() != null ? attendance.getNotes() : "";
-        if (request.getNotes() != null && !request.getNotes().trim().isEmpty()) {
-            String checkInNote = "Check-in: " + request.getNotes();
-            attendance.setNotes(existingNotes.isEmpty() ? checkInNote : existingNotes + "\n" + checkInNote);
-        } else if (existingNotes.isEmpty()) {
-            attendance.setNotes("Checked in at " + LocalDateTime.now());
+        // Handle QR code check-in vs manual check-in
+        if (request.getQrCode() != null && !request.getQrCode().trim().isEmpty()) {
+            // QR code-based check-in
+            attendance.setQrCodeUsed(true);
+            attendance.setQrCodeUsedAt(LocalDateTime.now());
+        } else {
+            // Manual check-in - QR code not required
+            // Only mark as QR code used if it was actually scanned
+            if (attendance.getQrCode() != null && attendance.getQrCodeUsed()) {
+                // QR code was already used, keep the status
+            } else {
+                attendance.setQrCodeUsed(false);
+            }
         }
+        
+        // Build check-in note with method and location if provided
+        String existingNotes = attendance.getNotes() != null ? attendance.getNotes() : "";
+        StringBuilder checkInNoteBuilder = new StringBuilder();
+        
+        if (request.getCheckInMethod() != null || request.getCheckInLocation() != null) {
+            checkInNoteBuilder.append("Check-in");
+            if (request.getCheckInMethod() != null) {
+                checkInNoteBuilder.append(" via ").append(request.getCheckInMethod());
+            }
+            if (request.getCheckInLocation() != null) {
+                checkInNoteBuilder.append(" at ").append(request.getCheckInLocation());
+            }
+            if (request.getNotes() != null && !request.getNotes().trim().isEmpty()) {
+                checkInNoteBuilder.append(" - ").append(request.getNotes());
+            }
+        } else if (request.getNotes() != null && !request.getNotes().trim().isEmpty()) {
+            checkInNoteBuilder.append("Check-in: ").append(request.getNotes());
+        } else if (request.getQrCode() != null && !request.getQrCode().trim().isEmpty()) {
+            checkInNoteBuilder.append("Checked in via QR code");
+        } else {
+            checkInNoteBuilder.append("Checked in at ").append(LocalDateTime.now());
+        }
+        
+        String checkInNote = checkInNoteBuilder.toString();
+        attendance.setNotes(existingNotes.isEmpty() ? checkInNote : existingNotes + "\n" + checkInNote);
         
         EventAttendance saved = attendanceRepository.save(attendance);
         

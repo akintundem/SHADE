@@ -1,6 +1,5 @@
 package eventplanner.features.attendee.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -10,8 +9,13 @@ import lombok.AllArgsConstructor;
 @AllArgsConstructor
 public class CheckInRequest {
     
-    @NotBlank(message = "QR code is required")
+    // QR code is optional - can be used for QR-based check-in
     private String qrCode;
+    
+    // Manual check-in fields
+    private String checkInMethod;  // e.g., "MANUAL", "QR_CODE", "MOBILE_APP"
+    
+    private String checkInLocation;  // e.g., "Main Entrance", "Gate 1"
     
     private String notes;
 }

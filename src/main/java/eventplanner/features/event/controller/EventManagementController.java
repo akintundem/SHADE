@@ -651,8 +651,13 @@ public class EventManagementController {
                     .header("Content-Type", "image/png")
                     .header("Cache-Control", "public, max-age=3600")
                     .body(qrImageResult.getPngData());
-        } catch (Exception ex) {
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, 
+                "Failed to generate QR code image: " + ex.getMessage(), ex);
         }
     }
 
