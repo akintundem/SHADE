@@ -86,6 +86,10 @@ public class UserAccount extends BaseEntity {
     @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
 
+    @Column(name = "profile_completed", nullable = false)
+    @Builder.Default
+    private Boolean profileCompleted = false;
+
     @PrePersist
     public void onCreate() {
         if (userType == null) {
@@ -96,6 +100,9 @@ public class UserAccount extends BaseEntity {
         }
         if (failedLoginAttempts == null) {
             failedLoginAttempts = 0;
+        }
+        if (profileCompleted == null) {
+            profileCompleted = false;
         }
     }
 

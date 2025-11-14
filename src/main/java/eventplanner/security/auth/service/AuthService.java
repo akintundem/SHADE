@@ -2,9 +2,11 @@ package eventplanner.security.auth.service;
 
 import eventplanner.security.auth.dto.req.LoginRequest;
 import eventplanner.security.auth.dto.req.LogoutRequest;
+import eventplanner.security.auth.dto.req.OnboardingRequest;
 import eventplanner.security.auth.dto.req.RefreshTokenRequest;
 import eventplanner.security.auth.dto.req.RegisterRequest;
 import eventplanner.security.auth.dto.res.SecureAuthResponse;
+import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.entity.EmailVerificationToken;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.entity.UserSession;
@@ -123,7 +125,7 @@ public class AuthService {
                 "Too many registration attempts. Please try again later.");
         }
         
-        // Validate registration request (password match, terms, email uniqueness)
+        // Validate registration request (password match, email uniqueness)
         registrationValidator.validate(request);
         
         Optional<UserAccount> existingUserOpt = userAccountRepository.findByEmailIgnoreCase(normalizedEmail);
@@ -131,29 +133,25 @@ public class AuthService {
         boolean isReRegistration = existingUserOpt.isPresent();
         
         if (isReRegistration) {
-            // User exists but is unverified - update account info and resend verification
+            // User exists but is unverified - update password and resend verification
+            // Profile fields will be collected during onboarding after email verification
             user = existingUserOpt.get();
             log.info("Updating unverified user account and resending verification: {}", normalizedEmail);
-            user.setName(request.getName().trim());
             user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-            user.setPhoneNumber(safeTrim(request.getPhoneNumber()));
-            user.setDateOfBirth(request.getDateOfBirth());
-            user.setAcceptTerms(Boolean.TRUE.equals(request.getAcceptTerms()));
-            user.setAcceptPrivacy(Boolean.TRUE.equals(request.getAcceptPrivacy()));
-            user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
             userAccountRepository.save(user);
         } else {
-            // Entirely New user - create account
+            // New user - create account with minimal info (email + password only)
+            // Profile completion happens during onboarding after email verification
+            // Name is required (non-nullable), so we set a placeholder that will be replaced during onboarding
             user = UserAccount.builder()
                 .email(normalizedEmail)
-                .name(request.getName().trim())
+                .name("") // Placeholder - will be set during onboarding
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .phoneNumber(safeTrim(request.getPhoneNumber()))
-                .dateOfBirth(request.getDateOfBirth())
                 .emailVerified(false)
-                .acceptTerms(Boolean.TRUE.equals(request.getAcceptTerms()))
-                .acceptPrivacy(Boolean.TRUE.equals(request.getAcceptPrivacy()))
-                .marketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()))
+                .profileCompleted(false)
+                .acceptTerms(false) // Will be collected during onboarding
+                .acceptPrivacy(false) // Will be collected during onboarding
+                .marketingOptIn(false)
                 .userType(UserType.INDIVIDUAL)
                 .build();
             userAccountRepository.save(user);
@@ -177,11 +175,10 @@ public class AuthService {
         // Send confirmation email (skip in dev mode)
         if (environmentUtil.isProductionEnvironment()) {
             try {
-                // Use query parameter instead of path parameter
+                // Use query parameter to match endpoint format
                 String confirmLink = baseUrl + "/api/v1/auth/verify-email?token=" + rawToken;
                 Map<String, Object> templateVariables = new HashMap<>();
-                templateVariables.put("user_name", user.getName() != null && !user.getName().trim().isEmpty() 
-                    ? user.getName() : "");
+                templateVariables.put("user_name", ""); // Name not collected yet during minimal registration
                 templateVariables.put("confirm_link", confirmLink);
                 templateVariables.put("baseUrl", baseUrl);
                 
@@ -317,9 +314,13 @@ public class AuthService {
         user.setLastLoginAt(LocalDateTime.now(ZoneOffset.UTC));
         userAccountRepository.save(user);
         
+        // Check if onboarding is required (profile not completed)
+        // Profile is considered incomplete if profileCompleted flag is false or required fields are missing
+        boolean onboardingRequired = !isProfileComplete(user);
+        
         // Server generates deviceId for this session
         // DeviceId is returned to the client for use in subsequent requests (security and logging)
-        SecureAuthResponse response = issueAuthResponse(user, request.isRememberMe(), clientIp, "Login successful");
+        SecureAuthResponse response = issueAuthResponse(user, request.isRememberMe(), clientIp, "Login successful", onboardingRequired);
         
         // Audit log successful login
         auditLogService.builder()
@@ -384,6 +385,9 @@ public class AuthService {
         UserAccount user = session.getUser();
         String accessToken = tokenService.generateAccessToken(user);
 
+        // Check if onboarding is still required after token refresh
+        boolean onboardingRequired = !isProfileComplete(user);
+        
         return SecureAuthResponse.builder()
             .message("Token refreshed successfully")
             .user(AuthMapper.toSecureUserResponse(user))
@@ -391,6 +395,7 @@ public class AuthService {
             .refreshToken(session.getRefreshToken())
             .tokenType("Bearer")
             .deviceId(session.getDeviceId())
+            .onboardingRequired(onboardingRequired)
             .build();
     }
 
@@ -433,12 +438,14 @@ public class AuthService {
      * @param rememberMe Whether to extend refresh token expiry
      * @param ipAddress Client IP address for session tracking
      * @param message Success message
-     * @return SecureAuthResponse with tokens and server-generated deviceId
+     * @param onboardingRequired Whether user needs to complete profile onboarding
+     * @return SecureAuthResponse with tokens, server-generated deviceId, and onboarding status
      */
     private SecureAuthResponse issueAuthResponse(UserAccount user,
                                                  boolean rememberMe,
                                                  String ipAddress,
-                                                 String message) {
+                                                 String message,
+                                                 boolean onboardingRequired) {
         long activeSessionCount = sessionRepository.countByUserAndRevokedFalse(user);
         if (activeSessionCount >= maxConcurrentSessions) {
             int sessionsToRevoke = (int) (activeSessionCount - maxConcurrentSessions + 1);
@@ -471,7 +478,124 @@ public class AuthService {
             .refreshToken(refreshToken)
             .tokenType("Bearer")
             .deviceId(deviceId)
+            .onboardingRequired(onboardingRequired)
             .build();
+    }
+    
+    /**
+     * Completes user profile onboarding.
+     * Validates that user is authenticated, email is verified, and profile is not already completed.
+     * Updates user profile with onboarding data and marks profile as completed.
+     * 
+     * @param request The onboarding request with profile data
+     * @param user The authenticated user account
+     * @param clientIp Client IP address for audit logging
+     * @return SecureUserResponse with updated user data
+     * @throws BadRequestException if validation fails or profile already completed
+     */
+    public SecureUserResponse completeOnboarding(OnboardingRequest request, UserAccount user, String clientIp) {
+        // Validate user is authenticated
+        if (user == null) {
+            throw new BadRequestException("AUTHENTICATION_REQUIRED", "User must be authenticated to complete onboarding");
+        }
+        
+        // Validate email is verified
+        if (!user.isEmailVerified()) {
+            auditLogService.builder()
+                .domain("SECURITY")
+                .entityType("UserAccount")
+                .entityId(user.getId())
+                .action(eventplanner.common.domain.enums.ActionType.PERMISSION_DENIED)
+                .user(user.getId(), null, user.getEmail())
+                .description("Onboarding attempt failed: Email not verified")
+                .request(clientIp, null, null)
+                .status("FAILURE")
+                .riskLevel("MEDIUM")
+                .log();
+            throw new BadRequestException("EMAIL_NOT_VERIFIED", 
+                "Email must be verified before completing onboarding");
+        }
+        
+        // Validate profile is not already completed
+        if (isProfileComplete(user)) {
+            auditLogService.builder()
+                .domain("SECURITY")
+                .entityType("UserAccount")
+                .entityId(user.getId())
+                .action(eventplanner.common.domain.enums.ActionType.UPDATE)
+                .user(user.getId(), null, user.getEmail())
+                .description("Onboarding attempt failed: Profile already completed")
+                .request(clientIp, null, null)
+                .status("FAILURE")
+                .riskLevel("LOW")
+                .log();
+            throw new BadRequestException("PROFILE_ALREADY_COMPLETED", 
+                "Profile has already been completed");
+        }
+        
+        // Validate required fields
+        if (request.getName() == null || request.getName().trim().isEmpty()) {
+            throw new BadRequestException("VALIDATION_ERROR", "Name is required");
+        }
+        
+        if (!Boolean.TRUE.equals(request.getAcceptTerms())) {
+            throw new BadRequestException("VALIDATION_ERROR", "Terms and conditions must be accepted");
+        }
+        
+        if (!Boolean.TRUE.equals(request.getAcceptPrivacy())) {
+            throw new BadRequestException("VALIDATION_ERROR", "Privacy policy must be accepted");
+        }
+        
+        // Update user profile with onboarding data
+        user.setName(request.getName().trim());
+        user.setPhoneNumber(safeTrim(request.getPhoneNumber()));
+        user.setDateOfBirth(request.getDateOfBirth());
+        user.setAcceptTerms(true);
+        user.setAcceptPrivacy(true);
+        user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
+        user.setProfileCompleted(true);
+        userAccountRepository.save(user);
+        
+        // Audit log successful onboarding completion
+        auditLogService.builder()
+            .domain("SECURITY")
+            .entityType("UserAccount")
+            .entityId(user.getId())
+            .action(eventplanner.common.domain.enums.ActionType.UPDATE)
+            .user(user.getId(), null, user.getEmail())
+            .description("User completed profile onboarding")
+            .request(clientIp, null, null)
+            .status("SUCCESS")
+            .log();
+        
+        log.info("User completed onboarding: {}", user.getEmail());
+        return AuthMapper.toSecureUserResponse(user);
+    }
+    
+    /**
+     * Checks if user profile is complete.
+     * Profile is considered complete if:
+     * - profileCompleted flag is true AND
+     * - Required fields are present (name, terms accepted, privacy accepted)
+     * 
+     * @param user The user account to check
+     * @return true if profile is complete, false otherwise
+     */
+    private boolean isProfileComplete(UserAccount user) {
+        if (user.getProfileCompleted() == null || !user.getProfileCompleted()) {
+            return false;
+        }
+        
+        // Verify required fields are present
+        if (user.getName() == null || user.getName().trim().isEmpty()) {
+            return false;
+        }
+        
+        if (!user.isAcceptTerms() || !user.isAcceptPrivacy()) {
+            return false;
+        }
+        
+        return true;
     }
 
     /**

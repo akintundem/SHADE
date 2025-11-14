@@ -476,17 +476,11 @@ check_service() {
 authenticate_user() {
     echo -e "${YELLOW}🔐 Authenticating user...${NC}"
     
-    # First, try to register a new user
+    # First, try to register a new user (minimal registration - email + password only)
     local registration_data='{
         "email": "'$TEST_USER_EMAIL'",
-        "name": "'$TEST_USER_NAME'",
         "password": "'$TEST_USER_PASSWORD'",
-        "confirmPassword": "'$TEST_USER_PASSWORD'",
-        "phoneNumber": "'$TEST_USER_PHONE'",
-        "dateOfBirth": "1990-01-01",
-        "acceptTerms": true,
-        "acceptPrivacy": true,
-        "marketingOptIn": false
+        "confirmPassword": "'$TEST_USER_PASSWORD'"
     }'
     
     local response=$(curl -s -w '%{http_code}' -X POST \
@@ -505,6 +499,7 @@ authenticate_user() {
         return 1
     fi
     
+    # Login after email verification
     local login_data='{
         "email": "'$TEST_USER_EMAIL'",
         "password": "'$TEST_USER_PASSWORD'",
@@ -523,6 +518,37 @@ authenticate_user() {
         ACCESS_TOKEN=$(echo "$login_response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
         REFRESH_TOKEN=$(echo "$login_response_body" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
         DEVICE_ID=$(echo "$login_response_body" | grep -o '"deviceId":"[^"]*"' | cut -d'"' -f4)
+        
+        # Check if onboarding is required
+        local onboarding_required=$(echo "$login_response_body" | grep -o '"onboardingRequired":[^,}]*' | cut -d':' -f2 | tr -d ' ')
+        
+        if [ "$onboarding_required" = "true" ]; then
+            echo -e "${YELLOW}⚠️  Onboarding required - completing profile...${NC}"
+            
+            # Complete onboarding
+            local onboarding_data='{
+                "name": "'$TEST_USER_NAME'",
+                "phoneNumber": "'$TEST_USER_PHONE'",
+                "dateOfBirth": "1990-01-01",
+                "acceptTerms": true,
+                "acceptPrivacy": true,
+                "marketingOptIn": false
+            }'
+            
+            local onboarding_response=$(curl -s -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer $ACCESS_TOKEN" \
+                -H "X-Device-ID: $DEVICE_ID" \
+                -H "Content-Type: application/json" \
+                -d "$onboarding_data" \
+                "$BASE_URL/api/v1/auth/complete-onboarding")
+            
+            local onboarding_http_code="${onboarding_response: -3}"
+            if [ "$onboarding_http_code" = "200" ]; then
+                echo -e "${GREEN}✅ Profile onboarding completed${NC}"
+            else
+                echo -e "${YELLOW}⚠️  Onboarding completion failed (HTTP: $onboarding_http_code), but continuing with tests${NC}"
+            fi
+        fi
         
         if [ -n "$ACCESS_TOKEN" ]; then
             local jwt_payload=$(echo "$ACCESS_TOKEN" | cut -d'.' -f2)
@@ -677,6 +703,39 @@ main() {
     # Step 4: CRUD Operations Tests
     echo -e "${CYAN}📝 Step 4: CRUD Operations Tests${NC}"
     echo "=================================="
+    
+    # Test create event (this will appear in the report)
+    local create_start_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
+    local create_end_date=$(date -u -v+1d -v+2H '+%Y-%m-%dT%H:%M:%S')
+    local create_event_data=$(cat <<EOF
+{
+    "name": "Report Test Event",
+    "description": "This event was created to test the create endpoint and appears in the report",
+    "eventType": "CONFERENCE",
+    "startDateTime": "$create_start_date",
+    "endDateTime": "$create_end_date",
+    "venueRequirements": "Test Location - Conference Room A",
+    "capacity": 100,
+    "isPublic": true,
+    "requiresApproval": false,
+    "coverImageUrl": "https://example.com/cover.jpg",
+    "eventWebsiteUrl": "https://example.com/event",
+    "hashtag": "#ReportTestEvent",
+    "venue": {
+        "address": "123 Main Street",
+        "city": "San Francisco",
+        "state": "California",
+        "country": "United States",
+        "zipCode": "94102",
+        "latitude": 37.7749,
+        "longitude": -122.4194,
+        "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+        "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
+    }
+}
+EOF
+)
+    run_test "Create Event" "POST" "/api/v1/events" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$create_event_data" "201" "Create a new event"
     
     # Test get event by ID
     run_test "Get Event by ID" "GET" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event by ID"

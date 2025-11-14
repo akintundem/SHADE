@@ -10,7 +10,8 @@ import static eventplanner.security.util.AuthValidationUtil.validatePasswordMatc
 
 /**
  * Validates registration requests before processing.
- * Ensures password match, terms acceptance, and email uniqueness.
+ * Ensures password match and email uniqueness.
+ * Profile completion (name, terms, etc.) happens during onboarding after email verification.
  */
 @Component
 @RequiredArgsConstructor
@@ -20,6 +21,7 @@ public class RegistrationValidator {
 
     /**
      * Validates a registration request.
+     * Only validates email and password. Other profile fields are collected during onboarding.
      * 
      * @param request The registration request to validate
      * @throws IllegalArgumentException if validation fails
@@ -31,15 +33,6 @@ public class RegistrationValidator {
 
         // Validate password match and strength
         validatePasswordMatch(request.getPassword(), request.getConfirmPassword());
-
-        // Validate terms acceptance
-        if (!Boolean.TRUE.equals(request.getAcceptTerms())) {
-            throw new IllegalArgumentException("Terms and conditions must be accepted");
-        }
-
-        if (!Boolean.TRUE.equals(request.getAcceptPrivacy())) {
-            throw new IllegalArgumentException("Privacy policy must be accepted");
-        }
 
         // Check email uniqueness (only for verified users - unverified users can re-register)
         String normalizedEmail = normalizeEmail(request.getEmail());
