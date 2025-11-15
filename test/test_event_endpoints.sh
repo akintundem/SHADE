@@ -737,8 +737,17 @@ EOF
 )
     run_test "Create Event" "POST" "/api/v1/events" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$create_event_data" "201" "Create a new event"
     
-    # Test get event by ID
-    run_test "Get Event by ID" "GET" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event by ID"
+    # Test get event by ID (should return full details for owner with scope=FULL)
+    run_test "Get Event by ID (Owner View)" "GET" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event by ID - should return full details for owner with scope=FULL"
+    
+    # Test get event feed endpoint (should return scope=FEED)
+    run_test "Get Event Feed" "GET" "/api/v1/events/$EVENT_ID/feed" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event feed - should return scope=FEED"
+    
+    # Test get event feed with pagination
+    run_test "Get Event Feed (Page 0)" "GET" "/api/v1/events/$EVENT_ID/feed?page=0&size=10" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event feed with pagination - page 0"
+    
+    # Test get event feed with filters
+    run_test "Get Event Feed (Filter by Type)" "GET" "/api/v1/events/$EVENT_ID/feed?postType=VIDEO" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event feed filtered by post type"
     
     # Test update event
     local update_start_date=$(date -u -v+2d '+%Y-%m-%dT%H:%M:%S')

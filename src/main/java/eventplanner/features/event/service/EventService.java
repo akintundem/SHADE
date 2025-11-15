@@ -14,8 +14,14 @@ import eventplanner.features.event.entity.Venue;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.common.domain.enums.EventStatus;
 import eventplanner.common.domain.enums.EventUserType;
+import eventplanner.common.domain.enums.EventScope;
 import eventplanner.security.authorization.domain.entity.EventRole;
 import eventplanner.common.domain.enums.RoleName;
+import eventplanner.features.event.dto.request.EventFeedRequest;
+import eventplanner.features.event.dto.response.EventFeedResponse;
+import eventplanner.features.event.dto.response.FeedPost;
+import java.util.Set;
+import java.util.Comparator;
 import eventplanner.security.authorization.domain.repository.EventRoleRepository;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -606,6 +612,7 @@ public class EventService {
         response.setVenue(event.getVenue() != null ? toVenueDTO(event.getVenue()) : null);
         response.setCreatedAt(event.getCreatedAt());
         response.setUpdatedAt(event.getUpdatedAt());
+        response.setScope(EventScope.FULL); // Full details response
         return response;
     }
 
@@ -1360,6 +1367,154 @@ public class EventService {
         dto.setGooglePlaceId(venue.getGooglePlaceId());
         dto.setGooglePlaceData(venue.getGooglePlaceData());
         return dto;
+    }
+
+    // ==================== EVENT SCOPE & FEED METHODS ====================
+
+    /**
+     * Determine the event scope for a user based on their relationship to the event
+     * @param user The user principal
+     * @param eventId The event ID
+     * @return EventScope - FULL for owners/high-responsibility, FEED for guests
+     */
+    public EventScope determineEventScope(UserPrincipal user, UUID eventId) {
+        if (user == null || eventId == null) {
+            return EventScope.FEED; // Default to feed for unauthenticated
+        }
+        
+        // Owners always get full scope
+        if (authorizationService != null && authorizationService.isEventOwner(user, eventId)) {
+            return EventScope.FULL;
+        }
+        
+        // Check user's role in the event
+        List<EventRole> roles = eventRoleRepository.findByEventIdAndUserId(eventId, user.getId());
+        
+        // High-responsibility roles get full scope
+        Set<RoleName> highResponsibilityRoles = Set.of(
+            RoleName.ORGANIZER, 
+            RoleName.COORDINATOR,
+            RoleName.STAFF
+        );
+        
+        boolean hasHighResponsibility = roles.stream()
+            .filter(EventRole::getIsActive)
+            .map(EventRole::getRoleName)
+            .anyMatch(highResponsibilityRoles::contains);
+        
+        if (hasHighResponsibility) {
+            return EventScope.FULL;
+        }
+        
+        // Everyone else (GUEST, attendees, etc.) gets feed view
+        return EventScope.FEED;
+    }
+
+    /**
+     * Convert event to feed response for guest users with pagination
+     * @param event The event entity
+     * @param user The user principal (optional)
+     * @param request The feed request with pagination parameters
+     * @return EventFeedResponse with paginated posts
+     */
+    public EventFeedResponse toFeedResponse(Event event, UserPrincipal user, EventFeedRequest request) {
+        EventFeedResponse feed = new EventFeedResponse();
+        
+        // Basic event info (public-facing only)
+        feed.setEventId(event.getId());
+        feed.setEventName(event.getName());
+        feed.setDescription(event.getDescription());
+        feed.setCoverImageUrl(event.getCoverImageUrl());
+        feed.setStartDateTime(event.getStartDateTime());
+        feed.setEndDateTime(event.getEndDateTime());
+        feed.setHashtag(event.getHashtag());
+        feed.setEventWebsiteUrl(event.getEventWebsiteUrl());
+        
+        // Build pagination
+        int page = request != null && request.getPage() != null ? request.getPage() : 0;
+        int size = request != null && request.getSize() != null ? request.getSize() : 20;
+        size = Math.min(50, Math.max(1, size)); // Enforce max page size
+        
+        // Aggregate all posts from various sources
+        List<FeedPost> allPosts = aggregateAllFeedPosts(event, user, request);
+        
+        // Calculate pagination
+        long totalPosts = allPosts.size();
+        int totalPages = (int) Math.ceil((double) totalPosts / size);
+        int start = page * size;
+        int end = Math.min(start + size, allPosts.size());
+        
+        // Get paginated subset
+        List<FeedPost> paginatedPosts = start < allPosts.size() 
+            ? allPosts.subList(start, end) 
+            : new ArrayList<>();
+        
+        // Set posts and pagination metadata
+        feed.setPosts(paginatedPosts);
+        feed.setCurrentPage(page);
+        feed.setPageSize(size);
+        feed.setTotalPosts(totalPosts);
+        feed.setTotalPages(totalPages);
+        feed.setHasNext(page < totalPages - 1);
+        feed.setHasPrevious(page > 0);
+        feed.setScope(EventScope.FEED); // Feed view response
+        
+        return feed;
+    }
+
+    /**
+     * Overloaded method for backward compatibility (no pagination)
+     */
+    public EventFeedResponse toFeedResponse(Event event, UserPrincipal user) {
+        EventFeedRequest request = new EventFeedRequest();
+        request.setPage(0);
+        request.setSize(20);
+        return toFeedResponse(event, user, request);
+    }
+
+    /**
+     * Aggregate all feed posts from internal sources only
+     * @param event The event entity
+     * @param user The user principal
+     * @param request The feed request with filters
+     * @return List of all feed posts (before pagination)
+     */
+    private List<FeedPost> aggregateAllFeedPosts(Event event, UserPrincipal user, EventFeedRequest request) {
+        List<FeedPost> posts = new ArrayList<>();
+        
+        // TODO: Implement actual feed aggregation
+        // 1. Get event media and convert to posts
+        // 2. Get user-generated content from internal app
+        
+        // Apply filters if specified
+        if (request != null && request.getPostType() != null && !request.getPostType().equals("ALL")) {
+            posts = posts.stream()
+                .filter(post -> request.getPostType().equalsIgnoreCase(post.getType()))
+                .collect(Collectors.toList());
+        }
+        
+        // Sort by posted date (newest first)
+        posts.sort(Comparator.comparing(FeedPost::getPostedAt, 
+            Comparator.nullsLast(Comparator.reverseOrder())));
+        
+        return posts;
+    }
+
+    /**
+     * Build event feed with pagination (always returns feed, regardless of user role)
+     * This is for the separate /feed endpoint
+     * @param eventId The event ID
+     * @param user The user principal
+     * @param request The feed request with pagination
+     * @return EventFeedResponse with paginated posts
+     */
+    public EventFeedResponse buildEventFeed(UUID eventId, UserPrincipal user, EventFeedRequest request) {
+        Optional<Event> eventOpt = getByIdWithAccessControl(eventId, user);
+        if (eventOpt.isEmpty()) {
+            throw new IllegalArgumentException("Event not found or access denied");
+        }
+        
+        return toFeedResponse(eventOpt.get(), user, request);
     }
 
 }

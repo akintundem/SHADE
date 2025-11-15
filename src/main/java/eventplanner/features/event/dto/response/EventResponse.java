@@ -2,6 +2,7 @@ package eventplanner.features.event.dto.response;
 
 import eventplanner.common.domain.enums.EventStatus;
 import eventplanner.common.domain.enums.EventType;
+import eventplanner.common.domain.enums.EventScope;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
@@ -118,4 +119,7 @@ public class EventResponse {
 
     @Schema(description = "Last updated timestamp")
     private LocalDateTime updatedAt;
+
+    @Schema(description = "Event scope: FULL (full details) or FEED (feed view)", example = "FULL")
+    private EventScope scope = EventScope.FULL;
 }

@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.features.event.dto.request.CreateEventRequest;
 import eventplanner.features.event.dto.request.EventListRequest;
 import eventplanner.features.event.dto.request.UpdateEventRequest;
+import eventplanner.features.event.dto.request.EventFeedRequest;
 import eventplanner.features.event.dto.response.EventResponse;
+import eventplanner.features.event.dto.response.EventFeedResponse;
+import eventplanner.common.domain.enums.EventScope;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.service.EventIdempotencyService;
 import eventplanner.features.event.service.EventService;
@@ -30,6 +33,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
@@ -80,31 +84,41 @@ public class EventCrudController {
 
     @GetMapping("/{id}")
     @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
-    @Operation(summary = "Get event by ID", description = "Retrieve a specific event by its unique identifier. Only accessible if event is public, user is owner, or user has appropriate role.")
+    @Operation(summary = "Get event by ID", description = "Retrieve a specific event by its unique identifier. Returns full details for owners/high-responsibility users, or feed view for guests.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event found",
-                content = @Content(schema = @Schema(implementation = EventResponse.class))),
+                content = @Content(schema = @Schema(oneOf = {EventResponse.class, EventFeedResponse.class}))),
         @ApiResponse(responseCode = "404", description = "Event not found or access denied"),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
         @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions")
     })
-    public ResponseEntity<EventResponse> get(
+    public ResponseEntity<?> get(
             @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal user) {
+            @AuthenticationPrincipal UserPrincipal user,
+            @Parameter(description = "Feed pagination (only used for guest users)") 
+            @ModelAttribute @Valid EventFeedRequest feedRequest) {
         Optional<Event> found = eventService.getByIdWithAccessControl(id, user);
-        return found
-                .map(eventService::toResponse)
-                .map(response -> {
-                    ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
-                    // Include ETag header with version for optimistic locking
-                    found.ifPresent(event -> {
-                        if (event.getVersion() != null) {
-                            builder.eTag(String.valueOf(event.getVersion()));
-                        }
-                    });
-                    return builder.body(response);
-                })
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        if (found.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        Event event = found.get();
+        EventScope scope = eventService.determineEventScope(user, id);
+        
+        if (scope == EventScope.FULL) {
+            // Return full event details for owners/high-responsibility users
+            EventResponse response = eventService.toResponse(event);
+            ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
+            if (event.getVersion() != null) {
+                builder.eTag(String.valueOf(event.getVersion()));
+            }
+            return builder.body(response);
+        } else {
+            // Return feed view for guests/low-responsibility users (with pagination)
+            EventFeedRequest request = feedRequest != null ? feedRequest : new EventFeedRequest();
+            EventFeedResponse feedResponse = eventService.toFeedResponse(event, user, request);
+            return ResponseEntity.ok(feedResponse);
+        }
     }
 
     @PostMapping
@@ -374,6 +388,24 @@ public class EventCrudController {
         } catch (AccessDeniedException ex) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
         }
+    }
+
+    @GetMapping("/{id}/feed")
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+    @Operation(summary = "Get event feed", description = "Get the social feed for an event (videos, pictures, tweets) with pagination. Available to all users with event access. Use page parameter to load more posts.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Event feed retrieved successfully",
+                content = @Content(schema = @Schema(implementation = EventFeedResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Event not found or access denied"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    public ResponseEntity<EventFeedResponse> getFeed(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal user,
+            @ModelAttribute @Valid EventFeedRequest request) {
+        EventFeedRequest feedRequest = request != null ? request : new EventFeedRequest();
+        EventFeedResponse feedResponse = eventService.buildEventFeed(id, user, feedRequest);
+        return ResponseEntity.ok(feedResponse);
     }
 
 }
