@@ -17,7 +17,4 @@ public class LoginRequest {
     private String password;
 
     private boolean rememberMe;
-
-    @Size(max = 120)
-    private String deviceId;
 }
