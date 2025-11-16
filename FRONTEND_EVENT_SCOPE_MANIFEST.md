@@ -1,8 +1,17 @@
 # Event Scope & Feed Feature - Frontend Integration Guide
 
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Last Updated:** November 15, 2025  
 **Feature Branch:** `feature/event-scope-feed-pagination`
+
+## ⚠️ Important: Infinite Loop Fixes
+
+**Version 1.1.0** includes critical fixes for "Maximum update depth exceeded" errors:
+- Fixed missing dependencies in `useEffect` and `useCallback` hooks
+- Added cleanup functions to prevent state updates after unmount
+- Fixed token dependency issues in hooks
+- Improved duplicate post prevention in feed pagination
+- Added proper memoization to prevent unnecessary re-renders
 
 ---
 
@@ -256,16 +265,34 @@ Create separate components for each scope:
 ```typescript
 // components/events/EventDetailView.tsx
 import React from 'react';
+import { useEvent } from '../../hooks/useEvent';
+import { FullEventDashboard } from './FullEventDashboard';
+import { EventFeedView } from './EventFeedView';
 
 interface Props {
-  eventData: EventData;
+  eventId: string;
+  token: string;
 }
 
-export const EventDetailView: React.FC<Props> = ({ eventData }) => {
-  if (isFullEventResponse(eventData)) {
-    return <FullEventDashboard event={eventData} />;
-  } else if (isFeedResponse(eventData)) {
-    return <EventFeedView feed={eventData} />;
+export const EventDetailView: React.FC<Props> = ({ eventId, token }) => {
+  const { eventData, loading, error, isFullScope, isFeedScope } = useEvent(eventId, token);
+
+  if (loading) {
+    return <div>Loading event...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error.message}</div>;
+  }
+
+  if (!eventData) {
+    return <div>Event not found</div>;
+  }
+
+  if (isFullScope) {
+    return <FullEventDashboard event={eventData as EventResponse} />;
+  } else if (isFeedScope) {
+    return <EventFeedView eventId={eventId} token={token} />;
   }
   
   return null;
@@ -306,46 +333,44 @@ export const FullEventDashboard: React.FC<Props> = ({ event }) => {
 
 ```typescript
 // components/events/EventFeedView.tsx
-import React, { useState, useEffect } from 'react';
-import { EventFeedResponse, FeedPost } from '../types';
+import React from 'react';
+import { useEventFeed } from '../../hooks/useEventFeed';
+import { FeedPostCard } from './FeedPostCard';
 
 interface Props {
-  feed: EventFeedResponse;
   eventId: string;
+  token: string;
 }
 
-export const EventFeedView: React.FC<Props> = ({ feed, eventId }) => {
-  const [posts, setPosts] = useState<FeedPost[]>(feed.posts);
-  const [currentPage, setCurrentPage] = useState(feed.currentPage);
-  const [hasNext, setHasNext] = useState(feed.hasNext);
-  const [loading, setLoading] = useState(false);
+export const EventFeedView: React.FC<Props> = ({ eventId, token }) => {
+  const { posts, hasNext, loadMore, loading, error } = useEventFeed(eventId, token);
 
-  // Load more posts (infinite scroll)
-  const loadMore = async () => {
-    if (!hasNext || loading) return;
-    
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `/api/v1/events/${eventId}/feed?page=${currentPage + 1}&size=20`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      const newFeed: EventFeedResponse = await response.json();
-      setPosts(prev => [...prev, ...newFeed.posts]);
-      setCurrentPage(newFeed.currentPage);
-      setHasNext(newFeed.hasNext);
-    } catch (error) {
-      console.error('Failed to load more posts:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (error) {
+    return <div>Error loading feed: {error.message}</div>;
+  }
+
+  return (
+    <div className="event-feed">
+      {/* Feed posts */}
+      <div className="feed-posts">
+        {posts.map(post => (
+          <FeedPostCard key={post.id} post={post} />
+        ))}
+      </div>
+
+      {/* Load more button */}
+      {hasNext && (
+        <button 
+          onClick={loadMore} 
+          disabled={loading}
+          className="load-more-btn"
+        >
+          {loading ? 'Loading...' : 'Load More Posts'}
+        </button>
+      )}
+    </div>
+  );
+};
 
   return (
     <div className="event-feed">
@@ -439,18 +464,28 @@ export const FeedPostCard: React.FC<Props> = ({ post }) => {
 
 ```typescript
 // hooks/useEvent.ts
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { EventData, EventResponse, EventFeedResponse } from '../types';
 
-export const useEvent = (eventId: string) => {
+export const useEvent = (eventId: string, token: string) => {
   const [eventData, setEventData] = useState<EventData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    // Prevent fetching if no token or eventId
+    if (!eventId || !token) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
     const fetchEvent = async () => {
       try {
         setLoading(true);
+        setError(null);
+        
         const response = await fetch(`/api/v1/events/${eventId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -458,28 +493,53 @@ export const useEvent = (eventId: string) => {
           }
         });
 
+        if (cancelled) return;
+
         if (!response.ok) {
           throw new Error(`Failed to fetch event: ${response.statusText}`);
         }
 
         const data: EventData = await response.json();
-        setEventData(data);
+        
+        if (!cancelled) {
+          setEventData(data);
+        }
       } catch (err) {
-        setError(err as Error);
+        if (!cancelled) {
+          setError(err as Error);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     fetchEvent();
-  }, [eventId]);
+
+    // Cleanup function to prevent state updates after unmount
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId, token]); // Include token in dependencies
+
+  // Memoize computed values to prevent unnecessary recalculations
+  const isFullScope = useMemo(() => 
+    eventData ? isFullEventResponse(eventData) : false,
+    [eventData]
+  );
+  
+  const isFeedScope = useMemo(() => 
+    eventData ? isFeedResponse(eventData) : false,
+    [eventData]
+  );
 
   return {
     eventData,
     loading,
     error,
-    isFullScope: eventData ? isFullEventResponse(eventData) : false,
-    isFeedScope: eventData ? isFeedResponse(eventData) : false
+    isFullScope,
+    isFeedScope
   };
 };
 ```
@@ -488,18 +548,26 @@ export const useEvent = (eventId: string) => {
 
 ```typescript
 // hooks/useEventFeed.ts
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { EventFeedResponse, FeedPost } from '../types';
 
-export const useEventFeed = (eventId: string, initialPage: number = 0) => {
+export const useEventFeed = (eventId: string, token: string, initialPage: number = 0) => {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [hasNext, setHasNext] = useState(false);
   const [hasPrevious, setHasPrevious] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  
+  // Use ref to track if initial load has happened
+  const hasInitialLoad = useRef(false);
 
   const loadFeed = useCallback(async (page: number, postType?: string) => {
+    // Prevent loading if already loading or no token/eventId
+    if (loading || !eventId || !token) {
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -529,10 +597,15 @@ export const useEventFeed = (eventId: string, initialPage: number = 0) => {
 
       const feedData: EventFeedResponse = await response.json();
       
+      // Prevent duplicate posts by checking IDs
       if (page === 0) {
         setPosts(feedData.posts);
       } else {
-        setPosts(prev => [...prev, ...feedData.posts]);
+        setPosts(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newPosts = feedData.posts.filter(p => !existingIds.has(p.id));
+          return [...prev, ...newPosts];
+        });
       }
       
       setCurrentPage(feedData.currentPage);
@@ -543,17 +616,28 @@ export const useEventFeed = (eventId: string, initialPage: number = 0) => {
     } finally {
       setLoading(false);
     }
-  }, [eventId]);
+  }, [eventId, token, loading]); // Include token and loading in dependencies
+
+  // Load initial feed on mount
+  useEffect(() => {
+    if (!hasInitialLoad.current && eventId && token) {
+      hasInitialLoad.current = true;
+      loadFeed(initialPage);
+    }
+  }, [eventId, token, initialPage, loadFeed]);
 
   const loadMore = useCallback(() => {
-    if (hasNext && !loading) {
+    if (hasNext && !loading && currentPage !== undefined) {
       loadFeed(currentPage + 1);
     }
   }, [hasNext, loading, currentPage, loadFeed]);
 
   const refresh = useCallback(() => {
-    loadFeed(0);
-  }, [loadFeed]);
+    hasInitialLoad.current = false;
+    setPosts([]);
+    setCurrentPage(initialPage);
+    loadFeed(initialPage);
+  }, [initialPage, loadFeed]);
 
   return {
     posts,
@@ -609,18 +693,18 @@ const eventData: EventData = await response.json();
 import { FlatList } from 'react-native';
 import { useEventFeed } from '../hooks/useEventFeed';
 
-export const EventFeedScreen = ({ eventId }: { eventId: string }) => {
-  const { posts, hasNext, loadMore, loading } = useEventFeed(eventId);
+export const EventFeedScreen = ({ eventId, token }: { eventId: string; token: string }) => {
+  const { posts, hasNext, loadMore, loading } = useEventFeed(eventId, token);
 
   const renderPost = ({ item }: { item: FeedPost }) => (
     <FeedPostCard post={item} />
   );
 
-  const handleEndReached = () => {
+  const handleEndReached = useCallback(() => {
     if (hasNext && !loading) {
       loadMore();
     }
-  };
+  }, [hasNext, loading, loadMore]);
 
   return (
     <FlatList
@@ -680,22 +764,31 @@ if (feed.hasNext && !loading) {
 loadMore(); // May cause unnecessary requests
 ```
 
-### 4. Cache Feed Data
+### 4. Cache Feed Data (Fixed - Prevents Infinite Loops)
 
 ```typescript
-// ✅ Good - Cache feed posts
+// ✅ Good - Cache feed posts with proper dependency management
 const [allPosts, setAllPosts] = useState<FeedPost[]>([]);
+const previousPostIds = useRef<Set<string>>(new Set());
 
 useEffect(() => {
   if (feed.posts.length > 0) {
     setAllPosts(prev => {
-      // Avoid duplicates
+      // Avoid duplicates using ref to track previous IDs
       const existingIds = new Set(prev.map(p => p.id));
       const newPosts = feed.posts.filter(p => !existingIds.has(p.id));
-      return [...prev, ...newPosts];
+      
+      // Update ref with new post IDs
+      newPosts.forEach(post => previousPostIds.current.add(post.id));
+      
+      // Only update if there are actually new posts
+      if (newPosts.length > 0) {
+        return [...prev, ...newPosts];
+      }
+      return prev; // Return same reference if no new posts
     });
   }
-}, [feed.posts]);
+}, [feed.posts.length]); // Only depend on length, not the array itself
 ```
 
 ---
