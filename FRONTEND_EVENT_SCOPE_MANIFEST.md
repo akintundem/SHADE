@@ -371,11 +371,24 @@ export const EventFeedView: React.FC<Props> = ({ eventId, token }) => {
     </div>
   );
 };
+```
+
+**Note:** If you need to display event header information, you can fetch it separately or pass it as a prop:
+
+```typescript
+// Alternative: EventFeedView with header
+export const EventFeedView: React.FC<Props> = ({ eventId, token, eventInfo }) => {
+  const { posts, hasNext, loadMore, loading, error } = useEventFeed(eventId, token);
+
+  if (error) {
+    return <div>Error loading feed: {error.message}</div>;
+  }
 
   return (
     <div className="event-feed">
       {/* Event header */}
-      <div className="feed-header">
+      {eventInfo && (
+        <div className="feed-header">
         <h1>{feed.eventName}</h1>
         <p>{feed.description}</p>
         {feed.coverImageUrl && (
