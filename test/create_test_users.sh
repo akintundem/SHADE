@@ -273,6 +273,13 @@ if [ -z "$ADMIN_DEVICE_ID" ]; then
     ADMIN_DEVICE_ID="test-device-$(date +%s | cut -c1-8)"
 fi
 
+# Unsplash image URLs for event and feed posts
+COVER_IMAGE_URL="https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1200&h=600&fit=crop&auto=format"
+FEED_IMAGE_1="https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&h=600&fit=crop&auto=format"
+FEED_IMAGE_2="https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&h=600&fit=crop&auto=format"
+FEED_IMAGE_3="https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=800&h=600&fit=crop&auto=format"
+FEED_VIDEO_THUMBNAIL="https://images.unsplash.com/photo-1478737270239-2f02b77fc618?w=800&h=600&fit=crop&auto=format"
+
 event_data="{
     \"name\": \"Test Event for Scope Feature\",
     \"description\": \"This is a test event to demonstrate the scope feature. Admin users see full details, guests see feed view.\",
@@ -283,7 +290,7 @@ event_data="{
     \"capacity\": 100,
     \"isPublic\": true,
     \"requiresApproval\": false,
-    \"coverImageUrl\": \"https://example.com/cover.jpg\",
+    \"coverImageUrl\": \"${COVER_IMAGE_URL}\",
     \"eventWebsiteUrl\": \"https://example.com/event\",
     \"hashtag\": \"#TestEvent2024\",
     \"venue\": {
@@ -344,11 +351,18 @@ if [ -n "$EVENT_ID" ]; then
     echo -e "   Event ID: ${GREEN}${EVENT_ID}${NC}"
     echo -e "   Name:     ${GREEN}Test Event for Scope Feature${NC}"
     echo -e "   Owner:    ${GREEN}${ADMIN_EMAIL}${NC}"
+    echo -e "   Cover:    ${GREEN}${COVER_IMAGE_URL}${NC}"
     echo ""
     echo -e "${CYAN}🔗 Test URLs:${NC}"
     echo -e "   Admin View:  ${GREEN}GET /api/v1/events/${EVENT_ID}${NC} (returns scope: FULL)"
     echo -e "   Guest View:  ${GREEN}GET /api/v1/events/${EVENT_ID}${NC} (returns scope: FEED)"
     echo -e "   Feed View:   ${GREEN}GET /api/v1/events/${EVENT_ID}/feed${NC} (always returns scope: FEED)"
+    echo ""
+    echo -e "${CYAN}🖼️  Sample Unsplash Images for Feed Posts:${NC}"
+    echo -e "   Image 1:   ${GREEN}${FEED_IMAGE_1}${NC}"
+    echo -e "   Image 2:   ${GREEN}${FEED_IMAGE_2}${NC}"
+    echo -e "   Image 3:   ${GREEN}${FEED_IMAGE_3}${NC}"
+    echo -e "   Video Thumb: ${GREEN}${FEED_VIDEO_THUMBNAIL}${NC}"
     echo ""
 fi
 
