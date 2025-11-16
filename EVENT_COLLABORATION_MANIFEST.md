@@ -41,11 +41,17 @@ The Event Collaboration feature allows event owners and administrators to manage
 
 ```typescript
 type EventUserType = 
-  | 'ORGANIZER'    // Full event management access
+  | 'ORGANIZER'      // Full event management access
   | 'COORDINATOR'    // Event coordination and planning
-  | 'STAFF'        // Event staff with limited permissions
-  | 'ATTENDEE'     // Regular attendee
-  | 'GUEST';       // Guest access
+  | 'STAFF'          // Event staff with limited permissions
+  | 'ATTENDEE'       // Regular attendee
+  | 'VOLUNTEER'      // Event volunteer
+  | 'VENDOR'         // Vendor/exhibitor
+  | 'SPEAKER'        // Event speaker
+  | 'SPONSOR'        // Event sponsor
+  | 'MEDIA'          // Media/press
+  | 'COLLABORATOR'   // General collaborator
+  | 'ADMIN';         // Event administrator
 ```
 
 ### Request DTOs
@@ -539,6 +545,12 @@ export const CollaboratorsList: React.FC<Props> = ({ eventId, token }) => {
                   <option value="ORGANIZER">Organizer</option>
                   <option value="COORDINATOR">Coordinator</option>
                   <option value="STAFF">Staff</option>
+                  <option value="COLLABORATOR">Collaborator</option>
+                  <option value="VOLUNTEER">Volunteer</option>
+                  <option value="VENDOR">Vendor</option>
+                  <option value="SPEAKER">Speaker</option>
+                  <option value="SPONSOR">Sponsor</option>
+                  <option value="MEDIA">Media</option>
                   <option value="ATTENDEE">Attendee</option>
                 </select>
                 
@@ -666,6 +678,12 @@ export const AddCollaboratorForm: React.FC<Props> = ({ eventId, token, onSuccess
             <option value="ORGANIZER">Organizer</option>
             <option value="COORDINATOR">Coordinator</option>
             <option value="STAFF">Staff</option>
+            <option value="COLLABORATOR">Collaborator</option>
+            <option value="VOLUNTEER">Volunteer</option>
+            <option value="VENDOR">Vendor</option>
+            <option value="SPEAKER">Speaker</option>
+            <option value="SPONSOR">Sponsor</option>
+            <option value="MEDIA">Media</option>
             <option value="ATTENDEE">Attendee</option>
           </select>
         </label>
@@ -870,7 +888,9 @@ const validateCollaboratorRequest = (request: EventCollaboratorRequest): string[
     errors.push('Valid email is required');
   }
 
-  if (!request.role || !['ORGANIZER', 'COORDINATOR', 'STAFF', 'ATTENDEE'].includes(request.role)) {
+  const validRoles = ['ORGANIZER', 'COORDINATOR', 'STAFF', 'COLLABORATOR', 'VOLUNTEER', 
+                      'VENDOR', 'SPEAKER', 'SPONSOR', 'MEDIA', 'ATTENDEE', 'ADMIN'];
+  if (!request.role || !validRoles.includes(request.role)) {
     errors.push('Valid role is required');
   }
 
