@@ -10,8 +10,6 @@ services:
       # Mount source code for hot-reload (changes reflect immediately!)
       - ./src:/app/src
       - ./pom.xml:/app/pom.xml
-      # Cache Maven dependencies to avoid re-downloading
-      - maven_cache:/root/.m2
     env_file:
       - .env
     environment:
@@ -85,9 +83,6 @@ services:
     restart: unless-stopped
     networks:
       - event-planner-network
-
-volumes:
-  maven_cache:  # Cache Maven dependencies for faster builds
 
 networks:
   event-planner-network:
