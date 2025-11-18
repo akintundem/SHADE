@@ -19,8 +19,6 @@ public enum RoleName {
     MC,
     SPEAKER,
     MODERATOR,
-    SPONSOR,
-    VENDOR,
     MEDIA,
     GUEST
 }

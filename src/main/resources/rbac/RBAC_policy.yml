@@ -1166,6 +1166,7 @@ policy:
         - auth.logout
         - auth.me
         - auth.refresh
+        - event.create
         - organization.create
         - organization.search
         - vendor.create
