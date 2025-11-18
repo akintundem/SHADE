@@ -1,57 +1,4 @@
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15
-    container_name: event-planner-postgres
-    environment:
-      POSTGRES_DB: ${DB_NAME:-eventplanner}
-      POSTGRES_USER: ${DB_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-eventplanner}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - event-planner-network
-
-  # Redis Cache
-  redis:
-    image: redis:7-alpine
-    container_name: event-planner-redis
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - event-planner-network
-
-  # MongoDB
-  mongodb:
-    image: mongo:7
-    container_name: event-planner-mongodb
-    command:
-      - mongod
-      - --quiet
-    environment:
-      MONGO_INITDB_DATABASE: ${MONGODB_INITDB:-event_planner}
-    volumes:
-      - mongodb_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - event-planner-network
-
   # Java Spring Boot Application
   java-app:
     build: .
@@ -65,34 +12,37 @@ services:
       - ./pom.xml:/app/pom.xml
       # Cache Maven dependencies to avoid re-downloading
       - maven_cache:/root/.m2
+    env_file:
+      - ${ENV_FILE:-.env.dev}
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       # Enable Spring Boot DevTools for hot-reload
       SPRING_DEVTOOLS_RESTART_ENABLED: "true"
       SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "true"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: "2s"
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: "1s"
 
-      # Database — will use Railway's DATABASE_URL if present, else local defaults
+      # Database — uses Railway's DATABASE_URL or external database
       DATABASE_URL: ${DATABASE_URL:-}
-      DB_HOST: ${DB_HOST:-postgres}
+      DB_HOST: ${DB_HOST:-}
       DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${DB_NAME:-eventplanner}
-      DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-}
+      DB_USERNAME: ${DB_USERNAME:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
       DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-20}
       DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-5}
       DB_CONNECTION_TIMEOUT: ${DB_CONNECTION_TIMEOUT:-30000}
       DB_IDLE_TIMEOUT: ${DB_IDLE_TIMEOUT:-600000}
       DB_MAX_LIFETIME: ${DB_MAX_LIFETIME:-1800000}
 
-      # Redis — will use Railway's REDIS_URL if present, else local fallback
+      # Redis — uses Railway's REDIS_URL or external Redis
       REDIS_URL: ${REDIS_URL:-}
-      SPRING_REDIS_HOST: ${SPRING_REDIS_HOST:-redis}
+      SPRING_REDIS_HOST: ${SPRING_REDIS_HOST:-}
       SPRING_REDIS_PORT: ${SPRING_REDIS_PORT:-6379}
+      SPRING_REDIS_PASSWORD: ${SPRING_REDIS_PASSWORD:-}
 
-      # MongoDB — uses MONGODB_URL if set, otherwise internal DNS
-      MONGODB_URL: ${MONGODB_URL:-mongodb://mongodb:27017/event_planner}
+      # MongoDB — uses MONGODB_URL or external MongoDB
+      MONGODB_URL: ${MONGODB_URL:-}
 
       # JWT + Logging
       JWT_SECRET: ${JWT_SECRET}
@@ -103,20 +53,6 @@ services:
       CACHE_MAX_SIZE: ${CACHE_MAX_SIZE:-1000}
       CACHE_EXPIRE_AFTER_WRITE: ${CACHE_EXPIRE_AFTER_WRITE:-300s}
 
-      # Internal Assistant + AI keys
-      INTERNAL_ASSISTANT_SECRET: ${INTERNAL_ASSISTANT_SECRET}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
-      OPENAI_CHAT_TEMPERATURE: ${OPENAI_CHAT_TEMPERATURE:-0.4}
-      OPENAI_CHAT_MAX_TOKENS: ${OPENAI_CHAT_MAX_TOKENS:-1000}
-      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
-      OPENAI_EMBEDDING_DIMENSIONS: ${OPENAI_EMBEDDING_DIMENSIONS:-1536}
-      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
-      PINECONE_ENVIRONMENT: ${PINECONE_ENVIRONMENT:-local}
-      PINECONE_PROJECT: ${PINECONE_PROJECT:-local-project}
-      PINECONE_INDEX: ${PINECONE_INDEX:-event-templates}
-      PINECONE_VECTORSTORE_INDEX: ${PINECONE_VECTORSTORE_INDEX:-event-templates}
-      PINECONE_VECTORSTORE_NAMESPACE: ${PINECONE_VECTORSTORE_NAMESPACE:-event-planning}
       FIREBASE_SERVICE_ACCOUNT_KEY_PATH: ${FIREBASE_SERVICE_ACCOUNT_KEY_PATH:-}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
@@ -130,16 +66,8 @@ services:
       API_TITLE: ${API_TITLE:-Event Planner API}
       API_DESCRIPTION: ${API_DESCRIPTION:-AI-powered event planning platform}
       API_VERSION: ${API_VERSION:-1.0.0}
-      SHADE_ASSISTANT_URL: ${SHADE_ASSISTANT_URL:-http://python-app:8000}
       WEATHER_BASE_URL: ${WEATHER_BASE_URL:-http://localhost:8089}
 
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
     # Extended startup time for Maven build on first run
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
@@ -151,33 +79,7 @@ services:
     networks:
       - event-planner-network
 
-  # Python AI Assistant (optional)
-  python-app:
-    build:
-      context: ./shade
-      dockerfile: Dockerfile
-    container_name: event-planner-python
-    ports:
-      - "8000:8000"
-    environment:
-      MONGODB_URL: ${MONGODB_URL:-mongodb://mongodb:27017/event_planner}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-    depends_on:
-      java-app:
-        condition: service_started
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-    profiles:
-      - assistant
-    networks:
-      - event-planner-network
-
 volumes:
-  redis_data:
-  mongodb_data:
   maven_cache:  # Cache Maven dependencies for faster builds
 
 networks:

@@ -1,0 +1,43 @@
+# Development Dockerfile for Railway deployment
+# Multi-stage build optimized for development
+
+# Stage 1: Build the application
+FROM maven:3.9.6-eclipse-temurin-17 AS build
+
+WORKDIR /app
+
+# Copy pom.xml first to cache dependencies
+COPY pom.xml .
+
+# Download dependencies (will use cache if pom.xml doesn't change)
+RUN mvn dependency:go-offline -B || true
+
+# Copy source code
+COPY src ./src
+
+# Build the application (skip tests for faster builds in dev)
+RUN mvn clean package -DskipTests -B
+
+# Stage 2: Runtime image
+FROM eclipse-temurin:17-jre-alpine
+
+WORKDIR /app
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy the built JAR from build stage
+COPY --from=build /app/target/event-planner-monolith-1.0.0.jar app.jar
+
+# Expose port (Railway will set PORT env var, but we default to 8080)
+EXPOSE ${PORT:-8080}
+
+# Health check with longer start period for dev
+HEALTHCHECK --interval=30s --timeout=3s --start-period=120s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-8080}/actuator/health || exit 1
+
+# Run the application
+# Railway sets PORT environment variable, but Spring Boot uses server.port
+# Development profile enabled for better debugging
+ENTRYPOINT ["sh", "-c", "java -jar -Dserver.port=${PORT:-8080} -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-dev} app.jar"]
+
