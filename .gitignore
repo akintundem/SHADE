@@ -18,6 +18,8 @@
 
 # Environment & credentials
 .env
+.env.dev
+.env.prod
 # Allow .env.example to be committed as a template
 !.env.example
 *.env
