@@ -13,7 +13,7 @@ services:
       # Cache Maven dependencies to avoid re-downloading
       - maven_cache:/root/.m2
     env_file:
-      - ${ENV_FILE:-.env.prod}
+      - ${ENV_FILE:-.env}
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       # Enable Spring Boot DevTools for hot-reload
