@@ -112,12 +112,21 @@ public class SecurityConfig {
             .httpBasic(httpBasic -> httpBasic.disable())
             .formLogin(formLogin -> formLogin.disable())
             .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationErrorHandler))
-            .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(serviceApiKeyFilter, JwtAuthenticationFilter.class)
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(rateLimitingFilter, JwtAuthenticationFilter.class)
-            .addFilterAfter(rbacContextFilter, JwtAuthenticationFilter.class)
-            .addFilterBefore(deviceValidationFilter, UsernamePasswordAuthenticationFilter.class);
+            // Register custom filters with explicit anchors so Spring knows their order.
+            // Execution order (outermost -> innermost):
+            // 1. SecurityHeadersFilter
+            // 2. RateLimitingFilter
+            // 3. ServiceApiKeyFilter
+            // 4. JwtAuthenticationFilter
+            // 5. DeviceValidationFilter
+            // 6. RbacContextFilter
+            // 7. UsernamePasswordAuthenticationFilter (Spring Security)
+            .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)     // 1
+            .addFilterAfter(rateLimitingFilter, SecurityHeadersFilter.class)                        // 2
+            .addFilterAfter(serviceApiKeyFilter, RateLimitingFilter.class)                          // 3
+            .addFilterAfter(jwtAuthenticationFilter, ServiceApiKeyFilter.class)                     // 4
+            .addFilterAfter(deviceValidationFilter, JwtAuthenticationFilter.class)                  // 5
+            .addFilterAfter(rbacContextFilter, DeviceValidationFilter.class);                       // 6
 
         return http.build();
     }

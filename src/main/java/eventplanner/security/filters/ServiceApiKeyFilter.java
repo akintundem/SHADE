@@ -7,8 +7,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.Ordered;
-import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -19,7 +17,6 @@ import java.util.Map;
 
 @Component
 @Slf4j
-@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class ServiceApiKeyFilter extends OncePerRequestFilter {
 
     @Value("${service.auth.api-key:}")

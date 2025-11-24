@@ -10,7 +10,6 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,7 +28,6 @@ import java.util.regex.Pattern;
  * This provides proper protection against abuse by individual users
  */
 @Component
-@Order(3)
 @RequiredArgsConstructor
 public class RateLimitingFilter implements Filter {
 
