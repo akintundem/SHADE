@@ -126,7 +126,14 @@ auth:
 app:
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
-  base-url: ${APP_BASE_URL:http://localhost:8080} 
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+
+# Service Authentication (for AI service and other internal services)
+service:
+  auth:
+    enabled: ${SERVICE_AUTH_ENABLED:true}
+    api-key: ${SERVICE_API_KEY:}
+ 
 
 # Branded QR code rendering defaults
 qr-code:

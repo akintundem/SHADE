@@ -6,6 +6,7 @@ import eventplanner.security.filters.DeviceValidationFilter;
 import eventplanner.security.filters.RateLimitingFilter;
 import eventplanner.security.filters.SecurityHeadersFilter;
 import eventplanner.security.filters.RbacContextFilter;
+import eventplanner.security.filters.ServiceApiKeyFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,19 +41,22 @@ public class SecurityConfig {
     private final DeviceValidationFilter deviceValidationFilter;
     private final RateLimitingFilter rateLimitingFilter;
     private final RbacContextFilter rbacContextFilter;
+    private final ServiceApiKeyFilter serviceApiKeyFilter;
 
     public SecurityConfig(SecurityHeadersFilter securityHeadersFilter,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
                           JwtAuthenticationErrorHandler authenticationErrorHandler,
                           DeviceValidationFilter deviceValidationFilter,
                           RateLimitingFilter rateLimitingFilter,
-                          RbacContextFilter rbacContextFilter) {
+                          RbacContextFilter rbacContextFilter,
+                          ServiceApiKeyFilter serviceApiKeyFilter) {
         this.securityHeadersFilter = securityHeadersFilter;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authenticationErrorHandler = authenticationErrorHandler;
         this.deviceValidationFilter = deviceValidationFilter;
         this.rateLimitingFilter = rateLimitingFilter;
         this.rbacContextFilter = rbacContextFilter;
+        this.serviceApiKeyFilter = serviceApiKeyFilter;
     }
 
     @Bean
@@ -109,6 +113,7 @@ public class SecurityConfig {
             .formLogin(formLogin -> formLogin.disable())
             .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationErrorHandler))
             .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(serviceApiKeyFilter, JwtAuthenticationFilter.class)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(rateLimitingFilter, JwtAuthenticationFilter.class)
             .addFilterAfter(rbacContextFilter, JwtAuthenticationFilter.class)
