@@ -20,11 +20,11 @@ import java.util.UUID;
 public class SendInvitesRequest {
 
     @NotNull(message = "Event ID is required")
-    @Schema(description = "Event ID", example = "123e4567-e89b-12d3-a456-426614174000", required = true)
+    @Schema(description = "Event ID", example = "123e4567-e89b-12d3-a456-426614174000", requiredMode = Schema.RequiredMode.REQUIRED)
     private UUID eventId;
 
     @NotEmpty(message = "Attendee IDs list cannot be empty")
-    @Schema(description = "List of attendee IDs to send invitations to", required = true)
+    @Schema(description = "List of attendee IDs to send invitations to", requiredMode = Schema.RequiredMode.REQUIRED)
     private List<UUID> attendeeIds;
 
     @Schema(description = "Custom message to include in the invitation", example = "You're invited to our special event!")

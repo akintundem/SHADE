@@ -14,7 +14,7 @@ import lombok.Setter;
 public class EventVisibilityUpdateRequest {
 
     @NotNull(message = "Public status is required")
-    @Schema(description = "Whether the event is public", example = "true", required = true)
+    @Schema(description = "Whether the event is public", example = "true", requiredMode = Schema.RequiredMode.REQUIRED)
     private Boolean isPublic;
 
     @Schema(description = "Whether the event requires approval", example = "false")

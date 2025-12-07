@@ -18,7 +18,7 @@ public class WorkbackRequest {
 
     @NotBlank(message = "Event date is required")
     @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "Event date must be in YYYY-MM-DD format")
-    @Schema(description = "Event date in ISO-8601 format", example = "2024-06-15", required = true)
+    @Schema(description = "Event date in ISO-8601 format", example = "2024-06-15", requiredMode = Schema.RequiredMode.REQUIRED)
     private String eventDate;
 
     @Schema(description = "Event type for customized milestones", example = "wedding")

@@ -15,6 +15,6 @@ import lombok.Setter;
 public class EventStatusUpdateRequest {
 
     @NotNull(message = "Event status is required")
-    @Schema(description = "New event status", example = "PUBLISHED", required = true)
+    @Schema(description = "New event status", example = "PUBLISHED", requiredMode = Schema.RequiredMode.REQUIRED)
     private EventStatus eventStatus;
 }

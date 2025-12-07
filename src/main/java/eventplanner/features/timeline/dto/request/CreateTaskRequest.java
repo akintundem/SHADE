@@ -26,12 +26,12 @@ import java.util.UUID;
 public class CreateTaskRequest {
     
     @NotNull(message = "Event ID is required")
-    @Schema(description = "Event ID this task belongs to", required = true, example = "123e4567-e89b-12d3-a456-426614174000")
+    @Schema(description = "Event ID this task belongs to", requiredMode = Schema.RequiredMode.REQUIRED, example = "123e4567-e89b-12d3-a456-426614174000")
     private UUID eventId;
     
     @NotBlank(message = "Title is required")
     @Size(max = 255, message = "Title must not exceed 255 characters")
-    @Schema(description = "Task title", required = true, example = "Venue Setup")
+    @Schema(description = "Task title", requiredMode = Schema.RequiredMode.REQUIRED, example = "Venue Setup")
     private String title;
     
     @Size(max = 2000, message = "Description must not exceed 2000 characters")

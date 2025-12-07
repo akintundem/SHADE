@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 public class UpdateTaskPositionRequest {
     
     @NotNull(message = "Start date is required")
-    @Schema(description = "New start date and time", required = true, example = "2024-05-09T10:00:00")
+    @Schema(description = "New start date and time", requiredMode = Schema.RequiredMode.REQUIRED, example = "2024-05-09T10:00:00")
     private LocalDateTime startDate;
     
     @Schema(description = "New end date and time", example = "2024-05-12T18:00:00")

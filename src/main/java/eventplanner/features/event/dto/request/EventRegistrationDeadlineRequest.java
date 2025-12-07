@@ -16,6 +16,6 @@ import java.time.LocalDateTime;
 public class EventRegistrationDeadlineRequest {
 
     @NotNull(message = "Registration deadline is required")
-    @Schema(description = "New registration deadline", example = "2024-06-10T23:59:59", required = true)
+    @Schema(description = "New registration deadline", example = "2024-06-10T23:59:59", requiredMode = Schema.RequiredMode.REQUIRED)
     private LocalDateTime deadline;
 }

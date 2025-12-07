@@ -16,7 +16,7 @@ public class EventDuplicateRequest {
 
     @NotBlank(message = "New event name is required")
     @Size(max = 255, message = "Event name must not exceed 255 characters")
-    @Schema(description = "Name for the duplicated event", example = "Copy of Annual Conference", required = true)
+    @Schema(description = "Name for the duplicated event", example = "Copy of Annual Conference", requiredMode = Schema.RequiredMode.REQUIRED)
     private String newEventName;
 
     @Schema(description = "Whether to copy attendees", example = "false")

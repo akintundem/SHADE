@@ -24,7 +24,7 @@ import java.util.UUID;
 public class BulkUpdateTaskRequest {
     
     @NotEmpty(message = "At least one update is required")
-    @Schema(description = "List of task updates", required = true)
+    @Schema(description = "List of task updates", requiredMode = Schema.RequiredMode.REQUIRED)
     private List<@Valid TaskUpdate> updates;
     
     /**
@@ -38,7 +38,7 @@ public class BulkUpdateTaskRequest {
     public static class TaskUpdate {
         
         @NotNull(message = "Task ID is required")
-        @Schema(description = "Task ID to update", required = true)
+        @Schema(description = "Task ID to update", requiredMode = Schema.RequiredMode.REQUIRED)
         private UUID taskId;
         
         @Schema(description = "New start date")

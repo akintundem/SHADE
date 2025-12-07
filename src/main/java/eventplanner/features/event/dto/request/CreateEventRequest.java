@@ -22,7 +22,7 @@ public class CreateEventRequest {
 
     @NotBlank(message = "Event name is required")
     @Size(max = 255, message = "Event name must not exceed 255 characters")
-    @Schema(description = "Name of the event", example = "Annual Company Conference", required = true)
+    @Schema(description = "Name of the event", example = "Annual Company Conference", requiredMode = Schema.RequiredMode.REQUIRED)
     private String name;
 
     @Size(max = 10000, message = "Description is too long")
@@ -30,7 +30,7 @@ public class CreateEventRequest {
     private String description;
 
     @NotNull(message = "Event type is required")
-    @Schema(description = "Type of the event", example = "CONFERENCE", required = true)
+    @Schema(description = "Type of the event", example = "CONFERENCE", requiredMode = Schema.RequiredMode.REQUIRED)
     private EventType eventType;
 
     @Schema(description = "Status of the event", example = "PLANNING")

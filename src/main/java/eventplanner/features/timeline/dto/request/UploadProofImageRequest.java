@@ -18,7 +18,7 @@ import lombok.NoArgsConstructor;
 public class UploadProofImageRequest {
     
     @NotBlank(message = "Image URL is required")
-    @Schema(description = "URL of the uploaded proof image", required = true, example = "https://storage.example.com/proofs/task-123/image.jpg")
+    @Schema(description = "URL of the uploaded proof image", requiredMode = Schema.RequiredMode.REQUIRED, example = "https://storage.example.com/proofs/task-123/image.jpg")
     private String imageUrl;
     
     @Schema(description = "Description of the proof")

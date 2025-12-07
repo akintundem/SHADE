@@ -16,6 +16,6 @@ public class EventCapacityUpdateRequest {
 
     @NotNull(message = "Capacity is required")
     @Min(value = 0, message = "Capacity must be non-negative")
-    @Schema(description = "New event capacity", example = "200", required = true)
+    @Schema(description = "New event capacity", example = "200", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer capacity;
 }
