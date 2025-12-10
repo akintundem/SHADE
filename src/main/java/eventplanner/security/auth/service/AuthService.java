@@ -32,6 +32,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -59,6 +60,7 @@ public class AuthService {
     private final RegistrationValidator registrationValidator;
     private final EnvironmentUtil environmentUtil;
     private final RateLimitingService rateLimitingService;
+    private final ProfileImageService profileImageService;
     private final eventplanner.common.audit.service.AuditLogService auditLogService;
     private final JwtValidationUtil jwtValidationUtil;
 
@@ -91,6 +93,7 @@ public class AuthService {
                        RegistrationValidator registrationValidator,
                        EnvironmentUtil environmentUtil,
                        RateLimitingService rateLimitingService,
+                       ProfileImageService profileImageService,
                        eventplanner.common.audit.service.AuditLogService auditLogService,
                        JwtValidationUtil jwtValidationUtil) {
         this.userAccountRepository = userAccountRepository;
@@ -102,6 +105,7 @@ public class AuthService {
         this.registrationValidator = registrationValidator;
         this.environmentUtil = environmentUtil;
         this.rateLimitingService = rateLimitingService;
+        this.profileImageService = profileImageService;
         this.auditLogService = auditLogService;
         this.jwtValidationUtil = jwtValidationUtil;
     }
@@ -553,6 +557,10 @@ public class AuthService {
         user.setAcceptTerms(true);
         user.setAcceptPrivacy(true);
         user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
+        String profileImageUrl = safeTrim(request.getProfileImageUrl());
+        if (StringUtils.hasText(profileImageUrl)) {
+            user.setProfileImageUrl(profileImageService.normalizeResourceUrl(profileImageUrl));
+        }
         user.setProfileCompleted(true);
         userAccountRepository.save(user);
         

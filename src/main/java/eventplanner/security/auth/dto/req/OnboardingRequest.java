@@ -24,6 +24,9 @@ public class OnboardingRequest {
     @Pattern(regexp = "^\\+?[0-9 .\\-]{7,20}$", message = "Phone number must be valid")
     private String phoneNumber;
 
+    @Size(max = 500, message = "Profile image URL is too long")
+    private String profileImageUrl;
+
     @Past(message = "Date of birth must be in the past")
     private LocalDate dateOfBirth;
 
@@ -35,4 +38,3 @@ public class OnboardingRequest {
 
     private Boolean marketingOptIn = Boolean.FALSE;
 }
-
