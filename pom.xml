@@ -19,6 +19,7 @@
         <java.version>17</java.version>
         <springdoc.version>2.5.0</springdoc.version>
         <testcontainers.version>1.19.8</testcontainers.version>
+        <aws.sdk.version>2.25.61</aws.sdk.version>
     </properties>
 
     <dependencies>
@@ -89,6 +90,13 @@
             </exclusions>
         </dependency>
         
+        <!-- AWS S3 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+
         <!-- Resend Email Service - Using Spring Web's RestTemplate -->
 
         <!-- Database -->

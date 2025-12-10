@@ -101,6 +101,17 @@ assistant:
   service:
     base-url: ${SHADE_ASSISTANT_URL:http://python-app:8000}
 
+aws:
+  s3:
+    access-key-id: ${AWS_ACCESS_KEY_ID:}
+    secret-access-key: ${AWS_SECRET_ACCESS_KEY:}
+    region: ${AWS_REGION:}
+    buckets:
+      user: ${AWS_S3_USER_BUCKET:}
+      event: ${AWS_S3_EVENT_BUCKET:}
+    endpoint: ${AWS_S3_ENDPOINT:}
+    path-style-access-enabled: ${AWS_S3_PATH_STYLE:false}
+
 # Firebase Configuration
 firebase:
   service-account-key-path: ${FIREBASE_SERVICE_ACCOUNT_KEY_PATH}
