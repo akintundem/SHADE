@@ -440,14 +440,6 @@ public class EventService {
     }
 
     /**
-     * Delete event by ID (hard delete - use archive instead)
-     * @param id The event ID
-     */
-    public void delete(UUID id) {
-        eventRepository.deleteById(id);
-    }
-
-    /**
      * List events with pagination and filtering
      * @param request The list request with filters
      * @param user The user principal for access control

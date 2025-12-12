@@ -1057,7 +1057,7 @@ EOF
     echo "==============================="
     
     if [ -n "$EVENT_ID" ]; then
-        run_test "Delete Test Event" "DELETE" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete test event"
+        run_test "Archive Test Event" "POST" "/api/v1/events/$EVENT_ID/archive" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Archive test event"
     fi
     echo ""
     

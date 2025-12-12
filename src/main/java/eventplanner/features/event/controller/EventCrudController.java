@@ -339,57 +339,6 @@ public class EventCrudController {
         }
     }
 
-    @DeleteMapping("/{id}")
-    @RequiresPermission(value = RbacPermissions.EVENT_DELETE, resources = {"event_id=#id"})
-    @Operation(summary = "Delete event (hard delete)", description = "Permanently delete an event. Consider using archive endpoint instead for recoverable removal. Supports If-Match header for optimistic locking.")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "204", description = "Event deleted successfully"),
-        @ApiResponse(responseCode = "404", description = "Event not found"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
-        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions"),
-        @ApiResponse(responseCode = "409", description = "Conflict - Event version mismatch (optimistic locking)")
-    })
-    public ResponseEntity<Void> delete(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal principal,
-            @RequestHeader(value = "If-Match", required = false) String ifMatch) {
-        try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
-            
-            Optional<Event> existingEvent = eventService.getById(id);
-            if (existingEvent.isEmpty()) {
-                return ResponseEntity.notFound().build();
-            }
-            
-            // Verify ownership or admin access
-            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
-                throw new AccessDeniedException("Only event owners or admins can delete events");
-            }
-            
-            // Check version if If-Match header is provided
-            if (StringUtils.hasText(ifMatch)) {
-                try {
-                    Long expectedVersion = Long.parseLong(ifMatch);
-                    if (!expectedVersion.equals(existingEvent.get().getVersion())) {
-                        throw new ResponseStatusException(HttpStatus.CONFLICT, 
-                                "Event has been modified by another user. Please refresh and try again.");
-                    }
-                } catch (NumberFormatException e) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid If-Match header format");
-                }
-            }
-            
-            eventService.delete(id);
-            return ResponseEntity.noContent().build();
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        } catch (AccessDeniedException ex) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
-        }
-    }
-
     @GetMapping("/{id}/feed")
     @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
     @Operation(summary = "Get event feed", description = "Get the social feed for an event (videos, pictures, tweets) with pagination. Available to all users with event access. Use page parameter to load more posts.")
