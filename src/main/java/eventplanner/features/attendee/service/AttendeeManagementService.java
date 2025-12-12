@@ -5,6 +5,7 @@ import eventplanner.features.attendee.dto.request.*;
 import eventplanner.features.attendee.dto.response.*;
 import eventplanner.features.attendee.entity.EventAttendance;
 import eventplanner.features.attendee.repository.EventAttendanceRepository;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.features.collaboration.entity.EventUser;
 import eventplanner.features.collaboration.repository.EventUserRepository;
 import eventplanner.security.authorization.domain.entity.EventRole;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 public class AttendeeManagementService {
     
     private final EventAttendanceRepository attendanceRepository;
+    private final UserAccountRepository userAccountRepository;
     private final EventUserRepository eventUserRepository;
     private final EventRoleRepository eventRoleRepository;
     private final EventValidationUtil eventValidationUtil;
@@ -38,6 +40,7 @@ public class AttendeeManagementService {
     
     public AttendeeManagementService(
             EventAttendanceRepository attendanceRepository,
+            UserAccountRepository userAccountRepository,
             EventUserRepository eventUserRepository,
             EventRoleRepository eventRoleRepository,
             EventValidationUtil eventValidationUtil,
@@ -47,6 +50,7 @@ public class AttendeeManagementService {
             AttendeeExportService exportService,
             AttendeeSearchService searchService) {
         this.attendanceRepository = attendanceRepository;
+        this.userAccountRepository = userAccountRepository;
         this.eventUserRepository = eventUserRepository;
         this.eventRoleRepository = eventRoleRepository;
         this.eventValidationUtil = eventValidationUtil;
@@ -76,6 +80,15 @@ public class AttendeeManagementService {
             if (existing.isPresent() && existing.get().getAttendanceStatus() != AttendanceStatus.CANCELLED) {
                 throw new RuntimeException("User is already registered for this event");
             }
+            
+            // Auto-fill details from UserAccount if available
+            userAccountRepository.findById(request.getUserId()).ifPresent(user -> {
+                request.setEmail(user.getEmail());
+                request.setName(user.getName());
+                if (request.getPhone() == null || request.getPhone().isEmpty()) {
+                    request.setPhone(user.getPhoneNumber());
+                }
+            });
         }
         
         EventAttendance attendance = new EventAttendance();

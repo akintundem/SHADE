@@ -1,6 +1,7 @@
 package eventplanner.security.auth.service;
 
 import eventplanner.security.auth.dto.req.UpdateUserProfileRequest;
+import eventplanner.security.auth.dto.res.PublicUserResponse;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
@@ -63,6 +64,34 @@ public class UserAccountService {
         return userAccountRepository
             .findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(sanitized, sanitized, pageable)
             .map(AuthMapper::toSecureUserResponse);
+    }
+
+    public Page<PublicUserResponse> searchPublicUsers(String term, Pageable pageable) {
+        if (term == null || term.trim().isEmpty()) {
+            throw new IllegalArgumentException("Search term cannot be empty");
+        }
+
+        String sanitized = term.trim();
+        if (sanitized.length() > 100) {
+            throw new IllegalArgumentException("Search term too long");
+        }
+
+        if (sanitized.matches(".*[;'\"\\\\].*")) {
+            throw new IllegalArgumentException("Invalid characters in search term");
+        }
+
+        return userAccountRepository
+            .findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(sanitized, sanitized, pageable)
+            .map(this::toPublicUserResponse);
+    }
+
+    private PublicUserResponse toPublicUserResponse(UserAccount user) {
+        return PublicUserResponse.builder()
+                .id(user.getId())
+                .name(user.getName())
+                .profileImageUrl(user.getProfileImageUrl())
+                .email(user.getEmail())
+                .build();
     }
 
     public boolean emailExists(String email) {

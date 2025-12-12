@@ -1,6 +1,7 @@
 package eventplanner.security.auth.controller;
 
 import eventplanner.security.auth.dto.req.UpdateUserProfileRequest;
+import eventplanner.security.auth.dto.res.PublicUserResponse;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.service.UserAccountService;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -60,6 +61,17 @@ public class UserManagementController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "searchTerm must be provided");
         }
         return userAccountService.searchSecureUsers(sanitizedTerm, pageable);
+    }
+
+    @GetMapping("/directory")
+    @RequiresPermission(RbacPermissions.USER_SEARCH)
+    public Page<PublicUserResponse> searchDirectory(@RequestParam(defaultValue = "") String searchTerm,
+                                              @PageableDefault(size = 20) Pageable pageable) {
+        String sanitizedTerm = searchTerm != null ? searchTerm.trim() : "";
+        if (sanitizedTerm.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        return userAccountService.searchPublicUsers(sanitizedTerm, pageable);
     }
 
 }
