@@ -33,7 +33,6 @@ public class EventCreationRequest {
     
     private Boolean isPublic = true;
     private Boolean requiresApproval = false;
-    private Boolean qrCodeEnabled = false;
     
     private eventplanner.features.event.dto.VenueDTO venue;
     

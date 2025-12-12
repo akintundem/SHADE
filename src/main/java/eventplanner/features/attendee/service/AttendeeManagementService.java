@@ -33,7 +33,6 @@ public class AttendeeManagementService {
     
     // Specialized services
     private final AttendeeCommunicationService communicationService;
-    private final AttendeeAnalyticsService analyticsService;
     private final AttendeeQRCodeService qrCodeService;
     private final AttendeeExportService exportService;
     private final AttendeeSearchService searchService;
@@ -45,7 +44,6 @@ public class AttendeeManagementService {
             EventRoleRepository eventRoleRepository,
             EventValidationUtil eventValidationUtil,
             AttendeeCommunicationService communicationService,
-            AttendeeAnalyticsService analyticsService,
             AttendeeQRCodeService qrCodeService,
             AttendeeExportService exportService,
             AttendeeSearchService searchService) {
@@ -55,7 +53,6 @@ public class AttendeeManagementService {
         this.eventRoleRepository = eventRoleRepository;
         this.eventValidationUtil = eventValidationUtil;
         this.communicationService = communicationService;
-        this.analyticsService = analyticsService;
         this.qrCodeService = qrCodeService;
         this.exportService = exportService;
         this.searchService = searchService;
@@ -421,14 +418,8 @@ public class AttendeeManagementService {
         return convertToEventUserResponse(eventUser);
     }
     
-    // Analytics and Reporting - Delegated to AttendeeAnalyticsService
-    public AttendanceSummaryResponse getAttendanceSummary(UUID eventId) {
-        return analyticsService.getAttendanceSummary(eventId);
-    }
+    // (analytics endpoints removed)
     
-    public AttendanceAnalyticsResponse getAttendanceAnalytics(UUID eventId) {
-        return analyticsService.getAttendanceAnalytics(eventId);
-    }
     
     // Export functionality - Delegated to AttendeeExportService
     public ExportResponse exportAttendees(UUID eventId, String format) {
@@ -597,22 +588,8 @@ public class AttendeeManagementService {
         eventRoleRepository.save(role);
     }
     
-    // Analytics Methods - Delegated to AttendeeAnalyticsService
-    public List<AttendanceAnalyticsResponse.CheckInTimeline> getCheckInTimeline(UUID eventId) {
-        return analyticsService.getCheckInTimeline(eventId);
-    }
-    
-    public Map<String, Long> getAttendanceByType(UUID eventId) {
-        return analyticsService.getAttendanceByType(eventId);
-    }
-    
-    public List<AttendanceAnalyticsResponse.NoShowAnalysis> getNoShowAnalytics(UUID eventId) {
-        return analyticsService.getNoShowAnalytics(eventId);
-    }
-    
-    public List<AttendanceAnalyticsResponse.RegistrationTimeline> getRegistrationTimeline(UUID eventId) {
-        return analyticsService.getRegistrationTimeline(eventId);
-    }
+    // Analytics Methods - removed
+    // (analytics endpoints removed)
     
     // Search and Filter Methods - Delegated to AttendeeSearchService
     public List<AttendanceDetailResponse> searchAttendees(UUID eventId, String name, String email, String status) {
@@ -667,7 +644,7 @@ public class AttendeeManagementService {
         }
     }
     
-    // Validation Methods - Delegated to AttendeeSearchService and AttendeeAnalyticsService
+    // Validation Methods - Delegated to AttendeeSearchService
     public List<AttendanceDetailResponse> findDuplicateAttendees(UUID eventId) {
         return searchService.findDuplicateAttendees(eventId);
     }
@@ -680,13 +657,7 @@ public class AttendeeManagementService {
         return searchService.validateAttendeeData(eventId);
     }
     
-    public Map<String, Object> getCapacityStatus(UUID eventId) {
-        return analyticsService.getCapacityStatus(eventId);
-    }
-    
-    public Map<String, Object> getWaitlistStatus(UUID eventId) {
-        return analyticsService.getWaitlistStatus(eventId);
-    }
+    // (capacity/waitlist analytics endpoints removed)
     
     // Communication Methods - Delegated to AttendeeCommunicationService
     public Map<String, Object> sendBulkEmail(UUID eventId, SendInvitationRequest request) {

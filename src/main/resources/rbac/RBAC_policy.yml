@@ -272,15 +272,6 @@ policy:
         owns_scope: false
         is_member: true
     -
-      name: event.analytics.read
-      scope: EVENT
-      resources: id
-      description: Get comprehensive event analytics
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
       name: event.assets.read
       scope: EVENT
       resources: id
@@ -353,16 +344,6 @@ policy:
         is_authenticated: true
         owns_scope: false
         is_member: true
-    -
-      name: event.health.read
-      scope: EVENT
-      resources: id
-      description: Event health check
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
       name: event.media.delete
       scope: EVENT
       resources: id,media_id
@@ -426,37 +407,10 @@ policy:
         owns_scope: false
         is_member: true
     -
-      name: event.qrcode.delete
-      scope: EVENT
-      resources: id
-      description: Disable QR code
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
-      name: event.qrcode.generate
-      scope: EVENT
-      resources: id
-      description: Generate QR code
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
-      name: event.qrcode.regenerate
-      scope: EVENT
-      resources: id
-      description: Regenerate QR code
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
       name: event.read
       scope: EVENT
       resources: id
-      description: Get available capacity; Get event QR code; Get event capacity info; Get event status; Get event visibility settings; View event details
+      description: Get available capacity; Get event capacity info; Get event status; Get event visibility settings; View event details
       abac:
         is_authenticated: true
         owns_scope: false
@@ -522,15 +476,6 @@ policy:
       scope: EVENT
       resources: id
       description: Update event capacity; Update event details; Update event status; Update event visibility; Update registration deadline
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
-      name: event.validate
-      scope: EVENT
-      resources: id
-      description: Validate event data
       abac:
         is_authenticated: true
         owns_scope: false
@@ -1221,7 +1166,6 @@ policy:
         - budget.update
         - communication.read
         - communication.send
-        - event.analytics.read
         - event.assets.read
         - event.assets.upload
         - event.cancel
@@ -1230,7 +1174,6 @@ policy:
         - event.coverimage.update
         - event.delete
         - event.duplicate
-        - event.health.read
         - event.media.delete
         - event.media.read
         - event.media.update
@@ -1238,9 +1181,6 @@ policy:
         - event.notification.read
         - event.notification.update
         - event.publish
-        - event.qrcode.delete
-        - event.qrcode.generate
-        - event.qrcode.regenerate
         - event.read
         - event.registration.close
         - event.registration.open
@@ -1249,7 +1189,6 @@ policy:
         - event.reminder.read
         - event.reminder.update
         - event.update
-        - event.validate
         - event.visibility.update
         - role.assign
         - role.read
@@ -1295,7 +1234,6 @@ policy:
         - budget.update
         - communication.read
         - communication.send
-        - event.analytics.read
         - event.assets.read
         - event.assets.upload
         - event.cancel
@@ -1311,9 +1249,6 @@ policy:
         - event.notification.read
         - event.notification.update
         - event.publish
-        - event.qrcode.delete
-        - event.qrcode.generate
-        - event.qrcode.regenerate
         - event.read
         - event.registration.close
         - event.registration.open
@@ -1322,7 +1257,6 @@ policy:
         - event.reminder.read
         - event.reminder.update
         - event.update
-        - event.validate
         - event.visibility.update
         - role.assign
         - role.read

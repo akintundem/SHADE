@@ -14,7 +14,6 @@ import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -39,16 +38,22 @@ public class RbacPermissionAspect {
 
     @Around("@annotation(permission)")
     public Object enforcePermission(ProceedingJoinPoint joinPoint, RequiresPermission permission) throws Throwable {
-        UserPrincipal principal = resolvePrincipal();
+        UserPrincipal principal = resolvePrincipalOrNull();
         Map<String, Object> resources = evaluateResources(joinPoint, permission.resources());
         authorizationService.assertAuthorized(principal, permission.value(), resources);
         return joinPoint.proceed();
     }
 
-    private UserPrincipal resolvePrincipal() {
+    /**
+     * Returns the authenticated principal when present; otherwise returns null.
+     *
+     * This allows permissions with {@code is_authenticated: false} (e.g. public discovery)
+     * to be evaluated without forcing authentication at the aspect layer.
+     */
+    private UserPrincipal resolvePrincipalOrNull() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
-            throw new AccessDeniedException("Authentication required");
+            return null;
         }
         return principal;
     }

@@ -87,6 +87,7 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     // Filtering with pagination
     @Query("SELECT e FROM Event e WHERE " +
            "(:status IS NULL OR e.eventStatus = :status) AND " +
+           "(:eventType IS NULL OR e.eventType = :eventType) AND " +
            "(:isPublic IS NULL OR e.isPublic = :isPublic) AND " +
            "(:startDateFrom IS NULL OR e.startDateTime >= :startDateFrom) AND " +
            "(:startDateTo IS NULL OR e.startDateTime <= :startDateTo) AND " +
@@ -98,6 +99,7 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
            "LOWER(e.theme) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<Event> findEventsWithFilters(
             @Param("status") EventStatus status,
+            @Param("eventType") EventType eventType,
             @Param("isPublic") Boolean isPublic,
             @Param("startDateFrom") LocalDateTime startDateFrom,
             @Param("startDateTo") LocalDateTime startDateTo,

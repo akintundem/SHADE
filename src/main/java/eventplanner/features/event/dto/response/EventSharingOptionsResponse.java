@@ -24,9 +24,6 @@ public class EventSharingOptionsResponse {
     @Schema(description = "Share link for the event")
     private String shareLink;
 
-    @Schema(description = "Whether QR code is available")
-    private Boolean qrCodeAvailable;
-
     @Schema(description = "Whether the event is public")
     private Boolean isPublic;
 

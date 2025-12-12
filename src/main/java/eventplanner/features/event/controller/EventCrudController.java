@@ -62,7 +62,7 @@ public class EventCrudController {
     }
 
 
-    @GetMapping
+    @GetMapping(params = "!mine")
     @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
     @Operation(summary = "List events", description = "List events with pagination, filtering, and search. Supports filtering by status, visibility, date range, and search by name/tag.")
     @ApiResponses(value = {
@@ -74,6 +74,25 @@ public class EventCrudController {
             @Valid EventListRequest request,
             @AuthenticationPrincipal UserPrincipal user) {
         try {
+            Page<Event> events = eventService.listEvents(request, user);
+            Page<EventResponse> responses = events.map(eventService::toResponse);
+            return ResponseEntity.ok(responses);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
+    }
+
+    @GetMapping(params = "mine=true")
+    @RequiresPermission(RbacPermissions.MY_EVENTS_SEARCH)
+    @Operation(summary = "List my events", description = "List events owned by the current user. Use timeframe=UPCOMING|PAST for convenience.")
+    public ResponseEntity<Page<EventResponse>> listMine(
+            @Valid EventListRequest request,
+            @AuthenticationPrincipal UserPrincipal user) {
+        try {
+            if (user == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            request.setMine(true);
             Page<Event> events = eventService.listEvents(request, user);
             Page<EventResponse> responses = events.map(eventService::toResponse);
             return ResponseEntity.ok(responses);

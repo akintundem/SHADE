@@ -25,8 +25,6 @@ import java.util.Comparator;
 import eventplanner.security.authorization.domain.repository.EventRoleRepository;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.common.qrcode.model.QRCodeGenerationResult;
-import eventplanner.common.qrcode.service.BrandedQRCodeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -38,6 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
@@ -59,9 +58,6 @@ public class EventService {
     @Autowired(required = false)
     private AuthorizationService authorizationService;
     
-    @Autowired
-    private BrandedQRCodeService brandedQRCodeService;
-
     /**
      * Create a new event from structured DTO
      * @param request The validated event creation request
@@ -103,7 +99,6 @@ public class EventService {
             // Set boolean fields
             event.setIsPublic(request.getIsPublic() != null ? request.getIsPublic() : true);
             event.setRequiresApproval(request.getRequiresApproval() != null ? request.getRequiresApproval() : false);
-            event.setQrCodeEnabled(request.getQrCodeEnabled() != null ? request.getQrCodeEnabled() : false);
             
             // Set venue if provided
             if (request.getVenue() != null) {
@@ -171,9 +166,6 @@ public class EventService {
             }
             if (request.getRequiresApproval() != null) {
                 event.setRequiresApproval(request.getRequiresApproval());
-            }
-            if (request.getQrCodeEnabled() != null) {
-                event.setQrCodeEnabled(request.getQrCodeEnabled());
             }
             
             // Update venue if provided
@@ -320,12 +312,6 @@ public class EventService {
         if (request.getRequiresApproval() != null) {
             event.setRequiresApproval(request.getRequiresApproval());
         }
-        if (request.getQrCodeEnabled() != null) {
-            event.setQrCodeEnabled(request.getQrCodeEnabled());
-        }
-        if (request.getQrCode() != null) {
-            event.setQrCode(request.getQrCode());
-        }
         if (request.getCoverImageUrl() != null) {
             event.setCoverImageUrl(request.getCoverImageUrl());
         }
@@ -409,7 +395,6 @@ public class EventService {
         event.setCapacity(request.getCapacity());
         event.setIsPublic(request.getIsPublic() != null ? request.getIsPublic() : Boolean.TRUE);
         event.setRequiresApproval(request.getRequiresApproval() != null ? request.getRequiresApproval() : Boolean.FALSE);
-        event.setQrCodeEnabled(request.getQrCodeEnabled() != null ? request.getQrCodeEnabled() : Boolean.FALSE);
         event.setVenueRequirements(request.getVenueRequirements());
         event.setCoverImageUrl(request.getCoverImageUrl());
         event.setEventWebsiteUrl(request.getEventWebsiteUrl());
@@ -427,7 +412,6 @@ public class EventService {
         event.setMetadata(request.getMetadata());
         event.setRegistrationDeadline(request.getRegistrationDeadline());
         event.setCurrentAttendeeCount(request.getCurrentAttendeeCount() != null ? request.getCurrentAttendeeCount() : 0);
-        event.setQrCode(request.getQrCode());
         
         // Set venue if provided
         if (request.getVenue() != null) {
@@ -465,16 +449,54 @@ public class EventService {
         // Default to non-archived events unless explicitly requested
         Boolean isArchived = request.getIsArchived() != null ? request.getIsArchived() : false;
         
+        // Note: Owner scoping is handled in-memory for now (mine=true).
+        // We keep using the shared query and apply owner filtering after fetch.
+
+        // Optional timeframe filtering (relative to now)
+        LocalDateTime startDateFrom = request.getStartDateFrom();
+        LocalDateTime startDateTo = request.getStartDateTo();
+        if (request.getTimeframe() != null && !request.getTimeframe().trim().isEmpty()) {
+            String tf = request.getTimeframe().trim().toUpperCase(Locale.US);
+            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+            if ("UPCOMING".equals(tf)) {
+                if (startDateFrom == null || startDateFrom.isBefore(now)) {
+                    startDateFrom = now;
+                }
+            } else if ("PAST".equals(tf)) {
+                if (startDateTo == null || startDateTo.isAfter(now)) {
+                    startDateTo = now;
+                }
+            } else {
+                throw new IllegalArgumentException("Invalid timeframe. Use UPCOMING or PAST.");
+            }
+        }
+
+        // Public discovery safety: if no authenticated user context, force public-only results.
+        Boolean isPublic = request.getIsPublic();
+        if (user == null) {
+            isPublic = true;
+        }
+
         // Query with filters
         Page<Event> events = eventRepository.findEventsWithFilters(
                 request.getStatus(),
-                request.getIsPublic(),
-                request.getStartDateFrom(),
-                request.getStartDateTo(),
+                request.getEventType(),
+                isPublic,
+                startDateFrom,
+                startDateTo,
                 isArchived,
                 search,
                 pageable
         );
+
+        // Apply mine=true filter (owned-by-current-user) as a post-filter.
+        // This avoids exposing arbitrary ownerId querying.
+        if (Boolean.TRUE.equals(request.getMine()) && user != null) {
+            List<Event> owned = events.getContent().stream()
+                    .filter(e -> e.getOwnerId() != null && e.getOwnerId().equals(user.getId()))
+                    .collect(Collectors.toList());
+            return new org.springframework.data.domain.PageImpl<>(owned, pageable, owned.size());
+        }
         
         // Filter by access control if user is provided
         if (user != null && authorizationService != null) {
@@ -583,8 +605,6 @@ public class EventService {
         response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
         response.setIsPublic(event.getIsPublic());
         response.setRequiresApproval(event.getRequiresApproval());
-        response.setQrCodeEnabled(event.getQrCodeEnabled());
-        response.setQrCode(event.getQrCode());
         response.setEventWebsiteUrl(event.getEventWebsiteUrl());
         response.setHashtag(event.getHashtag());
         response.setTheme(event.getTheme());
@@ -646,7 +666,7 @@ public class EventService {
         // Set boolean fields
         request.setIsPublic((Boolean) validatedData.getOrDefault("isPublic", true));
         request.setRequiresApproval((Boolean) validatedData.getOrDefault("requiresApproval", false));
-        request.setQrCodeEnabled((Boolean) validatedData.getOrDefault("qrCodeEnabled", false));
+        // QR code fields removed
         
         // Handle venues
         if (validatedData.containsKey("venues") && validatedData.get("venues") != null) {
@@ -717,9 +737,7 @@ public class EventService {
         if (validatedData.containsKey("requiresApproval")) {
             request.setRequiresApproval((Boolean) validatedData.get("requiresApproval"));
         }
-        if (validatedData.containsKey("qrCodeEnabled")) {
-            request.setQrCodeEnabled((Boolean) validatedData.get("qrCodeEnabled"));
-        }
+        // QR code fields removed
         
         return request;
     }
@@ -1000,64 +1018,6 @@ public class EventService {
         return eventRepository.save(event);
     }
 
-    // ==================== EVENT QR CODE METHODS ====================
-
-    /**
-     * Generate QR code for event.
-     * Creates a unique QR code string and enables QR code functionality for the event.
-     */
-    public Event generateQRCode(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        // Generate unique QR code string: EVENT_<eventId_prefix>_<timestamp>
-        String eventPrefix = eventId.toString().replace("-", "").substring(0, 16);
-        long timestamp = System.currentTimeMillis();
-        String qrCode = "EVENT_" + eventPrefix + "_" + timestamp;
-        
-        event.setQrCode(qrCode);
-        event.setQrCodeEnabled(true);
-        
-        return eventRepository.save(event);
-    }
-    
-    /**
-     * Generate QR code image for event.
-     * Returns the rendered QR code image using the branded QR code service.
-     */
-    public QRCodeGenerationResult generateQRCodeImage(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        // Ensure QR code exists
-        if (event.getQrCode() == null) {
-            event = generateQRCode(eventId);
-        }
-        
-        // Generate branded QR code image
-        return brandedQRCodeService.generateForEvent(event.getQrCode());
-    }
-
-    /**
-     * Regenerate QR code for event
-     */
-    public Event regenerateQRCode(UUID eventId) {
-        return generateQRCode(eventId);
-    }
-
-    /**
-     * Disable QR code for event
-     */
-    public Event disableQRCode(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setQrCodeEnabled(false);
-        event.setQrCode(null);
-        
-        return eventRepository.save(event);
-    }
-
     // ==================== EVENT VISIBILITY & ACCESS CONTROL METHODS ====================
 
     /**
@@ -1093,49 +1053,6 @@ public class EventService {
         return eventRepository.save(event);
     }
 
-    // ==================== EVENT ANALYTICS METHODS ====================
-
-    /**
-     * Get event analytics overview
-     */
-    public Map<String, Object> getEventAnalytics(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        Map<String, Object> analytics = new java.util.HashMap<>();
-        analytics.put("eventId", eventId);
-        analytics.put("eventName", event.getName());
-        analytics.put("currentAttendeeCount", event.getCurrentAttendeeCount());
-        analytics.put("capacity", event.getCapacity());
-        analytics.put("capacityUtilization", calculateCapacityUtilization(event));
-        analytics.put("eventStatus", event.getEventStatus());
-        analytics.put("isPublic", event.getIsPublic());
-        analytics.put("qrCodeEnabled", event.getQrCodeEnabled());
-        analytics.put("createdAt", event.getCreatedAt());
-        analytics.put("updatedAt", event.getUpdatedAt());
-        
-        return analytics;
-    }
-
-    /**
-     * Get attendance analytics
-     */
-    public Map<String, Object> getAttendanceAnalytics(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        Map<String, Object> analytics = new java.util.HashMap<>();
-        analytics.put("eventId", eventId);
-        analytics.put("currentAttendeeCount", event.getCurrentAttendeeCount());
-        analytics.put("capacity", event.getCapacity());
-        analytics.put("availableSpots", getAvailableCapacity(eventId));
-        analytics.put("capacityUtilization", calculateCapacityUtilization(event));
-        analytics.put("registrationDeadline", event.getRegistrationDeadline());
-        analytics.put("isRegistrationOpen", isRegistrationOpen(event));
-        
-        return analytics;
-    }
-
     // ==================== EVENT DUPLICATION & TEMPLATES METHODS ====================
 
     /**
@@ -1154,7 +1071,6 @@ public class EventService {
         duplicatedEvent.setCapacity(originalEvent.getCapacity());
         duplicatedEvent.setIsPublic(false); // Start as private
         duplicatedEvent.setRequiresApproval(originalEvent.getRequiresApproval());
-        duplicatedEvent.setQrCodeEnabled(false); // Disable QR code initially
         duplicatedEvent.setTheme(originalEvent.getTheme());
         duplicatedEvent.setObjectives(originalEvent.getObjectives());
         duplicatedEvent.setTargetAudience(originalEvent.getTargetAudience());
@@ -1186,77 +1102,6 @@ public class EventService {
         }
         
         return eventRepository.save(duplicatedEvent);
-    }
-
-    // ==================== EVENT VALIDATION & HEALTH CHECK METHODS ====================
-
-    /**
-     * Validate event data
-     */
-    public Map<String, Object> validateEvent(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        Map<String, Object> validation = new java.util.HashMap<>();
-        List<String> errors = new ArrayList<>();
-        List<String> warnings = new ArrayList<>();
-        
-        // Required field validations
-        if (event.getName() == null || event.getName().trim().isEmpty()) {
-            errors.add("Event name is required");
-        }
-        
-        if (event.getStartDateTime() == null) {
-            errors.add("Start date and time is required");
-        }
-        
-        if (event.getEventType() == null) {
-            errors.add("Event type is required");
-        }
-        
-        // Warning validations
-        if (event.getDescription() == null || event.getDescription().trim().isEmpty()) {
-            warnings.add("Event description is recommended");
-        }
-        
-        if (event.getCapacity() == null || event.getCapacity() <= 0) {
-            warnings.add("Event capacity should be set");
-        }
-        
-        if (event.getStartDateTime() != null && event.getStartDateTime().isBefore(LocalDateTime.now())) {
-            warnings.add("Event start time is in the past");
-        }
-        
-        validation.put("isValid", errors.isEmpty());
-        validation.put("errors", errors);
-        validation.put("warnings", warnings);
-        validation.put("eventId", eventId);
-        validation.put("eventName", event.getName());
-        
-        return validation;
-    }
-
-    /**
-     * Get event health check
-     */
-    public Map<String, Object> getEventHealthCheck(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        Map<String, Object> healthCheck = new java.util.HashMap<>();
-        healthCheck.put("eventId", eventId);
-        healthCheck.put("eventName", event.getName());
-        healthCheck.put("status", "healthy");
-        healthCheck.put("eventStatus", event.getEventStatus());
-        healthCheck.put("isPublic", event.getIsPublic());
-        healthCheck.put("hasQRCode", event.getQrCodeEnabled() && event.getQrCode() != null);
-        healthCheck.put("hasCapacity", event.getCapacity() != null && event.getCapacity() > 0);
-        healthCheck.put("hasDescription", event.getDescription() != null && !event.getDescription().trim().isEmpty());
-        healthCheck.put("hasStartTime", event.getStartDateTime() != null);
-        healthCheck.put("isUpcoming", event.getStartDateTime() != null && event.getStartDateTime().isAfter(LocalDateTime.now()));
-        healthCheck.put("lastUpdated", event.getUpdatedAt());
-        
-        return healthCheck;
     }
 
     // ==================== HELPER METHODS ====================
@@ -1294,32 +1139,7 @@ public class EventService {
         return response;
     }
 
-    /**
-     * Calculate capacity utilization percentage
-     */
-    private Double calculateCapacityUtilization(Event event) {
-        if (event.getCapacity() == null || event.getCapacity() == 0) {
-            return null;
-        }
-        
-        int currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
-        return (double) currentCount / event.getCapacity() * 100;
-    }
-
-    /**
-     * Check if registration is open
-     */
-    private Boolean isRegistrationOpen(Event event) {
-        if (event.getEventStatus() != EventStatus.REGISTRATION_OPEN) {
-            return false;
-        }
-        
-        if (event.getRegistrationDeadline() != null) {
-            return LocalDateTime.now().isBefore(event.getRegistrationDeadline());
-        }
-        
-        return true;
-    }
+    // (capacity utilization / registration-open helpers removed with analytics endpoints)
 
     /**
      * Convert VenueDTO to Venue entity

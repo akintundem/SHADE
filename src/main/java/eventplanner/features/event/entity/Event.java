@@ -67,12 +67,6 @@ public class Event extends BaseEntity {
     @Column(name = "requires_approval")
     private Boolean requiresApproval = false;
 
-    @Column(name = "qr_code_enabled")
-    private Boolean qrCodeEnabled = false;
-
-    @Column(name = "qr_code")
-    private String qrCode;
-
     @Column(name = "cover_image_url")
     private String coverImageUrl;
 

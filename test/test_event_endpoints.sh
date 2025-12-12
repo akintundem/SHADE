@@ -134,7 +134,6 @@ get_testing_environment "$@"
 # Path configuration (always resolve relative to this script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPORTS_DIR="${SCRIPT_DIR}/reports"
-QR_CODES_DIR="${SCRIPT_DIR}/qr-codes"
 
 # Configuration
 REPORT_FILE="${REPORTS_DIR}/event_test_report_$(date +%Y%m%d_%H%M%S).md"
@@ -165,73 +164,8 @@ verify_email_in_database() {
     fi
 }
 
-# Create directories for reports and QR codes
+# Create directory for reports
 mkdir -p "$REPORTS_DIR"
-mkdir -p "$QR_CODES_DIR"
-
-# Function to save QR code to file
-save_qr_code() {
-    local test_name="$1"
-    local endpoint="$2"
-    local response_body="$3"
-    local content_type="$4"
-    
-    # Create filename from test name and timestamp
-    local timestamp=$(date +%Y%m%d_%H%M%S_%N | cut -b1-23)
-    local safe_name=$(echo "$test_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g')
-    local filename="${QR_CODES_DIR}/${safe_name}_${timestamp}"
-    
-    # Determine file extension and save based on endpoint and content
-    if [[ "$endpoint" == *"/qr-code/image" ]]; then
-        # PNG image endpoint - response_body might be a temp file path or actual data
-        if [ -f "$response_body" ]; then
-            # It's a temp file, check if it's PNG or JSON error
-            local file_size=$(stat -f%z "$response_body" 2>/dev/null || stat -c%s "$response_body" 2>/dev/null || echo "0")
-            if [ "$file_size" -gt 100 ]; then
-                # Check PNG signature (first 4 bytes: 89 50 4E 47)
-                local first_bytes=$(head -c 4 "$response_body" 2>/dev/null | od -An -tx1 | tr -d ' ' | head -c 8)
-                if [ "$first_bytes" = "89504e47" ]; then
-                    cp "$response_body" "${filename}.png"
-                    echo -e "${GREEN}💾 Saved QR code PNG: ${filename}.png${NC}"
-                else
-                    # Might be JSON error response
-                    cp "$response_body" "${filename}.error.json"
-                    echo -e "${YELLOW}⚠️  Response is not PNG, saved as: ${filename}.error.json${NC}"
-                fi
-            fi
-        elif [ -n "$response_body" ] && [ ${#response_body} -gt 100 ]; then
-            # Direct binary data (shouldn't happen with our curl -o approach, but handle it)
-            echo -n "$response_body" > "${filename}.png"
-            echo -e "${GREEN}💾 Saved QR code PNG: ${filename}.png${NC}"
-        fi
-    elif [[ "$response_body" == *"data:image/png;base64,"* ]] || [[ "$response_body" == *"qrCodeImageBase64"* ]]; then
-        # Base64 encoded image in JSON response
-        local base64_data=""
-        if echo "$response_body" | grep -q "qrCodeImageBase64"; then
-            base64_data=$(echo "$response_body" | grep -o '"qrCodeImageBase64":"[^"]*"' | cut -d'"' -f4 | sed 's/data:image\/png;base64,//')
-        else
-            base64_data=$(echo "$response_body" | grep -o 'data:image/png;base64,[^"]*' | sed 's/data:image\/png;base64,//')
-        fi
-        
-        if [ -n "$base64_data" ]; then
-            echo "$base64_data" | base64 -d > "${filename}.png" 2>/dev/null
-            if [ $? -eq 0 ]; then
-                echo -e "${GREEN}💾 Saved QR code PNG from base64: ${filename}.png${NC}"
-            fi
-        fi
-        
-        # Also save the QR code text if available
-        local qr_text=$(echo "$response_body" | grep -o '"qrCode":"[^"]*"' | cut -d'"' -f4)
-        if [ -n "$qr_text" ]; then
-            echo "$qr_text" > "${filename}.txt"
-            echo -e "${GREEN}💾 Saved QR code text: ${filename}.txt${NC}"
-        fi
-    elif [[ "$endpoint" == *"/qr-code" ]] && [[ "$endpoint" != *"/qr-code/image" ]] && [[ "$endpoint" != *"/qr-code/rendered" ]]; then
-        # Plain text QR code
-        echo "$response_body" > "${filename}.txt"
-        echo -e "${GREEN}💾 Saved QR code text: ${filename}.txt${NC}"
-    fi
-}
 
 # Create report file
 cat > "$REPORT_FILE" << EOF
@@ -296,15 +230,7 @@ run_test() {
         curl_cmd="$curl_cmd --data-binary @$temp_data_file"
     fi
     
-    # Handle binary responses (PNG images) differently
-    local is_binary_response=false
-    if [[ "$endpoint" == *"/qr-code/image" ]]; then
-        is_binary_response=true
-        local temp_response_file=$(mktemp)
-        curl_cmd="$curl_cmd -o '$temp_response_file' '$BASE_URL$endpoint'"
-    else
-        curl_cmd="$curl_cmd '$BASE_URL$endpoint'"
-    fi
+    curl_cmd="$curl_cmd '$BASE_URL$endpoint'"
     
     # Execute the request
     local response
@@ -315,9 +241,6 @@ run_test() {
         if [ -n "$temp_data_file" ]; then
             rm -f "$temp_data_file"
         fi
-        if [ -n "$temp_response_file" ]; then
-            rm -f "$temp_response_file"
-        fi
         return 1
     fi
 
@@ -325,18 +248,8 @@ run_test() {
         rm -f "$temp_data_file"
     fi
     
-    local http_code
-    local response_body
-    
-    if [ "$is_binary_response" = true ]; then
-        # For binary responses, http_code is in the response variable, body is in temp file
-        http_code="${response: -3}"
-        # Keep the temp file for binary data handling in save_qr_code
-        response_body="$temp_response_file"
-    else
-        http_code="${response: -3}"
-        response_body="${response%???}"
-    fi
+    local http_code="${response: -3}"
+    local response_body="${response%???}"
     
     # Check if test passed
     if [ "$http_code" = "$expected_status" ]; then
@@ -372,16 +285,6 @@ run_test() {
         echo "---"
         echo ""
     } >> "$REPORT_FILE"
-    
-    # Save QR codes if this is a QR code endpoint
-    if [[ "$endpoint" == *"/qr-code"* ]] && [ "$http_code" = "200" ]; then
-        save_qr_code "$test_name" "$endpoint" "$response_body" ""
-    fi
-    
-    # Clean up temp response file for binary responses
-    if [ "$is_binary_response" = true ] && [ -f "$response_body" ]; then
-        rm -f "$response_body"
-    fi
     
     # Extract IDs and tokens from successful responses
     if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
@@ -787,18 +690,13 @@ EOF
     echo -e "${CYAN}🎯 Step 5: Event Management Tests${NC}"
     echo "=================================="
     
-    # User-Event Relationship Tests
-    run_test "Get User Events" "GET" "/api/v1/events/user/$USER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all events for user"
-    run_test "Get User Owned Events" "GET" "/api/v1/events/user/$USER_ID/owned" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events owned by user"
-    run_test "Get User Upcoming Events" "GET" "/api/v1/events/user/$USER_ID/upcoming" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get upcoming events for user"
-    run_test "Get User Past Events" "GET" "/api/v1/events/user/$USER_ID/past" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get past events for user"
-    
-    # My Events Tests
+    # My Events Summary
     run_test "Get My Events" "GET" "/api/v1/events/my-events" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's events"
-    run_test "Get My Owned Events" "GET" "/api/v1/events/my-events/owned" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's owned events"
-    run_test "Get My Upcoming Events" "GET" "/api/v1/events/my-events/upcoming" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's upcoming events"
-    run_test "Get My Past Events" "GET" "/api/v1/events/my-events/past" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's past events"
-    
+
+    # My Events via filters on the main list endpoint
+    run_test "List My Owned Events (mine=true)" "GET" "/api/v1/events?mine=true" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List events owned by current user"
+    run_test "List My Upcoming Owned Events" "GET" "/api/v1/events?mine=true&timeframe=UPCOMING" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List upcoming owned events"
+    run_test "List My Past Owned Events" "GET" "/api/v1/events?mine=true&timeframe=PAST" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List past owned events"
     # Event Status & Lifecycle Tests
     run_test "Get Event Status" "GET" "/api/v1/events/$EVENT_ID/status" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event status"
     
@@ -812,13 +710,13 @@ EOF
     run_test "Close Registration" "POST" "/api/v1/events/$EVENT_ID/registration?action=close" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Close event registration"
     
     # Event Discovery & Search Tests
-    run_test "Search Events" "GET" "/api/v1/events/search?q=test" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search events with query"
-    run_test "Get Public Events" "GET" "/api/v1/events/public" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get public events"
-    run_test "Get Featured Events" "GET" "/api/v1/events/featured" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get featured events"
-    run_test "Get Trending Events" "GET" "/api/v1/events/trending" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get trending events"
-    run_test "Get Upcoming Events" "GET" "/api/v1/events/upcoming" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get upcoming events"
-    run_test "Get Events by Type" "GET" "/api/v1/events/by-type/WORKSHOP" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by type"
-    run_test "Get Events by Status" "GET" "/api/v1/events/by-status/PUBLISHED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by status"
+    run_test "Search Events" "GET" "/api/v1/events?search=test" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search events with query"
+    run_test "Get Public Events" "GET" "/api/v1/events?isPublic=true" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get public events"
+    run_test "Get Featured Events" "GET" "/api/v1/events?isPublic=true&status=PUBLISHED&sortBy=createdAt&sortDirection=DESC" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get featured events"
+    run_test "Get Trending Events" "GET" "/api/v1/events?isPublic=true&status=PUBLISHED&sortBy=currentAttendeeCount&sortDirection=DESC" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get trending events"
+    run_test "Get Upcoming Events" "GET" "/api/v1/events?isPublic=true&timeframe=UPCOMING" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get upcoming events"
+    run_test "Get Events by Type" "GET" "/api/v1/events?eventType=WORKSHOP" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by type"
+    run_test "Get Events by Status" "GET" "/api/v1/events?status=PUBLISHED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by status"
     
     # Event Capacity & Registration Tests
     run_test "Get Event Capacity" "GET" "/api/v1/events/$EVENT_ID/capacity" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event capacity information"
@@ -828,27 +726,11 @@ EOF
     }'
     run_test "Update Event Capacity" "PUT" "/api/v1/events/$EVENT_ID/capacity" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$capacity_update_data" "200" "Update event capacity"
     
-    run_test "Get Available Capacity" "GET" "/api/v1/events/$EVENT_ID/capacity/available" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get available capacity"
-    
     local deadline_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
     local deadline_data='{
         "deadline": "'$deadline_date'"
     }'
     run_test "Update Registration Deadline" "PUT" "/api/v1/events/$EVENT_ID/registration-deadline" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$deadline_data" "200" "Update registration deadline"
-    
-    # QR Code Tests
-    run_test "Get Event QR Code" "GET" "/api/v1/events/$EVENT_ID/qr-code" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event QR code"
-    run_test "Generate QR Code" "POST" "/api/v1/events/$EVENT_ID/qr-code/generate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Generate QR code for event"
-    
-    # Test get event QR code image (PNG)
-    run_test "Get Event QR Code Image" "GET" "/api/v1/events/$EVENT_ID/qr-code/image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event QR code as PNG image"
-    
-    run_test "Regenerate QR Code" "POST" "/api/v1/events/$EVENT_ID/qr-code/regenerate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Regenerate QR code"
-    
-    # Test get regenerated QR code image
-    run_test "Get Regenerated Event QR Code Image" "GET" "/api/v1/events/$EVENT_ID/qr-code/image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get regenerated event QR code as PNG image"
-    
-    run_test "Disable QR Code" "DELETE" "/api/v1/events/$EVENT_ID/qr-code" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Disable QR code"
     
     # Visibility & Access Control Tests
     run_test "Get Event Visibility" "GET" "/api/v1/events/$EVENT_ID/visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event visibility settings"
@@ -857,23 +739,17 @@ EOF
         "isPublic": true
     }'
     run_test "Update Event Visibility" "PUT" "/api/v1/events/$EVENT_ID/visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_data" "200" "Update event visibility"
-    
-    run_test "Make Event Public" "POST" "/api/v1/events/$EVENT_ID/make-public" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Make event public"
-    run_test "Make Event Private" "POST" "/api/v1/events/$EVENT_ID/make-private" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Make event private"
-    
-    # Analytics Tests
-    run_test "Get Event Analytics" "GET" "/api/v1/events/$EVENT_ID/analytics" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event analytics"
-    run_test "Get Attendance Analytics" "GET" "/api/v1/events/$EVENT_ID/analytics/attendance" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get attendance analytics"
+
+    local visibility_private_data='{
+        "isPublic": false
+    }'
+    run_test "Make Event Private (via visibility update)" "PUT" "/api/v1/events/$EVENT_ID/visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_private_data" "200" "Make event private"
     
     # Duplication Tests
     local duplicate_data='{
         "newEventName": "Duplicated Test Event"
     }'
     run_test "Duplicate Event" "POST" "/api/v1/events/$EVENT_ID/duplicate" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$duplicate_data" "200" "Duplicate event"
-    
-    # Validation & Health Check Tests
-    run_test "Validate Event" "GET" "/api/v1/events/$EVENT_ID/validation" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Validate event"
-    run_test "Event Health Check" "GET" "/api/v1/events/$EVENT_ID/health" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Event health check"
     echo ""
     
     # Step 6: Media Management Tests

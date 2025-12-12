@@ -46,9 +46,6 @@ public class EventNotificationRequest {
     @Schema(description = "Whether to include event details")
     private Boolean includeEventDetails = true;
 
-    @Schema(description = "Whether to include QR code")
-    private Boolean includeQRCode = false;
-
     @Schema(description = "Notification priority", example = "NORMAL")
     private EventNotificationPriority priority = EventNotificationPriority.NORMAL;
 

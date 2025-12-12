@@ -49,12 +49,6 @@ public class UpdateEventRequest {
     @Schema(description = "Updated approval requirement")
     private Boolean requiresApproval;
 
-    @Schema(description = "Updated QR code flag")
-    private Boolean qrCodeEnabled;
-
-    @Schema(description = "Updated QR code")
-    private String qrCode;
-
     @Schema(description = "Updated cover image URL")
     private String coverImageUrl;
 

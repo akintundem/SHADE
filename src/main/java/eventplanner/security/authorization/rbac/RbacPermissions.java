@@ -55,7 +55,6 @@ public final class RbacPermissions {
     public static final String BUDGET_UPDATE = "budget.update";
     public static final String COMMUNICATION_READ = "communication.read";
     public static final String COMMUNICATION_SEND = "communication.send";
-    public static final String EVENT_ANALYTICS_READ = "event.analytics.read";
     public static final String EVENT_ASSETS_READ = "event.assets.read";
     public static final String EVENT_ASSETS_UPLOAD = "event.assets.upload";
     public static final String EVENT_CAPACITY_READ = "event.capacity.read";
@@ -67,7 +66,6 @@ public final class RbacPermissions {
     public static final String EVENT_CREATE = "event.create";
     public static final String EVENT_DELETE = "event.delete";
     public static final String EVENT_DUPLICATE = "event.duplicate";
-    public static final String EVENT_HEALTH_READ = "event.health.read";
     public static final String EVENT_MEDIA_DELETE = "event.media.delete";
     public static final String EVENT_MEDIA_READ = "event.media.read";
     public static final String EVENT_MEDIA_UPDATE = "event.media.update";
@@ -75,9 +73,6 @@ public final class RbacPermissions {
     public static final String EVENT_NOTIFICATION_READ = "event.notification.read";
     public static final String EVENT_NOTIFICATION_UPDATE = "event.notification.update";
     public static final String EVENT_PUBLISH = "event.publish";
-    public static final String EVENT_QR_CODE_DELETE = "event.qrcode.delete";
-    public static final String EVENT_QR_CODE_GENERATE = "event.qrcode.generate";
-    public static final String EVENT_QR_CODE_REGENERATE = "event.qrcode.regenerate";
     public static final String EVENT_READ = "event.read";
     public static final String EVENT_REGISTRATION_CLOSE = "event.registration.close";
     public static final String EVENT_REGISTRATION_OPEN = "event.registration.open";
@@ -87,7 +82,6 @@ public final class RbacPermissions {
     public static final String EVENT_REMINDER_UPDATE = "event.reminder.update";
     public static final String EVENT_STATUS_UPDATE = "event.update";
     public static final String EVENT_UPDATE = "event.update";
-    public static final String EVENT_VALIDATION_READ = "event.validate";
     public static final String EVENT_VISIBILITY_READ = "event.visibility.read";
     public static final String EVENT_VISIBILITY_UPDATE = "event.visibility.update";
     public static final String MY_EVENTS_READ = "my.events.read";

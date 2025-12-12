@@ -54,12 +54,6 @@ public class EventResponse {
     @Schema(description = "Whether the event requires approval")
     private Boolean requiresApproval;
 
-    @Schema(description = "Whether QR codes are enabled")
-    private Boolean qrCodeEnabled;
-
-    @Schema(description = "QR code value")
-    private String qrCode;
-
     @Schema(description = "Cover image URL for the event")
     private String coverImageUrl;
 

@@ -27,7 +27,6 @@ public class EventUpdateRequest {
     
     private Boolean isPublic;
     private Boolean requiresApproval;
-    private Boolean qrCodeEnabled;
     
     private eventplanner.features.event.dto.VenueDTO venue;
 }

@@ -1,6 +1,7 @@
 package eventplanner.features.event.dto.request;
 
 import eventplanner.common.domain.enums.EventStatus;
+import eventplanner.common.domain.enums.EventType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -29,6 +30,9 @@ public class EventListRequest {
     @Schema(description = "Filter by event status", example = "PUBLISHED")
     private EventStatus status;
 
+    @Schema(description = "Filter by event type", example = "WORKSHOP")
+    private EventType eventType;
+
     @Schema(description = "Filter by visibility (true for public, false for private)", example = "true")
     private Boolean isPublic;
 
@@ -40,6 +44,12 @@ public class EventListRequest {
 
     @Schema(description = "Filter by archived status (defaults to false)", example = "false")
     private Boolean isArchived;
+
+    @Schema(description = "Shortcut: filter to events owned by the current user", example = "true")
+    private Boolean mine;
+
+    @Schema(description = "Timeframe filter relative to now (UTC)", example = "UPCOMING", allowableValues = {"UPCOMING", "PAST"})
+    private String timeframe;
 
     @Schema(description = "Search term to match against event name, description, hashtag, or theme", example = "conference")
     private String search;

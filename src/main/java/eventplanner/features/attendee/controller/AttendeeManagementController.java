@@ -200,21 +200,6 @@ public class AttendeeManagementController {
         }
     }
     
-    @GetMapping("/attendances/attendance-stats")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
-    @Operation(summary = "Get attendance statistics", description = "Get comprehensive attendance statistics for the event")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Successfully retrieved attendance statistics")
-    })
-    public ResponseEntity<AttendanceSummaryResponse> getAttendanceStats(@PathVariable UUID eventId) {
-        try {
-            AttendanceSummaryResponse response = attendeeManagementService.getAttendanceSummary(eventId);
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
-        }
-    }
-    
     // QR Code Management
     @GetMapping("/attendances/{attendanceId}/qr-code")
     @RequiresPermission(value = RbacPermissions.ATTENDEE_QR_READ, resources = {"attendance_id=#attendanceId", "event_id=#eventId"})
@@ -519,82 +504,6 @@ public class AttendeeManagementController {
         }
     }
     
-    // Analytics and Reporting
-    @GetMapping("/analytics/attendance")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
-    @Operation(summary = "Get attendance analytics", description = "Get comprehensive attendance analytics and insights")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Successfully retrieved attendance analytics")
-    })
-    public ResponseEntity<AttendanceAnalyticsResponse> getAttendanceAnalytics(@PathVariable UUID eventId) {
-        try {
-            AttendanceAnalyticsResponse response = attendeeManagementService.getAttendanceAnalytics(eventId);
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
-        }
-    }
-    
-    @GetMapping("/analytics/check-in-timeline")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
-    @Operation(summary = "Get check-in timeline", description = "Get timeline of check-ins for the event")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Successfully retrieved check-in timeline")
-    })
-    public ResponseEntity<List<AttendanceAnalyticsResponse.CheckInTimeline>> getCheckInTimeline(@PathVariable UUID eventId) {
-        try {
-            List<AttendanceAnalyticsResponse.CheckInTimeline> timeline = attendeeManagementService.getCheckInTimeline(eventId);
-            return ResponseEntity.ok(timeline);
-        } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
-        }
-    }
-    
-    @GetMapping("/analytics/attendance-by-type")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
-    @Operation(summary = "Get attendance by user type", description = "Get attendance breakdown by user type")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Successfully retrieved attendance by type")
-    })
-    public ResponseEntity<Map<String, Long>> getAttendanceByType(@PathVariable UUID eventId) {
-        try {
-            Map<String, Long> attendanceByType = attendeeManagementService.getAttendanceByType(eventId);
-            return ResponseEntity.ok(attendanceByType);
-        } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
-        }
-    }
-    
-    @GetMapping("/analytics/no-shows")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
-    @Operation(summary = "Get no-show analytics", description = "Get analytics for attendees who did not show up")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Successfully retrieved no-show analytics")
-    })
-    public ResponseEntity<List<AttendanceAnalyticsResponse.NoShowAnalysis>> getNoShowAnalytics(@PathVariable UUID eventId) {
-        try {
-            List<AttendanceAnalyticsResponse.NoShowAnalysis> analysis = attendeeManagementService.getNoShowAnalytics(eventId);
-            return ResponseEntity.ok(analysis);
-        } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
-        }
-    }
-    
-    @GetMapping("/analytics/registration-timeline")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
-    @Operation(summary = "Get registration timeline", description = "Get timeline of registrations for the event")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Successfully retrieved registration timeline")
-    })
-    public ResponseEntity<List<AttendanceAnalyticsResponse.RegistrationTimeline>> getRegistrationTimeline(@PathVariable UUID eventId) {
-        try {
-            List<AttendanceAnalyticsResponse.RegistrationTimeline> timeline = attendeeManagementService.getRegistrationTimeline(eventId);
-            return ResponseEntity.ok(timeline);
-        } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
-        }
-    }
-    
     // Communication and Notifications
     @PostMapping("/attendances/bulk-email")
     @RequiresPermission(value = RbacPermissions.COMMUNICATION_SEND, resources = {"event_id=#eventId"})
@@ -854,33 +763,4 @@ public class AttendeeManagementController {
         }
     }
     
-    @GetMapping("/attendances/capacity-status")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_ANALYTICS_READ, resources = {"event_id=#eventId"})
-    @Operation(summary = "Get capacity status", description = "Get current capacity status for the event")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Successfully retrieved capacity status")
-    })
-    public ResponseEntity<Map<String, Object>> getCapacityStatus(@PathVariable UUID eventId) {
-        try {
-            Map<String, Object> status = attendeeManagementService.getCapacityStatus(eventId);
-            return ResponseEntity.ok(status);
-        } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
-        }
-    }
-    
-    @GetMapping("/attendances/waitlist-status")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId"})
-    @Operation(summary = "Get waitlist status", description = "Get current waitlist status for the event")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Successfully retrieved waitlist status")
-    })
-    public ResponseEntity<Map<String, Object>> getWaitlistStatus(@PathVariable UUID eventId) {
-        try {
-            Map<String, Object> status = attendeeManagementService.getWaitlistStatus(eventId);
-            return ResponseEntity.ok(status);
-        } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e);
-        }
-    }
 }

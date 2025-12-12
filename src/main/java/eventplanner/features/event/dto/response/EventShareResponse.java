@@ -40,9 +40,6 @@ public class EventShareResponse {
     @Schema(description = "Whether event details were included")
     private Boolean includeEventDetails;
 
-    @Schema(description = "Whether QR code was included")
-    private Boolean includeQRCode;
-
     @Schema(description = "Expiration date")
     private LocalDateTime expirationDate;
 

@@ -771,8 +771,6 @@ main() {
     # Test get checked-in attendees
     run_test "Get Checked-in Attendees" "GET" "/api/v1/events/$EVENT_ID/attendances/checked-in" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all checked-in attendees"
     
-    # Test get attendance stats
-    run_test "Get Attendance Statistics" "GET" "/api/v1/events/$EVENT_ID/attendances/attendance-stats" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get attendance statistics"
     
     # Test check-out attendee
     if [ -n "$ATTENDANCE_ID" ]; then
@@ -813,28 +811,8 @@ main() {
     fi
     echo ""
     
-    # Step 8: Analytics and Reporting Tests
-    echo -e "${CYAN}📊 Step 8: Analytics and Reporting Tests${NC}"
-    echo "========================================="
-    
-    # Test get attendance analytics
-    run_test "Get Attendance Analytics" "GET" "/api/v1/events/$EVENT_ID/analytics/attendance" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get attendance analytics"
-    
-    # Test get check-in timeline
-    run_test "Get Check-in Timeline" "GET" "/api/v1/events/$EVENT_ID/analytics/check-in-timeline" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get check-in timeline"
-    
-    # Test get attendance by type
-    run_test "Get Attendance by Type" "GET" "/api/v1/events/$EVENT_ID/analytics/attendance-by-type" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get attendance breakdown by type"
-    
-    # Test get no-show analytics
-    run_test "Get No-show Analytics" "GET" "/api/v1/events/$EVENT_ID/analytics/no-shows" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get no-show analytics"
-    
-    # Test get registration timeline
-    run_test "Get Registration Timeline" "GET" "/api/v1/events/$EVENT_ID/analytics/registration-timeline" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get registration timeline"
-    echo ""
-    
-    # Step 9: Search and Filtering Tests
-    echo -e "${CYAN}🔍 Step 9: Search and Filtering Tests${NC}"
+    # Step 8: Search and Filtering Tests
+    echo -e "${CYAN}🔍 Step 8: Search and Filtering Tests${NC}"
     echo "======================================"
     
     # Test search attendees
@@ -875,15 +853,10 @@ main() {
     # Test find incomplete profiles
     run_test "Find Incomplete Profiles" "GET" "/api/v1/events/$EVENT_ID/attendances/incomplete" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Find incomplete attendee profiles"
     
-    # Test get capacity status
-    run_test "Get Capacity Status" "GET" "/api/v1/events/$EVENT_ID/attendances/capacity-status" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event capacity status"
-    
-    # Test get waitlist status
-    run_test "Get Waitlist Status" "GET" "/api/v1/events/$EVENT_ID/attendances/waitlist-status" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get waitlist status"
     echo ""
     
-    # Step 11: Export and Import Tests
-    echo -e "${CYAN}💾 Step 11: Export and Import Tests${NC}"
+    # Step 10: Export and Import Tests
+    echo -e "${CYAN}💾 Step 10: Export and Import Tests${NC}"
     echo "===================================="
     
     # Test export to CSV

@@ -28,9 +28,6 @@ public class EventShareRequest {
     @Schema(description = "Whether to include event details in the share")
     private Boolean includeEventDetails = true;
 
-    @Schema(description = "Whether to include QR code in the share")
-    private Boolean includeQRCode = false;
-
     @Schema(description = "Expiration date for the share link (if applicable)")
     private String expirationDate;
 
