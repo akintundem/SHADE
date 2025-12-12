@@ -15,6 +15,7 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 @Entity
 @Table(name = "auth_user_sessions")
@@ -50,7 +51,7 @@ public class UserSession extends BaseEntity {
     @PrePersist
     public void onCreate() {
         if (lastSeenAt == null) {
-            lastSeenAt = LocalDateTime.now();
+            lastSeenAt = LocalDateTime.now(ZoneOffset.UTC);
         }
     }
     
@@ -58,7 +59,7 @@ public class UserSession extends BaseEntity {
      * Check if session is expired
      */
     public boolean isExpired() {
-        return LocalDateTime.now().isAfter(expiresAt);
+        return LocalDateTime.now(ZoneOffset.UTC).isAfter(expiresAt);
     }
     
     /**
@@ -72,7 +73,7 @@ public class UserSession extends BaseEntity {
      * Update last seen timestamp
      */
     public void updateLastSeen() {
-        this.lastSeenAt = LocalDateTime.now();
+        this.lastSeenAt = LocalDateTime.now(ZoneOffset.UTC);
     }
     
     /**

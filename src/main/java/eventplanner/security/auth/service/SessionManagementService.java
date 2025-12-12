@@ -46,11 +46,11 @@ public class SessionManagementService {
      */
     public long pruneExpiredSessions() {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-        long deletedCount = sessionRepository.deleteByExpiresAtBefore(now);
-        if (deletedCount > 0) {
-            log.info("Pruned {} expired session(s)", deletedCount);
+        long affected = sessionRepository.softDeleteExpiredSessions(now, now);
+        if (affected > 0) {
+            log.info("Pruned {} expired session(s) (soft-deleted)", affected);
         }
-        return deletedCount;
+        return affected;
     }
 
     /**

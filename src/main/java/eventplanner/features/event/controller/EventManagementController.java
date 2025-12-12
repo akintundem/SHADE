@@ -316,43 +316,38 @@ public class EventManagementController {
         }
     }
 
-    @PostMapping("/{id}/open-registration")
-    @RequiresPermission(value = RbacPermissions.EVENT_REGISTRATION_OPEN, resources = {"event_id=#id"})
-    @Operation(summary = "Open registration", description = "Open registration for an event")
-    public ResponseEntity<EventResponse> openRegistration(
+    @PostMapping("/{id}/registration")
+    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#id"})
+    @Operation(summary = "Update registration state", description = "Open or close registration for an event. Use action=open or action=close.")
+    public ResponseEntity<EventResponse> updateRegistrationState(
             @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal principal) {
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam("action") String action) {
         try {
             if (principal == null) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
             }
+            if (action == null || action.trim().isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "action is required (open|close)");
+            }
             // Verify user is owner or admin
             if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can open registration");
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update registration state");
             }
-            Event updatedEvent = eventService.openRegistration(id);
-            return ResponseEntity.ok(eventService.toResponse(updatedEvent));
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
-    }
 
-    @PostMapping("/{id}/close-registration")
-    @RequiresPermission(value = RbacPermissions.EVENT_REGISTRATION_CLOSE, resources = {"event_id=#id"})
-    @Operation(summary = "Close registration", description = "Close registration for an event")
-    public ResponseEntity<EventResponse> closeRegistration(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            String normalized = action.trim().toLowerCase(java.util.Locale.ROOT);
+            Event updatedEvent;
+            if ("open".equals(normalized)) {
+                updatedEvent = eventService.openRegistration(id);
+            } else if ("close".equals(normalized)) {
+                updatedEvent = eventService.closeRegistration(id);
+            } else {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid action. Use open or close.");
             }
-            // Verify user is owner or admin
-            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can close registration");
-            }
-            Event updatedEvent = eventService.closeRegistration(id);
+
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
+        } catch (ResponseStatusException ex) {
+            throw ex;
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }

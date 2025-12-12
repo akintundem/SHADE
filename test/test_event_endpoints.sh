@@ -808,8 +808,8 @@ EOF
     run_test "Update Event Status" "PUT" "/api/v1/events/$EVENT_ID/status" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$status_update_data" "200" "Update event status"
     
     run_test "Publish Event" "POST" "/api/v1/events/$EVENT_ID/publish" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Publish event"
-    run_test "Open Registration" "POST" "/api/v1/events/$EVENT_ID/open-registration" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Open event registration"
-    run_test "Close Registration" "POST" "/api/v1/events/$EVENT_ID/close-registration" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Close event registration"
+    run_test "Open Registration" "POST" "/api/v1/events/$EVENT_ID/registration?action=open" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Open event registration"
+    run_test "Close Registration" "POST" "/api/v1/events/$EVENT_ID/registration?action=close" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Close event registration"
     
     # Event Discovery & Search Tests
     run_test "Search Events" "GET" "/api/v1/events/search?q=test" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search events with query"

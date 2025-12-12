@@ -21,6 +21,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -130,9 +132,15 @@ public class DeviceValidationFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(updatedAuthentication);
         }
         
-        // Update last seen timestamp
-        session.updateLastSeen();
-        sessionRepository.save(session);
+        // Update last seen timestamp (avoid entity save to prevent stale-row errors)
+        int touched = sessionRepository.touchLastSeen(session.getId(), LocalDateTime.now(ZoneOffset.UTC));
+        if (touched == 0) {
+            // Session disappeared (expired cleanup/logout) between read and touch
+            log.warn("Session disappeared while processing request for user: {} deviceId: {} path: {}",
+                    user.getId(), sanitizedDeviceId, requestURI);
+            sendErrorResponse(response, "Session not found", HttpStatus.UNAUTHORIZED, requestURI);
+            return;
+        }
         
         log.debug("Device validation successful for user: {} with deviceId: {} on request: {}", 
                 user.getId(), sanitizedDeviceId, requestURI);
