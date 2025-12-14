@@ -14,6 +14,8 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventStoredObject;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.event.repository.EventStoredObjectRepository;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 
@@ -41,15 +43,18 @@ public class EventMediaService {
     private final S3StorageService storageService;
     private final EventStoredObjectRepository storedObjectRepository;
     private final EventRepository eventRepository;
+    private final UserAccountRepository userAccountRepository;
 
     public EventMediaService(EventAccessControlService accessControlService,
                              S3StorageService storageService,
                              EventStoredObjectRepository storedObjectRepository,
-                             EventRepository eventRepository) {
+                             EventRepository eventRepository,
+                             UserAccountRepository userAccountRepository) {
         this.accessControlService = accessControlService;
         this.storageService = storageService;
         this.storedObjectRepository = storedObjectRepository;
         this.eventRepository = eventRepository;
+        this.userAccountRepository = userAccountRepository;
     }
 
     public List<EventMediaResponse> getEventMedia(UUID eventId, UserPrincipal principal, String category, String type) {
@@ -227,7 +232,7 @@ public class EventMediaService {
     private EventStoredObject requireStoredObject(UUID eventId, UUID objectId, String purpose) {
         EventStoredObject item = storedObjectRepository.findById(objectId)
             .orElseThrow(() -> new IllegalArgumentException("Stored object not found"));
-        if (!eventId.equals(item.getEventId()) || !purpose.equals(item.getPurpose())) {
+        if (item.getEvent() == null || !eventId.equals(item.getEvent().getId()) || !purpose.equals(item.getPurpose())) {
             throw new IllegalArgumentException("Stored object not found");
         }
         return item;
@@ -257,11 +262,16 @@ public class EventMediaService {
             }
         }
 
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+        UserAccount owner = userAccountRepository.findById(ownerId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        
         EventStoredObject item = storedObjectRepository.findById(objectId).orElseGet(EventStoredObject::new);
         item.setId(objectId);
-        item.setEventId(eventId);
+        item.setEvent(event);
         item.setPurpose(purpose);
-        item.setOwnerId(ownerId);
+        item.setUploadedBy(owner);
         item.setObjectKey(expectedObjectKey);
         item.setResourceUrl(StringUtils.hasText(request.getResourceUrl())
             ? normalizeAndStripUrl(request.getResourceUrl())

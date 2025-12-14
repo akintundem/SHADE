@@ -1,10 +1,7 @@
 package eventplanner.features.event.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import jakarta.persistence.Version;
+import eventplanner.security.auth.entity.UserAccount;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -49,8 +46,12 @@ public class EventStoredObject {
     @Version
     private Long version;
 
-    @Column(name = "event_id", nullable = false)
-    private UUID eventId;
+    /**
+     * Many-to-one relationship with the event this object belongs to.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
 
     /**
      * Logical purpose of this object (scales without schema changes).
@@ -101,8 +102,12 @@ public class EventStoredObject {
     @Column(name = "metadata", columnDefinition = "TEXT")
     private String metadata;
 
-    @Column(name = "uploaded_by")
-    private UUID uploadedBy;
+    /**
+     * Many-to-one relationship with the user who uploaded this object.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "uploaded_by")
+    private UserAccount uploadedBy;
 }
 
 

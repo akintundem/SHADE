@@ -226,10 +226,13 @@ public class EventService {
             throw new IllegalArgumentException("Owner ID is required for event creation");
         }
         
+        UserAccount owner = userAccountRepository.findById(ownerId)
+                .orElseThrow(() -> new IllegalArgumentException("Owner not found"));
+        
         Event event = new Event();
         event.setName(request.getName());
         event.setDescription(request.getDescription());
-        event.setOwnerId(ownerId);
+        event.setOwner(owner);
         event.setEventType(request.getEventType());
         event.setEventStatus(request.getEventStatus() != null ? request.getEventStatus() : EventStatus.PLANNING);
         event.setStartDateTime(request.getStartDateTime());
@@ -377,7 +380,7 @@ public class EventService {
         // This avoids exposing arbitrary ownerId querying.
         if (Boolean.TRUE.equals(request.getMine()) && user != null) {
             List<Event> owned = events.getContent().stream()
-                    .filter(e -> e.getOwnerId() != null && e.getOwnerId().equals(user.getId()))
+                    .filter(e -> e.getOwner() != null && e.getOwner().getId().equals(user.getId()))
                     .collect(Collectors.toList());
             return new org.springframework.data.domain.PageImpl<>(owned, pageable, owned.size());
         }
@@ -504,7 +507,7 @@ public class EventService {
         response.setBackupPlan(event.getBackupPlan());
         response.setPostEventTasks(event.getPostEventTasks());
         response.setMetadata(event.getMetadata());
-        response.setOwnerId(event.getOwnerId());
+        response.setOwnerId(event.getOwner() != null ? event.getOwner().getId() : null);
         response.setVenueId(event.getVenueId());
         response.setVenue(event.getVenue() != null ? toVenueDTO(event.getVenue()) : null);
         response.setCreatedAt(event.getCreatedAt());

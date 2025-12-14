@@ -2,6 +2,8 @@ package eventplanner.features.attendee.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.AttendanceStatus;
+import eventplanner.features.event.entity.Event;
+import eventplanner.security.auth.entity.UserAccount;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -9,7 +11,6 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 /**
  * Event attendance with QR code support for check-in
@@ -22,11 +23,19 @@ import java.util.UUID;
 @EqualsAndHashCode(callSuper = true)
 public class EventAttendance extends BaseEntity {
     
-    @Column(name = "event_id", nullable = false)
-    private UUID eventId;
+    /**
+     * Many-to-one relationship with the event.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
     
-    @Column(name = "user_id", nullable = false)
-    private UUID userId;
+    /**
+     * Many-to-one relationship with the user.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private UserAccount user;
     
     @Enumerated(EnumType.STRING)
     @Column(name = "attendance_status")
@@ -95,9 +104,9 @@ public class EventAttendance extends BaseEntity {
     @Column(name = "metadata", columnDefinition = "TEXT")
     private String metadata;
     
-    public EventAttendance(UUID eventId, UUID userId) {
-        this.eventId = eventId;
-        this.userId = userId;
+    public EventAttendance(Event event, UserAccount user) {
+        this.event = event;
+        this.user = user;
         this.registrationDate = LocalDateTime.now();
     }
 }

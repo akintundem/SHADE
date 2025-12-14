@@ -1,0 +1,195 @@
+package eventplanner.features.feeds.service;
+
+import eventplanner.features.event.service.EventAccessControlService;
+import eventplanner.features.feeds.dto.request.CommentCreateRequest;
+import eventplanner.features.feeds.dto.request.CommentUpdateRequest;
+import eventplanner.features.feeds.dto.response.CommentResponse;
+import eventplanner.features.feeds.entity.EventFeedPost;
+import eventplanner.features.feeds.entity.PostComment;
+import eventplanner.features.feeds.repository.FeedPostRepository;
+import eventplanner.features.feeds.repository.PostCommentRepository;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
+import eventplanner.security.auth.service.UserPrincipal;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.util.UUID;
+
+@Service
+@Slf4j
+@Transactional
+public class PostCommentService {
+
+    private final PostCommentRepository commentRepository;
+    private final FeedPostRepository postRepository;
+    private final UserAccountRepository userAccountRepository;
+    private final EventAccessControlService accessControlService;
+
+    public PostCommentService(PostCommentRepository commentRepository,
+                             FeedPostRepository postRepository,
+                             UserAccountRepository userAccountRepository,
+                             EventAccessControlService accessControlService) {
+        this.commentRepository = commentRepository;
+        this.postRepository = postRepository;
+        this.userAccountRepository = userAccountRepository;
+        this.accessControlService = accessControlService;
+    }
+
+    public CommentResponse createComment(UUID eventId, UUID postId, UserPrincipal principal, CommentCreateRequest request) {
+        accessControlService.requireMediaView(principal, eventId);
+        
+        EventFeedPost post = postRepository.findById(postId)
+                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+        
+        if (!eventId.equals(post.getEventId())) {
+            throw new IllegalArgumentException("Post not found");
+        }
+
+        if (principal == null || principal.getId() == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+
+        String content = request != null ? safeTrimToNull(request.getContent()) : null;
+        if (!StringUtils.hasText(content)) {
+            throw new IllegalArgumentException("Comment content is required");
+        }
+        if (content.length() > 2000) {
+            throw new IllegalArgumentException("Comment content too long (max 2000 characters)");
+        }
+
+        UUID userId = principal.getId();
+        UserAccount user = userAccountRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        
+        PostComment comment = new PostComment();
+        comment.setPost(post);
+        comment.setUser(user);
+        comment.setContent(content);
+        
+        PostComment saved = commentRepository.save(comment);
+        
+        log.debug("User {} created comment {} on post {}", principal.getId(), saved.getId(), postId);
+        
+        return toResponse(saved);
+    }
+
+    public CommentResponse updateComment(UUID eventId, UUID postId, UUID commentId, UserPrincipal principal, CommentUpdateRequest request) {
+        accessControlService.requireMediaView(principal, eventId);
+        
+        EventFeedPost post = postRepository.findById(postId)
+                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+        
+        if (!eventId.equals(post.getEventId())) {
+            throw new IllegalArgumentException("Post not found");
+        }
+
+        PostComment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
+        
+        if (!postId.equals(comment.getPostId())) {
+            throw new IllegalArgumentException("Comment does not belong to post");
+        }
+
+        if (principal == null || principal.getId() == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+
+        // Only comment creator can update
+        if (comment.getUser() == null || !comment.getUser().getId().equals(principal.getId())) {
+            throw new IllegalArgumentException("Not authorized to update this comment");
+        }
+
+        String content = request != null ? safeTrimToNull(request.getContent()) : null;
+        if (!StringUtils.hasText(content)) {
+            throw new IllegalArgumentException("Comment content is required");
+        }
+        if (content.length() > 2000) {
+            throw new IllegalArgumentException("Comment content too long (max 2000 characters)");
+        }
+
+        comment.setContent(content);
+        PostComment updated = commentRepository.save(comment);
+        
+        log.debug("User {} updated comment {}", principal.getId(), commentId);
+        
+        return toResponse(updated);
+    }
+
+    public void deleteComment(UUID eventId, UUID postId, UUID commentId, UserPrincipal principal) {
+        accessControlService.requireMediaView(principal, eventId);
+        
+        EventFeedPost post = postRepository.findById(postId)
+                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+        
+        if (!eventId.equals(post.getEventId())) {
+            throw new IllegalArgumentException("Post not found");
+        }
+
+        PostComment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
+        
+        if (comment.getPost() == null || !postId.equals(comment.getPost().getId())) {
+            throw new IllegalArgumentException("Comment does not belong to post");
+        }
+
+        if (principal == null || principal.getId() == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+
+        // Only comment creator can delete
+        if (comment.getUser() == null || !comment.getUser().getId().equals(principal.getId())) {
+            throw new IllegalArgumentException("Not authorized to delete this comment");
+        }
+
+        commentRepository.delete(comment);
+        
+        log.debug("User {} deleted comment {}", principal.getId(), commentId);
+    }
+
+    public Page<CommentResponse> getComments(UUID eventId, UUID postId, UserPrincipal principal, Pageable pageable) {
+        accessControlService.requireMediaView(principal, eventId);
+        
+        EventFeedPost post = postRepository.findById(postId)
+                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+        
+        if (!eventId.equals(post.getEventId())) {
+            throw new IllegalArgumentException("Post not found");
+        }
+
+        Page<PostComment> comments = commentRepository.findByPostIdOrderByCreatedAtAsc(postId, pageable);
+        return comments.map(this::toResponse);
+    }
+
+    public long getCommentCount(UUID postId) {
+        return commentRepository.countByPostId(postId);
+    }
+
+    private CommentResponse toResponse(PostComment comment) {
+        CommentResponse resp = new CommentResponse();
+        resp.setId(comment.getId());
+        resp.setPostId(comment.getPost() != null ? comment.getPost().getId() : null);
+        resp.setContent(comment.getContent());
+        resp.setCreatedAt(comment.getCreatedAt());
+        resp.setUpdatedAt(comment.getUpdatedAt());
+
+        // Set user information from relationship
+        if (comment.getUser() != null) {
+            resp.setUserId(comment.getUser().getId());
+            resp.setAuthorName(comment.getUser().getName());
+            resp.setAuthorAvatarUrl(comment.getUser().getProfileImageUrl());
+        }
+
+        return resp;
+    }
+
+    private String safeTrimToNull(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
+    }
+}

@@ -1,5 +1,6 @@
 package eventplanner.features.event.repository;
 
+import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventReminder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,11 +14,19 @@ import java.util.UUID;
 @Repository
 public interface EventReminderRepository extends JpaRepository<EventReminder, UUID> {
 
+    // UUID-based queries (for backward compatibility)
     List<EventReminder> findByEventIdOrderByReminderTimeAsc(UUID eventId);
 
     List<EventReminder> findByEventIdAndReminderTimeAfterOrderByReminderTimeAsc(UUID eventId, LocalDateTime after);
 
     Page<EventReminder> findByEventId(UUID eventId, Pageable pageable);
+    
+    // Relationship-based queries
+    List<EventReminder> findByEventOrderByReminderTimeAsc(Event event);
+
+    List<EventReminder> findByEventAndReminderTimeAfterOrderByReminderTimeAsc(Event event, LocalDateTime after);
+
+    Page<EventReminder> findByEvent(Event event, Pageable pageable);
 
     /**
      * Find all active reminders that should be sent (reminder time has passed and not yet sent)

@@ -4,6 +4,7 @@ import eventplanner.features.feeds.dto.request.FeedPostCreateRequest;
 import eventplanner.features.feeds.dto.request.FeedPostMediaUploadCompleteRequest;
 import eventplanner.features.feeds.dto.response.CreateFeedPostResponse;
 import eventplanner.features.feeds.dto.response.FeedPostResponse;
+import eventplanner.features.feeds.dto.response.PostListResponse;
 import eventplanner.features.feeds.service.FeedPostService;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.RbacPermissions;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -64,12 +66,21 @@ public class FeedPostController {
 
     @GetMapping("/{id}/posts")
     @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
-    @Operation(summary = "List posts", description = "List posts for an event")
-    public ResponseEntity<List<FeedPostResponse>> list(
+    @Operation(summary = "List posts", description = "List posts for an event. Supports pagination via query parameters.")
+    public ResponseEntity<?> list(
             @Parameter(description = "Event ID") @PathVariable UUID id,
+            @Parameter(description = "Page number (0-indexed)") @RequestParam(required = false) Integer page,
+            @Parameter(description = "Page size (max 100)") @RequestParam(required = false) Integer size,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return ResponseEntity.ok(postService.list(id, principal));
+        // If pagination parameters are provided, use paginated endpoint
+        if (page != null || size != null) {
+            PostListResponse response = postService.listPaginated(id, principal, page, size);
+            return ResponseEntity.ok(response);
+        }
+        // Otherwise, return all posts (backward compatibility)
+        List<FeedPostResponse> posts = postService.list(id, principal);
+        return ResponseEntity.ok(posts);
     }
 
     @GetMapping("/{id}/posts/{postId}")

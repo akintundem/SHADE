@@ -2,9 +2,11 @@ package eventplanner.features.event.service;
 
 import eventplanner.features.event.dto.request.EventNotificationSettingsRequest;
 import eventplanner.features.event.dto.response.EventNotificationSettingsResponse;
+import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventNotificationSettings;
 import eventplanner.features.event.enums.EventNotificationChannel;
 import eventplanner.features.event.repository.EventNotificationSettingsRepository;
+import eventplanner.features.event.repository.EventRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,7 @@ public class EventNotificationSettingsService {
     private static final List<EventNotificationChannel> SUPPORTED_CHANNELS = List.of(EventNotificationChannel.EMAIL, EventNotificationChannel.SMS, EventNotificationChannel.PUSH);
 
     private final EventNotificationSettingsRepository settingsRepository;
+    private final EventRepository eventRepository;
 
     public EventNotificationSettingsResponse getSettings(UUID eventId) {
         EventNotificationSettings settings = ensureSettings(eventId);
@@ -43,13 +46,15 @@ public class EventNotificationSettingsService {
     }
 
     private EventNotificationSettings ensureSettings(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
         return settingsRepository.findByEventId(eventId)
-            .orElseGet(() -> settingsRepository.save(EventNotificationSettings.createDefault(eventId)));
+            .orElseGet(() -> settingsRepository.save(EventNotificationSettings.createDefault(event)));
     }
 
     private EventNotificationSettingsResponse toResponse(EventNotificationSettings settings) {
         EventNotificationSettingsResponse response = new EventNotificationSettingsResponse();
-        response.setEventId(settings.getEventId());
+        response.setEventId(settings.getEvent() != null ? settings.getEvent().getId() : null);
         response.setEmailNotifications(settings.getEmailEnabled());
         response.setSmsNotifications(settings.getSmsEnabled());
         response.setPushNotifications(settings.getPushEnabled());

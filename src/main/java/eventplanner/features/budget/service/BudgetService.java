@@ -66,10 +66,10 @@ public class BudgetService {
                 .entityType("Budget")
                 .entityId(saved.getId())
                 .action(ActionType.CREATE)
-                .user(saved.getOwnerId(), null, null)
+                .user(saved.getOwner() != null ? saved.getOwner().getId() : null, null, null)
                 .description(String.format("Budget created with total: %s %s", saved.getTotalBudget(), saved.getCurrency()))
                 .changes(null, saved)
-                .eventId(saved.getEventId())
+                .eventId(saved.getEvent() != null ? saved.getEvent().getId() : null)
                 .log();
         } else {
             auditLogService.builder()
@@ -77,10 +77,10 @@ public class BudgetService {
                 .entityType("Budget")
                 .entityId(saved.getId())
                 .action(ActionType.UPDATE)
-                .user(saved.getOwnerId(), null, null)
+                .user(saved.getOwner() != null ? saved.getOwner().getId() : null, null, null)
                 .description("Budget updated")
                 .changes(oldBudget, saved)
-                .eventId(saved.getEventId())
+                .eventId(saved.getEvent() != null ? saved.getEvent().getId() : null)
                 .log();
         }
         
@@ -127,10 +127,10 @@ public class BudgetService {
             .entityType("Budget")
             .entityId(saved.getId())
             .action(ActionType.UPDATE)
-            .user(saved.getOwnerId(), null, null)
+            .user(saved.getOwner() != null ? saved.getOwner().getId() : null, null, null)
             .description("Budget details updated")
             .changes(oldSnapshot, saved)
-            .eventId(saved.getEventId())
+            .eventId(saved.getEvent() != null ? saved.getEvent().getId() : null)
             .log();
         
         return saved;
@@ -182,8 +182,10 @@ public class BudgetService {
     public List<BudgetLineItem> addBulkLineItems(BulkLineItemRequest request) {
         List<BudgetLineItem> items = request.getLineItems().stream()
                 .map(req -> {
+                    Budget budget = budgetRepository.findById(request.getBudgetId())
+                            .orElseThrow(() -> new IllegalArgumentException("Budget not found"));
                     BudgetLineItem item = new BudgetLineItem();
-                    item.setBudgetId(request.getBudgetId());
+                    item.setBudget(budget);
                     item.setCategory(req.getCategory());
                     item.setDescription(req.getDescription());
                     item.setEstimatedCost(req.getEstimatedCost());
@@ -237,9 +239,9 @@ public class BudgetService {
             .entityType("Budget")
             .entityId(budgetId)
             .action(ActionType.APPROVE)
-            .user(budget.getOwnerId(), request.getApprovedBy(), null)
+            .user(budget.getOwner() != null ? budget.getOwner().getId() : null, request.getApprovedBy(), null)
             .description(String.format("Budget approved. Status changed from %s to APPROVED", oldStatus))
-            .eventId(budget.getEventId())
+            .eventId(budget.getEvent() != null ? budget.getEvent().getId() : null)
             .log();
         
         return saved;
@@ -270,10 +272,10 @@ public class BudgetService {
             .entityType("Budget")
             .entityId(budgetId)
             .action(ActionType.REJECT)
-            .user(budget.getOwnerId(), request.getApprovedBy(), null)
+            .user(budget.getOwner() != null ? budget.getOwner().getId() : null, request.getApprovedBy(), null)
             .description(String.format("Budget rejected. Status changed from %s to REJECTED. Reason: %s", 
                 oldStatus, request.getNotes() != null ? request.getNotes() : "No reason provided"))
-            .eventId(budget.getEventId())
+            .eventId(budget.getEvent() != null ? budget.getEvent().getId() : null)
             .log();
         
         return saved;
@@ -296,9 +298,9 @@ public class BudgetService {
             .entityType("Budget")
             .entityId(budgetId)
             .action(ActionType.SUBMIT)
-            .user(budget.getOwnerId(), null, null)
+            .user(budget.getOwner() != null ? budget.getOwner().getId() : null, null, null)
             .description("Budget submitted for approval")
-            .eventId(budget.getEventId())
+            .eventId(budget.getEvent() != null ? budget.getEvent().getId() : null)
             .log();
         
         return saved;
@@ -532,8 +534,8 @@ public class BudgetService {
         Budget budget = budgetRepository.findById(budgetId)
                 .orElseThrow(() -> new RuntimeException("Budget not found"));
         
-        UUID ownerId = budget.getOwnerId();
-        UUID eventId = budget.getEventId();
+        UUID ownerId = budget.getOwner() != null ? budget.getOwner().getId() : null;
+        UUID eventId = budget.getEvent() != null ? budget.getEvent().getId() : null;
         
         // Explicitly delete all line items first (cascade should handle this, but being explicit)
         List<BudgetLineItem> lineItems = lineItemRepository.findByBudgetId(budgetId);
@@ -711,12 +713,12 @@ public class BudgetService {
             validateCurrency(budget.getCurrency());
         }
         
-        if (budget.getEventId() == null) {
-            throw new IllegalArgumentException("Event ID is required");
+        if (budget.getEvent() == null) {
+            throw new IllegalArgumentException("Event is required");
         }
-        
-        if (budget.getOwnerId() == null) {
-            throw new IllegalArgumentException("Owner ID is required");
+
+        if (budget.getOwner() == null) {
+            throw new IllegalArgumentException("Owner is required");
         }
     }
 

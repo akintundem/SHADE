@@ -2,18 +2,16 @@ package eventplanner.features.feeds.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.storage.upload.MediaUploadStatus;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import jakarta.persistence.Table;
+import eventplanner.features.event.entity.Event;
+import eventplanner.security.auth.entity.UserAccount;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -30,8 +28,12 @@ public class EventFeedPost extends BaseEntity {
         VIDEO
     }
 
-    @Column(name = "event_id", nullable = false)
-    private UUID eventId;
+    /**
+     * Many-to-one relationship with the event this post belongs to.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "post_type", nullable = false)
@@ -47,8 +49,13 @@ public class EventFeedPost extends BaseEntity {
     @Column(name = "media_object_id")
     private UUID mediaObjectId;
 
-    @Column(name = "created_by")
-    private UUID createdBy;
+    /**
+     * Many-to-one relationship with the user who created this post.
+     * Optional as posts might be created by system or during migration.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by")
+    private UserAccount createdBy;
 
     /**
      * Status of media upload for IMAGE/VIDEO posts.
@@ -61,6 +68,20 @@ public class EventFeedPost extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "media_upload_status")
     private MediaUploadStatus mediaUploadStatus = MediaUploadStatus.COMPLETED;
+
+    /**
+     * One-to-many relationship with post likes.
+     * Lazy loaded to avoid N+1 queries.
+     */
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<PostLike> likes = new ArrayList<>();
+
+    /**
+     * One-to-many relationship with post comments.
+     * Lazy loaded to avoid N+1 queries.
+     */
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<PostComment> comments = new ArrayList<>();
 
     /**
      * Ensure mediaUploadStatus is never null for new/updated rows

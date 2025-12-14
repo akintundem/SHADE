@@ -1,6 +1,8 @@
 package eventplanner.features.budget.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
+import eventplanner.features.event.entity.Event;
+import eventplanner.security.auth.entity.UserAccount;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -9,8 +11,8 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @Entity
 @Table(name = "budgets")
@@ -22,11 +24,19 @@ import java.util.UUID;
 @org.hibernate.annotations.SQLRestriction("deleted_at IS NULL")
 public class Budget extends BaseEntity {
 
-    @Column(name = "event_id", nullable = false)
-    private UUID eventId;
+    /**
+     * Many-to-one relationship with the event this budget belongs to.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
 
-    @Column(name = "owner_id", nullable = false)
-    private UUID ownerId;
+    /**
+     * Many-to-one relationship with the user who owns this budget.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", nullable = false)
+    private UserAccount owner;
 
     @Column(name = "total_budget", nullable = false)
     private BigDecimal totalBudget;
@@ -64,8 +74,12 @@ public class Budget extends BaseEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
-    @OneToMany(mappedBy = "budgetId", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private List<BudgetLineItem> lineItems;
+    /**
+     * One-to-many relationship with budget line items.
+     * Lazy loaded to avoid N+1 queries.
+     */
+    @OneToMany(mappedBy = "budget", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<BudgetLineItem> lineItems = new ArrayList<>();
 
     @PrePersist
     public void prePersist() {

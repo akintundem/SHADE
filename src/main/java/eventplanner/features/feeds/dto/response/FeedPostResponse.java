@@ -22,7 +22,24 @@ public class FeedPostResponse {
     @Schema(description = "Presigned download URL for media (if present)")
     private String mediaUrl;
 
+    @Schema(description = "User ID who created the post")
     private UUID createdBy;
+    
+    @Schema(description = "Author name")
+    private String authorName;
+    
+    @Schema(description = "Author avatar URL")
+    private String authorAvatarUrl;
+    
+    @Schema(description = "Number of likes")
+    private Long likeCount;
+    
+    @Schema(description = "Number of comments")
+    private Long commentCount;
+    
+    @Schema(description = "Whether the current user has liked this post")
+    private Boolean isLiked;
+    
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

@@ -2,7 +2,9 @@ package eventplanner.features.event.service;
 
 import eventplanner.features.event.dto.request.EventReminderRequest;
 import eventplanner.features.event.dto.response.EventReminderResponse;
+import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventReminder;
+import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.event.repository.EventReminderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +25,7 @@ import java.util.stream.Collectors;
 public class EventReminderService {
 
     private final EventReminderRepository reminderRepository;
+    private final EventRepository eventRepository;
     private final EventRecipientResolverService recipientResolverService;
 
     public List<EventReminderResponse> list(UUID eventId, int page, int size) {
@@ -40,8 +43,11 @@ public class EventReminderService {
             );
         }
         
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+        
         EventReminder reminder = new EventReminder();
-        reminder.setEventId(eventId);
+        reminder.setEvent(event);
         reminder.setTitle(request.getTitle());
         reminder.setDescription(request.getDescription());
         
@@ -90,7 +96,7 @@ public class EventReminderService {
     public EventReminderResponse update(UUID eventId, UUID reminderId, EventReminderRequest request) {
         EventReminder reminder = reminderRepository.findById(reminderId)
                 .orElseThrow(() -> new IllegalArgumentException("Reminder not found"));
-        if (!reminder.getEventId().equals(eventId)) {
+        if (reminder.getEvent() == null || !reminder.getEvent().getId().equals(eventId)) {
             throw new IllegalArgumentException("Reminder does not belong to event");
         }
         if (request.getTitle() != null) reminder.setTitle(request.getTitle());
@@ -132,7 +138,7 @@ public class EventReminderService {
     public void delete(UUID eventId, UUID reminderId) {
         EventReminder reminder = reminderRepository.findById(reminderId)
                 .orElseThrow(() -> new IllegalArgumentException("Reminder not found"));
-        if (!reminder.getEventId().equals(eventId)) {
+        if (reminder.getEvent() == null || !reminder.getEvent().getId().equals(eventId)) {
             throw new IllegalArgumentException("Reminder does not belong to event");
         }
         reminderRepository.delete(reminder);
@@ -141,7 +147,7 @@ public class EventReminderService {
     public EventReminderResponse get(UUID eventId, UUID reminderId) {
         EventReminder reminder = reminderRepository.findById(reminderId)
                 .orElseThrow(() -> new IllegalArgumentException("Reminder not found"));
-        if (!reminder.getEventId().equals(eventId)) {
+        if (reminder.getEvent() == null || !reminder.getEvent().getId().equals(eventId)) {
             throw new IllegalArgumentException("Reminder does not belong to event");
         }
         return toResponse(reminder);
@@ -150,7 +156,7 @@ public class EventReminderService {
     private EventReminderResponse toResponse(EventReminder r) {
         EventReminderResponse resp = new EventReminderResponse();
         resp.setReminderId(r.getId());
-        resp.setEventId(r.getEventId());
+        resp.setEventId(r.getEvent() != null ? r.getEvent().getId() : null);
         resp.setTitle(r.getTitle());
         resp.setDescription(r.getDescription());
         resp.setReminderTime(r.getReminderTime());

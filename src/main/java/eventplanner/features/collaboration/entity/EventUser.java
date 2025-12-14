@@ -3,13 +3,13 @@ package eventplanner.features.collaboration.entity;
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.EventUserType;
 import eventplanner.common.domain.enums.RegistrationStatus;
+import eventplanner.features.event.entity.Event;
+import eventplanner.security.auth.entity.UserAccount;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-
-import java.util.UUID;
 
 @Entity
 @Table(name = "event_users")
@@ -21,13 +21,21 @@ public class EventUser extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private java.util.UUID id;
 
-    @Column(name = "event_id", nullable = false)
-    private UUID eventId;
+    /**
+     * Many-to-one relationship with the event.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
 
-    @Column(name = "user_id", nullable = false)
-    private UUID userId;
+    /**
+     * Many-to-one relationship with the user.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private UserAccount user;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "user_type", nullable = false)

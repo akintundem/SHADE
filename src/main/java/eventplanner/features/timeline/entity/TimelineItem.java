@@ -1,13 +1,9 @@
 package eventplanner.features.timeline.entity;
 
 import eventplanner.common.domain.enums.TimelineStatus;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
+import eventplanner.features.event.entity.Event;
+import eventplanner.security.auth.entity.UserAccount;
+import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -25,8 +21,12 @@ public class TimelineItem {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "event_id", nullable = false)
-    private UUID eventId;
+    /**
+     * Many-to-one relationship with the event this timeline item belongs to.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
 
     @Column(name = "title", nullable = false)
     private String title;
@@ -40,8 +40,12 @@ public class TimelineItem {
     @Column(name = "duration_minutes")
     private Integer durationMinutes;
 
-    @Column(name = "assigned_to")
-    private UUID assignedTo;
+    /**
+     * Many-to-one relationship with the user assigned to this timeline item.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_to")
+    private UserAccount assignedTo;
 
     @Column(name = "dependencies")
     private UUID[] dependencies;
@@ -51,8 +55,12 @@ public class TimelineItem {
     private TimelineStatus status;
     
     // Task hierarchy support
-    @Column(name = "parent_task_id")
-    private UUID parentTaskId;
+    /**
+     * Self-referential many-to-one relationship for task hierarchy (parent task).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_task_id")
+    private TimelineItem parentTask;
     
     @Column(name = "task_order")
     private Integer taskOrder;

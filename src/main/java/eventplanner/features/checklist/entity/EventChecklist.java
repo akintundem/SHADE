@@ -1,6 +1,8 @@
 package eventplanner.features.checklist.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
+import eventplanner.features.event.entity.Event;
+import eventplanner.security.auth.entity.UserAccount;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -21,8 +23,12 @@ public class EventChecklist extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "event_id", nullable = false)
-    private UUID eventId;
+    /**
+     * Many-to-one relationship with the event this checklist belongs to.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
 
     @Column(name = "title", nullable = false)
     private String title;
@@ -39,8 +45,12 @@ public class EventChecklist extends BaseEntity {
     @Column(name = "priority")
     private String priority; // HIGH, MEDIUM, LOW
 
-    @Column(name = "assigned_to")
-    private UUID assignedTo;
+    /**
+     * Many-to-one relationship with the user assigned to this checklist item.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_to")
+    private UserAccount assignedTo;
 
     @Column(name = "category")
     private String category;

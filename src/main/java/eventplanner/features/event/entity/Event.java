@@ -3,18 +3,19 @@ package eventplanner.features.event.entity;
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.EventStatus;
 import eventplanner.common.domain.enums.EventType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Embedded;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Table;
+import eventplanner.features.event.entity.EventNotificationSettings;
+import eventplanner.features.event.entity.EventReminder;
+import eventplanner.features.event.entity.EventStoredObject;
+import eventplanner.security.auth.entity.UserAccount;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -32,8 +33,12 @@ public class Event extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "owner_id", nullable = false)
-    private UUID ownerId;
+    /**
+     * Many-to-one relationship with the user who owns this event.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", nullable = false)
+    private UserAccount owner;
 
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
@@ -138,8 +143,12 @@ public class Event extends BaseEntity {
     @Column(name = "timeline_published_at")
     private LocalDateTime timelinePublishedAt;
 
-    @Column(name = "timeline_published_by")
-    private UUID timelinePublishedBy;
+    /**
+     * Many-to-one relationship with the user who published the timeline.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "timeline_published_by")
+    private UserAccount timelinePublishedBy;
 
     @Column(name = "timeline_publish_message", columnDefinition = "TEXT")
     private String timelinePublishMessage;
@@ -151,8 +160,12 @@ public class Event extends BaseEntity {
     @Column(name = "archived_at")
     private LocalDateTime archivedAt;
 
-    @Column(name = "archived_by")
-    private UUID archivedBy;
+    /**
+     * Many-to-one relationship with the user who archived this event.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "archived_by")
+    private UserAccount archivedBy;
 
     @Column(name = "archive_reason", columnDefinition = "TEXT")
     private String archiveReason;
@@ -160,12 +173,43 @@ public class Event extends BaseEntity {
     @Column(name = "restored_at")
     private LocalDateTime restoredAt;
 
-    @Column(name = "restored_by")
-    private UUID restoredBy;
+    /**
+     * Many-to-one relationship with the user who restored this event.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "restored_by")
+    private UserAccount restoredBy;
 
-    public Event(String name, EventType eventType, UUID ownerId) {
+    /**
+     * One-to-many relationship with stored objects (media, assets, etc.).
+     * Lazy loaded to avoid N+1 queries.
+     */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<EventStoredObject> storedObjects = new ArrayList<>();
+
+    /**
+     * One-to-many relationship with event reminders.
+     * Lazy loaded to avoid N+1 queries.
+     */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<EventReminder> reminders = new ArrayList<>();
+
+    /**
+     * One-to-one relationship with notification settings.
+     */
+    @OneToOne(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private EventNotificationSettings notificationSettings;
+
+    /**
+     * One-to-many relationship with feed posts.
+     * Lazy loaded to avoid N+1 queries.
+     */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<eventplanner.features.feeds.entity.EventFeedPost> feedPosts = new ArrayList<>();
+
+    public Event(String name, EventType eventType, UserAccount owner) {
         this.name = name;
         this.eventType = eventType;
-        this.ownerId = ownerId;
+        this.owner = owner;
     }
 }

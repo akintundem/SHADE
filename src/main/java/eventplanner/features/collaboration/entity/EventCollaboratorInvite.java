@@ -3,19 +3,15 @@ package eventplanner.features.collaboration.entity;
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.EventUserType;
 import eventplanner.features.collaboration.enums.CollaboratorInviteStatus;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Index;
-import jakarta.persistence.Table;
+import eventplanner.features.event.entity.Event;
+import eventplanner.security.auth.entity.UserAccount;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Entity
 @Table(
@@ -34,14 +30,26 @@ import java.util.UUID;
 @EqualsAndHashCode(callSuper = true)
 public class EventCollaboratorInvite extends BaseEntity {
 
-    @Column(name = "event_id", nullable = false)
-    private UUID eventId;
+    /**
+     * Many-to-one relationship with the event this invite is for.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
 
-    @Column(name = "inviter_user_id", nullable = false)
-    private UUID inviterUserId;
+    /**
+     * Many-to-one relationship with the user who sent the invite.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "inviter_user_id", nullable = false)
+    private UserAccount inviter;
 
-    @Column(name = "invitee_user_id")
-    private UUID inviteeUserId;
+    /**
+     * Many-to-one relationship with the user who was invited (optional, may be null if invite is by email).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "invitee_user_id")
+    private UserAccount invitee;
 
     @Column(name = "invitee_email", length = 180)
     private String inviteeEmail;

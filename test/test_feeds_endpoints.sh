@@ -132,6 +132,7 @@ POST_MEDIA_REQUIRED_HEADERS=""
 TEST_IMAGE_PATH=""
 TEST_IMAGE_SHA256=""
 TEST_IMAGE_SIZE=""
+COMMENT_ID=""
 
 verify_email_in_database() {
     local email="$1"
@@ -283,6 +284,7 @@ cat > "$REPORT_FILE" << EOF
 | Image Posts | 0 | 0 | 0 | 0% |
 | Video Posts | 0 | 0 | 0 | 0% |
 | Post Management | 0 | 0 | 0 | 0% |
+| Engagement Features | 0 | 0 | 0 | 0% |
 | **TOTAL** | 0 | 0 | 0 | 0% |
 
 ---
@@ -393,6 +395,9 @@ run_test() {
             "Create Video Post")
                 VIDEO_POST_ID=$(echo "$response_body" | jq -r '.post.id // empty')
                 extract_post_presigned_fields "$response_body"
+                ;;
+            "Create Comment")
+                COMMENT_ID=$(echo "$response_body" | jq -r '.id // empty')
                 ;;
         esac
     fi
@@ -547,6 +552,7 @@ main() {
     echo "5. Test IMAGE posts (with presigned upload)"
     echo "6. Test VIDEO posts (with presigned upload)"
     echo "7. Test post management (list, get, delete)"
+    echo "8. Test engagement features (likes, comments, pagination)"
     echo ""
     
     if ! wait_for_service; then
@@ -691,6 +697,47 @@ EOF
     echo "=================================="
     
     run_test "List All Posts" "GET" "/api/v1/events/$EVENT_ID/posts" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all posts for event"
+    
+    run_test "List Posts with Pagination" "GET" "/api/v1/events/$EVENT_ID/posts?page=0&size=10" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List posts with pagination"
+    
+    # Step 5: Engagement Features (Likes & Comments)
+    echo -e "${CYAN}❤️  Step 5: Engagement Features Tests${NC}"
+    echo "========================================="
+    
+    if [ -n "$POST_ID" ]; then
+        # Like functionality
+        run_test "Like Post" "POST" "/api/v1/events/$EVENT_ID/posts/$POST_ID/like" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Like a post"
+        
+        run_test "Get Post After Like" "GET" "/api/v1/events/$EVENT_ID/posts/$POST_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get post to verify like count and isLiked flag"
+        
+        run_test "Unlike Post" "DELETE" "/api/v1/events/$EVENT_ID/posts/$POST_ID/like" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Unlike a post"
+        
+        # Comment functionality
+        local create_comment='{
+            "content": "This is a test comment on the post!"
+        }'
+        run_test "Create Comment" "POST" "/api/v1/events/$EVENT_ID/posts/$POST_ID/comments" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$create_comment" "200" "Create a comment on a post"
+        
+        run_test "List Comments" "GET" "/api/v1/events/$EVENT_ID/posts/$POST_ID/comments" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List comments for a post"
+        
+        run_test "List Comments with Pagination" "GET" "/api/v1/events/$EVENT_ID/posts/$POST_ID/comments?page=0&size=10" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List comments with pagination"
+        
+        if [ -n "$COMMENT_ID" ]; then
+            local update_comment='{
+                "content": "This is an updated comment!"
+            }'
+            run_test "Update Comment" "PUT" "/api/v1/events/$EVENT_ID/posts/$POST_ID/comments/$COMMENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_comment" "200" "Update a comment"
+            
+            run_test "Delete Comment" "DELETE" "/api/v1/events/$EVENT_ID/posts/$POST_ID/comments/$COMMENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete a comment"
+        fi
+        
+        # Like again to test engagement counts
+        run_test "Like Post Again" "POST" "/api/v1/events/$EVENT_ID/posts/$POST_ID/like" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Like post again to test idempotency"
+        
+        run_test "Get Post with Engagement Data" "GET" "/api/v1/events/$EVENT_ID/posts/$POST_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get post with author info and engagement counts"
+    fi
+    
+    echo ""
     
     # Delete posts (cleanup)
     if [ -n "$VIDEO_POST_ID" ]; then

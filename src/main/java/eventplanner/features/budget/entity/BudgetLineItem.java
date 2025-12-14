@@ -9,7 +9,6 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.util.UUID;
 
 @Entity
 @Table(name = "budget_line_items")
@@ -21,8 +20,12 @@ import java.util.UUID;
 @org.hibernate.annotations.SQLRestriction("deleted_at IS NULL")
 public class BudgetLineItem extends BaseEntity {
 
-    @Column(name = "budget_id", nullable = false)
-    private UUID budgetId;
+    /**
+     * Many-to-one relationship with the budget this line item belongs to.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "budget_id", nullable = false)
+    private Budget budget;
 
     @Column(name = "category", nullable = false)
     private String category;

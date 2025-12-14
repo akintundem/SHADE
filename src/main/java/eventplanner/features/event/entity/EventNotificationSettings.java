@@ -1,14 +1,9 @@
 package eventplanner.features.event.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
-
-import java.util.UUID;
 
 @Entity
 @Table(name = "event_notification_settings",
@@ -17,8 +12,13 @@ import java.util.UUID;
 @Setter
 public class EventNotificationSettings extends BaseEntity {
 
-    @Column(name = "event_id", nullable = false, updatable = false)
-    private UUID eventId;
+    /**
+     * One-to-one relationship with the event (unique constraint ensures one settings per event).
+     * This is the owning side of the relationship.
+     */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false, updatable = false, unique = true)
+    private Event event;
 
     @Column(name = "email_enabled", nullable = false)
     private Boolean emailEnabled = true;
@@ -35,9 +35,9 @@ public class EventNotificationSettings extends BaseEntity {
     @Column(name = "default_reminder_minutes", nullable = false)
     private Integer defaultReminderMinutes = 1440;
 
-    public static EventNotificationSettings createDefault(UUID eventId) {
+    public static EventNotificationSettings createDefault(Event event) {
         EventNotificationSettings settings = new EventNotificationSettings();
-        settings.setEventId(eventId);
+        settings.setEvent(event);
         return settings;
     }
 }

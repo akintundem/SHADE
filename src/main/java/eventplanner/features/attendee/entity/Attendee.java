@@ -1,5 +1,6 @@
 package eventplanner.features.attendee.entity;
 
+import eventplanner.features.event.entity.Event;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -30,8 +31,12 @@ public class Attendee {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "event_id", nullable = false)
-    private UUID eventId;
+    /**
+     * Many-to-one relationship with the event this attendee belongs to.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
 
     @Column(name = "name", nullable = false)
     private String name;
