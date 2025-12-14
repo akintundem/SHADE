@@ -1121,23 +1121,33 @@ EOF
     run_test "Update Event Capacity (via Update Event)" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$capacity_update_data" "200" "Update event capacity via PUT /events/{id}"
     
     local deadline_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
-    local deadline_data='{
-        "deadline": "'$deadline_date'"
-    }'
-    run_test "Update Registration Deadline" "PUT" "/api/v1/events/$EVENT_ID/registration-deadline" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$deadline_data" "200" "Update registration deadline"
+    local deadline_data
+    deadline_data=$(cat <<EOF
+{
+  "event": {
+    "registrationDeadline": "$deadline_date"
+  }
+}
+EOF
+)
+    run_test "Update Registration Deadline (via Update Event)" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$deadline_data" "200" "Update registration deadline via PUT /events/{id}"
     
     # Visibility & Access Control Tests
-    run_test "Get Event Visibility" "GET" "/api/v1/events/$EVENT_ID/visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event visibility settings"
+    run_test "Get Event Visibility (via view=visibility)" "GET" "/api/v1/events/$EVENT_ID?view=visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event visibility settings via GET /events/{id}?view=visibility"
     
     local visibility_data='{
-        "isPublic": true
+        "event": {
+            "isPublic": true
+        }
     }'
-    run_test "Update Event Visibility" "PUT" "/api/v1/events/$EVENT_ID/visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_data" "200" "Update event visibility"
+    run_test "Update Event Visibility (via Update Event)" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_data" "200" "Update event visibility via PUT /events/{id}"
 
     local visibility_private_data='{
-        "isPublic": false
+        "event": {
+            "isPublic": false
+        }
     }'
-    run_test "Make Event Private (via visibility update)" "PUT" "/api/v1/events/$EVENT_ID/visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_private_data" "200" "Make event private"
+    run_test "Make Event Private (via Update Event)" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_private_data" "200" "Make event private via PUT /events/{id}"
     
     # Duplication Tests
     local duplicate_data='{

@@ -1,14 +1,11 @@
 package eventplanner.features.event.controller;
 
 import eventplanner.features.event.dto.request.EventDuplicateRequest;
-import eventplanner.features.event.dto.request.EventRegistrationDeadlineRequest;
 import eventplanner.features.event.dto.request.EventShareRequest;
-import eventplanner.features.event.dto.request.EventVisibilityUpdateRequest;
 import jakarta.validation.Valid;
 import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.dto.response.EventShareResponse;
 import eventplanner.features.event.dto.response.EventSharingOptionsResponse;
-import eventplanner.features.event.dto.response.EventVisibilityResponse;
 import eventplanner.features.event.dto.response.UserEventsSummaryResponse;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.service.EventService;
@@ -140,75 +137,6 @@ public class EventManagementController {
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (ResponseStatusException ex) {
             throw ex;
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
-    }
-
-    @PutMapping("/{id}/registration-deadline")
-    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#id"})
-    @Operation(summary = "Update registration deadline", description = "Update the registration deadline for an event")
-    public ResponseEntity<EventResponse> updateRegistrationDeadline(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody EventRegistrationDeadlineRequest request) {
-        try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
-            // Verify user is owner or admin
-            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update registration deadline");
-            }
-            Event updatedEvent = eventService.updateRegistrationDeadline(id, request.getDeadline());
-            return ResponseEntity.ok(eventService.toResponse(updatedEvent));
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
-    }
-
-    // ==================== 5. EVENT VISIBILITY & ACCESS CONTROL ENDPOINTS ====================
-
-    @GetMapping("/{id}/visibility")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
-    @Operation(summary = "Get event visibility", description = "Get the visibility settings for an event. Only accessible if event is public, user is owner, or user has appropriate role.")
-    public ResponseEntity<EventVisibilityResponse> getVisibility(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal user) {
-        try {
-            Event event = eventService.getByIdWithAccessControl(id, user)
-                    .orElseThrow(() -> new IllegalArgumentException("Event not found or access denied"));
-            
-            EventVisibilityResponse response = new EventVisibilityResponse();
-            response.setEventId(id);
-            response.setIsPublic(event.getIsPublic());
-            response.setRequiresApproval(event.getRequiresApproval());
-            response.setAccessLevel(event.getIsPublic() ? "public" : "private");
-            response.setUpdatedAt(event.getUpdatedAt() != null ? event.getUpdatedAt().toString() : null);
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
-    }
-
-    @PutMapping("/{id}/visibility")
-    @RequiresPermission(value = RbacPermissions.EVENT_VISIBILITY_UPDATE, resources = {"event_id=#id"})
-    @Operation(summary = "Update event visibility", description = "Update the visibility settings for an event")
-    public ResponseEntity<EventResponse> updateVisibility(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody EventVisibilityUpdateRequest request) {
-        try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
-            // Verify user is owner or admin
-            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update visibility");
-            }
-            Event updatedEvent = eventService.updateVisibility(id, request.getIsPublic());
-            return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }

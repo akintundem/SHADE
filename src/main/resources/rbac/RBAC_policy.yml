@@ -473,16 +473,6 @@ policy:
         owns_scope: false
         is_member: true
     -
-      name: event.visibility.update
-      scope: EVENT
-      resources: id
-      description: Make event private; Make event public
-      conditions: "Owner or Manager+Owner confirm; audited"
-      abac:
-        is_authenticated: true
-        owns_scope: true
-        is_member: true
-    -
       name: payment.read
       scope: EVENT
       resources: event_id
@@ -1180,7 +1170,6 @@ policy:
         - event.reminder.read
         - event.reminder.update
         - event.update
-        - event.visibility.update
         - role.assign
         - role.read
         - role.remove
@@ -1247,7 +1236,6 @@ policy:
         - event.reminder.read
         - event.reminder.update
         - event.update
-        - event.visibility.update
         - role.assign
         - role.read
         - role.remove

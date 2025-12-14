@@ -7,6 +7,7 @@ import eventplanner.features.event.dto.request.UpdateEventWithCoverUploadRequest
 import eventplanner.features.event.dto.request.EventFeedRequest;
 import eventplanner.features.event.dto.response.CreateEventWithCoverUploadResponse;
 import eventplanner.features.event.dto.response.EventCapacityResponse;
+import eventplanner.features.event.dto.response.EventVisibilityResponse;
 import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.dto.response.EventFeedResponse;
 import eventplanner.features.event.dto.response.UpdateEventWithCoverUploadResponse;
@@ -115,7 +116,7 @@ public class EventCrudController {
     @Operation(summary = "Get event by ID", description = "COMPLETE - Retrieve a specific event by its unique identifier. Returns full details for owners/high-responsibility users, or feed view for guests.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event found",
-                content = @Content(schema = @Schema(oneOf = {EventResponse.class, EventFeedResponse.class, EventCapacityResponse.class}))),
+                content = @Content(schema = @Schema(oneOf = {EventResponse.class, EventFeedResponse.class, EventCapacityResponse.class, EventVisibilityResponse.class}))),
         @ApiResponse(responseCode = "404", description = "Event not found or access denied"),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
         @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions")
@@ -123,7 +124,7 @@ public class EventCrudController {
     public ResponseEntity<?> get(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal user,
-            @Parameter(description = "Optional response projection. Supported: capacity, full, feed. Default: full for owners/high-responsibility; feed for guests.") 
+            @Parameter(description = "Optional response projection. Supported: capacity, visibility, full, feed. Default: full for owners/high-responsibility; feed for guests.") 
             @RequestParam(value = "view", required = false) String view,
             @Parameter(description = "Feed pagination (only used for guest users)") 
             @ModelAttribute @Valid EventFeedRequest feedRequest) {
@@ -157,6 +158,18 @@ public class EventCrudController {
             boolean open = event.getEventStatus() == eventplanner.common.domain.enums.EventStatus.REGISTRATION_OPEN
                     && (event.getRegistrationDeadline() == null || LocalDateTime.now(ZoneOffset.UTC).isBefore(event.getRegistrationDeadline()));
             response.setIsRegistrationOpen(open);
+            return ResponseEntity.ok(response);
+        }
+
+        // Projection: visibility (includes registration deadline)
+        if ("visibility".equals(normalizedView)) {
+            EventVisibilityResponse response = new EventVisibilityResponse();
+            response.setEventId(id);
+            response.setIsPublic(event.getIsPublic());
+            response.setRequiresApproval(event.getRequiresApproval());
+            response.setRegistrationDeadline(event.getRegistrationDeadline());
+            response.setAccessLevel(Boolean.TRUE.equals(event.getIsPublic()) ? "public" : "private");
+            response.setUpdatedAt(event.getUpdatedAt() != null ? event.getUpdatedAt().toString() : null);
             return ResponseEntity.ok(response);
         }
         

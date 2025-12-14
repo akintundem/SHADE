@@ -1040,17 +1040,6 @@ public class EventService {
     // ==================== EVENT CAPACITY & REGISTRATION METHODS ====================
 
     /**
-     * Update event capacity
-     */
-    public Event updateCapacity(UUID eventId, Integer newCapacity) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setCapacity(newCapacity);
-        return eventRepository.save(event);
-    }
-
-    /**
      * Get available capacity
      */
     public Integer getAvailableCapacity(UUID eventId) {
@@ -1063,17 +1052,6 @@ public class EventService {
         
         int currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
         return Math.max(0, event.getCapacity() - currentCount);
-    }
-
-    /**
-     * Update registration deadline
-     */
-    public Event updateRegistrationDeadline(UUID eventId, LocalDateTime deadline) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setRegistrationDeadline(deadline);
-        return eventRepository.save(event);
     }
 
     // ==================== EVENT VISIBILITY & ACCESS CONTROL METHODS ====================
@@ -1097,17 +1075,6 @@ public class EventService {
                 .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
         
         event.setIsPublic(false);
-        return eventRepository.save(event);
-    }
-
-    /**
-     * Update event visibility
-     */
-    public Event updateVisibility(UUID eventId, Boolean isPublic) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setIsPublic(isPublic);
         return eventRepository.save(event);
     }
 

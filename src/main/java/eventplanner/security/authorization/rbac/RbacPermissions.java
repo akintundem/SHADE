@@ -57,8 +57,6 @@ public final class RbacPermissions {
     public static final String COMMUNICATION_SEND = "communication.send";
     public static final String EVENT_ASSETS_READ = "event.assets.read";
     public static final String EVENT_ASSETS_UPLOAD = "event.assets.upload";
-    public static final String EVENT_CAPACITY_READ = "event.capacity.read";
-    public static final String EVENT_CAPACITY_UPDATE = "event.capacity.update";
     public static final String EVENT_CANCEL = "event.cancel";
     public static final String EVENT_COVER_IMAGE_DELETE = "event.coverimage.delete";
     public static final String EVENT_COVER_IMAGE_UPDATE = "event.coverimage.update";
@@ -81,8 +79,6 @@ public final class RbacPermissions {
     public static final String EVENT_REMINDER_UPDATE = "event.reminder.update";
     public static final String EVENT_STATUS_UPDATE = "event.update";
     public static final String EVENT_UPDATE = "event.update";
-    public static final String EVENT_VISIBILITY_READ = "event.visibility.read";
-    public static final String EVENT_VISIBILITY_UPDATE = "event.visibility.update";
     public static final String MY_EVENTS_READ = "my.events.read";
     public static final String MY_EVENTS_SEARCH = "my.events.search";
     public static final String ORGANIZATION_CREATE = "organization.create";
