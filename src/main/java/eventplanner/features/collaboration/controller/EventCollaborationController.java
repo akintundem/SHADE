@@ -1,21 +1,20 @@
-package eventplanner.features.event.controller;
+package eventplanner.features.collaboration.controller;
 
-import eventplanner.features.event.dto.request.EventCollaboratorRequest;
-import eventplanner.features.event.dto.response.EventCollaboratorResponse;
-import eventplanner.features.event.service.EventCollaboratorService;
+import eventplanner.features.collaboration.dto.request.EventCollaboratorRequest;
+import eventplanner.features.collaboration.dto.response.EventCollaboratorResponse;
+import eventplanner.features.collaboration.service.EventCollaboratorService;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
-import org.springframework.http.HttpStatus;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.server.ResponseStatusException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -42,7 +42,7 @@ public class EventCollaborationController {
     private final AuthorizationService authorizationService;
 
     public EventCollaborationController(EventCollaboratorService collaboratorService,
-                                       AuthorizationService authorizationService) {
+                                        AuthorizationService authorizationService) {
         this.collaboratorService = collaboratorService;
         this.authorizationService = authorizationService;
     }
@@ -67,7 +67,7 @@ public class EventCollaborationController {
     }
 
     @PostMapping("/{id}/collaborators")
-    @RequiresPermission(value = RbacPermissions.ROLE_ASSIGN, resources = {"event_id=#id"})
+    @RequiresPermission(value = RbacPermissions.ROLE_ASSIGN, resources = {"event_id=#id", "id=#id", "user_id=#request.userId"})
     @Operation(summary = "Add event collaborator", description = "Add a new collaborator to an event")
     public ResponseEntity<EventCollaboratorResponse> addCollaborator(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -85,7 +85,7 @@ public class EventCollaborationController {
     }
 
     @PutMapping("/{id}/collaborators/{collaboratorId}")
-    @RequiresPermission(value = RbacPermissions.ROLE_UPDATE, resources = {"event_id=#id"})
+    @RequiresPermission(value = RbacPermissions.ROLE_UPDATE, resources = {"event_id=#id", "id=#id", "collaborator_id=#collaboratorId"})
     @Operation(summary = "Update event collaborator", description = "Update collaborator information")
     public ResponseEntity<EventCollaboratorResponse> updateCollaborator(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -104,7 +104,7 @@ public class EventCollaborationController {
     }
 
     @DeleteMapping("/{id}/collaborators/{collaboratorId}")
-    @RequiresPermission(value = RbacPermissions.ROLE_REMOVE, resources = {"event_id=#id"})
+    @RequiresPermission(value = RbacPermissions.ROLE_REMOVE, resources = {"event_id=#id", "id=#id", "collaborator_id=#collaboratorId"})
     @Operation(summary = "Remove event collaborator", description = "Remove a collaborator from an event")
     public ResponseEntity<Void> removeCollaborator(
             @Parameter(description = "Event ID") @PathVariable UUID id,
@@ -121,3 +121,8 @@ public class EventCollaborationController {
         return ResponseEntity.noContent().build();
     }
 }
+
+
+
+
+

@@ -66,10 +66,10 @@ public class UserManagementController {
     @GetMapping("/directory")
     @RequiresPermission(RbacPermissions.USER_SEARCH)
     public Page<PublicUserResponse> searchDirectory(@RequestParam(defaultValue = "") String searchTerm,
-                                              @PageableDefault(size = 20) Pageable pageable) {
+                                              @PageableDefault(size = 10) Pageable pageable) {
         String sanitizedTerm = searchTerm != null ? searchTerm.trim() : "";
         if (sanitizedTerm.isEmpty()) {
-            return Page.empty(pageable);
+            return userAccountService.listPublicUsers(pageable);
         }
         return userAccountService.searchPublicUsers(sanitizedTerm, pageable);
     }

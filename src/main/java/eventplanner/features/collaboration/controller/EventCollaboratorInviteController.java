@@ -1,10 +1,10 @@
-package eventplanner.features.event.controller;
+package eventplanner.features.collaboration.controller;
 
 import eventplanner.features.collaboration.service.EventCollaboratorInviteService;
 import eventplanner.features.event.dto.request.CreateCollaboratorInviteRequest;
 import eventplanner.features.event.dto.request.RespondToCollaboratorInviteRequest;
 import eventplanner.features.event.dto.response.CollaboratorInviteResponse;
-import eventplanner.features.event.dto.response.EventCollaboratorResponse;
+import eventplanner.features.collaboration.dto.response.EventCollaboratorResponse;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
@@ -193,4 +193,8 @@ public class EventCollaboratorInviteController {
         }
     }
 }
+
+
+
+
 

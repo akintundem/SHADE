@@ -98,6 +98,13 @@ public class UserAccountService {
             .map(this::toPublicUserResponse);
     }
 
+    /**
+     * Public directory listing (paginated). Intended for "suggested users" UX.
+     */
+    public Page<PublicUserResponse> listPublicUsers(Pageable pageable) {
+        return userAccountRepository.findAll(pageable).map(this::toPublicUserResponse);
+    }
+
     private PublicUserResponse toPublicUserResponse(UserAccount user) {
         return PublicUserResponse.builder()
                 .id(user.getId())

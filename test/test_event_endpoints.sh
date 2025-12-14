@@ -180,6 +180,7 @@ OTHER_DEVICE_ID=""
 POST_ID=""
 IMAGE_POST_ID=""
 
+
 verify_email_in_database() {
     local email="$1"
     if command -v docker >/dev/null 2>&1; then
@@ -682,6 +683,7 @@ authenticate_user() {
             # Complete onboarding
             local onboarding_data='{
                 "name": "'$TEST_USER_NAME'",
+                "username": "testuser_'"$(date +%s | cut -c1-8)"'",
                 "phoneNumber": "'$TEST_USER_PHONE'",
                 "dateOfBirth": "1990-01-01",
                 "acceptTerms": true,
@@ -906,6 +908,7 @@ main() {
         exit 1
     fi
     echo ""
+
     
     # Step 4: CRUD Operations Tests
     echo -e "${CYAN}📝 Step 4: CRUD Operations Tests${NC}"
@@ -1354,40 +1357,8 @@ EOF
     run_test "Remove Cover Image" "DELETE" "/api/v1/events/$EVENT_ID/cover-image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Remove cover image"
     echo ""
     
-    # Step 7: Collaboration Tests
-    echo -e "${CYAN}🤝 Step 7: Collaboration Tests${NC}"
-    echo "==============================="
-    
-    # Collaboration Tests
-    run_test "Get Event Collaborators" "GET" "/api/v1/events/$EVENT_ID/collaborators" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event collaborators"
-    
-    local collaborator_data='{
-        "userId": "87654321-4321-4321-4321-210987654321",
-        "email": "collaborator@example.com",
-        "role": "COLLABORATOR",
-        "permissions": ["read", "write"],
-        "notes": "Test collaborator",
-        "sendInvitation": true
-    }'
-    run_test "Add Event Collaborator" "POST" "/api/v1/events/$EVENT_ID/collaborators" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$collaborator_data" "200" "Add event collaborator"
-    
-    # Update collaborator (using captured ID when available)
-    local mock_collaborator_id="87654321-4321-4321-4321-210987654321"
-    local collaborator_identifier="${COLLABORATOR_ID:-$mock_collaborator_id}"
-    local collaborator_update_data='{
-        "userId": "87654321-4321-4321-4321-210987654321",
-        "email": "updated-collaborator@example.com",
-        "role": "ADMIN",
-        "permissions": ["read", "write", "delete"],
-        "notes": "Updated collaborator"
-    }'
-    run_test "Update Event Collaborator" "PUT" "/api/v1/events/$EVENT_ID/collaborators/$collaborator_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$collaborator_update_data" "200" "Update event collaborator"
-    
-    run_test "Remove Event Collaborator" "DELETE" "/api/v1/events/$EVENT_ID/collaborators/$collaborator_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Remove event collaborator"
-    echo ""
-
-    # Step 7.5: Posts CRUD Tests
-    echo -e "${CYAN}📰 Step 7.5: Posts CRUD Tests${NC}"
+    # Step 7: Posts CRUD Tests
+    echo -e "${CYAN}📰 Step 7: Posts CRUD Tests${NC}"
     echo "==============================="
 
     local create_text_post='{

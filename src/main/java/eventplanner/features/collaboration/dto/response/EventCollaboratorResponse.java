@@ -1,4 +1,4 @@
-package eventplanner.features.event.dto.response;
+package eventplanner.features.collaboration.dto.response;
 
 import eventplanner.common.domain.enums.EventUserType;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Response DTO for event collaborator information
+ * Response DTO for event collaborator information.
  */
 @Schema(description = "Event collaborator response")
 @Getter
@@ -56,3 +56,8 @@ public class EventCollaboratorResponse {
     @Schema(description = "Last updated date")
     private LocalDateTime updatedAt;
 }
+
+
+
+
+
