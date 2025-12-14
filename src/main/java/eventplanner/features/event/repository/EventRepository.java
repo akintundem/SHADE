@@ -6,6 +6,7 @@ import eventplanner.features.event.entity.Event;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -14,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public interface EventRepository extends JpaRepository<Event, UUID> {
+public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecificationExecutor<Event> {
     
     // Basic queries
     Page<Event> findByEventStatus(String status, Pageable pageable);
@@ -92,7 +93,7 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
            "(:startDateFrom IS NULL OR e.startDateTime >= :startDateFrom) AND " +
            "(:startDateTo IS NULL OR e.startDateTime <= :startDateTo) AND " +
            "(:isArchived IS NULL OR e.isArchived = :isArchived) AND " +
-           "(:search IS NULL OR " +
+           "(" +
            "LOWER(e.name) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            "LOWER(e.description) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            "LOWER(e.hashtag) LIKE LOWER(CONCAT('%', :search, '%')) OR " +

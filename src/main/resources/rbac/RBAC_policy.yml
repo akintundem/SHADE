@@ -344,6 +344,7 @@ policy:
         is_authenticated: true
         owns_scope: false
         is_member: true
+    -
       name: event.media.delete
       scope: EVENT
       resources: id,media_id
@@ -902,7 +903,7 @@ policy:
         owns_scope: false
         is_member: false
     -
-      name: communication.send
+      name: communication.send.system
       scope: SYSTEM
       resources: null
       description: Send attendee invitations; Send invitations
@@ -1037,8 +1038,8 @@ policy:
       description: List current user's events
       abac:
         is_authenticated: true
-        owns_scope: true
-        is_member: true
+        owns_scope: false
+        is_member: false
     -
       name: my.events.search
       scope: SYSTEM
@@ -1046,8 +1047,8 @@ policy:
       description: Search/filter current user's events
       abac:
         is_authenticated: true
-        owns_scope: true
-        is_member: true
+        owns_scope: false
+        is_member: false
     -
       name: public.events.search
       scope: SYSTEM

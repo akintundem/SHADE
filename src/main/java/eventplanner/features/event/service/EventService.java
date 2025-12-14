@@ -30,6 +30,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -442,9 +443,11 @@ public class EventService {
         Pageable pageable = PageRequest.of(page, size, sort);
         
         // Normalize search term
-        String search = request.getSearch() != null && !request.getSearch().trim().isEmpty() 
-                ? request.getSearch().trim() 
-                : null;
+        // IMPORTANT: Do not pass null into JPQL optional-search predicates.
+        // Postgres can fail to infer the parameter type when the same null parameter
+        // is used in multiple expressions (e.g. LOWER(CONCAT('%', :search, '%'))),
+        // resulting in "could not determine data type of parameter $N".
+        String search = request.getSearch() != null ? request.getSearch().trim() : "";
         
         // Default to non-archived events unless explicitly requested
         Boolean isArchived = request.getIsArchived() != null ? request.getIsArchived() : false;
@@ -477,17 +480,57 @@ public class EventService {
             isPublic = true;
         }
 
-        // Query with filters
-        Page<Event> events = eventRepository.findEventsWithFilters(
-                request.getStatus(),
-                request.getEventType(),
-                isPublic,
-                startDateFrom,
-                startDateTo,
-                isArchived,
-                search,
-                pageable
-        );
+        final Boolean publicFilter = isPublic;
+        final LocalDateTime startFrom = startDateFrom;
+        final LocalDateTime startTo = startDateTo;
+
+        // Build dynamic criteria instead of "(:param is null or ...)" JPQL.
+        // Postgres can fail to infer parameter types for nulls in those patterns ("could not determine data type of parameter $N").
+        Specification<Event> spec = (root, query, cb) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+
+            if (request.getStatus() != null) {
+                predicates.add(cb.equal(root.get("eventStatus"), request.getStatus()));
+            }
+            if (request.getEventType() != null) {
+                predicates.add(cb.equal(root.get("eventType"), request.getEventType()));
+            }
+            if (publicFilter != null) {
+                predicates.add(cb.equal(root.get("isPublic"), publicFilter));
+            }
+            if (startFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("startDateTime"), startFrom));
+            }
+            if (startTo != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("startDateTime"), startTo));
+            }
+            if (isArchived != null) {
+                predicates.add(cb.equal(root.get("isArchived"), isArchived));
+            }
+
+            if (search != null && !search.isBlank()) {
+                String like = "%" + search.toLowerCase(Locale.ROOT) + "%";
+                jakarta.persistence.criteria.Expression<String> name = cb.lower(root.get("name"));
+                jakarta.persistence.criteria.Expression<String> description = cb.lower(root.get("description"));
+                jakarta.persistence.criteria.Expression<String> hashtag = cb.lower(root.get("hashtag"));
+                jakarta.persistence.criteria.Expression<String> theme = cb.lower(root.get("theme"));
+
+                predicates.add(cb.or(
+                        cb.like(name, like),
+                        cb.like(description, like),
+                        cb.like(hashtag, like),
+                        cb.like(theme, like)
+                ));
+            }
+
+            if (Boolean.TRUE.equals(request.getMine()) && user != null) {
+                predicates.add(cb.equal(root.get("ownerId"), user.getId()));
+            }
+
+            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
+
+        Page<Event> events = eventRepository.findAll(spec, pageable);
 
         // Apply mine=true filter (owned-by-current-user) as a post-filter.
         // This avoids exposing arbitrary ownerId querying.
