@@ -10,7 +10,6 @@ import eventplanner.features.event.dto.request.EventNotificationRequest;
 import eventplanner.features.event.dto.response.EventNotificationResponse;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventNotificationSettings;
-import eventplanner.features.event.enums.EmailTemplateType;
 import eventplanner.features.event.enums.EventNotificationChannel;
 import eventplanner.features.event.repository.EventRepository;
 import lombok.RequiredArgsConstructor;

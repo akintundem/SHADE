@@ -498,16 +498,36 @@ create_test_event() {
     "eventType": "CONFERENCE",
     "startDateTime": "$start_date",
     "endDateTime": "$end_date",
-    "venueRequirements": "Test Location",
+    "venueRequirements": "Test Location - Conference Room A",
     "capacity": 100,
     "isPublic": true,
-    "requiresApproval": false
+    "requiresApproval": false,
+    "eventWebsiteUrl": "https://example.com/event",
+    "hashtag": "#FeedTestEvent",
+    "venue": {
+      "address": "123 Main Street",
+      "city": "San Francisco",
+      "state": "California",
+      "country": "United States",
+      "zipCode": "94102",
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+      "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
+    }
+  },
+  "coverUpload": {
+    "fileName": "initial-cover.jpg",
+    "contentType": "image/jpeg",
+    "category": "cover",
+    "isPublic": true,
+    "description": "Initial cover image upload (create flow)"
   }
 }
 EOF
 )
     
-    run_test "Create Event" "POST" "/api/v1/events" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$event_data" "201" "Create a test event for feed posts"
+    run_test "Create Event" "POST" "/api/v1/events" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json' -H 'X-Device-ID: $DEVICE_ID'" "$event_data" "201" "Create a test event for feed posts"
     
     if [ -n "$EVENT_ID" ]; then
         echo -e "${GREEN}✅ Test event created with ID: $EVENT_ID${NC}"

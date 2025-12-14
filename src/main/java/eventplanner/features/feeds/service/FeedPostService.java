@@ -1,6 +1,11 @@
 package eventplanner.features.feeds.service;
 
 import eventplanner.common.storage.s3.services.S3StorageService;
+import eventplanner.common.storage.upload.MediaUploadStatus;
+import eventplanner.common.storage.upload.PresignedUploadCompleteRequest;
+import eventplanner.common.storage.upload.PresignedUploadRequest;
+import eventplanner.common.storage.upload.PresignedUploadService;
+import eventplanner.common.storage.upload.UploadCompletionCallback;
 import eventplanner.features.event.entity.EventStoredObject;
 import eventplanner.features.event.repository.EventStoredObjectRepository;
 import eventplanner.features.event.service.EventAccessControlService;
@@ -19,11 +24,8 @@ import org.springframework.util.StringUtils;
 
 import java.net.URL;
 import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -40,15 +42,18 @@ public class FeedPostService {
     private final FeedPostRepository postRepository;
     private final EventStoredObjectRepository storedObjectRepository;
     private final S3StorageService storageService;
+    private final PresignedUploadService presignedUploadService;
 
     public FeedPostService(EventAccessControlService accessControlService,
                            FeedPostRepository postRepository,
                            EventStoredObjectRepository storedObjectRepository,
-                           S3StorageService storageService) {
+                           S3StorageService storageService,
+                           PresignedUploadService presignedUploadService) {
         this.accessControlService = accessControlService;
         this.postRepository = postRepository;
         this.storedObjectRepository = storedObjectRepository;
         this.storageService = storageService;
+        this.presignedUploadService = presignedUploadService;
     }
 
     /**
@@ -74,6 +79,13 @@ public class FeedPostService {
         post.setPostType(type);
         post.setContent(content);
         post.setCreatedBy(principal != null ? principal.getId() : null);
+        
+        // Set initial status: TEXT posts are complete, IMAGE/VIDEO start as PENDING
+        if (type == EventFeedPost.PostType.TEXT) {
+            post.setMediaUploadStatus(MediaUploadStatus.COMPLETED);
+        } else {
+            post.setMediaUploadStatus(MediaUploadStatus.PENDING);
+        }
 
         PresignedUploadResponse upload = null;
 
@@ -82,24 +94,35 @@ public class FeedPostService {
             if (mediaUpload == null) {
                 throw new IllegalArgumentException("mediaUpload is required for " + type);
             }
-            ensureS3Configured();
             validateMediaType(type, mediaUpload.getContentType());
 
-            UUID mediaId = UUID.randomUUID();
-            String objectKey = buildObjectKey(eventId, mediaId);
-            URL presignedPut = storageService.generatePresignedPutUrl(EVENT_BUCKET_ALIAS, objectKey, UPLOAD_URL_TTL, mediaUpload.getContentType());
+            // Use generic presigned upload service
+            PresignedUploadRequest uploadRequest = new PresignedUploadRequest();
+            uploadRequest.setFileName(mediaUpload.getFileName());
+            uploadRequest.setContentType(mediaUpload.getContentType());
+            uploadRequest.setCategory("post");
+            uploadRequest.setIsPublic(mediaUpload.getIsPublic());
+            uploadRequest.setDescription(mediaUpload.getDescription());
+            
+            eventplanner.common.storage.upload.PresignedUploadResponse genericResponse = presignedUploadService.generatePresignedUpload(
+                    uploadRequest,
+                    mediaId -> buildObjectKey(eventId, mediaId),
+                    EVENT_BUCKET_ALIAS,
+                    UPLOAD_URL_TTL
+            );
 
-            post.setMediaObjectId(mediaId); // media will be completed later
+            post.setMediaObjectId(genericResponse.getMediaId());
             EventFeedPost saved = postRepository.save(post);
 
+            // Convert to feed-specific response DTO (they have the same structure)
             upload = PresignedUploadResponse.builder()
-                    .mediaId(mediaId)
-                    .objectKey(objectKey)
-                    .uploadMethod("PUT")
-                    .uploadUrl(presignedPut.toString())
-                    .headers(Map.of("Content-Type", mediaUpload.getContentType()))
-                    .resourceUrl(storageService.stripQuery(presignedPut))
-                    .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plus(UPLOAD_URL_TTL))
+                    .mediaId(genericResponse.getMediaId())
+                    .objectKey(genericResponse.getObjectKey())
+                    .uploadMethod(genericResponse.getUploadMethod())
+                    .uploadUrl(genericResponse.getUploadUrl())
+                    .headers(genericResponse.getHeaders())
+                    .resourceUrl(genericResponse.getResourceUrl())
+                    .expiresAt(genericResponse.getExpiresAt())
                     .build();
 
             return CreateFeedPostResponse.builder()
@@ -142,43 +165,52 @@ public class FeedPostService {
         }
 
         String expectedKey = buildObjectKey(eventId, mediaId);
-        if (request == null || !StringUtils.hasText(request.getObjectKey())) {
-            throw new IllegalArgumentException("objectKey is required");
-        }
-        if (!expectedKey.equals(request.getObjectKey())) {
-            throw new IllegalArgumentException("objectKey does not match expected key for this upload");
-        }
-
-        EventStoredObject item = storedObjectRepository.findById(mediaId).orElseGet(EventStoredObject::new);
-        item.setId(mediaId);
-        item.setEventId(eventId);
-        item.setPurpose(PURPOSE_POST_MEDIA);
-        item.setOwnerId(postId);
-        item.setObjectKey(expectedKey);
-        item.setResourceUrl(safeTrimToNull(request.getResourceUrl()));
-        item.setFileName(request.getFileName());
-        item.setContentType(request.getContentType());
-        item.setCategory("post");
-        item.setIsPublic(Boolean.TRUE.equals(request.getIsPublic()));
-        item.setDescription(safeTrimToNull(request.getDescription()));
-        item.setTags(safeTrimToNull(request.getTags()));
-        item.setMetadata(safeTrimToNull(request.getMetadata()));
-        item.setUploadedBy(principal.getId());
-        storedObjectRepository.save(item);
-
-        // Ensure post points to the media id (already should)
-        post.setMediaObjectId(mediaId);
-        postRepository.save(post);
+        
+        // Use generic presigned upload service
+        PresignedUploadCompleteRequest completeRequest = new PresignedUploadCompleteRequest();
+        completeRequest.setObjectKey(request.getObjectKey());
+        completeRequest.setResourceUrl(request.getResourceUrl());
+        completeRequest.setFileName(request.getFileName());
+        completeRequest.setContentType(request.getContentType());
+        completeRequest.setCategory("post");
+        completeRequest.setIsPublic(request.getIsPublic());
+        completeRequest.setDescription(request.getDescription());
+        completeRequest.setTags(request.getTags());
+        completeRequest.setMetadata(request.getMetadata());
+        
+        // Callback to update post status to COMPLETED
+        UploadCompletionCallback callback = (entityId, completedMediaId, user) -> {
+            post.setMediaUploadStatus(MediaUploadStatus.COMPLETED);
+            postRepository.save(post);
+        };
+        
+        presignedUploadService.completeUpload(
+                eventId,
+                mediaId,
+                postId,
+                PURPOSE_POST_MEDIA,
+                completeRequest,
+                expectedKey,
+                principal,
+                callback
+        );
 
         return toResponse(post, eventId);
     }
 
     public List<FeedPostResponse> list(UUID eventId, UserPrincipal principal) {
         accessControlService.requireMediaView(principal, eventId);
+        // Get all posts for the event, then filter to only show completed ones
+        // This includes posts with null status (existing posts before status tracking)
         return postRepository.findByEventIdOrderByCreatedAtDesc(eventId)
-                .stream()
-                .map(p -> toResponse(p, eventId))
-                .collect(Collectors.toList());
+            .stream()
+            .filter(p -> {
+                MediaUploadStatus status = p.getMediaUploadStatus();
+                // Include COMPLETED or null (null = existing posts, treat as completed)
+                return status == null || status == MediaUploadStatus.COMPLETED;
+            })
+            .map(p -> toResponse(p, eventId))
+            .collect(Collectors.toList());
     }
 
     public FeedPostResponse get(UUID eventId, UUID postId, UserPrincipal principal) {
@@ -186,6 +218,14 @@ public class FeedPostService {
         EventFeedPost post = postRepository.findById(postId).orElseThrow(() -> new IllegalArgumentException("Post not found"));
         if (!eventId.equals(post.getEventId())) {
             throw new IllegalArgumentException("Post not found");
+        }
+        // Only return if completed (null status = existing post, treat as completed)
+        // Or allow creator to see their own pending posts
+        MediaUploadStatus status = post.getMediaUploadStatus();
+        if (status != null && status != MediaUploadStatus.COMPLETED) {
+            if (principal == null || !post.getCreatedBy().equals(principal.getId())) {
+                throw new IllegalArgumentException("Post not found");
+            }
         }
         return toResponse(post, eventId);
     }
@@ -237,12 +277,6 @@ public class FeedPostService {
             return EventFeedPost.PostType.valueOf(raw.trim().toUpperCase(Locale.ROOT));
         } catch (Exception ex) {
             throw new IllegalArgumentException("Invalid post type");
-        }
-    }
-
-    private void ensureS3Configured() {
-        if (!storageService.isConfigured()) {
-            throw new IllegalArgumentException("S3 is not configured for uploads");
         }
     }
 

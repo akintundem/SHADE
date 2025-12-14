@@ -3,7 +3,6 @@ package eventplanner.features.event.service;
 import eventplanner.features.event.dto.request.EventReminderRequest;
 import eventplanner.features.event.dto.response.EventReminderResponse;
 import eventplanner.features.event.entity.EventReminder;
-import eventplanner.features.event.enums.EmailTemplateType;
 import eventplanner.features.event.repository.EventReminderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

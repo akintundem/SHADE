@@ -133,6 +133,17 @@ auth:
     initial-duration-minutes: ${AUTH_LOCKOUT_INITIAL_DURATION_MINUTES:15}
     max-duration-hours: ${AUTH_LOCKOUT_MAX_DURATION_HOURS:24}
 
+# Feed Posts Configuration
+feeds:
+  cleanup:
+    # Maximum age for incomplete uploads before cleanup (in minutes)
+    max-age-minutes: ${FEEDS_CLEANUP_MAX_AGE_MINUTES:5}
+    # Cron expression for cleanup job (runs every 5 minutes by default)
+    # Format: second, minute, hour, day, month, weekday
+    # "0 */5 * * * *" = every 5 minutes
+    # "0 * * * * *" = every minute
+    cron: ${FEEDS_CLEANUP_CRON:0 */5 * * * *}
+
 # Application Configuration
 app:
   cors:
