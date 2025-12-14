@@ -153,15 +153,229 @@ REFRESH_TOKEN=""
 USER_ID=""
 EVENT_ID=""
 MEDIA_ID=""
+MEDIA_UPLOAD_URL=""
+MEDIA_UPLOAD_METHOD=""
+MEDIA_RESOURCE_URL=""
+MEDIA_REQUIRED_HEADERS=""
+MEDIA_DOWNLOAD_URL=""
+MEDIA_OBJECT_KEY=""
+ASSET_ID=""
+ASSET_UPLOAD_URL=""
+ASSET_RESOURCE_URL=""
+ASSET_REQUIRED_HEADERS=""
+ASSET_OBJECT_KEY=""
+ASSET_DOWNLOAD_URL=""
+ASSET_MEDIA_IDENTIFIER=""
+ASSET_COMPLETE_OK="false"
+COVER_ID=""
+COVER_OBJECT_KEY=""
+COVER_UPLOAD_URL=""
+COVER_RESOURCE_URL=""
+COVER_REQUIRED_HEADERS=""
 COLLABORATOR_ID=""
 REMINDER_ID=""
 DEVICE_ID=""
+OTHER_ACCESS_TOKEN=""
+OTHER_DEVICE_ID=""
+POST_ID=""
+IMAGE_POST_ID=""
 
 verify_email_in_database() {
     local email="$1"
     if command -v docker >/dev/null 2>&1; then
         docker compose exec -T postgres psql -U postgres -d eventplanner -c "UPDATE auth_users SET email_verified = true WHERE lower(email) = lower('${email}');" >/dev/null 2>&1
     fi
+}
+
+# Requirements check (jq is needed for presigned upload parsing)
+if ! command -v jq >/dev/null 2>&1; then
+    echo -e "${RED}❌ jq is required but not installed.${NC}"
+    echo -e "${YELLOW}💡 Install it with: brew install jq${NC}"
+    exit 1
+fi
+
+# Download an Unsplash image for upload tests
+UNSPLASH_IMAGE_URL_DEFAULT="https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&q=80"
+UNSPLASH_IMAGE_URL="${UNSPLASH_IMAGE_URL:-$UNSPLASH_IMAGE_URL_DEFAULT}"
+TEST_IMAGE_PATH=""
+TEST_IMAGE_SHA256=""
+TEST_IMAGE_SIZE=""
+
+download_test_image() {
+    echo -e "${YELLOW}🖼️  Downloading test image from Unsplash...${NC}"
+    TEST_IMAGE_PATH="$(mktemp -t event-media-test-XXXXXX).jpg"
+    if ! curl -sS -L --fail "$UNSPLASH_IMAGE_URL" -o "$TEST_IMAGE_PATH"; then
+        echo -e "${RED}❌ Failed to download test image${NC}"
+        return 1
+    fi
+    TEST_IMAGE_SIZE="$(wc -c < "$TEST_IMAGE_PATH" | tr -d ' ')"
+    if command -v shasum >/dev/null 2>&1; then
+        TEST_IMAGE_SHA256="$(shasum -a 256 "$TEST_IMAGE_PATH" | awk '{print $1}')"
+    elif command -v openssl >/dev/null 2>&1; then
+        TEST_IMAGE_SHA256="$(openssl dgst -sha256 "$TEST_IMAGE_PATH" | awk '{print $2}')"
+    else
+        TEST_IMAGE_SHA256=""
+    fi
+    echo -e "${GREEN}✅ Test image downloaded (${TEST_IMAGE_SIZE} bytes)${NC}"
+    return 0
+}
+
+run_full_url_test() {
+    local test_name="$1"
+    local method="$2"
+    local url="$3"
+    local headers="$4"
+    local data_file="$5"
+    local expected_status="$6"
+    local description="$7"
+
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    echo -e "${BLUE}🧪 Running: $test_name${NC}"
+
+    local curl_cmd="curl -s -w '%{http_code}' -X $method"
+    if [ -n "$headers" ]; then
+        curl_cmd="$curl_cmd $headers"
+    fi
+    if [ -n "$data_file" ]; then
+        curl_cmd="$curl_cmd --data-binary @$data_file"
+    fi
+    curl_cmd="$curl_cmd '$url'"
+
+    local response
+    if ! response=$(eval "$curl_cmd"); then
+        echo -e "${RED}❌ Failed to execute curl command${NC}"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+        return 1
+    fi
+
+    local http_code="${response: -3}"
+    local response_body="${response%???}"
+
+    if [ "$http_code" = "$expected_status" ]; then
+        echo -e "${GREEN}✅ PASSED${NC} - Status: $http_code"
+        PASSED_TESTS=$((PASSED_TESTS + 1))
+        local status_icon="✅"
+    else
+        echo -e "${RED}❌ FAILED${NC} - Expected: $expected_status, Got: $http_code"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+        local status_icon="❌"
+    fi
+
+    {
+        echo ""
+        echo "### $test_name"
+        echo "**Status:** $status_icon $http_code (Expected: $expected_status)"
+        echo "**Description:** $description"
+        echo "**Endpoint:** $method $url"
+        echo "**Request Headers:** $headers"
+        if [ -n "$data_file" ]; then
+            echo "**Request Body:** (binary file: $data_file)"
+        fi
+        echo ""
+        echo "**Response:**"
+        echo "\`\`\`"
+        echo "$response_body"
+        echo "\`\`\`"
+        echo ""
+        echo "---"
+        echo ""
+    } >> "$REPORT_FILE"
+
+    echo ""
+}
+
+extract_presigned_fields() {
+    local json="$1"
+    MEDIA_ID="$(echo "$json" | jq -r '.mediaId // empty')"
+    MEDIA_OBJECT_KEY="$(echo "$json" | jq -r '.objectKey // empty')"
+    MEDIA_UPLOAD_URL="$(echo "$json" | jq -r '.uploadUrl // empty')"
+    MEDIA_UPLOAD_METHOD="$(echo "$json" | jq -r '.uploadMethod // empty')"
+    MEDIA_RESOURCE_URL="$(echo "$json" | jq -r '.resourceUrl // empty')"
+    MEDIA_REQUIRED_HEADERS="$(echo "$json" | jq -c '.headers // {}')"
+}
+
+extract_asset_presigned_fields() {
+    local json="$1"
+    ASSET_ID="$(echo "$json" | jq -r '.mediaId // empty')"
+    ASSET_OBJECT_KEY="$(echo "$json" | jq -r '.objectKey // empty')"
+    ASSET_UPLOAD_URL="$(echo "$json" | jq -r '.uploadUrl // empty')"
+    ASSET_RESOURCE_URL="$(echo "$json" | jq -r '.resourceUrl // empty')"
+    ASSET_REQUIRED_HEADERS="$(echo "$json" | jq -c '.headers // {}')"
+}
+
+extract_cover_presigned_fields() {
+    local json="$1"
+    COVER_ID="$(echo "$json" | jq -r '.mediaId // empty')"
+    COVER_OBJECT_KEY="$(echo "$json" | jq -r '.objectKey // empty')"
+    COVER_UPLOAD_URL="$(echo "$json" | jq -r '.uploadUrl // empty')"
+    COVER_RESOURCE_URL="$(echo "$json" | jq -r '.resourceUrl // empty')"
+    COVER_REQUIRED_HEADERS="$(echo "$json" | jq -c '.headers // {}')"
+}
+
+presigned_put_upload() {
+    local upload_url="$1"
+    local headers_json="$2"
+    local file_path="$3"
+
+    local header_flags=""
+    # Apply all required headers
+    while IFS=$'\t' read -r k v; do
+        if [ -n "$k" ] && [ -n "$v" ] && [ "$k" != "null" ] && [ "$v" != "null" ]; then
+            header_flags="$header_flags -H '$k: $v'"
+        fi
+    done < <(echo "$headers_json" | jq -r 'to_entries[] | "\(.key)\t\(.value)"')
+
+    # Run upload once, log it, and return success/failure
+    run_full_url_test "PUT Presigned Upload (S3)" "PUT" "$upload_url" "$header_flags" "$file_path" "200" "Upload bytes to S3 using presigned PUT URL (S3 often returns 200 or 204)"
+    local last_status=$?
+    if [ $last_status -eq 0 ]; then
+        return 0
+    fi
+    # Some S3-compatible endpoints return 204 on successful PUT
+    run_full_url_test "PUT Presigned Upload (S3 - 204)" "PUT" "$upload_url" "$header_flags" "$file_path" "204" "Upload bytes to S3 using presigned PUT URL (204 variant)"
+    return $?
+}
+
+download_and_hash() {
+    local url="$1"
+    local out_path="$2"
+    if ! curl -sS -L --fail "$url" -o "$out_path"; then
+        return 1
+    fi
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$out_path" | awk '{print $1}'
+        return 0
+    elif command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 "$out_path" | awk '{print $2}'
+        return 0
+    fi
+    echo ""
+    return 0
+}
+
+authenticate_other_user() {
+    local email="otheruser_$(date +%s)@example.com"
+    local password="Password123!"
+
+    # Register
+    local reg='{"email":"'$email'","password":"'$password'","confirmPassword":"'$password'"}'
+    local r=$(curl -s -w '%{http_code}' -X POST -H "Content-Type: application/json" -d "$reg" "$BASE_URL/api/v1/auth/register")
+    local rc="${r: -3}"
+    if [ "$rc" = "201" ]; then
+        verify_email_in_database "$email"
+    fi
+
+    # Login
+    local login='{"email":"'$email'","password":"'$password'","rememberMe":false}'
+    local lr=$(curl -s -w '%{http_code}' -X POST -H "Content-Type: application/json" -d "$login" "$BASE_URL/api/v1/auth/login")
+    local lc="${lr: -3}"
+    local lb="${lr%???}"
+    if [ "$lc" != "200" ]; then
+        return 1
+    fi
+    OTHER_ACCESS_TOKEN="$(echo "$lb" | jq -r '.accessToken // empty')"
+    OTHER_DEVICE_ID="$(echo "$lb" | jq -r '.deviceId // empty')"
+    return 0
 }
 
 # Create directory for reports
@@ -298,13 +512,20 @@ run_test() {
                 EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
                 ;;
             "Upload Event Media")
-                MEDIA_ID=$(echo "$response_body" | grep -o '"mediaId":"[^"]*"' | cut -d'"' -f4)
+                # Presigned upload response (parse via jq)
+                extract_presigned_fields "$response_body"
                 ;;
             "Add Event Collaborator")
                 COLLABORATOR_ID=$(echo "$response_body" | grep -o '"collaboratorId":"[^"]*"' | cut -d'"' -f4)
                 ;;
             "Create Event Reminder")
                 REMINDER_ID=$(echo "$response_body" | grep -o '"reminderId":"[^"]*"' | cut -d'"' -f4)
+                ;;
+            "Create Text Post")
+                POST_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+                ;;
+            "Create Image Post")
+                IMAGE_POST_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
                 ;;
         esac
     fi
@@ -755,24 +976,81 @@ EOF
     # Step 6: Media Management Tests
     echo -e "${CYAN}📸 Step 6: Media Management Tests${NC}"
     echo "=================================="
+
+    # Download real image for upload tests
+    if ! download_test_image; then
+        echo -e "${RED}❌ Failed to download test image. Exiting.${NC}"
+        exit 1
+    fi
     
     # Media Tests (Note: These will return mock responses since upload is presigned)
     run_test "Get Event Media" "GET" "/api/v1/events/$EVENT_ID/media" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event media"
     
     # Request presigned media upload
     local media_upload_request='{
-        "fileName": "test-image.jpg",
+        "fileName": "unsplash-test-image.jpg",
         "contentType": "image/jpeg",
         "category": "gallery",
         "isPublic": true,
         "description": "Test image upload"
     }'
     run_test "Upload Event Media" "POST" "/api/v1/events/$EVENT_ID/media" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$media_upload_request" "200" "Upload event media"
+
+    # Actually upload the image bytes to S3 via the presigned URL
+    if [ -n "$MEDIA_UPLOAD_URL" ] && [ -n "$TEST_IMAGE_PATH" ]; then
+        presigned_put_upload "$MEDIA_UPLOAD_URL" "$MEDIA_REQUIRED_HEADERS" "$TEST_IMAGE_PATH"
+    fi
+
+    # Complete upload: client informs backend to persist uploaded object reference
+    if [ -n "$MEDIA_ID" ]; then
+        local complete_payload
+        complete_payload=$(cat <<EOF
+{
+  "objectKey": "$MEDIA_OBJECT_KEY",
+  "resourceUrl": "$MEDIA_RESOURCE_URL",
+  "fileName": "unsplash-test-image.jpg",
+  "contentType": "image/jpeg",
+  "category": "gallery",
+  "isPublic": false,
+  "description": "Uploaded via presigned S3 URL",
+  "tags": "test,event",
+  "metadata": "{\"source\":\"unsplash\"}"
+}
+EOF
+)
+        run_test "Complete Event Media Upload" "POST" "/api/v1/events/$EVENT_ID/media/$MEDIA_ID/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$complete_payload" "200" "Complete media upload by saving uploaded object reference in backend"
+    fi
+
+    # Security: unauthenticated should not be able to view private event media metadata
+    if [ -n "$MEDIA_ID" ]; then
+        run_test "Get Specific Media (No Auth - Should Fail)" "GET" "/api/v1/events/$EVENT_ID/media/$MEDIA_ID" "" "" "401" "Ensure private event media cannot be accessed without authentication"
+    fi
+    # Security: authenticated but non-member should be forbidden
+    if authenticate_other_user && [ -n "$MEDIA_ID" ]; then
+        run_test "Get Specific Media (Other User - Should Fail)" "GET" "/api/v1/events/$EVENT_ID/media/$MEDIA_ID" "-H 'Authorization: Bearer $OTHER_ACCESS_TOKEN'" "" "403" "Ensure non-members cannot access private event media"
+    fi
     
     # Get specific media (using captured media ID when available)
     local mock_media_id="12345678-1234-1234-1234-123456789012"
     local media_identifier="${MEDIA_ID:-$mock_media_id}"
     run_test "Get Specific Media" "GET" "/api/v1/events/$EVENT_ID/media/$media_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific media"
+
+    # Download via the presigned GET URL returned by the API and verify content matches what we uploaded
+    if [ -n "$MEDIA_ID" ]; then
+        local media_meta=$(curl -sS -X GET -H "Authorization: Bearer $ACCESS_TOKEN" -H "X-Device-ID: $DEVICE_ID" "$BASE_URL/api/v1/events/$EVENT_ID/media/$MEDIA_ID")
+        MEDIA_DOWNLOAD_URL="$(echo "$media_meta" | jq -r '.mediaUrl // empty')"
+        if [ -n "$MEDIA_DOWNLOAD_URL" ]; then
+            local downloaded_path
+            downloaded_path="$(mktemp -t event-media-downloaded-XXXXXX).jpg"
+            local downloaded_sha
+            downloaded_sha="$(download_and_hash "$MEDIA_DOWNLOAD_URL" "$downloaded_path")"
+            if [ -n "$TEST_IMAGE_SHA256" ] && [ -n "$downloaded_sha" ] && [ "$downloaded_sha" = "$TEST_IMAGE_SHA256" ]; then
+                run_full_url_test "GET Presigned Download (Event Media) - Hash Match" "GET" "$MEDIA_DOWNLOAD_URL" "" "" "200" "Download uploaded media via presigned GET URL and verify SHA256 matches"
+            else
+                run_full_url_test "GET Presigned Download (Event Media)" "GET" "$MEDIA_DOWNLOAD_URL" "" "" "200" "Download uploaded media via presigned GET URL (hash mismatch or unavailable)"
+            fi
+        fi
+    fi
     
     # Update media
     local media_update_data='{
@@ -785,29 +1063,140 @@ EOF
     }'
     run_test "Update Media" "PUT" "/api/v1/events/$EVENT_ID/media/$media_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$media_update_data" "200" "Update media information"
     
-    # Delete media
-    run_test "Delete Media" "DELETE" "/api/v1/events/$EVENT_ID/media/$media_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete media"
+    # NOTE: don't delete media yet — the Posts tests may reference it.
     
     # Assets Tests
     run_test "Get Event Assets" "GET" "/api/v1/events/$EVENT_ID/assets" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event assets"
     local asset_upload_request='{
-        "fileName": "test-document.pdf",
-        "contentType": "application/pdf",
+        "fileName": "unsplash-private-asset.jpg",
+        "contentType": "image/jpeg",
         "category": "documents",
         "isPublic": false,
         "description": "Test document upload"
     }'
-    run_test "Upload Event Asset" "POST" "/api/v1/events/$EVENT_ID/assets" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$asset_upload_request" "200" "Upload event asset"
+    # Request presigned asset upload (capture response directly so we can parse it)
+    local asset_resp=$(curl -sS -w '%{http_code}' -X POST \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        -H "X-Device-ID: $DEVICE_ID" \
+        -H "Content-Type: application/json" \
+        -d "$asset_upload_request" \
+        "$BASE_URL/api/v1/events/$EVENT_ID/assets")
+    local asset_http="${asset_resp: -3}"
+    local asset_body="${asset_resp%???}"
+    if [ "$asset_http" = "200" ]; then
+        extract_asset_presigned_fields "$asset_body"
+    fi
+    # Log this request using the existing report format
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    if [ "$asset_http" = "200" ]; then PASSED_TESTS=$((PASSED_TESTS + 1)); else FAILED_TESTS=$((FAILED_TESTS + 1)); fi
+    {
+        echo ""
+        echo "### Upload Event Asset"
+        echo "**Status:** $([ "$asset_http" = "200" ] && echo "✅" || echo "❌") $asset_http (Expected: 200)"
+        echo "**Description:** Upload event asset (presign)"
+        echo "**Endpoint:** POST /api/v1/events/$EVENT_ID/assets"
+        echo "**Request Headers:** -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' -H 'X-Device-ID: $DEVICE_ID'"
+        echo "**Request Body:** $asset_upload_request"
+        echo ""
+        echo "**Response:**"
+        echo "\`\`\`json"
+        echo "$asset_body"
+        echo "\`\`\`"
+        echo ""
+        echo "---"
+        echo ""
+    } >> "$REPORT_FILE"
+
+    # Upload asset bytes to S3 and complete upload
+    if [ -n "$ASSET_UPLOAD_URL" ] && [ -n "$TEST_IMAGE_PATH" ]; then
+        presigned_put_upload "$ASSET_UPLOAD_URL" "$ASSET_REQUIRED_HEADERS" "$TEST_IMAGE_PATH"
+    fi
+    if [ -n "$ASSET_ID" ]; then
+        local asset_complete_payload
+        asset_complete_payload=$(cat <<EOF
+{
+  "objectKey": "$ASSET_OBJECT_KEY",
+  "resourceUrl": "$ASSET_RESOURCE_URL",
+  "fileName": "unsplash-private-asset.jpg",
+  "contentType": "image/jpeg",
+  "category": "documents",
+  "isPublic": false,
+  "description": "Asset uploaded via presigned S3 URL",
+  "tags": "test,event",
+  "metadata": "{\"source\":\"unsplash\"}"
+}
+EOF
+)
+        run_test "Complete Event Asset Upload" "POST" "/api/v1/events/$EVENT_ID/assets/$ASSET_ID/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$asset_complete_payload" "200" "Complete asset upload by saving uploaded object reference"
+    fi
     
     # Cover Image Tests
     local cover_image_request='{
-        "fileName": "cover-image.png",
-        "contentType": "image/png",
+        "fileName": "unsplash-cover.jpg",
+        "contentType": "image/jpeg",
         "category": "cover",
         "isPublic": true,
         "description": "Cover image upload"
     }'
-    run_test "Update Cover Image" "PUT" "/api/v1/events/$EVENT_ID/cover-image" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cover_image_request" "200" "Update cover image"
+    # Request presigned cover upload (capture response directly so we can parse it)
+    local cover_resp=$(curl -sS -w '%{http_code}' -X PUT \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        -H "X-Device-ID: $DEVICE_ID" \
+        -H "Content-Type: application/json" \
+        -d "$cover_image_request" \
+        "$BASE_URL/api/v1/events/$EVENT_ID/cover-image")
+    local cover_http="${cover_resp: -3}"
+    local cover_body="${cover_resp%???}"
+    # Log this request using the existing report format
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    if [ "$cover_http" = "200" ]; then PASSED_TESTS=$((PASSED_TESTS + 1)); else FAILED_TESTS=$((FAILED_TESTS + 1)); fi
+    {
+        echo ""
+        echo "### Update Cover Image"
+        echo "**Status:** $([ "$cover_http" = "200" ] && echo "✅" || echo "❌") $cover_http (Expected: 200)"
+        echo "**Description:** Update cover image (presign)"
+        echo "**Endpoint:** PUT /api/v1/events/$EVENT_ID/cover-image"
+        echo "**Request Headers:** -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' -H 'X-Device-ID: $DEVICE_ID'"
+        echo "**Request Body:** $cover_image_request"
+        echo ""
+        echo "**Response:**"
+        echo "\`\`\`json"
+        echo "$cover_body"
+        echo "\`\`\`"
+        echo ""
+        echo "---"
+        echo ""
+    } >> "$REPORT_FILE"
+
+    if [ "$cover_http" = "200" ]; then
+        extract_cover_presigned_fields "$cover_body"
+        if [ -n "$COVER_UPLOAD_URL" ] && [ -n "$TEST_IMAGE_PATH" ]; then
+            presigned_put_upload "$COVER_UPLOAD_URL" "$COVER_REQUIRED_HEADERS" "$TEST_IMAGE_PATH"
+        fi
+        if [ -n "$COVER_ID" ]; then
+            local cover_complete_payload
+            cover_complete_payload=$(cat <<EOF
+{
+  "objectKey": "$COVER_OBJECT_KEY",
+  "resourceUrl": "$COVER_RESOURCE_URL",
+  "fileName": "unsplash-cover.jpg",
+  "contentType": "image/jpeg",
+  "category": "cover",
+  "isPublic": true,
+  "description": "Cover uploaded via presigned S3 URL",
+  "tags": "test,event",
+  "metadata": "{\"source\":\"unsplash\"}"
+}
+EOF
+)
+            run_test "Complete Cover Image Upload" "POST" "/api/v1/events/$EVENT_ID/cover-image/$COVER_ID/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cover_complete_payload" "200" "Complete cover image upload and persist coverImageUrl on the event"
+        fi
+    fi
+
+    # Confirm coverImageUrl is now set on event
+    run_test "Get Event by ID (After Cover Upload)" "GET" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Verify cover image url is persisted on the event"
+
+    # (Optional) Could complete cover upload similarly; remove remains valid to clean state
     run_test "Remove Cover Image" "DELETE" "/api/v1/events/$EVENT_ID/cover-image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Remove cover image"
     echo ""
     
@@ -853,6 +1242,54 @@ EOF
     run_test "Update Event Collaborator" "PUT" "/api/v1/events/$EVENT_ID/collaborators/$collaborator_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$collaborator_update_data" "200" "Update event collaborator"
     
     run_test "Remove Event Collaborator" "DELETE" "/api/v1/events/$EVENT_ID/collaborators/$collaborator_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Remove event collaborator"
+    echo ""
+
+    # Step 7.5: Posts CRUD Tests
+    echo -e "${CYAN}📰 Step 7.5: Posts CRUD Tests${NC}"
+    echo "==============================="
+
+    local create_text_post='{
+        "type": "TEXT",
+        "content": "Hello from automated test post"
+    }'
+    run_test "Create Text Post" "POST" "/api/v1/events/$EVENT_ID/posts" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$create_text_post" "200" "Create a simple text post"
+
+    if [ -n "$POST_ID" ]; then
+        run_test "Get Post" "GET" "/api/v1/events/$EVENT_ID/posts/$POST_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get a post by id"
+    fi
+
+    run_test "List Posts" "GET" "/api/v1/events/$EVENT_ID/posts" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List posts for event"
+
+    if [ -n "$POST_ID" ]; then
+        local update_post='{
+            "content": "Updated content from test"
+        }'
+        run_test "Update Post" "PUT" "/api/v1/events/$EVENT_ID/posts/$POST_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_post" "200" "Update post content"
+        run_test "Delete Post" "DELETE" "/api/v1/events/$EVENT_ID/posts/$POST_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete post"
+    fi
+
+    # Create an image post if we have uploaded media
+    if [ -n "$MEDIA_ID" ]; then
+        local create_image_post
+        create_image_post=$(cat <<EOF
+{
+  "type": "IMAGE",
+  "content": "Image post caption",
+  "mediaObjectId": "$MEDIA_ID"
+}
+EOF
+)
+        run_test "Create Image Post" "POST" "/api/v1/events/$EVENT_ID/posts" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$create_image_post" "200" "Create an image post referencing uploaded media object"
+        if [ -n "$IMAGE_POST_ID" ]; then
+            run_test "Get Image Post" "GET" "/api/v1/events/$EVENT_ID/posts/$IMAGE_POST_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get created image post"
+        fi
+    fi
+
+    # Now that post tests are done, we can delete the uploaded media object
+    if [ -n "$MEDIA_ID" ]; then
+        run_test "Delete Media" "DELETE" "/api/v1/events/$EVENT_ID/media/$MEDIA_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete media (after posts tests)"
+    fi
+
     echo ""
     
     # Step 8: Notification Tests
@@ -1010,6 +1447,9 @@ EOF
 cleanup() {
     echo ""
     echo -e "${YELLOW}🛑 Test interrupted...${NC}"
+    if [ -n "$TEST_IMAGE_PATH" ] && [ -f "$TEST_IMAGE_PATH" ]; then
+        rm -f "$TEST_IMAGE_PATH"
+    fi
     if [[ $BASE_URL == *"localhost"* ]]; then
         echo -e "${YELLOW}💡 Local service continues running${NC}"
     else

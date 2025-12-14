@@ -1,4 +1,4 @@
-package eventplanner.common.storage.s3;
+package eventplanner.common.storage.s3.dto;
 
 import lombok.Builder;
 import lombok.Value;
@@ -16,3 +16,5 @@ public class PresignedUploadResult {
     String resourceUrl;
     LocalDateTime expiresAt;
 }
+
+

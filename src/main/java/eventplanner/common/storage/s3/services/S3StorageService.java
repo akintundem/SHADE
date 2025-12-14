@@ -1,4 +1,4 @@
-package eventplanner.common.storage.s3;
+package eventplanner.common.storage.s3.services;
 
 import eventplanner.common.storage.s3.config.AwsS3Properties;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequ
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
 import java.util.Optional;
@@ -115,6 +116,24 @@ public class S3StorageService {
         return properties.hasAwsBasicsConfigured() && s3Client.isPresent() && s3Presigner.isPresent();
     }
 
+    /**
+     * Strips the query string and fragment from a URL.
+     * Useful when storing/displaying "resource URLs" that must not contain presign credentials.
+     */
+    public String stripQuery(URL url) {
+        if (url == null) {
+            return null;
+        }
+        try {
+            URI uri = url.toURI();
+            return new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), null, null).toString();
+        } catch (Exception ex) {
+            String asString = url.toString();
+            int idx = asString.indexOf('?');
+            return idx > 0 ? asString.substring(0, idx) : asString;
+        }
+    }
+
     private S3Client requireClient() {
         return s3Client.orElseThrow(() -> new IllegalStateException(
                 "AWS S3 is not configured. Set aws.s3.* credentials and bucket."));
@@ -134,3 +153,5 @@ public class S3StorageService {
         return bucket;
     }
 }
+
+

@@ -3,6 +3,7 @@ package eventplanner.features.event.controller;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.features.event.dto.request.EventMediaRequest;
 import eventplanner.features.event.dto.request.EventMediaUploadRequest;
+import eventplanner.features.event.dto.request.EventMediaUploadCompleteRequest;
 import eventplanner.features.event.dto.response.EventCoverImageResponse;
 import eventplanner.features.event.dto.response.EventMediaResponse;
 import eventplanner.features.event.dto.response.EventPresignedUploadResponse;
@@ -64,6 +65,18 @@ public class EventMediaController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/{id}/media/{mediaId}/complete")
+    @RequiresPermission(value = RbacPermissions.EVENT_MEDIA_UPLOAD, resources = {"event_id=#id"})
+    @Operation(summary = "Complete media upload", description = "Called after the client uploads to S3 using the presigned URL. Persists the uploaded file metadata and enables secure retrieval.")
+    public ResponseEntity<EventMediaResponse> completeMediaUpload(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @Parameter(description = "Media ID") @PathVariable UUID mediaId,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody EventMediaUploadCompleteRequest request) {
+        EventMediaResponse response = mediaService.completeMediaUpload(id, mediaId, principal, request);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}/media/{mediaId}")
     @RequiresPermission(value = RbacPermissions.EVENT_MEDIA_READ, resources = {"event_id=#id"})
     @Operation(summary = "Get specific media", description = "Get details of specific media")
@@ -119,6 +132,18 @@ public class EventMediaController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/{id}/assets/{assetId}/complete")
+    @RequiresPermission(value = RbacPermissions.EVENT_ASSETS_UPLOAD, resources = {"event_id=#id"})
+    @Operation(summary = "Complete asset upload", description = "Called after the client uploads an asset to S3 using the presigned URL.")
+    public ResponseEntity<EventMediaResponse> completeAssetUpload(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @Parameter(description = "Asset ID") @PathVariable UUID assetId,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody EventMediaUploadCompleteRequest request) {
+        EventMediaResponse response = mediaService.completeAssetUpload(id, assetId, principal, request);
+        return ResponseEntity.ok(response);
+    }
+
     @PutMapping("/{id}/cover-image")
     @RequiresPermission(value = RbacPermissions.EVENT_COVER_IMAGE_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Update cover image", description = "Update the cover image for an event")
@@ -127,6 +152,18 @@ public class EventMediaController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventMediaUploadRequest request) {
         EventPresignedUploadResponse response = mediaService.createCoverImageUpload(id, principal, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{id}/cover-image/{coverId}/complete")
+    @RequiresPermission(value = RbacPermissions.EVENT_COVER_IMAGE_UPDATE, resources = {"event_id=#id"})
+    @Operation(summary = "Complete cover image upload", description = "Called after the client uploads the cover image to S3 using the presigned URL. Saves the cover image link to the event.")
+    public ResponseEntity<EventCoverImageResponse> completeCoverImageUpload(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @Parameter(description = "Cover object ID") @PathVariable UUID coverId,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody EventMediaUploadCompleteRequest request) {
+        EventCoverImageResponse response = mediaService.completeCoverImageUpload(id, coverId, principal, request);
         return ResponseEntity.ok(response);
     }
 

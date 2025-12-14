@@ -1,7 +1,9 @@
 package eventplanner.security.auth.controller;
 
 import eventplanner.common.exception.UnauthorizedException;
+import eventplanner.security.auth.dto.req.ProfileImageCompleteRequest;
 import eventplanner.security.auth.dto.req.ProfileImageUploadRequest;
+import eventplanner.security.auth.dto.res.ProfileImageCompleteResponse;
 import eventplanner.security.auth.dto.res.ProfileImageUploadResponse;
 import eventplanner.security.auth.service.ProfileImageService;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -34,6 +36,18 @@ public class ProfileImageController {
             throw new UnauthorizedException("Unauthorized");
         }
         ProfileImageUploadResponse response = profileImageService.createProfileImageUpload(principal.getUser(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/profile-image/complete")
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
+    public ResponseEntity<ProfileImageCompleteResponse> completeUpload(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody ProfileImageCompleteRequest request) {
+        if (principal == null) {
+            throw new UnauthorizedException("Unauthorized");
+        }
+        ProfileImageCompleteResponse response = profileImageService.completeProfileImageUpload(principal.getUser(), request);
         return ResponseEntity.ok(response);
     }
 }

@@ -1,11 +1,11 @@
-package eventplanner.common.storage.s3;
+package eventplanner.common.storage.s3.services;
 
 import eventplanner.common.exception.BadRequestException;
+import eventplanner.common.storage.s3.dto.PresignedUploadResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -63,7 +63,7 @@ public class S3ImageUploadService {
             throw new BadRequestException("S3_NOT_CONFIGURED", ex.getMessage());
         }
 
-        String resourceUrl = stripQuery(uploadUrl);
+        String resourceUrl = storageService.stripQuery(uploadUrl);
 
         return PresignedUploadResult.builder()
             .uploadMethod("PUT")
@@ -81,7 +81,7 @@ public class S3ImageUploadService {
         }
         try {
             URL url = new URL(resourceUrl.trim());
-            return stripQuery(url);
+            return storageService.stripQuery(url);
         } catch (Exception ex) {
             throw new BadRequestException("INVALID_PROFILE_IMAGE_URL", "Invalid profile image URL");
         }
@@ -131,15 +131,6 @@ public class S3ImageUploadService {
         }
         return key.toString();
     }
-
-    private String stripQuery(URL url) {
-        try {
-            URI uri = url.toURI();
-            return new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), null, null).toString();
-        } catch (Exception ex) {
-            String asString = url.toString();
-            int idx = asString.indexOf('?');
-            return idx > 0 ? asString.substring(0, idx) : asString;
-        }
-    }
 }
+
+

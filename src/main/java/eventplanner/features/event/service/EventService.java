@@ -20,6 +20,12 @@ import eventplanner.common.domain.enums.RoleName;
 import eventplanner.features.event.dto.request.EventFeedRequest;
 import eventplanner.features.event.dto.response.EventFeedResponse;
 import eventplanner.features.event.dto.response.FeedPost;
+import eventplanner.features.event.entity.EventPost;
+import eventplanner.features.event.repository.EventPostRepository;
+import eventplanner.features.event.repository.EventStoredObjectRepository;
+import eventplanner.common.storage.s3.services.S3StorageService;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import java.util.Set;
 import java.util.Comparator;
 import eventplanner.security.authorization.domain.repository.EventRoleRepository;
@@ -56,6 +62,18 @@ public class EventService {
     @Autowired
     private EventRoleRepository eventRoleRepository;
     
+    @Autowired(required = false)
+    private EventPostRepository eventPostRepository;
+
+    @Autowired(required = false)
+    private EventStoredObjectRepository eventStoredObjectRepository;
+
+    @Autowired(required = false)
+    private S3StorageService s3StorageService;
+
+    @Autowired(required = false)
+    private UserAccountRepository userAccountRepository;
+
     @Autowired(required = false)
     private AuthorizationService authorizationService;
     
@@ -1336,10 +1354,51 @@ public class EventService {
      */
     private List<FeedPost> aggregateAllFeedPosts(Event event, UserPrincipal user, EventFeedRequest request) {
         List<FeedPost> posts = new ArrayList<>();
-        
-        // TODO: Implement actual feed aggregation
-        // 1. Get event media and convert to posts
-        // 2. Get user-generated content from internal app
+
+        // Internal app posts (EventPost)
+        if (eventPostRepository != null) {
+            List<EventPost> eventPosts = eventPostRepository.findByEventIdOrderByCreatedAtDesc(event.getId());
+
+            // Fetch authors in one shot (no stubs)
+            Map<java.util.UUID, UserAccount> authorsById = Map.of();
+            if (userAccountRepository != null) {
+                Set<java.util.UUID> authorIds = eventPosts.stream()
+                        .map(EventPost::getCreatedBy)
+                        .filter(java.util.Objects::nonNull)
+                        .collect(Collectors.toSet());
+                if (!authorIds.isEmpty()) {
+                    authorsById = userAccountRepository.findAllById(authorIds).stream()
+                            .collect(Collectors.toMap(UserAccount::getId, a -> a));
+                }
+            }
+
+            for (EventPost p : eventPosts) {
+                FeedPost fp = new FeedPost();
+                fp.setId(p.getId());
+                fp.setType(p.getPostType() != null ? p.getPostType().name() : "TEXT");
+                fp.setContent(p.getContent());
+                fp.setPostedAt(p.getCreatedAt());
+
+                UserAccount author = p.getCreatedBy() != null ? authorsById.get(p.getCreatedBy()) : null;
+                fp.setAuthorName(author != null ? author.getName() : null);
+                fp.setAuthorAvatarUrl(author != null ? author.getProfileImageUrl() : null);
+
+                // Attach media if available
+                if (p.getMediaObjectId() != null && eventStoredObjectRepository != null && s3StorageService != null) {
+                    eventStoredObjectRepository.findById(p.getMediaObjectId()).ifPresent(obj -> {
+                        if (event.getId().equals(obj.getEventId())) {
+                            fp.setMediaUrl(s3StorageService.generatePresignedGetUrl("event", obj.getObjectKey(), java.time.Duration.ofMinutes(10)).toString());
+                        }
+                    });
+                }
+
+                // Like/comment counts not implemented yet; default to 0 for now
+                fp.setLikes(0);
+                fp.setComments(0);
+
+                posts.add(fp);
+            }
+        }
         
         // Apply filters if specified
         if (request != null && request.getPostType() != null && !request.getPostType().equals("ALL")) {

@@ -1,15 +1,21 @@
 package eventplanner.security.auth.service;
 
 import eventplanner.common.exception.BadRequestException;
-import eventplanner.common.storage.s3.PresignedUploadResult;
-import eventplanner.common.storage.s3.S3ImageUploadService;
+import eventplanner.common.storage.s3.dto.PresignedUploadResult;
+import eventplanner.common.storage.s3.services.S3ImageUploadService;
+import eventplanner.security.auth.dto.req.ProfileImageCompleteRequest;
 import eventplanner.security.auth.dto.req.ProfileImageUploadRequest;
+import eventplanner.security.auth.dto.res.ProfileImageCompleteResponse;
 import eventplanner.security.auth.dto.res.ProfileImageUploadResponse;
 import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 @Service
 @RequiredArgsConstructor
 public class ProfileImageService {
@@ -19,6 +25,7 @@ public class ProfileImageService {
     private static final String PROFILE_KEY_PREFIX_TEMPLATE = "users/%s/profile";
 
     private final S3ImageUploadService imageUploadService;
+    private final UserAccountRepository userAccountRepository;
 
     public ProfileImageUploadResponse createProfileImageUpload(UserAccount user, ProfileImageUploadRequest request) {
         if (user == null) {
@@ -46,5 +53,37 @@ public class ProfileImageService {
 
     public String normalizeResourceUrl(String resourceUrl) {
         return imageUploadService.normalizeResourceUrl(resourceUrl);
+    }
+
+    /**
+     * Called AFTER the client uploads directly to S3 using the presigned URL.
+     * Persists the resulting resourceUrl on the user record.
+     */
+    public ProfileImageCompleteResponse completeProfileImageUpload(UserAccount user, ProfileImageCompleteRequest request) {
+        if (user == null) {
+            throw new BadRequestException("USER_REQUIRED", "Valid user is required");
+        }
+        if (request == null) {
+            throw new BadRequestException("REQUEST_REQUIRED", "Request is required");
+        }
+
+        String expectedPrefix = (PROFILE_KEY_PREFIX_TEMPLATE.formatted(user.getId())) + "/";
+        String objectKey = request.getObjectKey() != null ? request.getObjectKey().trim() : "";
+        if (!StringUtils.hasText(objectKey) || !objectKey.startsWith(expectedPrefix)) {
+            throw new BadRequestException("INVALID_OBJECT_KEY", "Invalid object key for this user");
+        }
+
+        String normalized = imageUploadService.normalizeResourceUrl(request.getResourceUrl());
+        if (!StringUtils.hasText(normalized)) {
+            throw new BadRequestException("INVALID_RESOURCE_URL", "Invalid resourceUrl");
+        }
+
+        user.setProfileImageUrl(normalized);
+        userAccountRepository.save(user);
+
+        return ProfileImageCompleteResponse.builder()
+            .profileImageUrl(normalized)
+            .updatedAt(LocalDateTime.now(ZoneOffset.UTC))
+            .build();
     }
 }
