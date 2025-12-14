@@ -18,6 +18,17 @@ public interface EventReminderRepository extends JpaRepository<EventReminder, UU
     List<EventReminder> findByEventIdAndReminderTimeAfterOrderByReminderTimeAsc(UUID eventId, LocalDateTime after);
 
     Page<EventReminder> findByEventId(UUID eventId, Pageable pageable);
+
+    /**
+     * Find all active reminders that should be sent (reminder time has passed and not yet sent)
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT r FROM EventReminder r WHERE r.isActive = true " +
+        "AND r.wasSent = false " +
+        "AND r.reminderTime <= :now " +
+        "ORDER BY r.reminderTime ASC"
+    )
+    List<EventReminder> findPendingRemindersToSend(@org.springframework.data.repository.query.Param("now") LocalDateTime now);
 }
 
 

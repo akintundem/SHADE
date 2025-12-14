@@ -5,6 +5,7 @@ import eventplanner.features.event.dto.response.EventReminderResponse;
 import eventplanner.features.event.entity.EventReminder;
 import eventplanner.features.event.repository.EventReminderRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,11 +14,13 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @Transactional
 @RequiredArgsConstructor
 public class EventReminderService {
 
     private final EventReminderRepository reminderRepository;
+    private final EventRecipientResolverService recipientResolverService;
 
     public List<EventReminderResponse> list(UUID eventId, int page, int size) {
         var pageable = org.springframework.data.domain.PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
@@ -35,9 +38,25 @@ public class EventReminderService {
         reminder.setReminderType(request.getReminderType());
         reminder.setIsActive(Boolean.TRUE.equals(request.getIsActive()));
         reminder.setCustomMessage(request.getCustomMessage());
-        reminder.setRecipientUserIdsCsv(joinCsv(request.getRecipientUserIds()));
-        reminder.setRecipientEmailsCsv(joinCsv(request.getRecipientEmails()));
         reminder.setWasSent(false);
+        
+        // Resolve recipients if recipient types are specified
+        if (request.getRecipientTypes() != null && !request.getRecipientTypes().isEmpty()) {
+            EventRecipientResolverService.RecipientInfo recipients = recipientResolverService.resolveRecipients(
+                eventId,
+                request.getRecipientTypes(),
+                request.getRecipientUserIds(),
+                request.getRecipientEmails()
+            );
+            reminder.setRecipientUserIdsCsv(joinCsv(recipients.getUserIds().stream().toList()));
+            reminder.setRecipientEmailsCsv(joinCsv(recipients.getEmails().stream().toList()));
+            log.info("Created reminder for event {} with {} recipients", eventId, recipients.getTotalCount());
+        } else {
+            // Backward compatibility: use specific recipients if no types specified
+            reminder.setRecipientUserIdsCsv(joinCsv(request.getRecipientUserIds()));
+            reminder.setRecipientEmailsCsv(joinCsv(request.getRecipientEmails()));
+        }
+        
         EventReminder saved = reminderRepository.save(reminder);
         return toResponse(saved);
     }
@@ -55,8 +74,27 @@ public class EventReminderService {
         if (request.getReminderType() != null) reminder.setReminderType(request.getReminderType());
         if (request.getIsActive() != null) reminder.setIsActive(request.getIsActive());
         if (request.getCustomMessage() != null) reminder.setCustomMessage(request.getCustomMessage());
-        if (request.getRecipientUserIds() != null) reminder.setRecipientUserIdsCsv(joinCsv(request.getRecipientUserIds()));
-        if (request.getRecipientEmails() != null) reminder.setRecipientEmailsCsv(joinCsv(request.getRecipientEmails()));
+        
+        // Update recipients if recipient types are specified
+        if (request.getRecipientTypes() != null && !request.getRecipientTypes().isEmpty()) {
+            EventRecipientResolverService.RecipientInfo recipients = recipientResolverService.resolveRecipients(
+                eventId,
+                request.getRecipientTypes(),
+                request.getRecipientUserIds(),
+                request.getRecipientEmails()
+            );
+            reminder.setRecipientUserIdsCsv(joinCsv(recipients.getUserIds().stream().toList()));
+            reminder.setRecipientEmailsCsv(joinCsv(recipients.getEmails().stream().toList()));
+        } else {
+            // Backward compatibility: update specific recipients if provided
+            if (request.getRecipientUserIds() != null) {
+                reminder.setRecipientUserIdsCsv(joinCsv(request.getRecipientUserIds()));
+            }
+            if (request.getRecipientEmails() != null) {
+                reminder.setRecipientEmailsCsv(joinCsv(request.getRecipientEmails()));
+            }
+        }
+        
         return toResponse(reminder);
     }
 

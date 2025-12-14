@@ -1352,13 +1352,6 @@ EOF
     # Notification Settings Tests
     run_test "Get Notification Settings" "GET" "/api/v1/events/$EVENT_ID/notifications" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event notification settings"
     
-    local notification_settings='{
-        "enabledChannels": ["EMAIL", "PUSH"],
-        "reminderEnabled": true,
-        "defaultReminderMinutes": 1440
-    }'
-    run_test "Update Notification Settings" "PUT" "/api/v1/events/$EVENT_ID/notifications" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_settings" "200" "Update notification settings"
-    
     # Send Notification Tests
     local notification_data='{
         "channel": "EMAIL",

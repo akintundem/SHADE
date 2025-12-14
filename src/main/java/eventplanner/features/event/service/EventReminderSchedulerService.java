@@ -1,0 +1,160 @@
+package eventplanner.features.event.service;
+
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.domain.enums.CommunicationType;
+import eventplanner.features.event.entity.EventReminder;
+import eventplanner.features.event.repository.EventReminderRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Scheduled service to automatically send reminders when their time is up
+ * Runs every minute to check for reminders that need to be sent
+ */
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class EventReminderSchedulerService {
+
+    private final EventReminderRepository reminderRepository;
+    private final NotificationService notificationService;
+
+    /**
+     * Scheduled task that runs every minute to check and send pending reminders
+     * Cron expression: second, minute, hour, day, month, weekday
+     * "0 * * * * *" means: at 0 seconds of every minute
+     */
+    @Scheduled(cron = "0 * * * * *")
+    @Transactional
+    public void sendPendingReminders() {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            List<EventReminder> pendingReminders = reminderRepository.findPendingRemindersToSend(now);
+
+            if (pendingReminders.isEmpty()) {
+                return;
+            }
+
+            log.info("Processing {} pending reminders", pendingReminders.size());
+
+            int successCount = 0;
+            int failureCount = 0;
+
+            for (EventReminder reminder : pendingReminders) {
+                try {
+                    sendReminder(reminder);
+                    reminder.setWasSent(true);
+                    reminderRepository.save(reminder);
+                    successCount++;
+                    log.debug("Successfully sent reminder {} for event {}", reminder.getId(), reminder.getEventId());
+                } catch (Exception e) {
+                    failureCount++;
+                    log.error("Failed to send reminder {} for event {}: {}", 
+                            reminder.getId(), reminder.getEventId(), e.getMessage(), e);
+                    // Don't mark as sent if it failed - will retry on next run
+                }
+            }
+
+            log.info("Reminder processing complete: {} successful, {} failed", successCount, failureCount);
+        } catch (Exception e) {
+            log.error("Error in scheduled reminder processing", e);
+        }
+    }
+
+    /**
+     * Send a reminder notification
+     */
+    private void sendReminder(EventReminder reminder) {
+        CommunicationType communicationType = mapChannelToCommunicationType(reminder.getChannel());
+        
+        // Prepare message content
+        String subject = reminder.getTitle();
+        String content = reminder.getCustomMessage() != null && !reminder.getCustomMessage().isBlank()
+                ? reminder.getCustomMessage()
+                : reminder.getDescription() != null ? reminder.getDescription() : reminder.getTitle();
+
+        Map<String, Object> templateVariables = new HashMap<>();
+        templateVariables.put("content", content);
+        templateVariables.put("reminderTitle", reminder.getTitle());
+        if (reminder.getDescription() != null) {
+            templateVariables.put("description", reminder.getDescription());
+        }
+
+        // Send to email recipients
+        if (reminder.getRecipientEmailsCsv() != null && !reminder.getRecipientEmailsCsv().isBlank()) {
+            String[] emails = reminder.getRecipientEmailsCsv().split(",");
+            for (String email : emails) {
+                email = email.trim();
+                if (email.isBlank()) continue;
+
+                try {
+                    NotificationRequest notificationRequest = NotificationRequest.builder()
+                            .type(communicationType)
+                            .to(email)
+                            .subject(subject)
+                            .templateVariables(templateVariables)
+                            .eventId(reminder.getEventId())
+                            .build();
+
+                    notificationService.send(notificationRequest);
+                } catch (Exception e) {
+                    log.error("Failed to send reminder email to {}: {}", email, e.getMessage());
+                    throw e; // Re-throw to mark reminder as failed
+                }
+            }
+        }
+
+        // Send to user IDs (for push notifications)
+        if (reminder.getRecipientUserIdsCsv() != null && !reminder.getRecipientUserIdsCsv().isBlank()) {
+            String[] userIds = reminder.getRecipientUserIdsCsv().split(",");
+            for (String userIdStr : userIds) {
+                userIdStr = userIdStr.trim();
+                if (userIdStr.isBlank()) continue;
+
+                try {
+                    Map<String, Object> pushData = new HashMap<>(templateVariables);
+                    pushData.put("body", content);
+
+                    NotificationRequest notificationRequest = NotificationRequest.builder()
+                            .type(communicationType)
+                            .to(userIdStr)
+                            .subject(subject)
+                            .templateVariables(pushData)
+                            .eventId(reminder.getEventId())
+                            .build();
+
+                    notificationService.send(notificationRequest);
+                } catch (Exception e) {
+                    log.error("Failed to send reminder push to user {}: {}", userIdStr, e.getMessage());
+                    throw e; // Re-throw to mark reminder as failed
+                }
+            }
+        }
+    }
+
+    /**
+     * Map reminder channel string to CommunicationType enum
+     */
+    private CommunicationType mapChannelToCommunicationType(String channel) {
+        if (channel == null) {
+            return CommunicationType.EMAIL; // Default
+        }
+        
+        String channelLower = channel.toLowerCase().trim();
+        return switch (channelLower) {
+            case "email" -> CommunicationType.EMAIL;
+            case "sms" -> CommunicationType.SMS;
+            case "push", "push_notification" -> CommunicationType.PUSH_NOTIFICATION;
+            default -> CommunicationType.EMAIL; // Default to email
+        };
+    }
+}

@@ -346,25 +346,6 @@ Response:
 
 ---
 
-#### PUT /api/v1/events/{id}/notifications
-Query:
-- None
-
-Body: `EventNotificationSettingsRequest`
-
-```json
-{
-  "enabledChannels": ["EMAIL", "PUSH"],
-  "reminderEnabled": true,
-  "defaultReminderMinutes": 1440
-}
-```
-
-Response:
-- `200 OK` → `EventNotificationSettingsResponse`
-
----
-
 #### POST /api/v1/events/{id}/notifications/send
 Query:
 - None

@@ -1,7 +1,6 @@
 package eventplanner.features.event.controller;
 
 import eventplanner.features.event.dto.request.EventNotificationRequest;
-import eventplanner.features.event.dto.request.EventNotificationSettingsRequest;
 import eventplanner.features.event.dto.request.EventReminderRequest;
 import eventplanner.features.event.dto.response.EventNotificationResponse;
 import eventplanner.features.event.dto.response.EventNotificationSettingsResponse;
@@ -84,29 +83,6 @@ public class EventNotificationController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event notification settings");
         }
         return ResponseEntity.ok(settingsService.getSettings(id));
-    }
-
-    @PutMapping("/{id}/notifications")
-    @RequiresPermission(value = RbacPermissions.EVENT_NOTIFICATION_UPDATE, resources = {"event_id=#id"})
-    @Operation(summary = "Update event notification settings", description = "Update notification settings for an event")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Notification settings updated successfully"),
-        @ApiResponse(responseCode = "404", description = "Event not found"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions")
-    })
-    public ResponseEntity<EventNotificationSettingsResponse> updateNotificationSettings(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody EventNotificationSettingsRequest request) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        // Verify user is owner or admin
-        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update notification settings");
-        }
-        return ResponseEntity.ok(settingsService.updateSettings(id, request));
     }
 
     @PostMapping("/{id}/notifications/send")
