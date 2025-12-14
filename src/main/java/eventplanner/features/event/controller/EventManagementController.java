@@ -1,12 +1,10 @@
 package eventplanner.features.event.controller;
 
-import eventplanner.features.event.dto.request.EventCapacityUpdateRequest;
 import eventplanner.features.event.dto.request.EventDuplicateRequest;
 import eventplanner.features.event.dto.request.EventRegistrationDeadlineRequest;
 import eventplanner.features.event.dto.request.EventShareRequest;
 import eventplanner.features.event.dto.request.EventVisibilityUpdateRequest;
 import jakarta.validation.Valid;
-import eventplanner.features.event.dto.response.EventCapacityResponse;
 import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.dto.response.EventShareResponse;
 import eventplanner.features.event.dto.response.EventSharingOptionsResponse;
@@ -18,7 +16,6 @@ import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
-import eventplanner.common.domain.enums.EventStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -143,55 +140,6 @@ public class EventManagementController {
             return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (ResponseStatusException ex) {
             throw ex;
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
-    }
-
-    // ==================== 4. EVENT CAPACITY & REGISTRATION ENDPOINTS ====================
-
-    @GetMapping("/{id}/capacity")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
-    @Operation(summary = "Get event capacity", description = "Retrieve capacity information for an event. Only accessible if event is public, user is owner, or user has appropriate role.")
-    public ResponseEntity<EventCapacityResponse> getEventCapacity(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal user) {
-        try {
-            Event event = eventService.getByIdWithAccessControl(id, user)
-                    .orElseThrow(() -> new IllegalArgumentException("Event not found or access denied"));
-            
-            EventCapacityResponse response = new EventCapacityResponse();
-            response.setEventId(id);
-            response.setCapacity(event.getCapacity());
-            response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
-            response.setAvailableSpots(eventService.getAvailableCapacity(id));
-            response.setUtilizationPercentage(calculateUtilizationPercentage(event.getCapacity(), event.getCurrentAttendeeCount()));
-            response.setIsRegistrationOpen(event.getEventStatus() == EventStatus.REGISTRATION_OPEN && 
-                (event.getRegistrationDeadline() == null || LocalDateTime.now().isBefore(event.getRegistrationDeadline())));
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
-    }
-
-    @PutMapping("/{id}/capacity")
-    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#id"})
-    @Operation(summary = "Update event capacity", description = "Update the capacity of an event")
-    public ResponseEntity<EventResponse> updateCapacity(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody EventCapacityUpdateRequest request) {
-        try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
-            // Verify user is owner or admin
-            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update capacity");
-            }
-            Event updatedEvent = eventService.updateCapacity(id, request.getCapacity());
-            return ResponseEntity.ok(eventService.toResponse(updatedEvent));
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
@@ -342,16 +290,6 @@ public class EventManagementController {
             throw new AccessDeniedException("Authentication required");
         }
         return principal.getId();
-    }
-
-    private Double calculateUtilizationPercentage(Integer capacity, Integer currentAttendeeCount) {
-        if (capacity == null || capacity == 0) {
-            return 0.0;
-        }
-        if (currentAttendeeCount == null) {
-            return 0.0;
-        }
-        return (double) (currentAttendeeCount * 100) / capacity;
     }
 
 }

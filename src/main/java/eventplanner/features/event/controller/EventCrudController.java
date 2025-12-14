@@ -6,6 +6,7 @@ import eventplanner.features.event.dto.request.EventListRequest;
 import eventplanner.features.event.dto.request.UpdateEventWithCoverUploadRequest;
 import eventplanner.features.event.dto.request.EventFeedRequest;
 import eventplanner.features.event.dto.response.CreateEventWithCoverUploadResponse;
+import eventplanner.features.event.dto.response.EventCapacityResponse;
 import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.dto.response.EventFeedResponse;
 import eventplanner.features.event.dto.response.UpdateEventWithCoverUploadResponse;
@@ -40,6 +41,8 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -112,7 +115,7 @@ public class EventCrudController {
     @Operation(summary = "Get event by ID", description = "COMPLETE - Retrieve a specific event by its unique identifier. Returns full details for owners/high-responsibility users, or feed view for guests.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event found",
-                content = @Content(schema = @Schema(oneOf = {EventResponse.class, EventFeedResponse.class}))),
+                content = @Content(schema = @Schema(oneOf = {EventResponse.class, EventFeedResponse.class, EventCapacityResponse.class}))),
         @ApiResponse(responseCode = "404", description = "Event not found or access denied"),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
         @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions")
@@ -120,6 +123,8 @@ public class EventCrudController {
     public ResponseEntity<?> get(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal user,
+            @Parameter(description = "Optional response projection. Supported: capacity, full, feed. Default: full for owners/high-responsibility; feed for guests.") 
+            @RequestParam(value = "view", required = false) String view,
             @Parameter(description = "Feed pagination (only used for guest users)") 
             @ModelAttribute @Valid EventFeedRequest feedRequest) {
         Optional<Event> found = eventService.getByIdWithAccessControl(id, user);
@@ -129,8 +134,34 @@ public class EventCrudController {
         
         Event event = found.get();
         EventScope scope = eventService.determineEventScope(user, id);
+
+        // Normalize requested view
+        String normalizedView = view != null ? view.trim().toLowerCase(java.util.Locale.ROOT) : null;
+        if (normalizedView != null && normalizedView.isEmpty()) {
+            normalizedView = null;
+        }
+
+        // Enforce scope: guests cannot request "full"
+        if (scope != EventScope.FULL && "full".equals(normalizedView)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        // Projection: capacity
+        if ("capacity".equals(normalizedView)) {
+            EventCapacityResponse response = new EventCapacityResponse();
+            response.setEventId(id);
+            response.setCapacity(event.getCapacity());
+            response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
+            response.setAvailableSpots(eventService.getAvailableCapacity(id));
+            response.setUtilizationPercentage(calculateUtilizationPercentage(event.getCapacity(), event.getCurrentAttendeeCount()));
+            boolean open = event.getEventStatus() == eventplanner.common.domain.enums.EventStatus.REGISTRATION_OPEN
+                    && (event.getRegistrationDeadline() == null || LocalDateTime.now(ZoneOffset.UTC).isBefore(event.getRegistrationDeadline()));
+            response.setIsRegistrationOpen(open);
+            return ResponseEntity.ok(response);
+        }
         
-        if (scope == EventScope.FULL) {
+        // Default behavior (or explicit full/feed)
+        if (scope == EventScope.FULL && !"feed".equals(normalizedView)) {
             // Return full event details for owners/high-responsibility users
             EventResponse response = eventService.toResponse(event);
             ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
@@ -144,6 +175,16 @@ public class EventCrudController {
             EventFeedResponse feedResponse = eventService.toFeedResponse(event, user, request);
             return ResponseEntity.ok(feedResponse);
         }
+    }
+
+    private Double calculateUtilizationPercentage(Integer capacity, Integer currentAttendeeCount) {
+        if (capacity == null || capacity == 0) {
+            return 0.0;
+        }
+        if (currentAttendeeCount == null) {
+            return 0.0;
+        }
+        return (double) (currentAttendeeCount * 100) / capacity;
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)

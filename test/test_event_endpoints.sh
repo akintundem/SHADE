@@ -1107,12 +1107,18 @@ EOF
     run_test "Get Events by Status" "GET" "/api/v1/events?status=PUBLISHED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by status"
     
     # Event Capacity & Registration Tests
-    run_test "Get Event Capacity" "GET" "/api/v1/events/$EVENT_ID/capacity" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event capacity information"
-    
-    local capacity_update_data='{
-        "capacity": 200
-    }'
-    run_test "Update Event Capacity" "PUT" "/api/v1/events/$EVENT_ID/capacity" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$capacity_update_data" "200" "Update event capacity"
+    run_test "Get Event Capacity (via view=capacity)" "GET" "/api/v1/events/$EVENT_ID?view=capacity" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event capacity information via GET /events/{id}?view=capacity"
+
+    local capacity_update_data
+    capacity_update_data=$(cat <<EOF
+{
+  "event": {
+    "capacity": 200
+  }
+}
+EOF
+)
+    run_test "Update Event Capacity (via Update Event)" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$capacity_update_data" "200" "Update event capacity via PUT /events/{id}"
     
     local deadline_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
     local deadline_data='{
