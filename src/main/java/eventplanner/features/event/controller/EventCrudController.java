@@ -38,7 +38,6 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;

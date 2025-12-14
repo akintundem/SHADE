@@ -59,7 +59,6 @@ public class EventNotificationService {
 
         List<String> successfulRecipients = new ArrayList<>();
         List<String> failedRecipients = new ArrayList<>();
-        int totalSent = 0;
 
         // Fetch event details for template variables
         Event event = eventRepository.findById(eventId)
@@ -92,7 +91,6 @@ public class EventNotificationService {
                     
                     if (response.isSuccess()) {
                         successfulRecipients.add(email);
-                        totalSent++;
                         log.info("Successfully sent email notification to: {} - Message ID: {}", email, response.getMessageId());
                     } else {
                         failedRecipients.add(email);
@@ -128,7 +126,6 @@ public class EventNotificationService {
                     
                     if (response.isSuccess()) {
                         successfulRecipients.add(userId.toString());
-                        totalSent++;
                         log.info("Successfully sent notification to user: {} - Message ID: {}", userId, response.getMessageId());
                     } else {
                         failedRecipients.add(userId.toString());

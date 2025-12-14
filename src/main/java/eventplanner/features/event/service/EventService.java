@@ -1,11 +1,8 @@
 package eventplanner.features.event.service;
 
-import eventplanner.common.domain.enums.EventType;
 import eventplanner.features.event.dto.VenueDTO;
 import eventplanner.features.event.dto.request.CreateEventRequest;
 import eventplanner.features.event.dto.request.UpdateEventRequest;
-import eventplanner.features.event.dto.request.EventCreationRequest;
-import eventplanner.features.event.dto.request.EventUpdateRequest;
 import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.Venue;
@@ -34,16 +31,14 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Map;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.ArrayList;
@@ -74,142 +69,6 @@ public class EventService {
     @Autowired(required = false)
     private AuthorizationService authorizationService;
     
-    /**
-     * Create a new event from structured DTO
-     * @param request The validated event creation request
-     * @return EventResponse with created event details
-     */
-    public EventResponse createEvent(EventCreationRequest request) {
-        try {
-            // Create new event entity
-            Event event = new Event();
-            
-            // Set basic fields
-            event.setName(request.getName());
-            event.setDescription(request.getDescription());
-            
-            // Validate and set owner ID
-            UUID ownerId = UUID.fromString(request.getOwnerId());
-            event.setOwnerId(ownerId);
-            
-            // Set event type
-            if (request.getEventType() != null) {
-                try {
-                    event.setEventType(eventplanner.common.domain.enums.EventType.valueOf(request.getEventType()));
-                } catch (IllegalArgumentException e) {
-                    event.setEventType(eventplanner.common.domain.enums.EventType.MEETING);
-                }
-            }
-            
-            // Set dates
-            event.setStartDateTime(request.getStartDateTime());
-            if (request.getEndDateTime() != null) {
-                event.setEndDateTime(request.getEndDateTime());
-            }
-            
-            // Set capacity
-            if (request.getCapacity() != null) {
-                event.setCapacity(request.getCapacity());
-            }
-            
-            // Set boolean fields
-            event.setIsPublic(request.getIsPublic() != null ? request.getIsPublic() : true);
-            event.setRequiresApproval(request.getRequiresApproval() != null ? request.getRequiresApproval() : false);
-            
-            // Set venue if provided
-            if (request.getVenue() != null) {
-                event.setVenue(toVenueEntity(request.getVenue()));
-            }
-            
-            // Handle venue data if provided
-            if (request.getVenues() != null && !request.getVenues().isEmpty()) {
-                EventCreationRequest.VenueRequest selectedVenue = request.getVenues().get(0);
-                String venueInfo = String.format("Venue: %s, Address: %s", 
-                    selectedVenue.getName(), selectedVenue.getAddress());
-                if (event.getDescription() != null) {
-                    event.setDescription(event.getDescription() + "\n\n" + venueInfo);
-                } else {
-                    event.setDescription(venueInfo);
-                }
-            }
-            
-            // Save to database
-            Event savedEvent = eventRepository.save(event);
-            
-            // Convert to response
-            return toResponse(savedEvent);
-            
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to create event: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Update an existing event
-     * @param eventId The ID of the event to update
-     * @param request The validated update request
-     * @return EventResponse with updated event details
-     */
-    public EventResponse updateEvent(String eventId, EventUpdateRequest request) {
-        try {
-            UUID uuid = UUID.fromString(eventId);
-            Optional<Event> eventOpt = eventRepository.findById(uuid);
-            
-            if (eventOpt.isEmpty()) {
-                throw new RuntimeException("Event not found with ID: " + eventId);
-            }
-            
-            Event event = eventOpt.get();
-            
-            // Update fields if provided
-            if (request.getName() != null) {
-                event.setName(request.getName());
-            }
-            if (request.getDescription() != null) {
-                event.setDescription(request.getDescription());
-            }
-            if (request.getCapacity() != null) {
-                event.setCapacity(request.getCapacity());
-            }
-            if (request.getStartDateTime() != null) {
-                event.setStartDateTime(request.getStartDateTime());
-            }
-            if (request.getEndDateTime() != null) {
-                event.setEndDateTime(request.getEndDateTime());
-            }
-            if (request.getIsPublic() != null) {
-                event.setIsPublic(request.getIsPublic());
-            }
-            if (request.getRequiresApproval() != null) {
-                event.setRequiresApproval(request.getRequiresApproval());
-            }
-            
-            // Update venue if provided
-            if (request.getVenue() != null) {
-                event.setVenue(toVenueEntity(request.getVenue()));
-            }
-            
-            // Save updated event
-            Event savedEvent = eventRepository.save(event);
-            
-            // Convert to response
-            return toResponse(savedEvent);
-            
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to update event: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Get event by chat ID
-     * @param chatId The chat ID
-     * @return EventResponse or null if not found
-     */
-    public EventResponse getEventByChatId(String chatId) {
-        // For now, return null as we don't have chat ID tracking in the Event entity
-        // This would need to be implemented based on your requirements
-        return null;
-    }
 
     /**
      * Get event by ID
@@ -250,39 +109,6 @@ public class EventService {
         return Optional.of(event);
     }
 
-    /**
-     * Get current user from security context
-     */
-    private UserPrincipal getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal) {
-            return (UserPrincipal) authentication.getPrincipal();
-        }
-        return null;
-    }
-
-    /**
-     * Filter events based on user access
-     * Returns only events that are either public OR owned by user OR user has role in
-     */
-    private List<Event> filterEventsByAccess(List<Event> events, UserPrincipal user) {
-        if (user == null || authorizationService == null) {
-            // No user context - only return public events
-            return events.stream()
-                .filter(event -> Boolean.TRUE.equals(event.getIsPublic()))
-                .collect(Collectors.toList());
-        }
-        
-        return events.stream()
-            .filter(event -> {
-                if (Boolean.TRUE.equals(event.getIsPublic())) {
-                    return true; // Public events are accessible
-                }
-                // For private events, check if user has access
-                return authorizationService.canAccessEvent(user, event.getId());
-            })
-            .collect(Collectors.toList());
-    }
 
     /**
      * Update an existing event
@@ -687,149 +513,7 @@ public class EventService {
         return response;
     }
 
-    /**
-     * Convert Map data to EventCreationRequest DTO
-     * This method is used for backward compatibility with existing Map-based data
-     */
-    public EventCreationRequest convertMapToEventCreationRequest(Map<String, Object> validatedData) {
-        EventCreationRequest request = new EventCreationRequest();
-        
-        request.setName((String) validatedData.get("name"));
-        request.setDescription((String) validatedData.get("description"));
-        request.setOwnerId((String) validatedData.get("ownerId"));
-        request.setEventType((String) validatedData.get("eventType"));
-        
-        // Parse dates
-        String startDateTimeStr = (String) validatedData.get("startDateTime");
-        if (startDateTimeStr != null) {
-            request.setStartDateTime(LocalDateTime.parse(startDateTimeStr));
-        }
-        
-        String endDateTimeStr = (String) validatedData.get("endDateTime");
-        if (endDateTimeStr != null) {
-            request.setEndDateTime(LocalDateTime.parse(endDateTimeStr));
-        }
-        
-        // Parse capacity
-        Object capacityObj = validatedData.get("capacity");
-        if (capacityObj instanceof Integer) {
-            request.setCapacity((Integer) capacityObj);
-        } else if (capacityObj instanceof String) {
-            try {
-                request.setCapacity(Integer.parseInt((String) capacityObj));
-            } catch (NumberFormatException e) {
-                // Ignore invalid capacity
-            }
-        }
-        
-        // Set boolean fields
-        request.setIsPublic((Boolean) validatedData.getOrDefault("isPublic", true));
-        request.setRequiresApproval((Boolean) validatedData.getOrDefault("requiresApproval", false));
-        // QR code fields removed
-        
-        // Handle venues
-        if (validatedData.containsKey("venues") && validatedData.get("venues") != null) {
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> venues = (List<Map<String, Object>>) validatedData.get("venues");
-            List<EventCreationRequest.VenueRequest> venueRequests = new ArrayList<>();
-            
-            for (Map<String, Object> venue : venues) {
-                EventCreationRequest.VenueRequest venueRequest = new EventCreationRequest.VenueRequest();
-                venueRequest.setName((String) venue.get("name"));
-                venueRequest.setAddress((String) venue.get("address"));
-                venueRequest.setDescription((String) venue.get("description"));
-                venueRequest.setContactEmail((String) venue.get("contactEmail"));
-                venueRequest.setContactPhone((String) venue.get("contactPhone"));
-                venueRequest.setWebsite((String) venue.get("website"));
-                venueRequests.add(venueRequest);
-            }
-            request.setVenues(venueRequests);
-        }
-        
-        return request;
-    }
-    
-    /**
-     * Convert Map data to EventUpdateRequest DTO
-     * This method is used for backward compatibility with existing Map-based data
-     */
-    public EventUpdateRequest convertMapToEventUpdateRequest(Map<String, Object> validatedData) {
-        EventUpdateRequest request = new EventUpdateRequest();
-        
-        if (validatedData.containsKey("name")) {
-            request.setName((String) validatedData.get("name"));
-        }
-        if (validatedData.containsKey("description")) {
-            request.setDescription((String) validatedData.get("description"));
-        }
-        if (validatedData.containsKey("eventType")) {
-            request.setEventType((String) validatedData.get("eventType"));
-        }
-        
-        // Parse dates
-        String startDateTimeStr = (String) validatedData.get("startDateTime");
-        if (startDateTimeStr != null) {
-            request.setStartDateTime(LocalDateTime.parse(startDateTimeStr));
-        }
-        
-        String endDateTimeStr = (String) validatedData.get("endDateTime");
-        if (endDateTimeStr != null) {
-            request.setEndDateTime(LocalDateTime.parse(endDateTimeStr));
-        }
-        
-        // Parse capacity
-        Object capacityObj = validatedData.get("capacity");
-        if (capacityObj instanceof Integer) {
-            request.setCapacity((Integer) capacityObj);
-        } else if (capacityObj instanceof String) {
-            try {
-                request.setCapacity(Integer.parseInt((String) capacityObj));
-            } catch (NumberFormatException e) {
-                // Ignore invalid capacity
-            }
-        }
-        
-        // Set boolean fields
-        if (validatedData.containsKey("isPublic")) {
-            request.setIsPublic((Boolean) validatedData.get("isPublic"));
-        }
-        if (validatedData.containsKey("requiresApproval")) {
-            request.setRequiresApproval((Boolean) validatedData.get("requiresApproval"));
-        }
-        // QR code fields removed
-        
-        return request;
-    }
 
-    // ==================== USER-EVENT RELATIONSHIP METHODS ====================
-
-    /**
-     * Get all events for a specific user
-     */
-    public List<Event> getEventsByUser(UUID userId) {
-        return eventRepository.findEventsByOwner(userId);
-    }
-
-    /**
-     * Get events owned by a user
-     */
-    public List<Event> getEventsOwnedByUser(UUID userId) {
-        return eventRepository.findEventsByOwner(userId);
-    }
-
-    /**
-     * Get upcoming events for a user
-     */
-    public List<Event> getUpcomingEventsByUser(UUID userId) {
-        return eventRepository.findUpcomingEventsByOwner(userId, LocalDateTime.now());
-    }
-
-    /**
-     * Get past events for a user
-     */
-    public List<Event> getPastEventsByUser(UUID userId) {
-        return eventRepository.findPastEventsByOwner(userId, LocalDateTime.now());
-    }
 
     // ==================== EVENT STATUS & LIFECYCLE METHODS ====================
 
@@ -888,98 +572,6 @@ public class EventService {
         return updateEventStatus(eventId, EventStatus.REGISTRATION_CLOSED);
     }
 
-    // ==================== EVENT DISCOVERY & SEARCH METHODS ====================
-
-    /**
-     * Search events
-     */
-    public List<Event> searchEvents(String searchTerm) {
-        if (searchTerm == null || searchTerm.trim().isEmpty()) {
-            return new ArrayList<>();
-        }
-        List<Event> events = eventRepository.searchEvents(searchTerm.trim());
-        // Filter by access - only return events user can access
-        UserPrincipal user = getCurrentUser();
-        return filterEventsByAccess(events, user);
-    }
-
-    /**
-     * Search public events
-     */
-    public List<Event> searchPublicEvents(String searchTerm) {
-        if (searchTerm == null || searchTerm.trim().isEmpty()) {
-            return eventRepository.findByIsPublicTrue();
-        }
-        return eventRepository.searchPublicEvents(searchTerm.trim());
-    }
-
-    /**
-     * Get public events
-     */
-    public List<Event> getPublicEvents() {
-        return eventRepository.findByIsPublicTrue();
-    }
-
-    /**
-     * Get featured events
-     */
-    public List<Event> getFeaturedEvents(Pageable pageable) {
-        return eventRepository.findFeaturedEvents(pageable);
-    }
-
-    /**
-     * Get trending events
-     */
-    public List<Event> getTrendingEvents(Pageable pageable) {
-        return eventRepository.findTrendingEvents(pageable);
-    }
-
-    /**
-     * Get upcoming events
-     */
-    public List<Event> getUpcomingEvents() {
-        return eventRepository.findByStartDateTimeAfterAndIsPublicTrue(LocalDateTime.now());
-    }
-
-    /**
-     * Get events by type
-     */
-    public List<Event> getEventsByType(String eventType) {
-        try {
-            EventType type = EventType.valueOf(eventType.toUpperCase(Locale.US));
-            List<Event> events = eventRepository.findByEventType(type);
-            // Filter by access - only return events user can access
-            UserPrincipal user = getCurrentUser();
-            return filterEventsByAccess(events, user);
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("Invalid event type: " + eventType);
-        }
-    }
-
-    /**
-     * Get events by status
-     */
-    public List<Event> getEventsByStatus(String eventStatus) {
-        try {
-            EventStatus status = EventStatus.valueOf(eventStatus.toUpperCase(Locale.US));
-            List<Event> events = eventRepository.findByEventStatus(status);
-            // Filter by access - only return events user can access
-            UserPrincipal user = getCurrentUser();
-            return filterEventsByAccess(events, user);
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("Invalid event status: " + eventStatus);
-        }
-    }
-
-    /**
-     * Get events by date range
-     */
-    public List<Event> getEventsByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
-        List<Event> events = eventRepository.findByStartDateTimeBetween(startDate, endDate);
-        // Filter by access - only return events user can access
-        UserPrincipal user = getCurrentUser();
-        return filterEventsByAccess(events, user);
-    }
 
     // ==================== EVENT CAPACITY & REGISTRATION METHODS ====================
 
@@ -999,30 +591,6 @@ public class EventService {
     }
 
     // ==================== EVENT VISIBILITY & ACCESS CONTROL METHODS ====================
-
-    /**
-     * Make event public
-     */
-    public Event makeEventPublic(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setIsPublic(true);
-        return eventRepository.save(event);
-    }
-
-    /**
-     * Make event private
-     */
-    public Event makeEventPrivate(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setIsPublic(false);
-        return eventRepository.save(event);
-    }
-
-    // (capacity utilization / registration-open helpers removed with analytics endpoints)
 
     /**
      * Convert VenueDTO to Venue entity
