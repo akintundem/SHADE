@@ -19,7 +19,9 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
     
     // Basic queries
     Page<Event> findByEventStatus(String status, Pageable pageable);
-    Page<Event> findByOwnerId(UUID ownerId, Pageable pageable);
+    
+    @Query("SELECT e FROM Event e WHERE e.owner.id = :ownerId")
+    Page<Event> findByOwnerId(@Param("ownerId") UUID ownerId, Pageable pageable);
     
     // Event type and status queries
     List<Event> findByEventType(EventType eventType);
@@ -69,13 +71,13 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
     Long countByEventStatus(String status);
     
     // User relationship queries (these would need to be implemented with proper joins to EventUser/EventAttendance tables)
-    @Query("SELECT e FROM Event e WHERE e.ownerId = :userId")
+    @Query("SELECT e FROM Event e WHERE e.owner.id = :userId")
     List<Event> findEventsByOwner(@Param("userId") UUID userId);
     
-    @Query("SELECT e FROM Event e WHERE e.ownerId = :userId AND e.startDateTime > :now")
+    @Query("SELECT e FROM Event e WHERE e.owner.id = :userId AND e.startDateTime > :now")
     List<Event> findUpcomingEventsByOwner(@Param("userId") UUID userId, @Param("now") LocalDateTime now);
     
-    @Query("SELECT e FROM Event e WHERE e.ownerId = :userId AND e.startDateTime < :now")
+    @Query("SELECT e FROM Event e WHERE e.owner.id = :userId AND e.startDateTime < :now")
     List<Event> findPastEventsByOwner(@Param("userId") UUID userId, @Param("now") LocalDateTime now);
     
     // Featured and trending events (placeholder queries - would need more complex logic)

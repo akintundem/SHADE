@@ -368,7 +368,7 @@ public class EventService {
             }
 
             if (Boolean.TRUE.equals(request.getMine()) && user != null) {
-                predicates.add(cb.equal(root.get("ownerId"), user.getId()));
+                predicates.add(cb.equal(root.get("owner").get("id"), user.getId()));
             }
 
             return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));

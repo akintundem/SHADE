@@ -20,10 +20,12 @@ public interface EventCollaboratorInviteRepository extends JpaRepository<EventCo
 
     List<EventCollaboratorInvite> findByEventId(UUID eventId);
 
-    List<EventCollaboratorInvite> findByInviteeUserIdAndStatusOrderByCreatedAtDesc(UUID inviteeUserId, CollaboratorInviteStatus status);
+    @Query("SELECT i FROM EventCollaboratorInvite i WHERE i.invitee.id = :inviteeUserId AND i.status = :status ORDER BY i.createdAt DESC")
+    List<EventCollaboratorInvite> findByInviteeUserIdAndStatusOrderByCreatedAtDesc(@Param("inviteeUserId") UUID inviteeUserId, @Param("status") CollaboratorInviteStatus status);
 
+    @Query("SELECT i FROM EventCollaboratorInvite i WHERE i.event.id = :eventId AND i.invitee.id = :inviteeUserId AND i.status = :status ORDER BY i.createdAt DESC")
     Optional<EventCollaboratorInvite> findFirstByEventIdAndInviteeUserIdAndStatusOrderByCreatedAtDesc(
-            UUID eventId, UUID inviteeUserId, CollaboratorInviteStatus status
+            @Param("eventId") UUID eventId, @Param("inviteeUserId") UUID inviteeUserId, @Param("status") CollaboratorInviteStatus status
     );
 
     Optional<EventCollaboratorInvite> findFirstByEventIdAndInviteeEmailIgnoreCaseAndStatusOrderByCreatedAtDesc(
@@ -35,7 +37,7 @@ public interface EventCollaboratorInviteRepository extends JpaRepository<EventCo
     @Query("""
             SELECT i
             FROM EventCollaboratorInvite i
-            WHERE (i.inviteeUserId = :userId OR (i.inviteeEmail IS NOT NULL AND LOWER(i.inviteeEmail) = LOWER(:email)))
+            WHERE (i.invitee.id = :userId OR (i.inviteeEmail IS NOT NULL AND LOWER(i.inviteeEmail) = LOWER(:email)))
               AND i.status = :status
             ORDER BY i.createdAt DESC
             """)
