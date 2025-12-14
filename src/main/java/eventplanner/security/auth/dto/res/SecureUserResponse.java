@@ -19,6 +19,7 @@ public class SecureUserResponse {
     UUID id;
     String email;
     String name;
+    String username;
     String phoneNumber;
     LocalDate dateOfBirth;
     UserType userType;

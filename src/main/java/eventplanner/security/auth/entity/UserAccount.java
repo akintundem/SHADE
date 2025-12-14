@@ -25,7 +25,8 @@ import java.time.LocalDateTime;
     name = "auth_users",
     indexes = {
         @Index(name = "idx_auth_users_email", columnList = "email"),
-        @Index(name = "idx_auth_users_name", columnList = "name")
+        @Index(name = "idx_auth_users_name", columnList = "name"),
+        @Index(name = "idx_auth_users_username", columnList = "username")
     }
 )
 @Data
@@ -43,6 +44,13 @@ public class UserAccount extends BaseEntity {
 
     @Column(nullable = false, length = 120)
     private String name;
+
+    /**
+     * Public handle / username (lowercased). Nullable for backwards compatibility
+     * and for accounts that haven't completed onboarding yet.
+     */
+    @Column(name = "username", unique = true, length = 40)
+    private String username;
 
     @Column(name = "phone_number", length = 40)
     private String phoneNumber;

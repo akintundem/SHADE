@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 import static eventplanner.security.util.AuthValidationUtil.normalizeEmail;
+import static eventplanner.security.util.AuthValidationUtil.normalizeUsername;
 import static eventplanner.security.util.AuthValidationUtil.safeTrim;
 
 @Service
@@ -38,6 +39,18 @@ public class UserAccountService {
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         user.setName(request.getName().trim());
+        if (request.getUsername() != null) {
+            String normalized = normalizeUsername(request.getUsername());
+            if (normalized != null) {
+                // Ensure uniqueness (case-insensitive) - allow keeping current username.
+                boolean taken = userAccountRepository.existsByUsernameIgnoreCase(normalized)
+                        && (user.getUsername() == null || !user.getUsername().equalsIgnoreCase(normalized));
+                if (taken) {
+                    throw new IllegalArgumentException("Username is already taken");
+                }
+                user.setUsername(normalized);
+            }
+        }
         user.setPhoneNumber(safeTrim(request.getPhoneNumber()));
         user.setProfileImageUrl(safeTrim(request.getProfileImageUrl()));
         user.setUserType(request.getUserType());
@@ -81,7 +94,7 @@ public class UserAccountService {
         }
 
         return userAccountRepository
-            .findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(sanitized, sanitized, pageable)
+            .findByUsernameContainingIgnoreCaseOrNameContainingIgnoreCase(sanitized, sanitized, pageable)
             .map(this::toPublicUserResponse);
     }
 
@@ -89,8 +102,8 @@ public class UserAccountService {
         return PublicUserResponse.builder()
                 .id(user.getId())
                 .name(user.getName())
+                .username(user.getUsername())
                 .profileImageUrl(user.getProfileImageUrl())
-                .email(user.getEmail())
                 .build();
     }
 

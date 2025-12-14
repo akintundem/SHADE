@@ -26,6 +26,7 @@ public final class AuthMapper {
                 .id(user.getId())
                 .email(user.getEmail())
                 .name(user.getName())
+                .username(user.getUsername())
                 .phoneNumber(user.getPhoneNumber())
                 .dateOfBirth(user.getDateOfBirth())
                 .userType(user.getUserType())

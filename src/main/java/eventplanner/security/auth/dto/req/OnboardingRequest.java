@@ -21,6 +21,13 @@ public class OnboardingRequest {
     @Pattern(regexp = "^[^<>]*$", message = "Name contains invalid characters")
     private String name;
 
+    @Size(min = 3, max = 30, message = "Username must be between 3 and 30 characters")
+    @Pattern(
+            regexp = "^[A-Za-z0-9](?:[A-Za-z0-9._]{1,28}[A-Za-z0-9])?$",
+            message = "Username must be 3-30 characters and contain only letters, numbers, '.' or '_' (cannot start/end with '.' or '_')"
+    )
+    private String username;
+
     @Pattern(regexp = "^\\+?[0-9 .\\-]{7,20}$", message = "Phone number must be valid")
     private String phoneNumber;
 

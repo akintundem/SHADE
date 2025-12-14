@@ -64,4 +64,30 @@ public final class AuthValidationUtil {
     public static String safeTrim(String value) {
         return value == null ? null : value.trim();
     }
+
+    /**
+     * Normalizes usernames/handles for consistent storage and uniqueness checks.
+     * - trims whitespace
+     * - strips a leading '@'
+     * - lowercases
+     */
+    public static String normalizeUsername(String username) {
+        if (username == null) {
+            return null;
+        }
+        String normalized = username.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (normalized.startsWith("@")) {
+            normalized = normalized.substring(1);
+        }
+        normalized = normalized.trim().toLowerCase(Locale.ROOT);
+
+        // Basic extra safety: prevent double dots which often cause confusion in handles.
+        if (normalized.contains("..")) {
+            throw new IllegalArgumentException("Username cannot contain consecutive dots");
+        }
+        return normalized;
+    }
 }

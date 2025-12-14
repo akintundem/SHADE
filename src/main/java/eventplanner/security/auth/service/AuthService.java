@@ -43,6 +43,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static eventplanner.security.util.AuthValidationUtil.normalizeEmail;
+import static eventplanner.security.util.AuthValidationUtil.normalizeUsername;
 import static eventplanner.security.util.AuthValidationUtil.safeTrim;
 import static eventplanner.security.util.SecureTokenUtil.generateSecureToken;
 
@@ -552,6 +553,17 @@ public class AuthService {
         
         // Update user profile with onboarding data
         user.setName(request.getName().trim());
+        // Username (optional): normalize + ensure uniqueness. If not provided, try generating one.
+        String desiredUsername = normalizeUsername(request.getUsername());
+        if (desiredUsername == null) {
+            desiredUsername = generateCandidateUsernameFromNameOrEmail(user.getName(), user.getEmail());
+        }
+        if (desiredUsername != null && user.getUsername() == null) {
+            user.setUsername(allocateUniqueUsername(desiredUsername, user.getId()));
+        } else if (desiredUsername != null) {
+            // Allow setting/changing during onboarding.
+            user.setUsername(allocateUniqueUsername(desiredUsername, user.getId()));
+        }
         user.setPhoneNumber(safeTrim(request.getPhoneNumber()));
         user.setDateOfBirth(request.getDateOfBirth());
         user.setAcceptTerms(true);
@@ -578,6 +590,69 @@ public class AuthService {
         
         log.info("User completed onboarding: {}", user.getEmail());
         return AuthMapper.toSecureUserResponse(user);
+    }
+
+    private String generateCandidateUsernameFromNameOrEmail(String name, String email) {
+        String base = null;
+        if (name != null && !name.trim().isEmpty()) {
+            base = name.trim()
+                    .toLowerCase(java.util.Locale.ROOT)
+                    .replaceAll("\\s+", "_")
+                    .replaceAll("[^a-z0-9._]", "");
+        }
+        if (base == null || base.length() < 3) {
+            if (email != null && email.contains("@")) {
+                base = email.substring(0, email.indexOf('@'))
+                        .toLowerCase(java.util.Locale.ROOT)
+                        .replaceAll("[^a-z0-9._]", "");
+            }
+        }
+        if (base == null) {
+            return null;
+        }
+        // Keep within reasonable bounds; allocation will append suffix if needed.
+        base = base.replaceAll("^[._]+", "").replaceAll("[._]+$", "");
+        if (base.length() < 3) {
+            base = "user";
+        }
+        if (base.length() > 30) {
+            base = base.substring(0, 30);
+        }
+        return base;
+    }
+
+    private String allocateUniqueUsername(String desired, UUID currentUserId) {
+        String normalized = normalizeUsername(desired);
+        if (normalized == null) {
+            throw new BadRequestException("VALIDATION_ERROR", "Username is required");
+        }
+        if (!normalized.matches("^[a-z0-9](?:[a-z0-9._]{1,28}[a-z0-9])?$")) {
+            throw new BadRequestException("VALIDATION_ERROR", "Username format is invalid");
+        }
+        // Try base then base_2, base_3, ... (bounded)
+        String base = normalized;
+        for (int i = 0; i < 200; i++) {
+            String candidate = i == 0 ? base : truncateForSuffix(base, "_" + (i + 1));
+            Optional<UserAccount> existing = userAccountRepository.findByUsernameIgnoreCase(candidate);
+            if (existing.isEmpty() || existing.get().getId().equals(currentUserId)) {
+                return candidate;
+            }
+        }
+        throw new BadRequestException("USERNAME_UNAVAILABLE", "Unable to allocate username, please try another");
+    }
+
+    private String truncateForSuffix(String base, String suffix) {
+        int max = 30;
+        String trimmedBase = base;
+        if (trimmedBase.length() + suffix.length() > max) {
+            int end = Math.max(1, max - suffix.length());
+            trimmedBase = trimmedBase.substring(0, end);
+            trimmedBase = trimmedBase.replaceAll("[._]+$", "");
+            if (trimmedBase.length() < 1) {
+                trimmedBase = "user";
+            }
+        }
+        return trimmedBase + suffix;
     }
     
     /**

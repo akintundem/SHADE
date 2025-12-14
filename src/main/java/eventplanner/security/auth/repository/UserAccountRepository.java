@@ -17,6 +17,10 @@ import java.util.UUID;
 public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> {
     Optional<UserAccount> findByEmailIgnoreCase(String email);
     boolean existsByEmailIgnoreCase(String email);
+    Optional<UserAccount> findByUsernameIgnoreCase(String username);
+    boolean existsByUsernameIgnoreCase(String username);
+    Page<UserAccount> findByNameContainingIgnoreCase(String name, Pageable pageable);
+    Page<UserAccount> findByUsernameContainingIgnoreCaseOrNameContainingIgnoreCase(String username, String name, Pageable pageable);
     Page<UserAccount> findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(String name, String email, Pageable pageable);
     
     @Query("SELECT COUNT(u) FROM UserAccount u WHERE u.createdAt BETWEEN :startDate AND :endDate")
