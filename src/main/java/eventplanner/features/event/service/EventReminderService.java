@@ -3,12 +3,16 @@ package eventplanner.features.event.service;
 import eventplanner.features.event.dto.request.EventReminderRequest;
 import eventplanner.features.event.dto.response.EventReminderResponse;
 import eventplanner.features.event.entity.EventReminder;
+import eventplanner.features.event.enums.EmailTemplateType;
 import eventplanner.features.event.repository.EventReminderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -29,15 +33,37 @@ public class EventReminderService {
     }
 
     public EventReminderResponse create(UUID eventId, EventReminderRequest request) {
+        // Validate email template type for email channel
+        if ("email".equalsIgnoreCase(request.getChannel()) && request.getEmailTemplateType() == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "emailTemplateType is required for EMAIL channel reminders. Options: ANNOUNCEMENT, CANCEL_EVENT"
+            );
+        }
+        
         EventReminder reminder = new EventReminder();
         reminder.setEventId(eventId);
         reminder.setTitle(request.getTitle());
         reminder.setDescription(request.getDescription());
-        reminder.setReminderTime(request.getReminderTime());
+        
+        // Set reminder time: use provided time or default to 5 minutes from now
+        if (request.getReminderTime() != null) {
+            reminder.setReminderTime(request.getReminderTime());
+        } else {
+            reminder.setReminderTime(LocalDateTime.now().plusMinutes(5));
+            log.info("Reminder time not provided, setting to 5 minutes from now: {}", reminder.getReminderTime());
+        }
+        
         reminder.setChannel(request.getChannel());
         reminder.setReminderType(request.getReminderType());
         reminder.setIsActive(Boolean.TRUE.equals(request.getIsActive()));
         reminder.setCustomMessage(request.getCustomMessage());
+        
+        // Store email template type
+        if (request.getEmailTemplateType() != null) {
+            reminder.setEmailTemplateType(request.getEmailTemplateType().name());
+        }
+        
         reminder.setWasSent(false);
         
         // Resolve recipients if recipient types are specified
@@ -50,7 +76,8 @@ public class EventReminderService {
             );
             reminder.setRecipientUserIdsCsv(joinCsv(recipients.getUserIds().stream().toList()));
             reminder.setRecipientEmailsCsv(joinCsv(recipients.getEmails().stream().toList()));
-            log.info("Created reminder for event {} with {} recipients", eventId, recipients.getTotalCount());
+            log.info("Created reminder for event {} with {} recipients, scheduled for {}", 
+                    eventId, recipients.getTotalCount(), reminder.getReminderTime());
         } else {
             // Backward compatibility: use specific recipients if no types specified
             reminder.setRecipientUserIdsCsv(joinCsv(request.getRecipientUserIds()));
@@ -74,6 +101,11 @@ public class EventReminderService {
         if (request.getReminderType() != null) reminder.setReminderType(request.getReminderType());
         if (request.getIsActive() != null) reminder.setIsActive(request.getIsActive());
         if (request.getCustomMessage() != null) reminder.setCustomMessage(request.getCustomMessage());
+        
+        // Update email template type
+        if (request.getEmailTemplateType() != null) {
+            reminder.setEmailTemplateType(request.getEmailTemplateType().name());
+        }
         
         // Update recipients if recipient types are specified
         if (request.getRecipientTypes() != null && !request.getRecipientTypes().isEmpty()) {

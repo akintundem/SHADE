@@ -10,7 +10,6 @@ import eventplanner.features.event.dto.request.EventNotificationRequest;
 import eventplanner.features.event.dto.response.EventNotificationResponse;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventNotificationSettings;
-import eventplanner.features.event.entity.Venue;
 import eventplanner.features.event.enums.EmailTemplateType;
 import eventplanner.features.event.enums.EventNotificationChannel;
 import eventplanner.features.event.repository.EventRepository;
@@ -21,7 +20,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 
@@ -37,6 +35,7 @@ public class EventNotificationService {
     private final EventRecipientResolverService recipientResolverService;
     private final EventEmailTemplateService emailTemplateService;
     private final EventRepository eventRepository;
+    private final EventTemplateVariableService templateVariableService;
 
     public EventNotificationResponse sendNotification(UUID eventId, EventNotificationRequest request) {
         EventNotificationSettings settings = settingsService.getSettingsEntity(eventId);
@@ -67,8 +66,13 @@ public class EventNotificationService {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found"));
 
-        // Prepare template variables with event details
-        Map<String, Object> templateVariables = prepareTemplateVariables(request, event);
+        // Prepare template variables with event details using shared service
+        Map<String, Object> templateVariables = templateVariableService.prepareTemplateVariables(
+            event, 
+            request.getContent(), 
+            request.getSubject(), 
+            request.getEmailTemplateType()
+        );
         log.debug("Prepared {} template variables for event {}", templateVariables.size(), eventId);
 
         // Send to email recipients
@@ -194,110 +198,6 @@ public class EventNotificationService {
         return null;
     }
 
-    /**
-     * Prepare template variables for the email template
-     * Includes relevant event details based on template type
-     * 
-     * @param request The notification request
-     * @param event The event entity
-     * @return Map of template variables
-     */
-    private Map<String, Object> prepareTemplateVariables(EventNotificationRequest request, Event event) {
-        Map<String, Object> templateVariables = new HashMap<>();
-        
-        // Basic notification content
-        templateVariables.put("content", request.getContent());
-        templateVariables.put("subject", request.getSubject());
-        templateVariables.put("eventId", event.getId().toString());
-        
-        // Template type
-        EmailTemplateType templateType = request.getEmailTemplateType();
-        if (templateType != null) {
-            templateVariables.put("templateType", templateType.name());
-        }
-        
-        // Common event information (always included)
-        templateVariables.put("eventName", event.getName());
-        templateVariables.put("eventDescription", event.getDescription());
-        templateVariables.put("eventType", event.getEventType() != null ? event.getEventType().name() : null);
-        templateVariables.put("eventStatus", event.getEventStatus() != null ? event.getEventStatus().name() : null);
-        
-        // Format dates for display
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MMMM d, yyyy");
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("h:mm a");
-        DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("MMMM d, yyyy 'at' h:mm a");
-        
-        if (event.getStartDateTime() != null) {
-            templateVariables.put("startDate", event.getStartDateTime().format(dateFormatter));
-            templateVariables.put("startTime", event.getStartDateTime().format(timeFormatter));
-            templateVariables.put("startDateTime", event.getStartDateTime().format(dateTimeFormatter));
-            templateVariables.put("startDateTimeISO", event.getStartDateTime().toString());
-        }
-        
-        if (event.getEndDateTime() != null) {
-            templateVariables.put("endDate", event.getEndDateTime().format(dateFormatter));
-            templateVariables.put("endTime", event.getEndDateTime().format(timeFormatter));
-            templateVariables.put("endDateTime", event.getEndDateTime().format(dateTimeFormatter));
-            templateVariables.put("endDateTimeISO", event.getEndDateTime().toString());
-        }
-        
-        if (event.getRegistrationDeadline() != null) {
-            templateVariables.put("registrationDeadline", event.getRegistrationDeadline().format(dateTimeFormatter));
-            templateVariables.put("registrationDeadlineISO", event.getRegistrationDeadline().toString());
-        }
-        
-        // Venue information
-        if (event.getVenue() != null) {
-            Venue venue = event.getVenue();
-            Map<String, Object> venueInfo = new HashMap<>();
-            venueInfo.put("address", venue.getAddress());
-            venueInfo.put("city", venue.getCity());
-            venueInfo.put("state", venue.getState());
-            venueInfo.put("country", venue.getCountry());
-            venueInfo.put("zipCode", venue.getZipCode());
-            
-            // Build full address string
-            List<String> addressParts = new ArrayList<>();
-            if (venue.getAddress() != null) addressParts.add(venue.getAddress());
-            if (venue.getCity() != null) addressParts.add(venue.getCity());
-            if (venue.getState() != null) addressParts.add(venue.getState());
-            if (venue.getZipCode() != null) addressParts.add(venue.getZipCode());
-            if (venue.getCountry() != null) addressParts.add(venue.getCountry());
-            venueInfo.put("fullAddress", String.join(", ", addressParts));
-            
-            if (venue.getLatitude() != null && venue.getLongitude() != null) {
-                venueInfo.put("latitude", venue.getLatitude());
-                venueInfo.put("longitude", venue.getLongitude());
-            }
-            
-            templateVariables.put("venue", venueInfo);
-        }
-        
-        // Additional event details
-        templateVariables.put("coverImageUrl", event.getCoverImageUrl());
-        templateVariables.put("eventWebsiteUrl", event.getEventWebsiteUrl());
-        templateVariables.put("hashtag", event.getHashtag());
-        templateVariables.put("capacity", event.getCapacity());
-        templateVariables.put("currentAttendeeCount", event.getCurrentAttendeeCount());
-        
-        // Template-specific variables
-        if (templateType == EmailTemplateType.ANNOUNCEMENT) {
-            // For announcements, include all relevant event details
-            templateVariables.put("announcementMessage", request.getContent());
-            templateVariables.put("includeEventDetails", 
-                request.getIncludeEventDetails() != null ? request.getIncludeEventDetails() : true);
-        } else if (templateType == EmailTemplateType.CANCEL_EVENT) {
-            // For cancellations, include cancellation-specific information
-            templateVariables.put("cancellationMessage", request.getContent());
-            templateVariables.put("cancellationReason", request.getContent()); // Use content as cancellation reason
-            templateVariables.put("originalStartDate", event.getStartDateTime() != null 
-                ? event.getStartDateTime().format(dateTimeFormatter) : null);
-            templateVariables.put("originalEndDate", event.getEndDateTime() != null 
-                ? event.getEndDateTime().format(dateTimeFormatter) : null);
-        }
-        
-        return templateVariables;
-    }
 
     private void validateChannelEnabled(EventNotificationSettings settings, EventNotificationChannel channel) {
         if (channel == null) {

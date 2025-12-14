@@ -1,5 +1,6 @@
 package eventplanner.features.event.dto.request;
 
+import eventplanner.features.event.enums.EmailTemplateType;
 import eventplanner.features.event.enums.RecipientType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -29,14 +30,17 @@ public class EventReminderRequest {
     @Schema(description = "Reminder description")
     private String description;
 
-    @NotNull(message = "Reminder time is required")
-    @Schema(description = "When to send the reminder")
+    @Schema(description = "When to send the reminder. If not provided, defaults to 5 minutes from now")
     private LocalDateTime reminderTime;
 
     @NotBlank(message = "Channel is required")
     @Size(max = 30, message = "Channel must be <= 30 chars")
     @Schema(description = "Reminder channel (email, sms, push)", example = "email")
     private String channel;
+
+    @Schema(description = "Email template type for EMAIL channel reminders. Options: ANNOUNCEMENT, CANCEL_EVENT. " +
+            "Required when channel is 'email'", example = "ANNOUNCEMENT")
+    private EmailTemplateType emailTemplateType;
 
     @Schema(description = "Recipient types for bulk sending. Options: ALL_COLLABORATORS, ALL_VENDORS, ALL_GUESTS, SPECIFIC_PERSON. " +
             "If SPECIFIC_PERSON is used, recipientUserIds or recipientEmails must be provided.")

@@ -2,9 +2,13 @@ package eventplanner.features.event.service;
 
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.communication.services.core.dto.NotificationResponse;
 import eventplanner.common.domain.enums.CommunicationType;
+import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventReminder;
+import eventplanner.features.event.enums.EmailTemplateType;
 import eventplanner.features.event.repository.EventReminderRepository;
+import eventplanner.features.event.repository.EventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,6 +31,9 @@ public class EventReminderSchedulerService {
 
     private final EventReminderRepository reminderRepository;
     private final NotificationService notificationService;
+    private final EventRepository eventRepository;
+    private final EventEmailTemplateService emailTemplateService;
+    private final EventTemplateVariableService templateVariableService;
 
     /**
      * Scheduled task that runs every minute to check and send pending reminders
@@ -76,17 +83,39 @@ public class EventReminderSchedulerService {
     private void sendReminder(EventReminder reminder) {
         CommunicationType communicationType = mapChannelToCommunicationType(reminder.getChannel());
         
+        // Fetch event details for template variables
+        Event event = eventRepository.findById(reminder.getEventId())
+                .orElseThrow(() -> new IllegalStateException("Event not found: " + reminder.getEventId()));
+        
         // Prepare message content
         String subject = reminder.getTitle();
         String content = reminder.getCustomMessage() != null && !reminder.getCustomMessage().isBlank()
                 ? reminder.getCustomMessage()
                 : reminder.getDescription() != null ? reminder.getDescription() : reminder.getTitle();
 
-        Map<String, Object> templateVariables = new HashMap<>();
-        templateVariables.put("content", content);
-        templateVariables.put("reminderTitle", reminder.getTitle());
-        if (reminder.getDescription() != null) {
-            templateVariables.put("description", reminder.getDescription());
+        // Resolve email template type
+        EmailTemplateType templateType = null;
+        if (reminder.getEmailTemplateType() != null) {
+            try {
+                templateType = EmailTemplateType.valueOf(reminder.getEmailTemplateType());
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid email template type in reminder: {}", reminder.getEmailTemplateType());
+            }
+        }
+
+        // Prepare template variables with event details using shared service
+        Map<String, Object> templateVariables = templateVariableService.prepareTemplateVariables(
+            event, 
+            content, 
+            subject, 
+            templateType
+        );
+        
+        // Resolve template ID if email template type is specified
+        String templateId = null;
+        if (communicationType == CommunicationType.EMAIL && templateType != null) {
+            templateId = emailTemplateService.getTemplateId(templateType);
+            log.info("Using email template: {} for reminder {}", templateId, reminder.getId());
         }
 
         // Send to email recipients
@@ -101,11 +130,17 @@ public class EventReminderSchedulerService {
                             .type(communicationType)
                             .to(email)
                             .subject(subject)
+                            .templateId(templateId)
                             .templateVariables(templateVariables)
                             .eventId(reminder.getEventId())
                             .build();
 
-                    notificationService.send(notificationRequest);
+                    NotificationResponse response = notificationService.send(notificationRequest);
+                    if (!response.isSuccess()) {
+                        log.error("Failed to send reminder email to {}: {}", email, response.getErrorMessage());
+                        throw new IllegalStateException("Email send failed: " + response.getErrorMessage());
+                    }
+                    log.debug("Successfully sent reminder email to {}", email);
                 } catch (Exception e) {
                     log.error("Failed to send reminder email to {}: {}", email, e.getMessage());
                     throw e; // Re-throw to mark reminder as failed
@@ -132,7 +167,12 @@ public class EventReminderSchedulerService {
                             .eventId(reminder.getEventId())
                             .build();
 
-                    notificationService.send(notificationRequest);
+                    NotificationResponse response = notificationService.send(notificationRequest);
+                    if (!response.isSuccess()) {
+                        log.error("Failed to send reminder push to user {}: {}", userIdStr, response.getErrorMessage());
+                        throw new IllegalStateException("Push notification send failed: " + response.getErrorMessage());
+                    }
+                    log.debug("Successfully sent reminder push to user {}", userIdStr);
                 } catch (Exception e) {
                     log.error("Failed to send reminder push to user {}: {}", userIdStr, e.getMessage());
                     throw e; // Re-throw to mark reminder as failed
@@ -140,6 +180,7 @@ public class EventReminderSchedulerService {
             }
         }
     }
+
 
     /**
      * Map reminder channel string to CommunicationType enum

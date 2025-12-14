@@ -2,12 +2,12 @@
 
 # Comprehensive Event Controller Endpoints Test Script
 # Tests all event-related endpoints and generates a detailed report
-# Supports both local and production testing with custom API URLs
 #
 # Usage:
-#   ./test_event_endpoints.sh                    # Interactive mode
-#   ./test_event_endpoints.sh local              # Test localhost:8080
-#   ./test_event_endpoints.sh prod <API_URL>     # Test production URL
+#   ./test_event_endpoints.sh                    # Test localhost:8080
+#   ./test_event_endpoints.sh <API_URL>          # Test custom API URL
+#   ./test_event_endpoints.sh --send-notifications  # Enable notification sending
+#   ./test_event_endpoints.sh <API_URL> --send-notifications  # Custom URL with notifications
 #   ./test_event_endpoints.sh help               # Show help
 
 # Function to show help
@@ -16,25 +16,35 @@ show_help() {
     echo "========================================="
     echo ""
     echo "Usage:"
-    echo "  $0                    # Interactive mode - choose environment"
-    echo "  $0 local              # Test localhost:8080"
-    echo "  $0 prod <API_URL>     # Test production URL"
-    echo "  $0 help               # Show this help"
+    echo "  $0                                    # Test localhost:8080 (default)"
+    echo "  $0 local                              # Test localhost:8080 (explicit)"
+    echo "  $0 <API_URL>                          # Test custom API URL"
+    echo "  $0 --send-notifications               # Test localhost:8080 with notifications enabled"
+    echo "  $0 local --send-notifications         # Test localhost:8080 with notifications enabled"
+    echo "  $0 <API_URL> --send-notifications     # Test custom URL with notifications enabled"
+    echo "  $0 help                               # Show this help"
+    echo ""
+    echo "Environment Variables:"
+    echo "  SEND_NOTIFICATIONS=true|false         # Override notification sending behavior"
     echo ""
     echo "Examples:"
+    echo "  $0"
     echo "  $0 local"
-    echo "  $0 prod https://your-app.railway.app"
-    echo "  $0 prod https://your-app.herokuapp.com"
-    echo "  $0 prod https://api.yourdomain.com"
+    echo "  $0 local --send-notifications"
+    echo "  $0 --send-notifications"
+    echo "  $0 https://your-app.railway.app"
+    echo "  $0 https://your-app.railway.app --send-notifications"
+    echo "  SEND_NOTIFICATIONS=true $0"
     echo ""
-    echo "Interactive Mode:"
-    echo "  Run without arguments to choose environment interactively"
+    echo "Notification Behavior:"
+    echo "  - Notifications/Reminders are SKIPPED by default"
+    echo "  - Use --send-notifications flag to enable sending"
+    echo "  - Or set SEND_NOTIFICATIONS=true environment variable"
     echo ""
     echo "Requirements:"
     echo "  - curl command available"
     echo "  - jq command available (for JSON parsing)"
-    echo "  - For local testing: Spring Boot app running on port 8080"
-    echo "  - For production testing: Valid API URL with health endpoint"
+    echo "  - Spring Boot app running (default: localhost:8080)"
     echo ""
     exit 0
 }
@@ -56,80 +66,66 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Function to get user input for testing environment
-get_testing_environment() {
-    # Check for command line arguments
-    if [ $# -gt 0 ]; then
+# Function to parse command line arguments
+parse_arguments() {
+    # Default values
+    BASE_URL="http://localhost:8080"
+    SEND_NOTIFICATIONS_FLAG=false
+    
+    # Initialize SEND_NOTIFICATIONS based on environment variable
+    if [ -n "$SEND_NOTIFICATIONS" ]; then
+        if [ "$SEND_NOTIFICATIONS" = "true" ] || [ "$SEND_NOTIFICATIONS" = "1" ] || [ "$SEND_NOTIFICATIONS" = "yes" ]; then
+            SEND_NOTIFICATIONS_FLAG=true
+        fi
+    fi
+    
+    # Parse command line arguments
+    while [ $# -gt 0 ]; do
         case $1 in
+            "--send-notifications")
+                SEND_NOTIFICATIONS_FLAG=true
+                shift
+                ;;
+            "--no-notifications")
+                SEND_NOTIFICATIONS_FLAG=false
+                shift
+                ;;
             "local"|"l")
                 BASE_URL="http://localhost:8080"
-                echo -e "${GREEN}✅ Selected: Local Development (from command line)${NC}"
-                echo -e "${YELLOW}💡 Make sure your local Spring Boot application is running${NC}"
+                shift
                 ;;
-            "prod"|"p")
-                if [ -n "$2" ]; then
-                    BASE_URL="$2"
-                    echo -e "${GREEN}✅ Selected: Production - $BASE_URL (from command line)${NC}"
-                else
-                    echo -e "${RED}❌ Production URL required. Usage: $0 prod <API_URL>${NC}"
-                    exit 1
-                fi
+            "help"|"-h"|"--help")
+                show_help
+                exit 0
                 ;;
             *)
-                echo -e "${RED}❌ Invalid argument. Usage:${NC}"
-                echo -e "${YELLOW}   $0 local                    # Test localhost:8080${NC}"
-                echo -e "${YELLOW}   $0 prod <API_URL>          # Test production URL${NC}"
-                echo -e "${YELLOW}   $0                         # Interactive mode${NC}"
-                exit 1
-                ;;
-        esac
-    else
-        # Interactive mode
-        echo -e "${CYAN}🌍 Choose Testing Environment:${NC}"
-        echo "1. Local Development (localhost:8080)"
-        echo "2. Production (Custom API URL)"
-        echo ""
-        read -p "Enter your choice (1 or 2): " choice
-        
-        case $choice in
-            1)
-                BASE_URL="http://localhost:8080"
-                echo -e "${GREEN}✅ Selected: Local Development${NC}"
-                echo -e "${YELLOW}💡 Make sure your local Spring Boot application is running${NC}"
-                ;;
-            2)
-                echo ""
-                echo -e "${CYAN}🌐 Enter Production API URL:${NC}"
-                echo -e "${YELLOW}   Example: https://your-app.railway.app${NC}"
-                echo -e "${YELLOW}   Example: https://your-app.herokuapp.com${NC}"
-                echo -e "${YELLOW}   Example: https://api.yourdomain.com${NC}"
-                echo ""
-                read -p "API URL: " custom_url
-                
-                # Validate URL format
-                if [[ $custom_url =~ ^https?:// ]]; then
-                    BASE_URL="$custom_url"
-                    echo -e "${GREEN}✅ Selected: Production - $BASE_URL${NC}"
+                # If it looks like a URL, use it as BASE_URL
+                if [[ $1 =~ ^https?:// ]]; then
+                    BASE_URL="$1"
                 else
-                    echo -e "${RED}❌ Invalid URL format. Please include http:// or https://${NC}"
-                    echo -e "${YELLOW}   Example: https://your-app.railway.app${NC}"
+                    echo -e "${RED}❌ Invalid argument: $1${NC}"
+                    echo -e "${YELLOW}Usage: $0 [local|<API_URL>] [--send-notifications]${NC}"
                     exit 1
                 fi
-                ;;
-            *)
-                echo -e "${RED}❌ Invalid choice. Please select 1 or 2.${NC}"
-                exit 1
+                shift
                 ;;
         esac
-    fi
+    done
     
     echo ""
     echo -e "${BLUE}🔗 Testing URL: $BASE_URL${NC}"
+    if [ "$SEND_NOTIFICATIONS_FLAG" = "true" ]; then
+        echo -e "${GREEN}📧 Notifications/Reminders: ENABLED${NC}"
+    else
+        echo -e "${YELLOW}📧 Notifications/Reminders: SKIPPED${NC}"
+    fi
     echo ""
+    # Export the variable to ensure it's available globally
+    export SEND_NOTIFICATIONS_FLAG
 }
 
-# Get testing environment from user
-get_testing_environment "$@"
+# Parse command line arguments
+parse_arguments "$@"
 
 # Path configuration (always resolve relative to this script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -177,6 +173,9 @@ REMINDER_ID=""
 DEVICE_ID=""
 OTHER_ACCESS_TOKEN=""
 OTHER_DEVICE_ID=""
+LAST_BODY=""
+LAST_HTTP_CODE=""
+# SEND_NOTIFICATIONS_FLAG is set by parse_arguments function
 
 
 verify_email_in_database() {
@@ -487,6 +486,10 @@ run_test() {
     local http_code="${response: -3}"
     local response_body="${response%???}"
     
+    # Store response body globally for later extraction if needed
+    LAST_BODY="$response_body"
+    LAST_HTTP_CODE="$http_code"
+    
     # Check if test passed
     if [ "$http_code" = "$expected_status" ]; then
         echo -e "${GREEN}✅ PASSED${NC} - Status: $http_code"
@@ -546,6 +549,21 @@ run_test() {
                 ;;
             "Create Event Reminder")
                 REMINDER_ID=$(echo "$response_body" | grep -o '"reminderId":"[^"]*"' | cut -d'"' -f4)
+                if [ -n "$REMINDER_ID" ]; then
+                    echo -e "${GREEN}✓ Captured reminder ID: $REMINDER_ID${NC}"
+                fi
+                ;;
+            "Create Announcement Reminder"*)
+                REMINDER_ID=$(echo "$response_body" | jq -r '.reminderId // empty' 2>/dev/null || echo "$response_body" | grep -o '"reminderId":"[^"]*"' | cut -d'"' -f4)
+                if [ -n "$REMINDER_ID" ]; then
+                    echo -e "${GREEN}✓ Captured reminder ID: $REMINDER_ID${NC}"
+                fi
+                ;;
+            "Create Cancellation Reminder"*)
+                REMINDER_ID=$(echo "$response_body" | jq -r '.reminderId // empty' 2>/dev/null || echo "$response_body" | grep -o '"reminderId":"[^"]*"' | cut -d'"' -f4)
+                if [ -n "$REMINDER_ID" ]; then
+                    echo -e "${GREEN}✓ Captured reminder ID: $REMINDER_ID${NC}"
+                fi
                 ;;
         esac
     fi
@@ -1349,81 +1367,131 @@ EOF
     echo -e "${CYAN}🔔 Step 7: Notification Tests${NC}"
     echo "==============================="
     
-    # Notification Settings Tests
+    # Notification Settings Tests (always run)
     run_test "Get Notification Settings" "GET" "/api/v1/events/$EVENT_ID/notifications" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event notification settings"
     
-    # Send Notification Tests
-    local notification_data='{
-        "channel": "EMAIL",
-        "subject": "Event Announcement - Test",
-        "content": "This is a test announcement notification. Please check your email at mayokak@gmail.com",
-        "emailTemplateType": "ANNOUNCEMENT",
-        "recipientUserIds": ["'$USER_ID'"],
-        "recipientEmails": ["mayokak@gmail.com"],
-        "scheduledAt": null,
-        "priority": "NORMAL",
-        "includeEventDetails": true
-    }'
-    run_test "Send Event Notification (Announcement)" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_data" "200" "Send event announcement notification to mayokak@gmail.com"
-    
-    # Test cancellation notification
-    local cancellation_data='{
-        "channel": "EMAIL",
-        "subject": "Event Cancellation - Test",
-        "content": "We regret to inform you that this test event has been cancelled due to unforeseen circumstances.",
-        "emailTemplateType": "CANCEL_EVENT",
-        "recipientEmails": ["mayokak@gmail.com"],
-        "scheduledAt": null,
-        "priority": "NORMAL",
-        "includeEventDetails": true
-    }'
-    run_test "Send Event Notification (Cancellation)" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cancellation_data" "200" "Send event cancellation notification to mayokak@gmail.com"
+    # Send Notification Tests (conditional based on SEND_NOTIFICATIONS_FLAG)
+    if [ "$SEND_NOTIFICATIONS_FLAG" = "true" ]; then
+        echo -e "${GREEN}📧 Notification sending is ENABLED - emails will be sent${NC}"
+        echo ""
+        
+        local notification_data='{
+            "channel": "EMAIL",
+            "subject": "Event Announcement - Test",
+            "content": "This is a test announcement notification. Please check your email at mayokak@gmail.com",
+            "emailTemplateType": "ANNOUNCEMENT",
+            "recipientUserIds": ["'$USER_ID'"],
+            "recipientEmails": ["mayokak@gmail.com"],
+            "scheduledAt": null,
+            "priority": "NORMAL",
+            "includeEventDetails": true
+        }'
+        run_test "Send Event Notification (Announcement)" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_data" "200" "Send event announcement notification to mayokak@gmail.com"
+        
+        # Test cancellation notification
+        local cancellation_data='{
+            "channel": "EMAIL",
+            "subject": "Event Cancellation - Test",
+            "content": "We regret to inform you that this test event has been cancelled due to unforeseen circumstances.",
+            "emailTemplateType": "CANCEL_EVENT",
+            "recipientEmails": ["mayokak@gmail.com"],
+            "scheduledAt": null,
+            "priority": "NORMAL",
+            "includeEventDetails": true
+        }'
+        run_test "Send Event Notification (Cancellation)" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cancellation_data" "200" "Send event cancellation notification to mayokak@gmail.com"
+    else
+        echo -e "${YELLOW}📧 Notification sending is DISABLED - skipping email sending tests${NC}"
+        echo -e "${CYAN}💡 Use --send-notifications flag or SEND_NOTIFICATIONS=true to enable${NC}"
+        echo ""
+    fi
     
     # Reminder Tests
     run_test "Get Event Reminders" "GET" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event reminders"
     
-    local reminder_time=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
-    local reminder_data
-    reminder_data=$(cat <<EOF
+    # Create Reminder Tests (conditional based on SEND_NOTIFICATIONS_FLAG)
+    if [ "$SEND_NOTIFICATIONS_FLAG" = "true" ]; then
+        echo -e "${GREEN}📧 Reminder creation is ENABLED - reminders will be scheduled and sent${NC}"
+        echo ""
+        
+        # Create Announcement Reminder (will trigger in 5 minutes)
+        local announcement_reminder_data
+        announcement_reminder_data=$(cat <<EOF
 {
-    "title": "Event Reminder",
-    "description": "Don't forget about the event!",
-    "reminderTime": "$reminder_time",
+    "title": "Event Announcement Reminder",
+    "description": "Important announcement about the event",
     "channel": "email",
+    "emailTemplateType": "ANNOUNCEMENT",
     "reminderType": "custom",
     "isActive": true,
-    "customMessage": "Custom reminder message - Test reminder sent to mayokak@gmail.com",
-    "recipientUserIds": ["$USER_ID"],
+    "customMessage": "This is a test announcement reminder. The event is coming up soon!",
     "recipientEmails": ["mayokak@gmail.com"]
 }
 EOF
 )
-    run_test "Create Event Reminder" "POST" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$reminder_data" "200" "Create event reminder"
-    
-    # Update reminder (using captured ID when available)
-    local mock_reminder_id="12345678-1234-1234-1234-123456789012"
-    local reminder_identifier="${REMINDER_ID:-$mock_reminder_id}"
-    local reminder_update_time=$(date -u -v+2d '+%Y-%m-%dT%H:%M:%S')
-    local reminder_update_data
-    reminder_update_data=$(cat <<EOF
+        run_test "Create Announcement Reminder (5 min delay)" "POST" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$announcement_reminder_data" "200" "Create announcement reminder - will send in 5 minutes to mayokak@gmail.com"
+        
+        # Create Cancellation Reminder (will trigger in 5 minutes)
+        local cancellation_reminder_data
+        cancellation_reminder_data=$(cat <<EOF
 {
-    "title": "Updated Event Reminder",
+    "title": "Event Cancellation Reminder",
+    "description": "Event cancellation notice",
+    "channel": "email",
+    "emailTemplateType": "CANCEL_EVENT",
+    "reminderType": "custom",
+    "isActive": true,
+    "customMessage": "We regret to inform you that this test event has been cancelled.",
+    "recipientEmails": ["mayokak@gmail.com"]
+}
+EOF
+)
+        run_test "Create Cancellation Reminder (5 min delay)" "POST" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cancellation_reminder_data" "200" "Create cancellation reminder - will send in 5 minutes to mayokak@gmail.com"
+        
+        # Update reminder (using captured ID from the last created reminder - cancellation reminder)
+        if [ -z "$REMINDER_ID" ]; then
+            echo -e "${YELLOW}⚠ Warning: REMINDER_ID not captured from case statement. Attempting to extract from last response...${NC}"
+            # Try to extract from the last response if available
+            if [ -n "$LAST_BODY" ]; then
+                REMINDER_ID=$(echo "$LAST_BODY" | jq -r '.reminderId // empty' 2>/dev/null)
+                if [ -n "$REMINDER_ID" ]; then
+                    echo -e "${GREEN}✓ Extracted reminder ID from last response: $REMINDER_ID${NC}"
+                fi
+            fi
+        fi
+        
+        if [ -z "$REMINDER_ID" ]; then
+            echo -e "${RED}❌ Error: Cannot proceed with reminder update/get/delete tests - no reminder ID available${NC}"
+            echo -e "${YELLOW}   Skipping reminder update/get/delete tests${NC}"
+            echo ""
+        else
+            local reminder_identifier="$REMINDER_ID"
+            echo -e "${CYAN}📝 Using reminder ID: $reminder_identifier for update/get/delete tests${NC}"
+            local reminder_update_data
+            reminder_update_data=$(cat <<EOF
+{
+    "title": "Updated Event Announcement Reminder",
     "description": "Updated reminder description",
-    "reminderTime": "$reminder_update_time",
     "channel": "email",
+    "emailTemplateType": "ANNOUNCEMENT",
     "reminderType": "custom",
     "isActive": true,
-    "customMessage": "Updated reminder message - Test reminder sent to mayokak@gmail.com",
-    "recipientUserIds": ["$USER_ID"],
+    "customMessage": "Updated announcement reminder message - Test reminder sent to mayokak@gmail.com",
     "recipientEmails": ["mayokak@gmail.com"]
 }
 EOF
 )
-    run_test "Update Event Reminder" "PUT" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$reminder_update_data" "200" "Update event reminder"
-    
-    run_test "Get Specific Reminder" "GET" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific reminder"
-    
-    run_test "Delete Event Reminder" "DELETE" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete event reminder"
+            run_test "Update Event Reminder" "PUT" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$reminder_update_data" "200" "Update event reminder"
+            
+            run_test "Get Specific Reminder" "GET" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific reminder"
+            
+            run_test "Delete Event Reminder" "DELETE" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete event reminder"
+        fi
+    else
+        echo -e "${YELLOW}📧 Reminder creation is DISABLED - skipping reminder creation and management tests${NC}"
+        echo -e "${CYAN}💡 Use --send-notifications flag or SEND_NOTIFICATIONS=true to enable${NC}"
+        echo ""
+    fi
     echo ""
     
     # Step 8: Clean up test data

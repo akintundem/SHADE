@@ -42,6 +42,9 @@ public class EventReminder extends BaseEntity {
     @Column(name = "custom_message")
     private String customMessage;
 
+    @Column(name = "email_template_type", length = 50)
+    private String emailTemplateType;
+
     @Column(name = "recipient_user_ids", columnDefinition = "TEXT")
     private String recipientUserIdsCsv;
 
