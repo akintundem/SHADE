@@ -1,19 +1,27 @@
 package eventplanner.features.attendee.service;
 
+import eventplanner.features.attendee.dto.request.AttendeeInfo;
+import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
 import eventplanner.features.attendee.dto.response.AttendeeResponse;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.repository.AttendeeRepository;
+import eventplanner.features.event.entity.Event;
+import eventplanner.features.event.repository.EventRepository;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -26,6 +34,8 @@ import java.util.stream.Collectors;
 public class AttendeeService {
     
     private final AttendeeRepository repository;
+    private final EventRepository eventRepository;
+    private final UserAccountRepository userAccountRepository;
 
     /**
      * Create a single attendee
@@ -269,6 +279,183 @@ public class AttendeeService {
     private boolean isValidEmail(String email) {
         // Basic email validation
         return email != null && email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    }
+    
+    /**
+     * Create attendees from bulk request, resolving user accounts and validating
+     */
+    public List<Attendee> createFromBulkRequest(BulkAttendeeCreateRequest request) {
+        if (request == null || request.getEventId() == null) {
+            throw new IllegalArgumentException("Invalid request: eventId is required");
+        }
+        
+        if (request.getAttendees() == null || request.getAttendees().isEmpty()) {
+            throw new IllegalArgumentException("Attendees list cannot be empty");
+        }
+        
+        // Fetch the event
+        Event event = eventRepository.findById(request.getEventId())
+            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.getEventId()));
+        
+        // Map attendee info to Attendee entities, resolving userId or email
+        List<Attendee> toSave = request.getAttendees().stream().map(attendeeInfo -> {
+            Attendee attendee = new Attendee();
+            attendee.setEvent(event);
+            
+            // If userId is provided, fetch user account and auto-fill info
+            if (attendeeInfo.getUserId() != null) {
+                UserAccount user = userAccountRepository.findById(attendeeInfo.getUserId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                        "User not found with userId: " + attendeeInfo.getUserId()));
+                
+                // Set user relationship
+                attendee.setUser(user);
+                
+                // Auto-fill from user account (can be overridden)
+                attendee.setName(attendeeInfo.getName() != null && !attendeeInfo.getName().trim().isEmpty() 
+                    ? attendeeInfo.getName() : user.getName());
+                attendee.setEmail(attendeeInfo.getEmail() != null && !attendeeInfo.getEmail().trim().isEmpty()
+                    ? attendeeInfo.getEmail() : user.getEmail());
+            } else {
+                // Use email - validate that either userId or email is provided
+                if (attendeeInfo.getEmail() == null || attendeeInfo.getEmail().trim().isEmpty()) {
+                    throw new IllegalArgumentException(
+                        "Either userId or email must be provided for each attendee");
+                }
+                
+                // Try to resolve userId from email (optional - if user exists, link them)
+                Optional<UserAccount> userByEmail = userAccountRepository.findByEmailIgnoreCase(attendeeInfo.getEmail());
+                if (userByEmail.isPresent()) {
+                    UserAccount user = userByEmail.get();
+                    // Link user account
+                    attendee.setUser(user);
+                    // Auto-fill name if not provided
+                    attendee.setName(attendeeInfo.getName() != null && !attendeeInfo.getName().trim().isEmpty()
+                        ? attendeeInfo.getName() : user.getName());
+                } else {
+                    // User doesn't exist - use provided info, no user link
+                    attendee.setUser(null);
+                    if (attendeeInfo.getName() == null || attendeeInfo.getName().trim().isEmpty()) {
+                        throw new IllegalArgumentException(
+                            "Name is required when email is provided and user doesn't exist in directory");
+                    }
+                    attendee.setName(attendeeInfo.getName());
+                }
+                
+                attendee.setEmail(attendeeInfo.getEmail());
+            }
+            
+            return attendee;
+        }).collect(Collectors.toList());
+        
+        return addAll(toSave);
+    }
+    
+    /**
+     * Get attendee by ID with event validation
+     */
+    @Transactional(readOnly = true)
+    public Attendee getAttendeeById(UUID attendeeId) {
+        return repository.findById(attendeeId)
+            .orElseThrow(() -> new IllegalArgumentException("Attendee not found: " + attendeeId));
+    }
+    
+    /**
+     * Filter and list attendees with pagination
+     */
+    @Transactional(readOnly = true)
+    public Page<Attendee> filterAttendees(
+            UUID eventId,
+            String status,
+            Boolean checkedIn,
+            String search,
+            UUID userId,
+            String email,
+            int page,
+            int size,
+            String sortBy,
+            String sortDirection) {
+        
+        // Validate and normalize pagination parameters
+        if (page < 0) page = 0;
+        if (size < 1) size = 20;
+        if (size > 100) size = 100; // Max page size
+        
+        // Create sort
+        Sort.Direction direction = "DESC".equalsIgnoreCase(sortDirection) ? Sort.Direction.DESC : Sort.Direction.ASC;
+        Sort sort = Sort.by(direction, sortBy);
+        Pageable pageable = PageRequest.of(page, size, sort);
+        
+        // Apply filters in priority order
+        if (StringUtils.hasText(search)) {
+            return searchAttendees(eventId, search.trim(), pageable);
+        }
+        
+        if (checkedIn != null) {
+            if (checkedIn) {
+                return listCheckedIn(eventId, pageable);
+            } else {
+                return repository.findNotCheckedInByEventId(eventId, pageable);
+            }
+        }
+        
+        if (StringUtils.hasText(status)) {
+            List<Attendee.Status> statuses = parseStatuses(status);
+            if (statuses.isEmpty()) {
+                throw new IllegalArgumentException("Invalid status values");
+            }
+            return listByEventAndStatuses(eventId, statuses, pageable);
+        }
+        
+        if (userId != null) {
+            Optional<Attendee> attendeeOpt = repository.findByEventIdAndUserId(eventId, userId);
+            if (attendeeOpt.isPresent()) {
+                return new PageImpl<>(
+                    Collections.singletonList(attendeeOpt.get()), 
+                    pageable, 
+                    1
+                );
+            } else {
+                return Page.empty(pageable);
+            }
+        }
+        
+        if (StringUtils.hasText(email)) {
+            Optional<Attendee> attendeeOpt = repository.findByEventIdAndEmail(eventId, email.trim());
+            if (attendeeOpt.isPresent()) {
+                return new PageImpl<>(
+                    Collections.singletonList(attendeeOpt.get()), 
+                    pageable, 
+                    1
+                );
+            } else {
+                return Page.empty(pageable);
+            }
+        }
+        
+        // No filters - return all
+        return listByEventPaginated(eventId, pageable);
+    }
+    
+    /**
+     * Parse comma-separated status values
+     */
+    public List<Attendee.Status> parseStatuses(String statusParam) {
+        if (!StringUtils.hasText(statusParam)) {
+            return Collections.emptyList();
+        }
+        
+        List<Attendee.Status> statuses = new ArrayList<>();
+        String[] parts = statusParam.toUpperCase().split(",");
+        
+        for (String part : parts) {
+            String trimmed = part.trim();
+            if (Attendee.Status.isValid(trimmed)) {
+                statuses.add(Attendee.Status.fromString(trimmed));
+            }
+        }
+        
+        return statuses;
     }
 }
 
