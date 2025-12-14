@@ -4,7 +4,6 @@ import eventplanner.features.event.dto.request.EventCapacityUpdateRequest;
 import eventplanner.features.event.dto.request.EventDuplicateRequest;
 import eventplanner.features.event.dto.request.EventRegistrationDeadlineRequest;
 import eventplanner.features.event.dto.request.EventShareRequest;
-import eventplanner.features.event.dto.request.EventStatusUpdateRequest;
 import eventplanner.features.event.dto.request.EventVisibilityUpdateRequest;
 import jakarta.validation.Valid;
 import eventplanner.features.event.dto.response.EventCapacityResponse;
@@ -55,10 +54,6 @@ public class EventManagementController {
     }
 
     // ==================== 1. USER-EVENT RELATIONSHIP ENDPOINTS ====================
-    //
-    // NOTE: To reduce endpoint sprawl, the "owned/upcoming/past" list endpoints have been consolidated
-    // into query filters on GET /api/v1/events (see EventCrudController + EventListRequest).
-
     @GetMapping("/my-events")
     @RequiresPermission(value = RbacPermissions.MY_EVENTS_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get current user's events", description = "Retrieve all events for the current authenticated user")
@@ -74,65 +69,6 @@ public class EventManagementController {
     }
 
     // ==================== 2. EVENT STATUS & LIFECYCLE ENDPOINTS ====================
-
-    @GetMapping("/{id}/status")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
-    @Operation(summary = "Get event status", description = "Retrieve the current status of an event. Only accessible if event is public, user is owner, or user has appropriate role.")
-    public ResponseEntity<EventStatus> getEventStatus(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal user) {
-        try {
-            Event event = eventService.getByIdWithAccessControl(id, user)
-                    .orElseThrow(() -> new IllegalArgumentException("Event not found or access denied"));
-            return ResponseEntity.ok(event.getEventStatus());
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
-    }
-
-    @PutMapping("/{id}/status")
-    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#id"})
-    @Operation(summary = "Update event status", description = "Update the status of an event")
-    public ResponseEntity<EventResponse> updateEventStatus(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody EventStatusUpdateRequest request) {
-        try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
-            // Verify user is owner or admin
-            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update event status");
-            }
-            Event updatedEvent = eventService.updateEventStatus(id, request.getEventStatus());
-            return ResponseEntity.ok(eventService.toResponse(updatedEvent));
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
-    }
-
-    @PostMapping("/{id}/publish")
-    @RequiresPermission(value = RbacPermissions.EVENT_PUBLISH, resources = {"event_id=#id"})
-    @Operation(summary = "Publish event", description = "Publish an event to make it visible")
-    public ResponseEntity<EventResponse> publishEvent(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
-            // Verify user is owner or admin
-            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can publish events");
-            }
-            Event updatedEvent = eventService.publishEvent(id);
-            return ResponseEntity.ok(eventService.toResponse(updatedEvent));
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
-    }
-
     @PostMapping("/{id}/cancel")
     @RequiresPermission(value = RbacPermissions.EVENT_CANCEL, resources = {"event_id=#id"})
     @Operation(summary = "Cancel event", description = "Cancel an event")

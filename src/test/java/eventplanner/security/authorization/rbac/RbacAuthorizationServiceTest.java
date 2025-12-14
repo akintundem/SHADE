@@ -74,7 +74,7 @@ class RbacAuthorizationServiceTest {
                 .build());
 
         Map<String, Object> resources = Map.of("event_id", eventId);
-        assertTrue(authorization.isAuthorized(principal, RbacPermissions.EVENT_PUBLISH, resources));
+        assertTrue(authorization.isAuthorized(principal, RbacPermissions.EVENT_UPDATE, resources));
     }
 
     @Test
@@ -83,7 +83,7 @@ class RbacAuthorizationServiceTest {
         Map<String, Object> resources = Map.of("event_id", "not-a-uuid");
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> authorization.isAuthorized(principal, RbacPermissions.EVENT_PUBLISH, resources));
+                () -> authorization.isAuthorized(principal, RbacPermissions.EVENT_UPDATE, resources));
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
     }
 

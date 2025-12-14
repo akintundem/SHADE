@@ -1,14 +1,14 @@
 package eventplanner.features.event.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import eventplanner.features.event.dto.request.CreateEventRequest;
 import eventplanner.features.event.dto.request.CreateEventWithCoverUploadRequest;
 import eventplanner.features.event.dto.request.EventListRequest;
-import eventplanner.features.event.dto.request.UpdateEventRequest;
+import eventplanner.features.event.dto.request.UpdateEventWithCoverUploadRequest;
 import eventplanner.features.event.dto.request.EventFeedRequest;
 import eventplanner.features.event.dto.response.CreateEventWithCoverUploadResponse;
 import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.dto.response.EventFeedResponse;
+import eventplanner.features.event.dto.response.UpdateEventWithCoverUploadResponse;
 import eventplanner.common.domain.enums.EventScope;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.service.EventIdempotencyService;
@@ -26,7 +26,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
@@ -71,7 +70,7 @@ public class EventCrudController {
 
     @GetMapping(params = "!mine")
     @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
-    @Operation(summary = "List events", description = "List events with pagination, filtering, and search. Supports filtering by status, visibility, date range, and search by name/tag.")
+    @Operation(summary = "List events", description = "COMPLETE - List events with pagination, filtering, and search. Supports filtering by status, visibility, date range, and search by name/tag.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Events retrieved successfully"),
         @ApiResponse(responseCode = "400", description = "Invalid query parameters"),
@@ -91,7 +90,7 @@ public class EventCrudController {
 
     @GetMapping(params = "mine=true")
     @RequiresPermission(RbacPermissions.MY_EVENTS_SEARCH)
-    @Operation(summary = "List my events", description = "List events owned by the current user. Use timeframe=UPCOMING|PAST for convenience.")
+    @Operation(summary = "List my events", description = " COMPLETE - List events owned by the current user. Use timeframe=UPCOMING|PAST for convenience.")
     public ResponseEntity<Page<EventResponse>> listMine(
             @Valid EventListRequest request,
             @AuthenticationPrincipal UserPrincipal user) {
@@ -110,7 +109,7 @@ public class EventCrudController {
 
     @GetMapping("/{id}")
     @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
-    @Operation(summary = "Get event by ID", description = "Retrieve a specific event by its unique identifier. Returns full details for owners/high-responsibility users, or feed view for guests.")
+    @Operation(summary = "Get event by ID", description = "COMPLETE - Retrieve a specific event by its unique identifier. Returns full details for owners/high-responsibility users, or feed view for guests.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event found",
                 content = @Content(schema = @Schema(oneOf = {EventResponse.class, EventFeedResponse.class}))),
@@ -149,80 +148,12 @@ public class EventCrudController {
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @RequiresPermission(RbacPermissions.EVENT_CREATE)
-    @Operation(summary = "Create new event", description = "Create a new event with the provided details. Supports Idempotency-Key header to prevent duplicate creation on retries.")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "201", description = "Event created successfully",
-                content = @Content(schema = @Schema(implementation = EventResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Event already exists (idempotent replay)",
-                content = @Content(schema = @Schema(implementation = EventResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Invalid request data"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
-        @ApiResponse(responseCode = "409", description = "Conflict - Operation already in progress")
-    })
-    public ResponseEntity<EventResponse> create(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @Valid @RequestBody CreateEventRequest request,
-            HttpServletRequest httpRequest) {
-        try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
-            
-            // Check idempotency - return cached result if available
-            if (StringUtils.hasText(idempotencyKey)) {
-                Optional<String> cachedResult = idempotencyService.getProcessedResult(idempotencyKey);
-                if (cachedResult.isPresent()) {
-                    try {
-                        EventResponse cached = objectMapper.readValue(cachedResult.get(), EventResponse.class);
-                        return ResponseEntity.ok()
-                                .header("X-Idempotency-Replay", "true")
-                                .header(HttpHeaders.LOCATION, "/api/v1/events/" + cached.getId())
-                                .body(cached);
-                    } catch (Exception e) {
-                        // Log but continue with normal creation
-                    }
-                }
-                
-                // Mark as processing to prevent concurrent requests
-                if (!idempotencyService.markAsProcessing(idempotencyKey)) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, 
-                            "Event creation already in progress. Please wait.");
-                }
-            }
-            
-            try {
-                Event created = eventService.create(request, principal.getId());
-                EventResponse response = eventService.toResponse(created);
-                
-                // Store result for idempotency
-                if (StringUtils.hasText(idempotencyKey)) {
-                    try {
-                        String resultJson = objectMapper.writeValueAsString(response);
-                        idempotencyService.storeResult(idempotencyKey, resultJson);
-                    } catch (Exception e) {
-                        // Log but don't fail the request
-                    }
-                }
-                
-                URI location = URI.create("/api/v1/events/" + created.getId());
-                return ResponseEntity.created(location)
-                        .header(HttpHeaders.LOCATION, location.toString())
-                        .body(response);
-            } finally {
-                // Release processing lock
-                if (StringUtils.hasText(idempotencyKey)) {
-                    idempotencyService.releaseProcessingLock(idempotencyKey);
-                }
-            }
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
-    }
-
-    @PostMapping(value = "/with-cover-upload", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @RequiresPermission(RbacPermissions.EVENT_CREATE)
-    @Operation(summary = "Create new event + cover presigned upload", description = "Create a new event, and return a presigned URL for uploading the cover image. Client uploads to S3, then calls the existing complete-cover-upload endpoint to persist the cover image URL on the event. Supports Idempotency-Key header to prevent duplicate creation on retries.")
+    @Operation(
+            summary = "Create new event",
+            description = "COMPLETE - Create a new event and return a presigned URL for uploading the cover image. "
+                    + "Client uploads to S3, then calls the cover-image complete endpoint to persist coverImageUrl. "
+                    + "Supports Idempotency-Key header to prevent duplicate creation on retries."
+    )
     @ApiResponses(value = {
         @ApiResponse(responseCode = "201", description = "Event created successfully with cover upload details",
                 content = @Content(schema = @Schema(implementation = CreateEventWithCoverUploadResponse.class))),
@@ -232,7 +163,7 @@ public class EventCrudController {
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
         @ApiResponse(responseCode = "409", description = "Conflict - Operation already in progress")
     })
-    public ResponseEntity<CreateEventWithCoverUploadResponse> createWithCoverUpload(
+    public ResponseEntity<CreateEventWithCoverUploadResponse> create(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CreateEventWithCoverUploadRequest request) {
@@ -241,6 +172,12 @@ public class EventCrudController {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
             }
 
+            // Enforce one-flow: cover image must be uploaded via S3 presigned flow, not by arbitrary URL
+            if (request.getEvent() != null && StringUtils.hasText(request.getEvent().getCoverImageUrl())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Do not set coverImageUrl on create. Use the presigned cover upload flow and then call the cover-image complete endpoint.");
+            }
+            
             // Check idempotency - return cached result if available
             if (StringUtils.hasText(idempotencyKey)) {
                 Optional<String> cachedResult = idempotencyService.getProcessedResult(idempotencyKey);
@@ -255,14 +192,14 @@ public class EventCrudController {
                         // Log but continue with normal creation
                     }
                 }
-
+                
                 // Mark as processing to prevent concurrent requests
                 if (!idempotencyService.markAsProcessing(idempotencyKey)) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, 
                             "Event creation already in progress. Please wait.");
                 }
             }
-
+            
             try {
                 Event created = eventService.create(request.getEvent(), principal.getId());
                 EventResponse eventResponse = eventService.toResponse(created);
@@ -272,7 +209,7 @@ public class EventCrudController {
                         .event(eventResponse)
                         .coverUpload(coverUpload)
                         .build();
-
+                
                 // Store result for idempotency
                 if (StringUtils.hasText(idempotencyKey)) {
                     try {
@@ -282,7 +219,7 @@ public class EventCrudController {
                         // Log but don't fail the request
                     }
                 }
-
+                
                 URI location = URI.create("/api/v1/events/" + created.getId());
                 return ResponseEntity.created(location)
                         .header(HttpHeaders.LOCATION, location.toString())
@@ -300,21 +237,21 @@ public class EventCrudController {
 
     @PutMapping("/{id}")
     @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#id"})
-    @Operation(summary = "Update event", description = "Update an existing event with new details. Supports If-Match header for optimistic locking.")
+    @Operation(summary = "Update event", description = "COMPLETE - Update an existing event with new details. Supports If-Match header for optimistic locking.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event updated successfully",
-                content = @Content(schema = @Schema(implementation = EventResponse.class))),
+                content = @Content(schema = @Schema(implementation = UpdateEventWithCoverUploadResponse.class))),
         @ApiResponse(responseCode = "404", description = "Event not found"),
         @ApiResponse(responseCode = "400", description = "Invalid request data"),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
         @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions"),
         @ApiResponse(responseCode = "409", description = "Conflict - Event version mismatch (optimistic locking)")
     })
-    public ResponseEntity<EventResponse> update(
+    public ResponseEntity<UpdateEventWithCoverUploadResponse> update(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestHeader(value = "If-Match", required = false) String ifMatch,
-            @Valid @RequestBody UpdateEventRequest request) {
+            @Valid @RequestBody UpdateEventWithCoverUploadRequest request) {
         try {
             if (principal == null) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
@@ -339,15 +276,28 @@ public class EventCrudController {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid If-Match header format");
                 }
             }
+
+            if (request.getEvent() != null && StringUtils.hasText(request.getEvent().getCoverImageUrl())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Do not set coverImageUrl on update. Use the presigned cover upload flow (coverUpload) and then call the cover-image complete endpoint.");
+            }
             
             Event updated;
             if (expectedVersion != null) {
-                updated = eventService.updateWithVersion(id, request, expectedVersion);
+                updated = eventService.updateWithVersion(id, request.getEvent(), expectedVersion);
             } else {
-                updated = eventService.update(id, request);
+                updated = eventService.update(id, request.getEvent());
             }
-            
-            EventResponse response = eventService.toResponse(updated);
+
+            var coverUpload = request.getCoverUpload() != null
+                    ? eventMediaService.createCoverImageUpload(id, principal, request.getCoverUpload())
+                    : null;
+
+            UpdateEventWithCoverUploadResponse response = UpdateEventWithCoverUploadResponse.builder()
+                    .event(eventService.toResponse(updated))
+                    .coverUpload(coverUpload)
+                    .build();
+
             ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
             // Include ETag with new version
             if (updated.getVersion() != null) {
@@ -445,7 +395,7 @@ public class EventCrudController {
 
     @GetMapping("/{id}/feed")
     @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
-    @Operation(summary = "Get event feed", description = "Get the social feed for an event (videos, pictures, tweets) with pagination. Available to all users with event access. Use page parameter to load more posts.")
+    @Operation(summary = "Get event feed", description = "COMPLETE - Get the social feed for an event (videos, pictures, tweets) with pagination. Available to all users with event access. Use page parameter to load more posts.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Event feed retrieved successfully",
                 content = @Content(schema = @Schema(implementation = EventFeedResponse.class))),

@@ -916,10 +916,6 @@ public class EventService {
     /**
      * Publish event
      */
-    public Event publishEvent(UUID eventId) {
-        return updateEventStatus(eventId, EventStatus.PUBLISHED);
-    }
-
     /**
      * Cancel event
      */

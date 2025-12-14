@@ -399,15 +399,6 @@ policy:
         owns_scope: false
         is_member: true
     -
-      name: event.publish
-      scope: EVENT
-      resources: id
-      description: Publish event
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
       name: event.read
       scope: EVENT
       resources: id
@@ -1181,7 +1172,6 @@ policy:
         - event.media.upload
         - event.notification.read
         - event.notification.update
-        - event.publish
         - event.read
         - event.registration.close
         - event.registration.open
@@ -1249,7 +1239,6 @@ policy:
         - event.media.upload
         - event.notification.read
         - event.notification.update
-        - event.publish
         - event.read
         - event.registration.close
         - event.registration.open

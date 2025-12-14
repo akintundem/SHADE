@@ -72,7 +72,6 @@ public final class RbacPermissions {
     public static final String EVENT_MEDIA_UPLOAD = "event.media.upload";
     public static final String EVENT_NOTIFICATION_READ = "event.notification.read";
     public static final String EVENT_NOTIFICATION_UPDATE = "event.notification.update";
-    public static final String EVENT_PUBLISH = "event.publish";
     public static final String EVENT_READ = "event.read";
     public static final String EVENT_REGISTRATION_CLOSE = "event.registration.close";
     public static final String EVENT_REGISTRATION_OPEN = "event.registration.open";

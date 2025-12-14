@@ -322,6 +322,15 @@ extract_create_event_with_cover_upload_fields() {
     COVER_REQUIRED_HEADERS="$(echo "$json" | jq -c '.coverUpload.headers // {}')"
 }
 
+extract_update_event_with_cover_upload_fields() {
+    local json="$1"
+    COVER_ID="$(echo "$json" | jq -r '.coverUpload.mediaId // empty')"
+    COVER_OBJECT_KEY="$(echo "$json" | jq -r '.coverUpload.objectKey // empty')"
+    COVER_UPLOAD_URL="$(echo "$json" | jq -r '.coverUpload.uploadUrl // empty')"
+    COVER_RESOURCE_URL="$(echo "$json" | jq -r '.coverUpload.resourceUrl // empty')"
+    COVER_REQUIRED_HEADERS="$(echo "$json" | jq -c '.coverUpload.headers // {}')"
+}
+
 presigned_put_upload() {
     local upload_url="$1"
     local headers_json="$2"
@@ -436,11 +445,16 @@ run_test() {
     local temp_data_file=""
     
     # Automatically attach X-Device-ID header for authenticated requests
-    if [[ -n "$DEVICE_ID" && "$headers" != *"X-Device-ID"* ]]; then
+    # Use OTHER_DEVICE_ID when using OTHER_ACCESS_TOKEN, otherwise use DEVICE_ID.
+    local effective_device_id="$DEVICE_ID"
+    if [[ -n "$OTHER_ACCESS_TOKEN" && "$headers" == *"Authorization: Bearer $OTHER_ACCESS_TOKEN"* && -n "$OTHER_DEVICE_ID" ]]; then
+        effective_device_id="$OTHER_DEVICE_ID"
+    fi
+    if [[ -n "$effective_device_id" && "$headers" != *"X-Device-ID"* ]]; then
         if [ -n "$headers" ]; then
-            headers="$headers -H 'X-Device-ID: $DEVICE_ID'"
+            headers="$headers -H 'X-Device-ID: $effective_device_id'"
         else
-            headers="-H 'X-Device-ID: $DEVICE_ID'"
+            headers="-H 'X-Device-ID: $effective_device_id'"
         fi
     fi
     
@@ -519,11 +533,15 @@ run_test() {
                 USER_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
                 ;;
             "Create Event")
-                EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+                # Create event now returns { event, coverUpload }
+                EVENT_ID=$(echo "$response_body" | jq -r '.event.id // empty')
                 ;;
             "Upload Event Media")
                 # Presigned upload response (parse via jq)
                 extract_presigned_fields "$response_body"
+                ;;
+            "Request Cover Upload via Update Event")
+                extract_update_event_with_cover_upload_fields "$response_body"
                 ;;
             "Add Event Collaborator")
                 COLLABORATOR_ID=$(echo "$response_body" | grep -o '"collaboratorId":"[^"]*"' | cut -d'"' -f4)
@@ -763,7 +781,7 @@ EOF
         -H "X-Device-ID: $DEVICE_ID" \
         -H "Content-Type: application/json" \
         -d "$event_with_cover_request" \
-        "$BASE_URL/api/v1/events/with-cover-upload")
+        "$BASE_URL/api/v1/events")
     
     local http_code="${response: -3}"
     local response_body="${response%???}"
@@ -940,7 +958,7 @@ EOF
         -H "X-Device-ID: $DEVICE_ID" \
         -H "Content-Type: application/json" \
         -d "$create_event_with_cover_data" \
-        "$BASE_URL/api/v1/events/with-cover-upload")
+        "$BASE_URL/api/v1/events")
     local create_flow_http="${create_flow_resp: -3}"
     local create_flow_body="${create_flow_resp%???}"
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
@@ -951,10 +969,10 @@ EOF
     fi
     {
         echo ""
-        echo "### Create Event (With Cover Upload)"
+        echo "### Create Event"
         echo "**Status:** $([ "$create_flow_http" = "201" ] && echo "✅" || echo "❌") $create_flow_http (Expected: 201)"
         echo "**Description:** Create a new event and request a presigned cover image upload URL"
-        echo "**Endpoint:** POST /api/v1/events/with-cover-upload"
+        echo "**Endpoint:** POST /api/v1/events"
         echo "**Request Headers:** -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' -H 'X-Device-ID: $DEVICE_ID'"
         echo "**Request Body:** $create_event_with_cover_data"
         echo ""
@@ -1031,6 +1049,7 @@ EOF
     local update_end_date=$(date -u -v+2d -v+3H '+%Y-%m-%dT%H:%M:%S')
     local update_data=$(cat <<EOF
 {
+  "event": {
     "name": "Updated Test Event",
     "description": "Updated description",
     "eventType": "WORKSHOP",
@@ -1041,16 +1060,17 @@ EOF
     "isPublic": false,
     "requiresApproval": true,
     "venue": {
-        "address": "456 Market Street",
-        "city": "San Francisco",
-        "state": "California",
-        "country": "United States",
-        "zipCode": "94105",
-        "latitude": 37.7849,
-        "longitude": -122.4094,
-        "googlePlaceId": "ChIJUpdatedPlaceID123",
-        "googlePlaceData": "{\"name\":\"Updated Venue\",\"rating\":4.8}"
+      "address": "456 Market Street",
+      "city": "San Francisco",
+      "state": "California",
+      "country": "United States",
+      "zipCode": "94105",
+      "latitude": 37.7849,
+      "longitude": -122.4094,
+      "googlePlaceId": "ChIJUpdatedPlaceID123",
+      "googlePlaceData": "{\"name\":\"Updated Venue\",\"rating\":4.8}"
     }
+  }
 }
 EOF
 )
@@ -1072,14 +1092,8 @@ EOF
     run_test "List My Upcoming Owned Events" "GET" "/api/v1/events?mine=true&timeframe=UPCOMING" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List upcoming owned events"
     run_test "List My Past Owned Events" "GET" "/api/v1/events?mine=true&timeframe=PAST" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List past owned events"
     # Event Status & Lifecycle Tests
-    run_test "Get Event Status" "GET" "/api/v1/events/$EVENT_ID/status" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event status"
-    
-    local status_update_data='{
-        "eventStatus": "PUBLISHED"
-    }'
-    run_test "Update Event Status" "PUT" "/api/v1/events/$EVENT_ID/status" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$status_update_data" "200" "Update event status"
-    
-    run_test "Publish Event" "POST" "/api/v1/events/$EVENT_ID/publish" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Publish event"
+    # NOTE: /{id}/status endpoints removed; eventStatus is returned by GET /api/v1/events/{id}
+    # NOTE: Publish endpoint removed. Use PUT /api/v1/events/{id} with event.eventStatus=PUBLISHED instead if needed.
     run_test "Open Registration" "POST" "/api/v1/events/$EVENT_ID/registration?action=open" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Open event registration"
     run_test "Close Registration" "POST" "/api/v1/events/$EVENT_ID/registration?action=close" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Close event registration"
     
@@ -1280,51 +1294,29 @@ EOF
     fi
     
     # Cover Image Tests
-    local cover_image_request='{
-        "fileName": "unsplash-cover.jpg",
-        "contentType": "image/jpeg",
-        "category": "cover",
-        "isPublic": true,
-        "description": "Cover image upload"
-    }'
-    # Request presigned cover upload (capture response directly so we can parse it)
-    local cover_resp=$(curl -sS -w '%{http_code}' -X PUT \
-        -H "Authorization: Bearer $ACCESS_TOKEN" \
-        -H "X-Device-ID: $DEVICE_ID" \
-        -H "Content-Type: application/json" \
-        -d "$cover_image_request" \
-        "$BASE_URL/api/v1/events/$EVENT_ID/cover-image")
-    local cover_http="${cover_resp: -3}"
-    local cover_body="${cover_resp%???}"
-    # Log this request using the existing report format
-    TOTAL_TESTS=$((TOTAL_TESTS + 1))
-    if [ "$cover_http" = "200" ]; then PASSED_TESTS=$((PASSED_TESTS + 1)); else FAILED_TESTS=$((FAILED_TESTS + 1)); fi
-    {
-        echo ""
-        echo "### Update Cover Image"
-        echo "**Status:** $([ "$cover_http" = "200" ] && echo "✅" || echo "❌") $cover_http (Expected: 200)"
-        echo "**Description:** Update cover image (presign)"
-        echo "**Endpoint:** PUT /api/v1/events/$EVENT_ID/cover-image"
-        echo "**Request Headers:** -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' -H 'X-Device-ID: $DEVICE_ID'"
-        echo "**Request Body:** $cover_image_request"
-        echo ""
-        echo "**Response:**"
-        echo "\`\`\`json"
-        echo "$cover_body"
-        echo "\`\`\`"
-        echo ""
-        echo "---"
-        echo ""
-    } >> "$REPORT_FILE"
+    local cover_update_request
+    cover_update_request=$(cat <<EOF
+{
+  "event": {},
+  "coverUpload": {
+    "fileName": "unsplash-cover.jpg",
+    "contentType": "image/jpeg",
+    "category": "cover",
+    "isPublic": true,
+    "description": "Cover image upload via PUT /events"
+  }
+}
+EOF
+)
+    run_test "Request Cover Upload via Update Event" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cover_update_request" "200" "Request a presigned cover image upload via PUT /events/{id}"
 
-    if [ "$cover_http" = "200" ]; then
-        extract_cover_presigned_fields "$cover_body"
-        if [ -n "$COVER_UPLOAD_URL" ] && [ -n "$TEST_IMAGE_PATH" ]; then
-            presigned_put_upload "$COVER_UPLOAD_URL" "$COVER_REQUIRED_HEADERS" "$TEST_IMAGE_PATH"
-        fi
-        if [ -n "$COVER_ID" ]; then
-            local cover_complete_payload
-            cover_complete_payload=$(cat <<EOF
+    # Upload cover bytes to S3 and complete upload
+    if [ -n "$COVER_UPLOAD_URL" ] && [ -n "$TEST_IMAGE_PATH" ]; then
+        presigned_put_upload "$COVER_UPLOAD_URL" "$COVER_REQUIRED_HEADERS" "$TEST_IMAGE_PATH"
+    fi
+    if [ -n "$COVER_ID" ]; then
+        local cover_complete_payload
+        cover_complete_payload=$(cat <<EOF
 {
   "objectKey": "$COVER_OBJECT_KEY",
   "resourceUrl": "$COVER_RESOURCE_URL",
@@ -1332,22 +1324,21 @@ EOF
   "contentType": "image/jpeg",
   "category": "cover",
   "isPublic": true,
-  "description": "Cover uploaded via presigned S3 URL",
+  "description": "Cover uploaded via presigned S3 URL (update flow)",
   "tags": "test,event",
   "metadata": "{\"source\":\"unsplash\"}"
 }
 EOF
 )
-            local cover_complete_wrapped
-            cover_complete_wrapped=$(cat <<EOF
+        local cover_complete_wrapped
+        cover_complete_wrapped=$(cat <<EOF
 {
   "coverId": "$COVER_ID",
   "upload": $cover_complete_payload
 }
 EOF
 )
-            run_test "Complete Cover Image Upload" "POST" "/api/v1/events/$EVENT_ID/cover-image/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cover_complete_wrapped" "200" "Complete cover image upload and persist coverImageUrl on the event"
-        fi
+        run_test "Complete Cover Image Upload" "POST" "/api/v1/events/$EVENT_ID/cover-image/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cover_complete_wrapped" "200" "Complete cover image upload and persist coverImageUrl on the event"
     fi
 
     # Confirm coverImageUrl is now set on event
