@@ -312,6 +312,16 @@ extract_cover_presigned_fields() {
     COVER_REQUIRED_HEADERS="$(echo "$json" | jq -c '.headers // {}')"
 }
 
+extract_create_event_with_cover_upload_fields() {
+    local json="$1"
+    EVENT_ID="$(echo "$json" | jq -r '.event.id // empty')"
+    COVER_ID="$(echo "$json" | jq -r '.coverUpload.mediaId // empty')"
+    COVER_OBJECT_KEY="$(echo "$json" | jq -r '.coverUpload.objectKey // empty')"
+    COVER_UPLOAD_URL="$(echo "$json" | jq -r '.coverUpload.uploadUrl // empty')"
+    COVER_RESOURCE_URL="$(echo "$json" | jq -r '.coverUpload.resourceUrl // empty')"
+    COVER_REQUIRED_HEADERS="$(echo "$json" | jq -c '.coverUpload.headers // {}')"
+}
+
 presigned_put_upload() {
     local upload_url="$1"
     local headers_json="$2"
@@ -543,7 +553,9 @@ wait_for_service() {
     fi
     
     echo -e "${YELLOW}⏳ Waiting for $service_name to be ready...${NC}"
-    local max_attempts=10
+    # Docker compose healthcheck start_period allows up to 120s on first run.
+    # Keep this in sync so tests don't fail during cold starts.
+    local max_attempts=40
     local attempt=1
     
     while [ $attempt -le $max_attempts ]; do
@@ -703,8 +715,11 @@ create_test_event() {
     local start_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
     local end_date=$(date -u -v+1d -v+2H '+%Y-%m-%dT%H:%M:%S')
     
-    local event_data=$(cat <<EOF
+    # Create event + request presigned cover upload
+    local event_with_cover_request
+    event_with_cover_request=$(cat <<EOF
 {
+  "event": {
     "name": "Test Event",
     "description": "This is a test event for endpoint testing",
     "eventType": "CONFERENCE",
@@ -714,20 +729,27 @@ create_test_event() {
     "capacity": 100,
     "isPublic": true,
     "requiresApproval": false,
-    "coverImageUrl": "https://example.com/cover.jpg",
     "eventWebsiteUrl": "https://example.com/event",
     "hashtag": "#TestEvent",
     "venue": {
-        "address": "123 Main Street",
-        "city": "San Francisco",
-        "state": "California",
-        "country": "United States",
-        "zipCode": "94102",
-        "latitude": 37.7749,
-        "longitude": -122.4194,
-        "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
-        "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
+      "address": "123 Main Street",
+      "city": "San Francisco",
+      "state": "California",
+      "country": "United States",
+      "zipCode": "94102",
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+      "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
     }
+  },
+  "coverUpload": {
+    "fileName": "initial-cover.jpg",
+    "contentType": "image/jpeg",
+    "category": "cover",
+    "isPublic": true,
+    "description": "Initial cover image upload (create flow)"
+  }
 }
 EOF
 )
@@ -740,20 +762,58 @@ EOF
         -H "Authorization: Bearer $ACCESS_TOKEN" \
         -H "X-Device-ID: $DEVICE_ID" \
         -H "Content-Type: application/json" \
-        -d "$event_data" \
-        "$BASE_URL/api/v1/events")
+        -d "$event_with_cover_request" \
+        "$BASE_URL/api/v1/events/with-cover-upload")
     
     local http_code="${response: -3}"
     local response_body="${response%???}"
     
     if [ "$http_code" = "201" ] || [ "$http_code" = "200" ]; then
-        EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
-        if [ -z "$EVENT_ID" ]; then
-            echo -e "${RED}❌ Failed to extract event ID from response${NC}"
+        extract_create_event_with_cover_upload_fields "$response_body"
+        if [ -z "$EVENT_ID" ] || [ -z "$COVER_ID" ] || [ -z "$COVER_UPLOAD_URL" ]; then
+            echo -e "${RED}❌ Failed to extract event or cover upload fields from response${NC}"
             echo -e "${RED}Response: $response_body${NC}"
             return 1
         fi
-        echo -e "${GREEN}✅ Test event created with ID: $EVENT_ID${NC}"
+
+        # Upload cover image bytes to S3 via presigned URL (requires test image downloaded)
+        if [ -n "$TEST_IMAGE_PATH" ] && [ -f "$TEST_IMAGE_PATH" ]; then
+            presigned_put_upload "$COVER_UPLOAD_URL" "$COVER_REQUIRED_HEADERS" "$TEST_IMAGE_PATH" >/dev/null 2>&1
+        fi
+
+        # Complete upload so backend persists coverImageUrl
+        local cover_complete_payload
+        cover_complete_payload=$(cat <<EOF
+{
+  "objectKey": "$COVER_OBJECT_KEY",
+  "resourceUrl": "$COVER_RESOURCE_URL",
+  "fileName": "initial-cover.jpg",
+  "contentType": "image/jpeg",
+  "category": "cover",
+  "isPublic": true,
+  "description": "Cover uploaded via create-event flow",
+  "tags": "test,event",
+  "metadata": "{\"source\":\"unsplash\"}"
+}
+EOF
+)
+        # We won't log this "setup" completion into the report; failures will surface in later GET checks.
+        local cover_complete_wrapped
+        cover_complete_wrapped=$(cat <<EOF
+{
+  "coverId": "$COVER_ID",
+  "upload": $cover_complete_payload
+}
+EOF
+)
+        curl -sS -X POST \
+          -H "Authorization: Bearer $ACCESS_TOKEN" \
+          -H "X-Device-ID: $DEVICE_ID" \
+          -H "Content-Type: application/json" \
+          -d "$cover_complete_wrapped" \
+          "$BASE_URL/api/v1/events/$EVENT_ID/cover-image/complete" >/dev/null 2>&1
+
+        echo -e "${GREEN}✅ Test event created with ID: $EVENT_ID (cover upload requested)${NC}"
         return 0
     else
         echo -e "${RED}❌ Failed to create test event - HTTP: $http_code${NC}"
@@ -818,6 +878,11 @@ main() {
     # Step 3: Create test event
     echo -e "${CYAN}📅 Step 3: Create Test Event${NC}"
     echo "============================="
+    # Download image early because event creation now uses presigned cover upload
+    if ! download_test_image; then
+        echo -e "${RED}❌ Failed to download test image. Exiting.${NC}"
+        exit 1
+    fi
     if ! create_test_event; then
         echo -e "${RED}❌ Failed to create test event. Exiting.${NC}"
         exit 1
@@ -828,13 +893,15 @@ main() {
     echo -e "${CYAN}📝 Step 4: CRUD Operations Tests${NC}"
     echo "=================================="
     
-    # Test create event (this will appear in the report)
+    # Test create event with cover upload (this will appear in the report)
     local create_start_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
     local create_end_date=$(date -u -v+1d -v+2H '+%Y-%m-%dT%H:%M:%S')
-    local create_event_data=$(cat <<EOF
+    local create_event_with_cover_data
+    create_event_with_cover_data=$(cat <<EOF
 {
+  "event": {
     "name": "Report Test Event",
-    "description": "This event was created to test the create endpoint and appears in the report",
+    "description": "This event was created to test create+cover upload flow and appears in the report",
     "eventType": "CONFERENCE",
     "startDateTime": "$create_start_date",
     "endDateTime": "$create_end_date",
@@ -842,24 +909,110 @@ main() {
     "capacity": 100,
     "isPublic": true,
     "requiresApproval": false,
-    "coverImageUrl": "https://example.com/cover.jpg",
     "eventWebsiteUrl": "https://example.com/event",
     "hashtag": "#ReportTestEvent",
     "venue": {
-        "address": "123 Main Street",
-        "city": "San Francisco",
-        "state": "California",
-        "country": "United States",
-        "zipCode": "94102",
-        "latitude": 37.7749,
-        "longitude": -122.4194,
-        "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
-        "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
+      "address": "123 Main Street",
+      "city": "San Francisco",
+      "state": "California",
+      "country": "United States",
+      "zipCode": "94102",
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+      "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
     }
+  },
+  "coverUpload": {
+    "fileName": "report-cover.jpg",
+    "contentType": "image/jpeg",
+    "category": "cover",
+    "isPublic": true,
+    "description": "Cover image upload for report event"
+  }
 }
 EOF
 )
-    run_test "Create Event" "POST" "/api/v1/events" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$create_event_data" "201" "Create a new event"
+
+    # Create event and capture response (so we can upload + complete cover)
+    local create_flow_resp=$(curl -sS -w '%{http_code}' -X POST \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        -H "X-Device-ID: $DEVICE_ID" \
+        -H "Content-Type: application/json" \
+        -d "$create_event_with_cover_data" \
+        "$BASE_URL/api/v1/events/with-cover-upload")
+    local create_flow_http="${create_flow_resp: -3}"
+    local create_flow_body="${create_flow_resp%???}"
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    if [ "$create_flow_http" = "201" ]; then
+        PASSED_TESTS=$((PASSED_TESTS + 1))
+    else
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+    fi
+    {
+        echo ""
+        echo "### Create Event (With Cover Upload)"
+        echo "**Status:** $([ "$create_flow_http" = "201" ] && echo "✅" || echo "❌") $create_flow_http (Expected: 201)"
+        echo "**Description:** Create a new event and request a presigned cover image upload URL"
+        echo "**Endpoint:** POST /api/v1/events/with-cover-upload"
+        echo "**Request Headers:** -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' -H 'X-Device-ID: $DEVICE_ID'"
+        echo "**Request Body:** $create_event_with_cover_data"
+        echo ""
+        echo "**Response:**"
+        echo "\`\`\`json"
+        echo "$create_flow_body"
+        echo "\`\`\`"
+        echo ""
+        echo "---"
+        echo ""
+    } >> "$REPORT_FILE"
+
+    # If created, perform the S3 upload + complete step
+    if [ "$create_flow_http" = "201" ]; then
+        local created_event_id
+        created_event_id="$(echo "$create_flow_body" | jq -r '.event.id // empty')"
+        local created_cover_id
+        created_cover_id="$(echo "$create_flow_body" | jq -r '.coverUpload.mediaId // empty')"
+        local created_cover_object_key
+        created_cover_object_key="$(echo "$create_flow_body" | jq -r '.coverUpload.objectKey // empty')"
+        local created_cover_upload_url
+        created_cover_upload_url="$(echo "$create_flow_body" | jq -r '.coverUpload.uploadUrl // empty')"
+        local created_cover_resource_url
+        created_cover_resource_url="$(echo "$create_flow_body" | jq -r '.coverUpload.resourceUrl // empty')"
+        local created_cover_headers
+        created_cover_headers="$(echo "$create_flow_body" | jq -c '.coverUpload.headers // {}')"
+
+        if [ -n "$created_cover_upload_url" ] && [ -n "$TEST_IMAGE_PATH" ]; then
+            presigned_put_upload "$created_cover_upload_url" "$created_cover_headers" "$TEST_IMAGE_PATH"
+        fi
+
+        if [ -n "$created_event_id" ] && [ -n "$created_cover_id" ]; then
+            local created_cover_complete_payload
+            created_cover_complete_payload=$(cat <<EOF
+{
+  "objectKey": "$created_cover_object_key",
+  "resourceUrl": "$created_cover_resource_url",
+  "fileName": "report-cover.jpg",
+  "contentType": "image/jpeg",
+  "category": "cover",
+  "isPublic": true,
+  "description": "Cover uploaded via create+cover flow",
+  "tags": "test,event",
+  "metadata": "{\"source\":\"unsplash\"}"
+}
+EOF
+)
+            local created_cover_complete_wrapped
+            created_cover_complete_wrapped=$(cat <<EOF
+{
+  "coverId": "$created_cover_id",
+  "upload": $created_cover_complete_payload
+}
+EOF
+)
+            run_test "Complete Cover Image Upload (Create Flow)" "POST" "/api/v1/events/$created_event_id/cover-image/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$created_cover_complete_wrapped" "200" "Complete cover image upload for newly created event (create flow)"
+        fi
+    fi
     
     # Test get event by ID (should return full details for owner with scope=FULL)
     run_test "Get Event by ID (Owner View)" "GET" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event by ID - should return full details for owner with scope=FULL"
@@ -977,11 +1130,7 @@ EOF
     echo -e "${CYAN}📸 Step 6: Media Management Tests${NC}"
     echo "=================================="
 
-    # Download real image for upload tests
-    if ! download_test_image; then
-        echo -e "${RED}❌ Failed to download test image. Exiting.${NC}"
-        exit 1
-    fi
+    # Test image already downloaded earlier (required for create flow)
     
     # Media Tests (Note: These will return mock responses since upload is presigned)
     run_test "Get Event Media" "GET" "/api/v1/events/$EVENT_ID/media" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event media"
@@ -1189,7 +1338,15 @@ EOF
 }
 EOF
 )
-            run_test "Complete Cover Image Upload" "POST" "/api/v1/events/$EVENT_ID/cover-image/$COVER_ID/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cover_complete_payload" "200" "Complete cover image upload and persist coverImageUrl on the event"
+            local cover_complete_wrapped
+            cover_complete_wrapped=$(cat <<EOF
+{
+  "coverId": "$COVER_ID",
+  "upload": $cover_complete_payload
+}
+EOF
+)
+            run_test "Complete Cover Image Upload" "POST" "/api/v1/events/$EVENT_ID/cover-image/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cover_complete_wrapped" "200" "Complete cover image upload and persist coverImageUrl on the event"
         fi
     fi
 

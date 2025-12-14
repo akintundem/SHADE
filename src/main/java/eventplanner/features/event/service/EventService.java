@@ -666,6 +666,7 @@ public class EventService {
         response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
         response.setIsPublic(event.getIsPublic());
         response.setRequiresApproval(event.getRequiresApproval());
+        response.setCoverImageUrl(event.getCoverImageUrl());
         response.setEventWebsiteUrl(event.getEventWebsiteUrl());
         response.setHashtag(event.getHashtag());
         response.setTheme(event.getTheme());

@@ -2,14 +2,17 @@ package eventplanner.features.event.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.features.event.dto.request.CreateEventRequest;
+import eventplanner.features.event.dto.request.CreateEventWithCoverUploadRequest;
 import eventplanner.features.event.dto.request.EventListRequest;
 import eventplanner.features.event.dto.request.UpdateEventRequest;
 import eventplanner.features.event.dto.request.EventFeedRequest;
+import eventplanner.features.event.dto.response.CreateEventWithCoverUploadResponse;
 import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.dto.response.EventFeedResponse;
 import eventplanner.common.domain.enums.EventScope;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.service.EventIdempotencyService;
+import eventplanner.features.event.service.EventMediaService;
 import eventplanner.features.event.service.EventService;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.RbacPermissions;
@@ -28,6 +31,7 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -47,15 +51,18 @@ import java.util.UUID;
 public class EventCrudController {
 
     private final EventService eventService;
+    private final EventMediaService eventMediaService;
     private final AuthorizationService authorizationService;
     private final EventIdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
 
     public EventCrudController(EventService eventService, 
+                              EventMediaService eventMediaService,
                               AuthorizationService authorizationService,
                               EventIdempotencyService idempotencyService,
                               ObjectMapper objectMapper) {
         this.eventService = eventService;
+        this.eventMediaService = eventMediaService;
         this.authorizationService = authorizationService;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
@@ -140,7 +147,7 @@ public class EventCrudController {
         }
     }
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @RequiresPermission(RbacPermissions.EVENT_CREATE)
     @Operation(summary = "Create new event", description = "Create a new event with the provided details. Supports Idempotency-Key header to prevent duplicate creation on retries.")
     @ApiResponses(value = {
@@ -198,6 +205,84 @@ public class EventCrudController {
                     }
                 }
                 
+                URI location = URI.create("/api/v1/events/" + created.getId());
+                return ResponseEntity.created(location)
+                        .header(HttpHeaders.LOCATION, location.toString())
+                        .body(response);
+            } finally {
+                // Release processing lock
+                if (StringUtils.hasText(idempotencyKey)) {
+                    idempotencyService.releaseProcessingLock(idempotencyKey);
+                }
+            }
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
+    }
+
+    @PostMapping(value = "/with-cover-upload", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @RequiresPermission(RbacPermissions.EVENT_CREATE)
+    @Operation(summary = "Create new event + cover presigned upload", description = "Create a new event, and return a presigned URL for uploading the cover image. Client uploads to S3, then calls the existing complete-cover-upload endpoint to persist the cover image URL on the event. Supports Idempotency-Key header to prevent duplicate creation on retries.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Event created successfully with cover upload details",
+                content = @Content(schema = @Schema(implementation = CreateEventWithCoverUploadResponse.class))),
+        @ApiResponse(responseCode = "200", description = "Event already exists (idempotent replay)",
+                content = @Content(schema = @Schema(implementation = CreateEventWithCoverUploadResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid request data"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing Bearer token"),
+        @ApiResponse(responseCode = "409", description = "Conflict - Operation already in progress")
+    })
+    public ResponseEntity<CreateEventWithCoverUploadResponse> createWithCoverUpload(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody CreateEventWithCoverUploadRequest request) {
+        try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+
+            // Check idempotency - return cached result if available
+            if (StringUtils.hasText(idempotencyKey)) {
+                Optional<String> cachedResult = idempotencyService.getProcessedResult(idempotencyKey);
+                if (cachedResult.isPresent()) {
+                    try {
+                        CreateEventWithCoverUploadResponse cached = objectMapper.readValue(cachedResult.get(), CreateEventWithCoverUploadResponse.class);
+                        return ResponseEntity.ok()
+                                .header("X-Idempotency-Replay", "true")
+                                .header(HttpHeaders.LOCATION, "/api/v1/events/" + cached.getEvent().getId())
+                                .body(cached);
+                    } catch (Exception e) {
+                        // Log but continue with normal creation
+                    }
+                }
+
+                // Mark as processing to prevent concurrent requests
+                if (!idempotencyService.markAsProcessing(idempotencyKey)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Event creation already in progress. Please wait.");
+                }
+            }
+
+            try {
+                Event created = eventService.create(request.getEvent(), principal.getId());
+                EventResponse eventResponse = eventService.toResponse(created);
+                var coverUpload = eventMediaService.createCoverImageUpload(created.getId(), principal, request.getCoverUpload());
+
+                CreateEventWithCoverUploadResponse response = CreateEventWithCoverUploadResponse.builder()
+                        .event(eventResponse)
+                        .coverUpload(coverUpload)
+                        .build();
+
+                // Store result for idempotency
+                if (StringUtils.hasText(idempotencyKey)) {
+                    try {
+                        String resultJson = objectMapper.writeValueAsString(response);
+                        idempotencyService.storeResult(idempotencyKey, resultJson);
+                    } catch (Exception e) {
+                        // Log but don't fail the request
+                    }
+                }
+
                 URI location = URI.create("/api/v1/events/" + created.getId());
                 return ResponseEntity.created(location)
                         .header(HttpHeaders.LOCATION, location.toString())

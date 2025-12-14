@@ -4,6 +4,7 @@ import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.features.event.dto.request.EventMediaRequest;
 import eventplanner.features.event.dto.request.EventMediaUploadRequest;
 import eventplanner.features.event.dto.request.EventMediaUploadCompleteRequest;
+import eventplanner.features.event.dto.request.EventCoverImageCompleteRequest;
 import eventplanner.features.event.dto.response.EventCoverImageResponse;
 import eventplanner.features.event.dto.response.EventMediaResponse;
 import eventplanner.features.event.dto.response.EventPresignedUploadResponse;
@@ -155,6 +156,17 @@ public class EventMediaController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/{id}/cover-image")
+    @RequiresPermission(value = RbacPermissions.EVENT_COVER_IMAGE_UPDATE, resources = {"event_id=#id"})
+    @Operation(summary = "Create cover image upload", description = "Create a presigned cover image upload URL for an event (POST alias of PUT /cover-image).")
+    public ResponseEntity<EventPresignedUploadResponse> createCoverImageUpload(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody EventMediaUploadRequest request) {
+        EventPresignedUploadResponse response = mediaService.createCoverImageUpload(id, principal, request);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/{id}/cover-image/{coverId}/complete")
     @RequiresPermission(value = RbacPermissions.EVENT_COVER_IMAGE_UPDATE, resources = {"event_id=#id"})
     @Operation(summary = "Complete cover image upload", description = "Called after the client uploads the cover image to S3 using the presigned URL. Saves the cover image link to the event.")
@@ -164,6 +176,17 @@ public class EventMediaController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventMediaUploadCompleteRequest request) {
         EventCoverImageResponse response = mediaService.completeCoverImageUpload(id, coverId, principal, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{id}/cover-image/complete")
+    @RequiresPermission(value = RbacPermissions.EVENT_COVER_IMAGE_UPDATE, resources = {"event_id=#id"})
+    @Operation(summary = "Complete cover image upload (body includes coverId)", description = "Called after the client uploads the cover image to S3. Convenience endpoint that takes coverId in the request body.")
+    public ResponseEntity<EventCoverImageResponse> completeCoverImageUploadBody(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody EventCoverImageCompleteRequest request) {
+        EventCoverImageResponse response = mediaService.completeCoverImageUpload(id, request.getCoverId(), principal, request.getUpload());
         return ResponseEntity.ok(response);
     }
 
