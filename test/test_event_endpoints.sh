@@ -177,8 +177,6 @@ REMINDER_ID=""
 DEVICE_ID=""
 OTHER_ACCESS_TOKEN=""
 OTHER_DEVICE_ID=""
-POST_ID=""
-IMAGE_POST_ID=""
 
 
 verify_email_in_database() {
@@ -417,7 +415,6 @@ cat > "$REPORT_FILE" << EOF
 | CRUD Operations | 0 | 0 | 0 | 0% |
 | Event Management | 0 | 0 | 0 | 0% |
 | Media Management | 0 | 0 | 0 | 0% |
-| Collaboration | 0 | 0 | 0 | 0% |
 | Notifications | 0 | 0 | 0 | 0% |
 | **TOTAL** | 0 | 0 | 0 | 0% |
 
@@ -549,12 +546,6 @@ run_test() {
                 ;;
             "Create Event Reminder")
                 REMINDER_ID=$(echo "$response_body" | grep -o '"reminderId":"[^"]*"' | cut -d'"' -f4)
-                ;;
-            "Create Text Post")
-                POST_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
-                ;;
-            "Create Image Post")
-                IMAGE_POST_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
                 ;;
         esac
     fi
@@ -872,9 +863,8 @@ main() {
     echo "4. Test CRUD operations"
     echo "5. Test event management endpoints"
     echo "6. Test media management endpoints"
-    echo "7. Test collaboration endpoints"
-    echo "8. Test notification endpoints"
-    echo "9. Clean up test data"
+    echo "7. Test notification endpoints"
+    echo "8. Clean up test data"
     echo ""
     
     # Step 1: Check service availability
@@ -1235,8 +1225,6 @@ EOF
     }'
     run_test "Update Media" "PUT" "/api/v1/events/$EVENT_ID/media/$media_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$media_update_data" "200" "Update media information"
     
-    # NOTE: don't delete media yet — the Posts tests may reference it.
-    
     # Assets Tests
     run_test "Get Event Assets" "GET" "/api/v1/events/$EVENT_ID/assets" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event assets"
     local asset_upload_request='{
@@ -1357,56 +1345,8 @@ EOF
     run_test "Remove Cover Image" "DELETE" "/api/v1/events/$EVENT_ID/cover-image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Remove cover image"
     echo ""
     
-    # Step 7: Posts CRUD Tests
-    echo -e "${CYAN}📰 Step 7: Posts CRUD Tests${NC}"
-    echo "==============================="
-
-    local create_text_post='{
-        "type": "TEXT",
-        "content": "Hello from automated test post"
-    }'
-    run_test "Create Text Post" "POST" "/api/v1/events/$EVENT_ID/posts" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$create_text_post" "200" "Create a simple text post"
-
-    if [ -n "$POST_ID" ]; then
-        run_test "Get Post" "GET" "/api/v1/events/$EVENT_ID/posts/$POST_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get a post by id"
-    fi
-
-    run_test "List Posts" "GET" "/api/v1/events/$EVENT_ID/posts" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List posts for event"
-
-    if [ -n "$POST_ID" ]; then
-        local update_post='{
-            "content": "Updated content from test"
-        }'
-        run_test "Update Post" "PUT" "/api/v1/events/$EVENT_ID/posts/$POST_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_post" "200" "Update post content"
-        run_test "Delete Post" "DELETE" "/api/v1/events/$EVENT_ID/posts/$POST_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete post"
-    fi
-
-    # Create an image post if we have uploaded media
-    if [ -n "$MEDIA_ID" ]; then
-        local create_image_post
-        create_image_post=$(cat <<EOF
-{
-  "type": "IMAGE",
-  "content": "Image post caption",
-  "mediaObjectId": "$MEDIA_ID"
-}
-EOF
-)
-        run_test "Create Image Post" "POST" "/api/v1/events/$EVENT_ID/posts" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$create_image_post" "200" "Create an image post referencing uploaded media object"
-        if [ -n "$IMAGE_POST_ID" ]; then
-            run_test "Get Image Post" "GET" "/api/v1/events/$EVENT_ID/posts/$IMAGE_POST_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get created image post"
-        fi
-    fi
-
-    # Now that post tests are done, we can delete the uploaded media object
-    if [ -n "$MEDIA_ID" ]; then
-        run_test "Delete Media" "DELETE" "/api/v1/events/$EVENT_ID/media/$MEDIA_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete media (after posts tests)"
-    fi
-
-    echo ""
-    
-    # Step 8: Notification Tests
-    echo -e "${CYAN}🔔 Step 8: Notification Tests${NC}"
+    # Step 7: Notification Tests
+    echo -e "${CYAN}🔔 Step 7: Notification Tests${NC}"
     echo "==============================="
     
     # Notification Settings Tests
@@ -1478,8 +1418,8 @@ EOF
     run_test "Delete Event Reminder" "DELETE" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete event reminder"
     echo ""
     
-    # Step 9: Clean up test data
-    echo -e "${CYAN}🧹 Step 9: Clean Up Test Data${NC}"
+    # Step 8: Clean up test data
+    echo -e "${CYAN}🧹 Step 8: Clean Up Test Data${NC}"
     echo "==============================="
     
     if [ -n "$EVENT_ID" ]; then

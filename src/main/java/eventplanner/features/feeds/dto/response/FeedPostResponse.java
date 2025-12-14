@@ -1,4 +1,4 @@
-package eventplanner.features.event.dto.response;
+package eventplanner.features.feeds.dto.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
@@ -9,15 +9,14 @@ import java.util.UUID;
 
 @Getter
 @Setter
-@Schema(description = "Event post response")
-public class EventPostResponse {
-
+@Schema(description = "Feed post response")
+public class FeedPostResponse {
     private UUID id;
     private UUID eventId;
     private String type;
     private String content;
 
-    @Schema(description = "Stored object id for media")
+    @Schema(description = "Stored object id for media (if present)")
     private UUID mediaObjectId;
 
     @Schema(description = "Presigned download URL for media (if present)")

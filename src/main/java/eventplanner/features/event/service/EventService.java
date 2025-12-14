@@ -17,8 +17,8 @@ import eventplanner.common.domain.enums.RoleName;
 import eventplanner.features.event.dto.request.EventFeedRequest;
 import eventplanner.features.event.dto.response.EventFeedResponse;
 import eventplanner.features.event.dto.response.FeedPost;
-import eventplanner.features.event.entity.EventPost;
-import eventplanner.features.event.repository.EventPostRepository;
+import eventplanner.features.feeds.entity.EventFeedPost;
+import eventplanner.features.feeds.repository.FeedPostRepository;
 import eventplanner.features.event.repository.EventStoredObjectRepository;
 import eventplanner.common.storage.s3.services.S3StorageService;
 import eventplanner.security.auth.entity.UserAccount;
@@ -60,7 +60,7 @@ public class EventService {
     private EventRoleRepository eventRoleRepository;
     
     @Autowired(required = false)
-    private EventPostRepository eventPostRepository;
+    private FeedPostRepository eventPostRepository;
 
     @Autowired(required = false)
     private EventStoredObjectRepository eventStoredObjectRepository;
@@ -1177,15 +1177,15 @@ public class EventService {
     private List<FeedPost> aggregateAllFeedPosts(Event event, UserPrincipal user, EventFeedRequest request) {
         List<FeedPost> posts = new ArrayList<>();
 
-        // Internal app posts (EventPost)
+        // Internal app posts (Feeds)
         if (eventPostRepository != null) {
-            List<EventPost> eventPosts = eventPostRepository.findByEventIdOrderByCreatedAtDesc(event.getId());
+            List<EventFeedPost> eventPosts = eventPostRepository.findByEventIdOrderByCreatedAtDesc(event.getId());
 
             // Fetch authors in one shot (no stubs)
             Map<java.util.UUID, UserAccount> authorsById = Map.of();
             if (userAccountRepository != null) {
                 Set<java.util.UUID> authorIds = eventPosts.stream()
-                        .map(EventPost::getCreatedBy)
+                        .map(EventFeedPost::getCreatedBy)
                         .filter(java.util.Objects::nonNull)
                         .collect(Collectors.toSet());
                 if (!authorIds.isEmpty()) {
@@ -1194,7 +1194,7 @@ public class EventService {
                 }
             }
 
-            for (EventPost p : eventPosts) {
+            for (EventFeedPost p : eventPosts) {
                 FeedPost fp = new FeedPost();
                 fp.setId(p.getId());
                 fp.setType(p.getPostType() != null ? p.getPostType().name() : "TEXT");

@@ -1,4 +1,4 @@
-package eventplanner.features.event.entity;
+package eventplanner.features.feeds.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
 import jakarta.persistence.Column;
@@ -19,7 +19,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-public class EventPost extends BaseEntity {
+public class EventFeedPost extends BaseEntity {
 
     public enum PostType {
         TEXT,
