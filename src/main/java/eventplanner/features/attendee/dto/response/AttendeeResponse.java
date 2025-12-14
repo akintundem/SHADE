@@ -1,7 +1,7 @@
 package eventplanner.features.attendee.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import eventplanner.features.attendee.entity.AttendeeStatus;
+import eventplanner.features.attendee.entity.Attendee;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -12,7 +12,6 @@ import java.util.UUID;
 
 /**
  * Sanitized attendee response that doesn't leak internal JPA fields
- * Includes consent flags and privacy controls
  */
 @Data
 @Builder
@@ -23,20 +22,13 @@ public class AttendeeResponse {
     
     private UUID id;
     private UUID eventId;
+    private UUID userId; // User account ID if attendee is linked to a user in the platform
     private String name;
-    
-    // Contact information - only included if consent given
     private String email;
-    private String phone;
     
     // Status information
-    private AttendeeStatus rsvpStatus;
+    private Attendee.Status rsvpStatus;
     private LocalDateTime checkedInAt;
-    
-    // Consent flags (for privacy compliance)
-    private Boolean emailConsent;
-    private Boolean smsConsent;
-    private Boolean dataProcessingConsent;
     
     // Metadata
     private LocalDateTime createdAt;

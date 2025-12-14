@@ -2,7 +2,6 @@ package eventplanner.features.attendee.service;
 
 import eventplanner.features.attendee.dto.response.AttendeeResponse;
 import eventplanner.features.attendee.entity.Attendee;
-import eventplanner.features.attendee.entity.AttendeeStatus;
 import eventplanner.features.attendee.repository.AttendeeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -97,7 +96,7 @@ public class AttendeeService {
      * List attendees filtered by status with pagination
      */
     @Transactional(readOnly = true)
-    public Page<Attendee> listByEventAndStatus(UUID eventId, AttendeeStatus status, Pageable pageable) {
+    public Page<Attendee> listByEventAndStatus(UUID eventId, Attendee.Status status, Pageable pageable) {
         return repository.findByEventIdAndRsvpStatus(eventId, status, pageable);
     }
     
@@ -105,7 +104,7 @@ public class AttendeeService {
      * List attendees filtered by multiple statuses with pagination
      */
     @Transactional(readOnly = true)
-    public Page<Attendee> listByEventAndStatuses(UUID eventId, List<AttendeeStatus> statuses, Pageable pageable) {
+    public Page<Attendee> listByEventAndStatuses(UUID eventId, List<Attendee.Status> statuses, Pageable pageable) {
         return repository.findByEventIdAndRsvpStatusIn(eventId, statuses, pageable);
     }
     
@@ -137,20 +136,11 @@ public class AttendeeService {
             if (updatedAttendee.getEmail() != null) {
                 existing.setEmail(updatedAttendee.getEmail());
             }
-            if (updatedAttendee.getPhone() != null) {
-                existing.setPhone(updatedAttendee.getPhone());
-            }
             if (updatedAttendee.getRsvpStatus() != null) {
                 existing.setRsvpStatus(updatedAttendee.getRsvpStatus());
             }
-            if (updatedAttendee.getEmailConsent() != null) {
-                existing.setEmailConsent(updatedAttendee.getEmailConsent());
-            }
-            if (updatedAttendee.getSmsConsent() != null) {
-                existing.setSmsConsent(updatedAttendee.getSmsConsent());
-            }
-            if (updatedAttendee.getDataProcessingConsent() != null) {
-                existing.setDataProcessingConsent(updatedAttendee.getDataProcessingConsent());
+            if (updatedAttendee.getUser() != null) {
+                existing.setUser(updatedAttendee.getUser());
             }
             
             Attendee saved = repository.save(existing);
@@ -162,11 +152,11 @@ public class AttendeeService {
     /**
      * Update RSVP status
      */
-    public Optional<Attendee> updateRsvp(UUID attendeeId, AttendeeStatus status) {
+    public Optional<Attendee> updateRsvp(UUID attendeeId, Attendee.Status status) {
         validateStatus(status);
         
         return repository.findById(attendeeId).map(a -> {
-            AttendeeStatus oldStatus = a.getRsvpStatus();
+            Attendee.Status oldStatus = a.getRsvpStatus();
             a.setRsvpStatus(status);
             Attendee saved = repository.save(a);
             log.info("Updated RSVP status for attendee {} from {} to {}", attendeeId, oldStatus, status);
@@ -227,14 +217,11 @@ public class AttendeeService {
         return AttendeeResponse.builder()
                 .id(attendee.getId())
                 .eventId(attendee.getEvent() != null ? attendee.getEvent().getId() : null)
+                .userId(attendee.getUser() != null ? attendee.getUser().getId() : null)
                 .name(attendee.getName())
                 .email(attendee.getEmail())
-                .phone(attendee.getPhone())
                 .rsvpStatus(attendee.getRsvpStatus())
                 .checkedInAt(attendee.getCheckedInAt())
-                .emailConsent(attendee.getEmailConsent())
-                .smsConsent(attendee.getSmsConsent())
-                .dataProcessingConsent(attendee.getDataProcessingConsent())
                 .createdAt(attendee.getCreatedAt())
                 .updatedAt(attendee.getUpdatedAt())
                 .build();
@@ -273,7 +260,7 @@ public class AttendeeService {
         }
     }
     
-    private void validateStatus(AttendeeStatus status) {
+    private void validateStatus(Attendee.Status status) {
         if (status == null) {
             throw new IllegalArgumentException("Status is required");
         }

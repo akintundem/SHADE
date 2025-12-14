@@ -1,6 +1,7 @@
 package eventplanner.features.attendee.entity;
 
 import eventplanner.features.event.entity.Event;
+import eventplanner.security.auth.entity.UserAccount;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -12,12 +13,13 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Attendee entity for event participants
- * Uses AttendeeStatus enum for type-safe RSVP status handling
+ * Attendee entity for event participants.
+ * Can be linked to a UserAccount (if user is in the platform) or just email (if external user).
  */
 @Entity
 @Table(name = "attendees", indexes = {
     @Index(name = "idx_attendees_event_id", columnList = "event_id"),
+    @Index(name = "idx_attendees_user_id", columnList = "user_id"),
     @Index(name = "idx_attendees_email", columnList = "email"),
     @Index(name = "idx_attendees_rsvp_status", columnList = "rsvp_status")
 })
@@ -25,6 +27,63 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Attendee {
+
+    /**
+     * RSVP status enumeration for attendees.
+     * Maps to the attendees table rsvp_status column
+     */
+    public enum Status {
+        PENDING("pending"),
+        CONFIRMED("confirmed"),
+        DECLINED("declined"),
+        TENTATIVE("tentative"),
+        NO_SHOW("no_show");
+        
+        private final String value;
+        
+        Status(String value) {
+            this.value = value;
+        }
+        
+        public String getValue() {
+            return value;
+        }
+        
+        /**
+         * Parse from string value (case-insensitive)
+         */
+        public static Status fromString(String value) {
+            if (value == null) {
+                return PENDING;
+            }
+            
+            String normalized = value.toLowerCase().trim();
+            for (Status status : Status.values()) {
+                if (status.value.equals(normalized) || status.name().equalsIgnoreCase(normalized)) {
+                    return status;
+                }
+            }
+            
+            throw new IllegalArgumentException("Invalid attendee status: " + value + 
+                ". Valid values are: pending, confirmed, declined, tentative, no_show");
+        }
+        
+        /**
+         * Check if a string is a valid status
+         */
+        public static boolean isValid(String value) {
+            if (value == null) {
+                return false;
+            }
+            
+            try {
+                fromString(value);
+                return true;
+            } catch (IllegalArgumentException e) {
+                return false;
+            }
+        }
+    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -38,31 +97,26 @@ public class Attendee {
     @JoinColumn(name = "event_id", nullable = false)
     private Event event;
 
+    /**
+     * Many-to-one relationship with the user account (optional - null if attendee is not in the platform).
+     * If user is provided, name and email will be auto-filled from user account.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private UserAccount user;
+
     @Column(name = "name", nullable = false)
     private String name;
 
     @Column(name = "email")
     private String email;
 
-    @Column(name = "phone")
-    private String phone;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "rsvp_status")
-    private AttendeeStatus rsvpStatus;
+    private Status rsvpStatus;
 
     @Column(name = "checked_in_at")
     private LocalDateTime checkedInAt;
-    
-    // Consent flags for privacy compliance (GDPR, etc.)
-    @Column(name = "email_consent")
-    private Boolean emailConsent = false;
-    
-    @Column(name = "sms_consent")
-    private Boolean smsConsent = false;
-    
-    @Column(name = "data_processing_consent")
-    private Boolean dataProcessingConsent = false;
     
     // Audit timestamps
     @CreationTimestamp
@@ -76,12 +130,8 @@ public class Attendee {
     @PrePersist
     public void prePersist() {
         if (rsvpStatus == null) {
-            rsvpStatus = AttendeeStatus.PENDING;
+            rsvpStatus = Status.PENDING;
         }
-        // Default consent to false if not set
-        if (emailConsent == null) emailConsent = false;
-        if (smsConsent == null) smsConsent = false;
-        if (dataProcessingConsent == null) dataProcessingConsent = false;
     }
     
     /**

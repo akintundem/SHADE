@@ -1,24 +1,20 @@
 package eventplanner.features.attendee.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.features.attendee.dto.BulkAttendeeCreateRequest;
-import eventplanner.features.attendee.dto.request.SendInvitesRequest;
 import eventplanner.features.attendee.dto.request.UpdateAttendeeRequest;
 import eventplanner.features.attendee.dto.response.AttendeeResponse;
-import eventplanner.features.attendee.dto.response.SendInvitesResponse;
 import eventplanner.features.attendee.entity.Attendee;
-import eventplanner.features.attendee.entity.AttendeeStatus;
 import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.common.audit.service.AuditLogService;
 import eventplanner.common.domain.enums.ActionType;
-import eventplanner.features.attendee.service.AttendeeIdempotencyService;
-import eventplanner.features.attendee.service.AttendeeInvitationService;
 import eventplanner.features.attendee.service.AttendeeService;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -39,6 +35,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -55,48 +56,12 @@ public class AttendeeController {
 
 	private final AttendeeService attendeeService;
 	private final AuthorizationService authorizationService;
-	private final AttendeeInvitationService attendeeInvitationService;
 	private final AttendeeRepository attendeeRepository;
 	private final EventRepository eventRepository;
+	private final UserAccountRepository userAccountRepository;
 	private final AuditLogService auditLogService;
-	private final AttendeeIdempotencyService idempotencyService;
-	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	// ==================== Individual Attendee CRUD Operations ====================
-
-	@GetMapping("/{id}")
-	@Operation(summary = "Get attendee by ID", description = "Retrieve a single attendee by their ID")
-	@RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"attendance_id=#id"})
-	public ResponseEntity<AttendeeResponse> getAttendee(
-			@PathVariable String id,
-			@AuthenticationPrincipal UserPrincipal principal) {
-		try {
-			UUID attendeeId = UUID.fromString(id);
-			
-			Optional<Attendee> attendeeOpt = attendeeService.getById(attendeeId);
-			if (attendeeOpt.isEmpty()) {
-				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Attendee not found: " + id);
-			}
-			
-			Attendee attendee = attendeeOpt.get();
-			
-			// Verify user can access the event this attendee belongs to
-			if (attendee.getEvent() == null) {
-				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for attendee");
-			}
-			UUID eventId = attendee.getEvent().getId();
-			if (!authorizationService.canAccessEvent(principal, eventId)) {
-				throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-					"Access denied to event: " + eventId);
-			}
-			
-			AttendeeResponse response = attendeeService.toResponse(attendee);
-			return ResponseEntity.ok(response);
-			
-		} catch (IllegalArgumentException e) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid attendee ID format");
-		}
-	}
 
 	@PutMapping("/{id}")
 	@Operation(summary = "Update attendee", description = "Update attendee information")
@@ -131,15 +96,11 @@ public class AttendeeController {
 			Attendee updates = new Attendee();
 			updates.setName(request.getName());
 			updates.setEmail(request.getEmail());
-			updates.setPhone(request.getPhone());
 			updates.setRsvpStatus(request.getRsvpStatus());
-			updates.setEmailConsent(request.getEmailConsent());
-			updates.setSmsConsent(request.getSmsConsent());
-			updates.setDataProcessingConsent(request.getDataProcessingConsent());
 			
 			// Store old value for audit
-			String oldValue = String.format("name=%s,email=%s,phone=%s,status=%s", 
-				existing.getName(), existing.getEmail(), existing.getPhone(), existing.getRsvpStatus());
+			String oldValue = String.format("name=%s,email=%s,status=%s", 
+				existing.getName(), existing.getEmail(), existing.getRsvpStatus());
 			
 			// Update
 			Optional<Attendee> updated = attendeeService.update(attendeeId, updates);
@@ -150,8 +111,8 @@ public class AttendeeController {
 			Attendee result = updated.get();
 			
 			// Store new value for audit
-			String newValue = String.format("name=%s,email=%s,phone=%s,status=%s", 
-				result.getName(), result.getEmail(), result.getPhone(), result.getRsvpStatus());
+			String newValue = String.format("name=%s,email=%s,status=%s", 
+				result.getName(), result.getEmail(), result.getRsvpStatus());
 			
 			// Audit log
 			auditLogService.builder()
@@ -233,10 +194,10 @@ public class AttendeeController {
 		}
 	}
 
-	// ==================== Bulk Operations ====================
+	// ==================== Add Attendees (Single or Bulk) ====================
 
 	@PostMapping
-	@Operation(summary = "Add attendees", description = "Bulk add attendees to a single event. Returns DTOs instead of entities.")
+	@Operation(summary = "Add attendees", description = "Add one or more attendees to an event. Supports adding by userId (from directory) or email. Works for both single and multiple attendees.")
 	@RequiresPermission(value = RbacPermissions.ATTENDEE_CREATE, resources = {"event_id=#request.eventId"})
 	public ResponseEntity<List<AttendeeResponse>> add(
 			@Valid @RequestBody BulkAttendeeCreateRequest request,
@@ -263,13 +224,54 @@ public class AttendeeController {
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
 				"Event not found: " + request.getEventId()));
 		
-		// Map attendee info to Attendee entities
+		// Map attendee info to Attendee entities, resolving userId or email
 		List<Attendee> toSave = request.getAttendees().stream().map(attendeeInfo -> {
 			Attendee attendee = new Attendee();
 			attendee.setEvent(event);
-			attendee.setName(attendeeInfo.getName());
-			attendee.setEmail(attendeeInfo.getEmail());
-			attendee.setPhone(attendeeInfo.getPhone());
+			
+			// If userId is provided, fetch user account and auto-fill info
+			if (attendeeInfo.getUserId() != null) {
+				UserAccount user = userAccountRepository.findById(attendeeInfo.getUserId())
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+						"User not found with userId: " + attendeeInfo.getUserId()));
+				
+				// Set user relationship
+				attendee.setUser(user);
+				
+				// Auto-fill from user account (can be overridden)
+				attendee.setName(attendeeInfo.getName() != null && !attendeeInfo.getName().trim().isEmpty() 
+					? attendeeInfo.getName() : user.getName());
+				attendee.setEmail(attendeeInfo.getEmail() != null && !attendeeInfo.getEmail().trim().isEmpty()
+					? attendeeInfo.getEmail() : user.getEmail());
+			} else {
+				// Use email - validate that either userId or email is provided
+				if (attendeeInfo.getEmail() == null || attendeeInfo.getEmail().trim().isEmpty()) {
+					throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+						"Either userId or email must be provided for each attendee");
+				}
+				
+				// Try to resolve userId from email (optional - if user exists, link them)
+				Optional<UserAccount> userByEmail = userAccountRepository.findByEmailIgnoreCase(attendeeInfo.getEmail());
+				if (userByEmail.isPresent()) {
+					UserAccount user = userByEmail.get();
+					// Link user account
+					attendee.setUser(user);
+					// Auto-fill name if not provided
+					attendee.setName(attendeeInfo.getName() != null && !attendeeInfo.getName().trim().isEmpty()
+						? attendeeInfo.getName() : user.getName());
+				} else {
+					// User doesn't exist - use provided info, no user link
+					attendee.setUser(null);
+					if (attendeeInfo.getName() == null || attendeeInfo.getName().trim().isEmpty()) {
+						throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+							"Name is required when email is provided and user doesn't exist in directory");
+					}
+					attendee.setName(attendeeInfo.getName());
+				}
+				
+				attendee.setEmail(attendeeInfo.getEmail());
+			}
+			
 			return attendee;
 		}).collect(Collectors.toList());
 		
@@ -282,9 +284,9 @@ public class AttendeeController {
 		auditLogService.builder()
 			.domain("ATTENDEE")
 			.entityType("Attendee")
-			.action(ActionType.BULK_IMPORT)
+			.action(saved.size() == 1 ? ActionType.CREATE : ActionType.BULK_IMPORT)
 			.user(principal.getUser().getId(), null, principal.getUser().getEmail())
-			.description(String.format("Bulk imported %d attendees", saved.size()))
+			.description(String.format(saved.size() == 1 ? "Added attendee" : "Bulk imported %d attendees", saved.size()))
 			.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), null)
 			.eventId(request.getEventId())
 			.metadata(bulkMetadata)
@@ -295,34 +297,110 @@ public class AttendeeController {
 		return ResponseEntity.ok(responses);
 	}
 
-	// ==================== List & Filter Operations ====================
+	// ==================== Unified List/Filter/Get Operations ====================
 
-	@GetMapping("/event/{eventId}")
-	@Operation(summary = "List attendees by event with pagination and filtering", 
-		description = "Retrieve attendees for an event with support for pagination, status filters, search, and sorting")
-	@RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId"})
-	public ResponseEntity<Page<AttendeeResponse>> listByEvent(
-			@PathVariable String eventId,
+	@GetMapping
+	@Operation(summary = "Get, list, or filter attendees", 
+		description = "Unified endpoint for retrieving attendees. Supports: single ID (?id=uuid), multiple IDs (?ids=uuid1,uuid2), event filtering (?eventId=uuid), and advanced filtering with pagination. Always returns a list.")
+	@RequiresPermission(value = RbacPermissions.ATTENDEE_READ)
+	public ResponseEntity<List<AttendeeResponse>> getAttendees(
+			@RequestParam(required = false) @Parameter(description = "Single attendee ID") 
+				String id,
+			@RequestParam(required = false) @Parameter(description = "Multiple attendee IDs (comma-separated)") 
+				String ids,
+			@RequestParam(required = false) @Parameter(description = "Event ID for filtering") 
+				String eventId,
 			@RequestParam(required = false) @Parameter(description = "Filter by RSVP status (comma-separated): PENDING,CONFIRMED,DECLINED,TENTATIVE,NO_SHOW") 
 				String status,
 			@RequestParam(required = false) @Parameter(description = "Filter by check-in status: true (checked in) or false (not checked in)") 
 				Boolean checkedIn,
 			@RequestParam(required = false) @Parameter(description = "Search by name or email") 
 				String search,
-			@RequestParam(defaultValue = "0") @Parameter(description = "Page number (0-indexed)") 
+			@RequestParam(required = false) @Parameter(description = "Filter by user ID (from directory)") 
+				String userId,
+			@RequestParam(required = false) @Parameter(description = "Filter by email") 
+				String email,
+			@RequestParam(defaultValue = "0") @Parameter(description = "Page number (0-indexed, only used with eventId)") 
 				int page,
-			@RequestParam(defaultValue = "20") @Parameter(description = "Page size") 
+			@RequestParam(defaultValue = "20") @Parameter(description = "Page size (only used with eventId)") 
 				int size,
-			@RequestParam(defaultValue = "name") @Parameter(description = "Sort field: name, email, rsvpStatus, checkedInAt, createdAt") 
+			@RequestParam(defaultValue = "name") @Parameter(description = "Sort field: name, email, rsvpStatus, checkedInAt, createdAt (only used with eventId)") 
 				String sortBy,
-			@RequestParam(defaultValue = "ASC") @Parameter(description = "Sort direction: ASC or DESC") 
+			@RequestParam(defaultValue = "ASC") @Parameter(description = "Sort direction: ASC or DESC (only used with eventId)") 
 				String sortDirection,
 			@AuthenticationPrincipal UserPrincipal principal) {
 		try {
-			UUID uuid = UUID.fromString(eventId);
+			List<AttendeeResponse> responses;
+			
+			// Priority 1: Single ID lookup
+			if (StringUtils.hasText(id)) {
+				UUID attendeeId = UUID.fromString(id.trim());
+				Optional<Attendee> attendeeOpt = attendeeService.getById(attendeeId);
+				if (attendeeOpt.isEmpty()) {
+					throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Attendee not found: " + id);
+				}
+				
+				Attendee attendee = attendeeOpt.get();
+				
+				// Verify user can access the event
+				if (attendee.getEvent() == null) {
+					throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for attendee");
+				}
+				UUID eventUuid = attendee.getEvent().getId();
+				if (!authorizationService.canAccessEvent(principal, eventUuid)) {
+					throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+						"Access denied to event: " + eventUuid);
+				}
+				
+				responses = Collections.singletonList(attendeeService.toResponse(attendee));
+				return ResponseEntity.ok(responses);
+			}
+			
+			// Priority 2: Multiple IDs lookup
+			if (StringUtils.hasText(ids)) {
+				List<UUID> attendeeIds = Arrays.stream(ids.split(","))
+					.map(String::trim)
+					.filter(StringUtils::hasText)
+					.map(UUID::fromString)
+					.collect(Collectors.toList());
+				
+				if (attendeeIds.isEmpty()) {
+					throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No valid attendee IDs provided");
+				}
+				
+				List<Attendee> attendees = attendeeIds.stream()
+					.map(attendeeService::getById)
+					.filter(Optional::isPresent)
+					.map(Optional::get)
+					.collect(Collectors.toList());
+				
+				// Verify access to all events
+				Set<UUID> eventIds = attendees.stream()
+					.map(a -> a.getEvent() != null ? a.getEvent().getId() : null)
+					.filter(Objects::nonNull)
+					.collect(Collectors.toSet());
+				
+				for (UUID eventUuid : eventIds) {
+					if (!authorizationService.canAccessEvent(principal, eventUuid)) {
+						throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+							"Access denied to event: " + eventUuid);
+					}
+				}
+				
+				responses = attendeeService.toResponseList(attendees);
+				return ResponseEntity.ok(responses);
+			}
+			
+			// Priority 3: Event-based filtering (requires eventId)
+			if (!StringUtils.hasText(eventId)) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+					"Either 'id', 'ids', or 'eventId' parameter must be provided");
+			}
+			
+			UUID eventUuid = UUID.fromString(eventId.trim());
 			
 			// Verify event access
-			if (!authorizationService.canAccessEvent(principal, uuid)) {
+			if (!authorizationService.canAccessEvent(principal, eventUuid)) {
 				throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
 					"Access denied to event: " + eventId);
 			}
@@ -341,321 +419,66 @@ public class AttendeeController {
 			
 			// Apply search if provided
 			if (StringUtils.hasText(search)) {
-				attendees = attendeeService.searchAttendees(uuid, search.trim(), pageable);
+				attendees = attendeeService.searchAttendees(eventUuid, search.trim(), pageable);
 			}
 			// Apply check-in filter if provided
 			else if (checkedIn != null) {
 				if (checkedIn) {
-					attendees = attendeeService.listCheckedIn(uuid, pageable);
+					attendees = attendeeService.listCheckedIn(eventUuid, pageable);
 				} else {
-					attendees = attendeeRepository.findNotCheckedInByEventId(uuid, pageable);
+					attendees = attendeeRepository.findNotCheckedInByEventId(eventUuid, pageable);
 				}
 			}
 			// Apply status filter if provided
 			else if (StringUtils.hasText(status)) {
-				List<AttendeeStatus> statuses = parseStatuses(status);
+				List<Attendee.Status> statuses = parseStatuses(status);
 				if (statuses.isEmpty()) {
 					throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status values");
 				}
-				attendees = attendeeService.listByEventAndStatuses(uuid, statuses, pageable);
+				attendees = attendeeService.listByEventAndStatuses(eventUuid, statuses, pageable);
+			}
+			// Apply userId filter if provided
+			else if (StringUtils.hasText(userId)) {
+				UUID userUuid = UUID.fromString(userId.trim());
+				Optional<Attendee> attendeeOpt = attendeeRepository.findByEventIdAndUserId(eventUuid, userUuid);
+				if (attendeeOpt.isPresent()) {
+					attendees = new org.springframework.data.domain.PageImpl<>(
+						Collections.singletonList(attendeeOpt.get()), 
+						pageable, 
+						1
+					);
+				} else {
+					attendees = Page.empty(pageable);
+				}
+			}
+			// Apply email filter if provided
+			else if (StringUtils.hasText(email)) {
+				Optional<Attendee> attendeeOpt = attendeeRepository.findByEventIdAndEmail(eventUuid, email.trim());
+				if (attendeeOpt.isPresent()) {
+					attendees = new org.springframework.data.domain.PageImpl<>(
+						Collections.singletonList(attendeeOpt.get()), 
+						pageable, 
+						1
+					);
+				} else {
+					attendees = Page.empty(pageable);
+				}
 			}
 			// No filters - return all
 			else {
-				attendees = attendeeService.listByEventPaginated(uuid, pageable);
+				attendees = attendeeService.listByEventPaginated(eventUuid, pageable);
 			}
 			
 			// Convert to DTOs
-			Page<AttendeeResponse> responses = attendeeService.toResponsePage(attendees);
+			responses = attendeeService.toResponseList(attendees.getContent());
 			return ResponseEntity.ok(responses);
 			
 		} catch (IllegalArgumentException e) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid event ID or parameters: " + e.getMessage());
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid parameters: " + e.getMessage());
 		}
 	}
 
-	// ==================== RSVP & Check-in Operations ====================
 
-	@PatchMapping("/events/{eventId}/attendees/{attendeeId}/rsvp")
-	@Operation(summary = "Update RSVP status", description = "Update attendee RSVP status using validated enum")
-	@RequiresPermission(value = RbacPermissions.ATTENDEE_UPDATE, resources = {"attendance_id=#attendeeId", "event_id=#eventId"})
-	public ResponseEntity<AttendeeResponse> updateRsvp(
-			@PathVariable String eventId,
-			@PathVariable String attendeeId, 
-			@RequestParam @Parameter(description = "RSVP status: PENDING, CONFIRMED, DECLINED, TENTATIVE, NO_SHOW") String status,
-			@AuthenticationPrincipal UserPrincipal principal,
-			HttpServletRequest httpRequest) {
-		try {
-			UUID attendeeUuid = UUID.fromString(attendeeId);
-			UUID eventUuid = UUID.fromString(eventId);
-			
-			// Validate and parse status
-			if (!AttendeeStatus.isValid(status)) {
-				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-					"Invalid status. Valid values are: PENDING, CONFIRMED, DECLINED, TENTATIVE, NO_SHOW");
-			}
-			AttendeeStatus attendeeStatus = AttendeeStatus.fromString(status);
-			
-			// Verify attendee exists and belongs to the specified event
-			Attendee attendee = attendeeRepository.findById(attendeeUuid)
-				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
-					"Attendee not found: " + attendeeId));
-			
-			// Verify attendee belongs to the specified event
-			if (attendee.getEvent() == null || !eventUuid.equals(attendee.getEvent().getId())) {
-				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-					"Attendee does not belong to the specified event");
-			}
-			
-			AttendeeStatus oldStatus = attendee.getRsvpStatus();
-			
-			Optional<Attendee> updated = attendeeService.updateRsvp(attendeeUuid, attendeeStatus);
-			if (updated.isEmpty()) {
-				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Attendee not found: " + attendeeId);
-			}
-			
-			// Audit log
-			auditLogService.builder()
-				.domain("ATTENDEE")
-				.entityType("Attendee")
-				.entityId(attendeeUuid)
-				.action(ActionType.RSVP_UPDATED)
-				.user(principal.getUser().getId(), null, principal.getUser().getEmail())
-				.description("RSVP status updated")
-				.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), null)
-				.eventId(eventUuid)
-				.oldValue(oldStatus != null ? oldStatus.name() : null)
-				.newValue(attendeeStatus.name())
-				.log();
-			
-			AttendeeResponse response = attendeeService.toResponse(updated.get());
-			return ResponseEntity.ok(response);
-			
-		} catch (IllegalArgumentException e) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-		}
-	}
-
-	@PostMapping("/events/{eventId}/attendees/{attendeeId}/check-in")
-	@Operation(summary = "Check-in attendee", description = "Check-in attendee with idempotency support")
-	@RequiresPermission(value = RbacPermissions.ATTENDEE_CHECKIN, resources = {"attendance_id=#attendeeId", "event_id=#eventId"})
-	public ResponseEntity<AttendeeResponse> checkIn(
-			@PathVariable String eventId,
-			@PathVariable String attendeeId,
-			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-			@RequestHeader(value = "X-Device-ID", required = false) String deviceId,
-			@AuthenticationPrincipal UserPrincipal principal,
-			HttpServletRequest httpRequest) {
-		try {
-			UUID attendeeUuid = UUID.fromString(attendeeId);
-			UUID eventUuid = UUID.fromString(eventId);
-			
-			// Check idempotency - return cached result if available
-			if (StringUtils.hasText(idempotencyKey)) {
-				Optional<String> cachedResult = idempotencyService.getProcessedResult(idempotencyKey);
-				if (cachedResult.isPresent()) {
-					AttendeeResponse cached = objectMapper.readValue(cachedResult.get(), AttendeeResponse.class);
-					return ResponseEntity.ok()
-						.header("X-Idempotency-Replay", "true")
-						.body(cached);
-				}
-				
-				// Mark as processing
-				if (!idempotencyService.markAsProcessing(idempotencyKey)) {
-					throw new ResponseStatusException(HttpStatus.CONFLICT, 
-						"Check-in already in progress. Please wait.");
-				}
-			}
-			
-			try {
-				// Verify attendee exists and belongs to the specified event
-				Attendee attendee = attendeeRepository.findById(attendeeUuid)
-					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
-						"Attendee not found: " + attendeeId));
-				
-			// Verify attendee belongs to the specified event
-			if (attendee.getEvent() == null || !eventUuid.equals(attendee.getEvent().getId())) {
-				throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-					"Attendee does not belong to the specified event");
-				}
-				
-				Optional<Attendee> checkedIn = attendeeService.checkIn(attendeeUuid);
-				if (checkedIn.isEmpty()) {
-					throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Attendee not found: " + attendeeId);
-				}
-				
-				Attendee result = checkedIn.get();
-				
-				// Audit log with idempotency key and device
-				Map<String, Object> metadata = new HashMap<>();
-				metadata.put("attendeeName", result.getName());
-				metadata.put("attendeeEmail", result.getEmail());
-				
-				auditLogService.builder()
-					.domain("ATTENDEE")
-					.entityType("Attendee")
-					.entityId(attendeeUuid)
-					.action(ActionType.CHECK_IN)
-					.user(principal.getUser().getId(), null, principal.getUser().getEmail())
-					.description("Attendee checked in")
-					.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), deviceId)
-					.eventId(eventUuid)
-					.idempotencyKey(idempotencyKey)
-					.metadata(metadata)
-					.log();
-				
-				AttendeeResponse response = attendeeService.toResponse(result);
-				
-				// Store result for idempotency
-				if (StringUtils.hasText(idempotencyKey)) {
-					try {
-						String resultJson = objectMapper.writeValueAsString(response);
-						idempotencyService.storeResult(idempotencyKey, resultJson);
-					} catch (Exception e) {
-						log.error("Failed to store idempotency result: {}", e.getMessage());
-					} finally {
-						idempotencyService.releaseProcessingLock(idempotencyKey);
-					}
-				}
-				
-				return ResponseEntity.ok(response);
-				
-			} catch (Exception e) {
-				// Release lock on error
-				if (StringUtils.hasText(idempotencyKey)) {
-					idempotencyService.releaseProcessingLock(idempotencyKey);
-				}
-				throw e;
-			}
-			
-		} catch (IllegalArgumentException e) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-		} catch (Exception e) {
-			log.error("Error during check-in: {}", e.getMessage(), e);
-			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error during check-in");
-		}
-	}
-
-	// ==================== Invitation Operations ====================
-
-	@PostMapping("/invites/send")
-	@Operation(summary = "Send invitations with idempotency", 
-		description = "Queues invitations to be sent asynchronously. Returns immediately with a queued status. Supports idempotency to prevent duplicate sends.")
-	@RequiresPermission(value = RbacPermissions.ATTENDEE_CREATE, resources = {"event_id=#request.eventId"})
-	public ResponseEntity<SendInvitesResponse> sendInvites(
-			@Valid @RequestBody SendInvitesRequest request,
-			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-			@RequestHeader(value = "X-Device-ID", required = false) String deviceId,
-			@AuthenticationPrincipal UserPrincipal principal,
-			HttpServletRequest httpRequest) {
-		
-		// Verify user can access the event
-		if (!authorizationService.canAccessEvent(principal, request.getEventId())) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-				"Access denied to event: " + request.getEventId());
-		}
-		
-		// Validate request
-		if (request.getAttendeeIds() == null || request.getAttendeeIds().isEmpty()) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-				"At least one attendee ID is required");
-		}
-		
-		// Validate list size to prevent abuse
-		if (request.getAttendeeIds().size() > 1000) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-				"Cannot send invitations to more than 1000 attendees at once");
-		}
-		
-		// Check idempotency - return cached result if available
-		if (StringUtils.hasText(idempotencyKey)) {
-			Optional<String> cachedResult = idempotencyService.getProcessedResult(idempotencyKey);
-			if (cachedResult.isPresent()) {
-				try {
-					SendInvitesResponse cached = objectMapper.readValue(cachedResult.get(), SendInvitesResponse.class);
-					return ResponseEntity.accepted()
-						.header("X-Idempotency-Replay", "true")
-						.body(cached);
-				} catch (Exception e) {
-					log.error("Failed to deserialize cached result: {}", e.getMessage());
-				}
-			}
-			
-			// Mark as processing
-			if (!idempotencyService.markAsProcessing(idempotencyKey)) {
-				throw new ResponseStatusException(HttpStatus.CONFLICT, 
-					"Invitation send already in progress. Please wait.");
-			}
-		}
-		
-		try {
-			// Queue invitations for async processing
-			boolean sendEmail = Boolean.TRUE.equals(request.getSendEmail());
-			boolean sendPush = Boolean.TRUE.equals(request.getSendPush());
-			
-			if (sendEmail || sendPush) {
-				// Start async processing - returns immediately
-				attendeeInvitationService.sendInvitationsAsync(
-					request.getEventId(),
-					request.getAttendeeIds(),
-					request.getCustomMessage(),
-					sendEmail,
-					sendPush
-				);
-			} else {
-				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-					"At least one notification method (email or push) must be enabled");
-			}
-			
-			// Audit log
-			Map<String, Object> metadata = new HashMap<>();
-			metadata.put("attendeeCount", request.getAttendeeIds().size());
-			metadata.put("sendEmail", sendEmail);
-			metadata.put("sendPush", sendPush);
-			
-			auditLogService.builder()
-				.domain("ATTENDEE")
-				.entityType("Attendee")
-				.action(ActionType.INVITATION_QUEUED)
-				.user(principal.getUser().getId(), null, principal.getUser().getEmail())
-				.description(String.format("Queued %d invitations", request.getAttendeeIds().size()))
-				.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), null)
-				.eventId(request.getEventId())
-				.idempotencyKey(idempotencyKey)
-				.metadata(metadata)
-				.log();
-			
-			// Return immediately with queued status
-			SendInvitesResponse response = new SendInvitesResponse();
-			response.setStatus("queued");
-			response.setQueuedCount(0); // Will be updated when processing completes
-			response.setFailedCount(0);
-			response.setQueuedAttendeeIds(new ArrayList<>());
-			response.setFailedAttendeeIds(new ArrayList<>());
-			response.setMessage(String.format("Invitations queued for processing: %d attendees", 
-				request.getAttendeeIds().size()));
-			
-			// Store result for idempotency
-			if (StringUtils.hasText(idempotencyKey)) {
-				try {
-					String resultJson = objectMapper.writeValueAsString(response);
-					idempotencyService.storeResult(idempotencyKey, resultJson);
-				} catch (Exception e) {
-					log.error("Failed to store idempotency result: {}", e.getMessage());
-				} finally {
-					idempotencyService.releaseProcessingLock(idempotencyKey);
-				}
-			}
-			
-			return ResponseEntity.accepted().body(response);
-			
-		} catch (Exception e) {
-			// Release lock on error
-			if (StringUtils.hasText(idempotencyKey)) {
-				idempotencyService.releaseProcessingLock(idempotencyKey);
-			}
-			throw e;
-		}
-	}
 
 	// ==================== Helper Methods ====================
 
@@ -677,18 +500,18 @@ public class AttendeeController {
 	/**
 	 * Parse comma-separated status values
 	 */
-	private List<AttendeeStatus> parseStatuses(String statusParam) {
+	private List<Attendee.Status> parseStatuses(String statusParam) {
 		if (!StringUtils.hasText(statusParam)) {
 			return Collections.emptyList();
 		}
 		
-		List<AttendeeStatus> statuses = new ArrayList<>();
+		List<Attendee.Status> statuses = new ArrayList<>();
 		String[] parts = statusParam.toUpperCase().split(",");
 		
 		for (String part : parts) {
 			String trimmed = part.trim();
-			if (AttendeeStatus.isValid(trimmed)) {
-				statuses.add(AttendeeStatus.fromString(trimmed));
+			if (Attendee.Status.isValid(trimmed)) {
+				statuses.add(Attendee.Status.fromString(trimmed));
 			} else {
 				log.warn("Invalid status value: {}", trimmed);
 			}

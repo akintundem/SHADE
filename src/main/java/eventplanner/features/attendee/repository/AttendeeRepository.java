@@ -1,7 +1,6 @@
 package eventplanner.features.attendee.repository;
 
 import eventplanner.features.attendee.entity.Attendee;
-import eventplanner.features.attendee.entity.AttendeeStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -32,15 +31,15 @@ public interface AttendeeRepository extends JpaRepository<Attendee, UUID> {
     
     // Filtering by status
     @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.rsvpStatus = :status")
-    List<Attendee> findByEventIdAndRsvpStatus(@Param("eventId") UUID eventId, @Param("status") AttendeeStatus status);
+    List<Attendee> findByEventIdAndRsvpStatus(@Param("eventId") UUID eventId, @Param("status") Attendee.Status status);
     
     @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.rsvpStatus = :status")
-    Page<Attendee> findByEventIdAndRsvpStatus(@Param("eventId") UUID eventId, @Param("status") AttendeeStatus status, Pageable pageable);
+    Page<Attendee> findByEventIdAndRsvpStatus(@Param("eventId") UUID eventId, @Param("status") Attendee.Status status, Pageable pageable);
     
     // Filtering by multiple statuses
     @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.rsvpStatus IN :statuses")
     Page<Attendee> findByEventIdAndRsvpStatusIn(@Param("eventId") UUID eventId, 
-                                                  @Param("statuses") List<AttendeeStatus> statuses, 
+                                                  @Param("statuses") List<Attendee.Status> statuses, 
                                                   Pageable pageable);
     
     // Check-in filtering
@@ -61,7 +60,7 @@ public interface AttendeeRepository extends JpaRepository<Attendee, UUID> {
     Long countByEventId(@Param("eventId") UUID eventId);
     
     @Query("SELECT COUNT(a) FROM Attendee a WHERE a.event.id = :eventId AND a.rsvpStatus = :status")
-    Long countByEventIdAndRsvpStatus(@Param("eventId") UUID eventId, @Param("status") AttendeeStatus status);
+    Long countByEventIdAndRsvpStatus(@Param("eventId") UUID eventId, @Param("status") Attendee.Status status);
     
     @Query("SELECT COUNT(a) FROM Attendee a WHERE a.event.id = :eventId AND a.checkedInAt IS NOT NULL")
     Long countCheckedInByEventId(@Param("eventId") UUID eventId);
@@ -72,6 +71,10 @@ public interface AttendeeRepository extends JpaRepository<Attendee, UUID> {
     
     @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.email IN :emails")
     List<Attendee> findByEventIdAndEmailIn(@Param("eventId") UUID eventId, @Param("emails") List<String> emails);
+    
+    // Find by user (for invite acceptance)
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.user.id = :userId")
+    Optional<Attendee> findByEventIdAndUserId(@Param("eventId") UUID eventId, @Param("userId") UUID userId);
 }
 
 
