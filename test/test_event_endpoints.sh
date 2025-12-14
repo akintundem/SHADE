@@ -1084,9 +1084,6 @@ EOF
     echo -e "${CYAN}🎯 Step 5: Event Management Tests${NC}"
     echo "=================================="
     
-    # My Events Summary
-    run_test "Get My Events" "GET" "/api/v1/events/my-events" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's events"
-
     # My Events via filters on the main list endpoint
     run_test "List My Owned Events (mine=true)" "GET" "/api/v1/events?mine=true" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List events owned by current user"
     run_test "List My Upcoming Owned Events" "GET" "/api/v1/events?mine=true&timeframe=UPCOMING" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List upcoming owned events"
@@ -1360,18 +1357,6 @@ EOF
     # Step 7: Collaboration Tests
     echo -e "${CYAN}🤝 Step 7: Collaboration Tests${NC}"
     echo "==============================="
-    
-    # Sharing Tests
-    run_test "Get Sharing Options" "GET" "/api/v1/events/$EVENT_ID/share" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event sharing options"
-    
-    local share_data='{
-        "channel": "email",
-        "recipients": ["test@example.com", "user@example.com"],
-        "message": "Check out this event!",
-        "includeEventDetails": true,
-        "includeQRCode": false
-    }'
-    run_test "Share Event" "POST" "/api/v1/events/$EVENT_ID/share" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$share_data" "200" "Share event via email"
     
     # Collaboration Tests
     run_test "Get Event Collaborators" "GET" "/api/v1/events/$EVENT_ID/collaborators" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event collaborators"

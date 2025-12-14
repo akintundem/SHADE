@@ -368,6 +368,52 @@ public class EventCrudController {
         }
     }
 
+    @PostMapping("/{id}/registration")
+    @RequiresPermission(value = RbacPermissions.EVENT_UPDATE, resources = {"event_id=#id"})
+    @Operation(summary = "Update registration state", description = "Open or close registration for an event. Use action=open or action=close.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Registration state updated successfully",
+                content = @Content(schema = @Schema(implementation = EventResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid request"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "403", description = "Forbidden"),
+        @ApiResponse(responseCode = "404", description = "Event not found")
+    })
+    public ResponseEntity<EventResponse> updateRegistrationState(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam("action") String action) {
+        try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            if (!StringUtils.hasText(action)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "action is required (open|close)");
+            }
+
+            // Verify ownership or admin access
+            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+                throw new AccessDeniedException("Only event owners or admins can update registration state");
+            }
+
+            String normalized = action.trim().toLowerCase(java.util.Locale.ROOT);
+            Event updatedEvent;
+            if ("open".equals(normalized)) {
+                updatedEvent = eventService.openRegistration(id);
+            } else if ("close".equals(normalized)) {
+                updatedEvent = eventService.closeRegistration(id);
+            } else {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid action. Use open or close.");
+            }
+
+            return ResponseEntity.ok(eventService.toResponse(updatedEvent));
+        } catch (AccessDeniedException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
+    }
+
     @PostMapping("/{id}/archive")
     @RequiresPermission(value = RbacPermissions.EVENT_DELETE, resources = {"event_id=#id"})
     @Operation(summary = "Archive event", description = "Archive an event (soft delete) with audit metadata. Use this instead of DELETE for recoverable removal.")

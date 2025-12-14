@@ -7,13 +7,10 @@ import eventplanner.features.event.dto.request.UpdateEventRequest;
 import eventplanner.features.event.dto.request.EventCreationRequest;
 import eventplanner.features.event.dto.request.EventUpdateRequest;
 import eventplanner.features.event.dto.response.EventResponse;
-import eventplanner.features.event.dto.response.UserEventRelationshipResponse;
-import eventplanner.features.event.dto.response.UserEventsSummaryResponse;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.Venue;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.common.domain.enums.EventStatus;
-import eventplanner.common.domain.enums.EventUserType;
 import eventplanner.common.domain.enums.EventScope;
 import eventplanner.security.authorization.domain.entity.EventRole;
 import eventplanner.common.domain.enums.RoleName;
@@ -834,42 +831,6 @@ public class EventService {
         return eventRepository.findPastEventsByOwner(userId, LocalDateTime.now());
     }
 
-    /**
-     * Get user's events summary
-     */
-    public UserEventsSummaryResponse getUserEventsSummary(UUID userId) {
-        UserEventsSummaryResponse summary = new UserEventsSummaryResponse();
-        
-        List<Event> ownedEvents = getEventsOwnedByUser(userId);
-        List<Event> upcomingEvents = getUpcomingEventsByUser(userId);
-        List<Event> pastEvents = getPastEventsByUser(userId);
-        
-        summary.setOwnedEvents(convertToUserEventRelationship(ownedEvents, EventUserType.ORGANIZER));
-        summary.setUpcomingEvents(convertToUserEventRelationship(upcomingEvents, EventUserType.ORGANIZER));
-        summary.setPastEvents(convertToUserEventRelationship(pastEvents, EventUserType.ORGANIZER));
-        
-        // For now, we'll set empty lists for other relationship types
-        // These would be populated by joining with EventUser/EventAttendance tables
-        summary.setAttendingEvents(new ArrayList<>());
-        summary.setOrganizingEvents(new ArrayList<>());
-        summary.setCoordinatingEvents(new ArrayList<>());
-        summary.setVolunteeringEvents(new ArrayList<>());
-        summary.setSpeakingEvents(new ArrayList<>());
-        summary.setSponsoringEvents(new ArrayList<>());
-        
-        // Set counts
-        summary.setTotalCount(ownedEvents.size());
-        summary.setOwnedCount(ownedEvents.size());
-        summary.setAttendingCount(0);
-        summary.setOrganizingCount(0);
-        summary.setCoordinatingCount(0);
-        summary.setVolunteeringCount(0);
-        summary.setSpeakingCount(0);
-        summary.setSponsoringCount(0);
-        
-        return summary;
-    }
-
     // ==================== EVENT STATUS & LIFECYCLE METHODS ====================
 
     /**
@@ -911,23 +872,6 @@ public class EventService {
         organizerRole.setAssignedAt(LocalDateTime.now());
         organizerRole.setNotes("Auto-assigned event owner");
         eventRoleRepository.save(organizerRole);
-    }
-
-    /**
-     * Publish event
-     */
-    /**
-     * Cancel event
-     */
-    public Event cancelEvent(UUID eventId) {
-        return updateEventStatus(eventId, EventStatus.CANCELLED);
-    }
-
-    /**
-     * Complete event
-     */
-    public Event completeEvent(UUID eventId) {
-        return updateEventStatus(eventId, EventStatus.COMPLETED);
     }
 
     /**
@@ -1076,41 +1020,6 @@ public class EventService {
         
         event.setIsPublic(false);
         return eventRepository.save(event);
-    }
-
-    // ==================== HELPER METHODS ====================
-
-    /**
-     * Convert events to user event relationship responses
-     */
-    private List<UserEventRelationshipResponse> convertToUserEventRelationship(List<Event> events, EventUserType userRole) {
-        return events.stream()
-                .map(event -> convertToUserEventRelationship(event, userRole))
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Convert single event to user event relationship response
-     */
-    private UserEventRelationshipResponse convertToUserEventRelationship(Event event, EventUserType userRole) {
-        UserEventRelationshipResponse response = new UserEventRelationshipResponse();
-        response.setEventId(event.getId());
-        response.setEventName(event.getName());
-        response.setEventDescription(event.getDescription());
-        response.setEventType(event.getEventType());
-        response.setEventStatus(event.getEventStatus());
-        response.setStartDateTime(event.getStartDateTime());
-        response.setEndDateTime(event.getEndDateTime());
-        response.setUserRole(userRole);
-        response.setIsOwner(userRole == EventUserType.ORGANIZER);
-        response.setCapacity(event.getCapacity());
-        response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
-        response.setIsPublic(event.getIsPublic());
-        response.setCoverImageUrl(event.getCoverImageUrl());
-        response.setEventWebsiteUrl(event.getEventWebsiteUrl());
-        response.setHashtag(event.getHashtag());
-        
-        return response;
     }
 
     // (capacity utilization / registration-open helpers removed with analytics endpoints)

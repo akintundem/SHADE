@@ -290,24 +290,6 @@ policy:
         owns_scope: false
         is_member: true
     -
-      name: event.cancel
-      scope: EVENT
-      resources: id
-      description: Cancel event
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
-      name: event.complete
-      scope: EVENT
-      resources: id
-      description: Mark event as completed
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
       name: event.coverimage.delete
       scope: EVENT
       resources: id
@@ -1004,15 +986,6 @@ policy:
         owns_scope: false
         is_member: false
     -
-      name: my.events.read
-      scope: SYSTEM
-      resources: null
-      description: List current user's events
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: false
-    -
       name: my.events.search
       scope: SYSTEM
       resources: null
@@ -1076,7 +1049,6 @@ policy:
         - user.update
         - vendor.create
         - vendor.read
-        - my.events.read
         - my.events.search
         - public.events.search
         - vendor.search
@@ -1105,7 +1077,6 @@ policy:
         - user.sessions.delete
         - user.search
         - user.update
-        - my.events.read
         - my.events.search
         - public.events.search
         - vendor.search
@@ -1141,8 +1112,6 @@ policy:
         - communication.send
         - event.assets.read
         - event.assets.upload
-        - event.cancel
-        - event.complete
         - event.coverimage.delete
         - event.coverimage.update
         - event.delete
@@ -1206,8 +1175,6 @@ policy:
         - communication.send
         - event.assets.read
         - event.assets.upload
-        - event.cancel
-        - event.complete
         - event.coverimage.delete
         - event.coverimage.update
         - event.delete
@@ -1271,8 +1238,6 @@ policy:
         - communication.send
         - event.assets.read
         - event.assets.upload
-        - event.cancel
-        - event.complete
         - event.coverimage.delete
         - event.coverimage.update
         - event.delete

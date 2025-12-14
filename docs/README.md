@@ -58,20 +58,6 @@ Response:
 
 ---
 
-## Event relationship (My events)
-
-#### GET /api/v1/events/my-events
-Query:
-- None
-
-Body:
-- None
-
-Response:
-- `200 OK` → `UserEventsSummaryResponse`
-
----
-
 ### My events via `GET /api/v1/events` filters
 
 Use the main listing endpoint instead of multiple “my events” list endpoints:
