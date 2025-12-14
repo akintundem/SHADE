@@ -92,9 +92,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPORTS_DIR="${SCRIPT_DIR}/reports"
 REPORT_FILE="${REPORTS_DIR}/collaboration_test_report_$(date +%Y%m%d_%H%M%S).md"
 
-TEST_USER_EMAIL="testcollab@example.com"
-TEST_USER_PASSWORD="Password123!"
-TEST_USER_NAME="Test Collaboration User"
+TEST_USER_EMAIL="admin@test.com"
+TEST_USER_PASSWORD="Admin123!@#"
+TEST_USER_NAME="Admin User"
 TEST_USER_PHONE="+1234567890"
 
 # Counters
@@ -115,6 +115,14 @@ DISCOVERED_USER_USERNAME=""
 
 # Collaborator record id returned by API
 COLLABORATOR_ID=""
+
+# Invite-related variables
+INVITE_ID=""
+INVITE_TOKEN=""
+INVITED_USER_EMAIL="invited@test.com"
+INVITED_USER_PASSWORD="Invited123!@#"
+INVITED_USER_TOKEN=""
+INVITED_USER_ID=""
 
 # Requirements check
 if ! command -v jq >/dev/null 2>&1; then
@@ -252,6 +260,17 @@ run_test() {
             "Add Collaborator")
                 COLLABORATOR_ID=$(echo "$response_body" | jq -r '.collaboratorId // empty')
                 ;;
+            "Create Collaborator Invite")
+                INVITE_ID=$(echo "$response_body" | jq -r '.inviteId // empty')
+                ;;
+            "Create Collaborator Invite By Email")
+                INVITE_ID=$(echo "$response_body" | jq -r '.inviteId // empty')
+                # Note: Token is not returned in response for security, would be in email
+                ;;
+            "Invited User Login")
+                INVITED_USER_TOKEN=$(echo "$response_body" | jq -r '.accessToken // empty')
+                INVITED_USER_ID=$(echo "$response_body" | jq -r '.user.id // empty')
+                ;;
         esac
     fi
 
@@ -364,6 +383,31 @@ seed_directory_users() {
     echo ""
 }
 
+authenticate_invited_user() {
+    echo -e "${YELLOW}🔐 Authenticating invited user...${NC}"
+
+    local reg='{"email":"'"$INVITED_USER_EMAIL"'","password":"'"$INVITED_USER_PASSWORD"'","confirmPassword":"'"$INVITED_USER_PASSWORD"'"}'
+    local r=$(curl -s -w '%{http_code}' -X POST -H "Content-Type: application/json" -d "$reg" "$BASE_URL/api/v1/auth/register")
+    local rc="${r: -3}"
+    if [ "$rc" = "201" ]; then
+        verify_email_in_database "$INVITED_USER_EMAIL"
+    fi
+
+    local login='{"email":"'"$INVITED_USER_EMAIL"'","password":"'"$INVITED_USER_PASSWORD"'","rememberMe":false}'
+    run_test "Invited User Login" "POST" "/api/v1/auth/login" "-H 'Content-Type: application/json'" "$login" "200" "Login as invited user to test invite acceptance"
+
+    # Complete onboarding if needed
+    if [ "$LAST_HTTP_CODE" = "200" ]; then
+        local onboarding_required
+        onboarding_required=$(echo "$LAST_BODY" | jq -r '.onboardingRequired // false')
+        if [ "$onboarding_required" = "true" ]; then
+            local uname="invited_$(date +%s | cut -c1-8)"
+            local onboarding='{"name":"Invited Test User","username":"'"$uname"'","phoneNumber":"+1234567891","dateOfBirth":"1990-01-01","acceptTerms":true,"acceptPrivacy":true,"marketingOptIn":false}'
+            run_test "Complete Invited User Onboarding" "POST" "/api/v1/auth/complete-onboarding" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "$onboarding" "200" "Complete onboarding for invited user"
+        fi
+    fi
+}
+
 main() {
     echo -e "${PURPLE}📋 Test Plan:${NC}"
     echo "1. Check service availability"
@@ -373,6 +417,12 @@ main() {
     echo "5. Add collaborator using discovered userId"
     echo "6. Update collaborator"
     echo "7. Remove collaborator"
+    echo "8. Create collaborator invite"
+    echo "9. List event invites"
+    echo "10. Authenticate as invited user"
+    echo "11. List incoming invites"
+    echo "12. Accept invite"
+    echo "13. Decline invite (if applicable)"
     echo ""
 
     if ! wait_for_service; then
@@ -421,7 +471,6 @@ main() {
   "userId": "$DISCOVERED_USER_ID",
   "role": "COLLABORATOR",
   "permissions": ["read", "write"],
-  "notes": "Added from directory in collaboration test",
   "sendInvitation": false
 }
 EOF
@@ -445,14 +494,168 @@ EOF
 {
   "userId": "$DISCOVERED_USER_ID",
   "role": "ADMIN",
-  "permissions": ["read", "write", "delete"],
-  "notes": "Updated collaborator via collaboration test"
+  "permissions": ["read", "write", "delete"]
 }
 EOF
 )
     run_test "Update Collaborator" "PUT" "/api/v1/events/$EVENT_ID/collaborators/$collab_id" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_payload" "200" "Update collaborator role/permissions"
 
     run_test "Remove Collaborator" "DELETE" "/api/v1/events/$EVENT_ID/collaborators/$collab_id" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Remove collaborator from event"
+
+    # ===== Invite Tests =====
+    echo -e "${CYAN}📨 Testing Collaborator Invites${NC}"
+    echo ""
+
+    # First, authenticate as invited user so we can create invites for them
+    authenticate_invited_user
+    if [ -z "$INVITED_USER_TOKEN" ] || [ -z "$INVITED_USER_ID" ]; then
+        echo -e "${YELLOW}⚠️  Could not authenticate invited user; skipping invite tests.${NC}"
+    else
+        # Create an invite for the invited user (by userId)
+        local invite_payload
+        invite_payload=$(cat <<EOF
+{
+  "inviteeUserId": "$INVITED_USER_ID",
+  "role": "COLLABORATOR",
+  "message": "You are invited to collaborate on this event",
+  "sendEmail": false,
+  "sendPush": false
+}
+EOF
+)
+        run_test "Create Collaborator Invite" "POST" "/api/v1/events/$EVENT_ID/collaborator-invites" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invite_payload" "201" "Create collaborator invite by userId for invited user"
+
+        local invite_id="${INVITE_ID}"
+        if [ -z "$invite_id" ]; then
+            # fallback: list invites and pick the one for invited user
+            run_test "List Event Invites" "GET" "/api/v1/events/$EVENT_ID/collaborator-invites?page=0&size=50" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all invites for the event"
+            invite_id="$(echo "$LAST_BODY" | jq -r --arg uid "$INVITED_USER_ID" '.content[] | select(.inviteeUserId==$uid and .status=="PENDING") | .inviteId' | head -n 1)"
+        fi
+
+        # Test that the event owner CANNOT accept someone else's invite
+        if [ -n "$invite_id" ]; then
+            run_test "Event Owner Cannot Accept Others Invite" "POST" "/api/v1/collaborator-invites/$invite_id/accept" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "{}" "400" "Verify event owner cannot accept invite meant for another user"
+        fi
+
+        # List incoming invites for the invited user
+        run_test "List My Incoming Invites" "GET" "/api/v1/collaborator-invites/incoming" "-H 'Authorization: Bearer $INVITED_USER_TOKEN'" "" "200" "List pending invites for authenticated user"
+
+        # Get invite ID from incoming invites if we don't have one
+        if [ -z "$invite_id" ] && [ "$LAST_HTTP_CODE" = "200" ]; then
+            invite_id="$(echo "$LAST_BODY" | jq -r '.[] | select(.status=="PENDING") | .inviteId' | head -n 1)"
+        fi
+
+        # Accept invite as the invited user (should succeed)
+        if [ -n "$invite_id" ]; then
+            run_test "Accept Collaborator Invite" "POST" "/api/v1/collaborator-invites/$invite_id/accept" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "{}" "200" "Accept a collaborator invite as the invited user"
+        fi
+
+        # Create invite by email for the invited user (to test token-based acceptance)
+        local invite_by_email_payload
+        invite_by_email_payload=$(cat <<EOF
+{
+  "inviteeEmail": "$INVITED_USER_EMAIL",
+  "role": "STAFF",
+  "message": "You are invited to collaborate via email",
+  "sendEmail": false,
+  "sendPush": false
+}
+EOF
+)
+        run_test "Create Collaborator Invite By Email" "POST" "/api/v1/events/$EVENT_ID/collaborator-invites" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invite_by_email_payload" "201" "Create collaborator invite by email"
+
+        local email_invite_id="${INVITE_ID}"
+        if [ -z "$email_invite_id" ]; then
+            # Get from list
+            run_test "List Event Invites For Email" "GET" "/api/v1/events/$EVENT_ID/collaborator-invites?page=0&size=50" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List invites to find email-based invite"
+            email_invite_id="$(echo "$LAST_BODY" | jq -r --arg email "$INVITED_USER_EMAIL" '.content[] | select(.inviteeEmail==$email and .status=="PENDING") | .inviteId' | head -n 1)"
+        fi
+
+        # For email invites, token-based acceptance would use: POST /api/v1/collaborator-invites/accept?token=<token>
+        # Note: In production, the token is sent via email. For testing, we can't easily retrieve the raw token
+        # (it's stored as a hash in the database). However, we can test that accepting by ID works for email invites,
+        # which verifies that the logged-in user's email matches the inviteeEmail.
+        if [ -n "$email_invite_id" ]; then
+            run_test "Accept Email Invite By ID" "POST" "/api/v1/collaborator-invites/$email_invite_id/accept" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "{}" "200" "Accept email-based invite by ID (verifies email matches logged-in user)"
+            
+            # Note: Token-based acceptance would work like this (if we had the token):
+            # POST /api/v1/collaborator-invites/accept?token=<token_from_email>
+            # The token is hashed in the database, so we can't easily extract it for testing.
+            # In production, users click a link in their email with the token parameter.
+        fi
+
+        # Create another invite to test decline
+        local decline_invite_payload
+        decline_invite_payload=$(cat <<EOF
+{
+  "inviteeUserId": "$INVITED_USER_ID",
+  "role": "STAFF",
+  "message": "Test invite for decline",
+  "sendEmail": false,
+  "sendPush": false
+}
+EOF
+)
+        run_test "Create Invite For Decline Test" "POST" "/api/v1/events/$EVENT_ID/collaborator-invites" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$decline_invite_payload" "201" "Create invite to test decline functionality"
+
+        local decline_invite_id=""
+        if [ "$LAST_HTTP_CODE" = "201" ]; then
+            decline_invite_id="$(echo "$LAST_BODY" | jq -r '.inviteId // empty')"
+        fi
+        if [ -z "$decline_invite_id" ]; then
+            # Get from list
+            run_test "List Event Invites For Decline" "GET" "/api/v1/events/$EVENT_ID/collaborator-invites?page=0&size=50" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List invites to find one for decline test"
+            decline_invite_id="$(echo "$LAST_BODY" | jq -r --arg uid "$INVITED_USER_ID" '.content[] | select(.inviteeUserId==$uid and .status=="PENDING") | .inviteId' | head -n 1)"
+        fi
+
+        if [ -n "$decline_invite_id" ]; then
+            run_test "Decline Collaborator Invite" "POST" "/api/v1/collaborator-invites/$decline_invite_id/decline" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "{}" "204" "Decline a collaborator invite"
+        fi
+
+        # Test that invited user cannot accept someone else's invite
+        # Create an invite for the discovered user
+        local other_invite_payload
+        other_invite_payload=$(cat <<EOF
+{
+  "inviteeUserId": "$DISCOVERED_USER_ID",
+  "role": "COLLABORATOR",
+  "message": "Invite for another user",
+  "sendEmail": false,
+  "sendPush": false
+}
+EOF
+)
+        run_test "Create Invite For Other User" "POST" "/api/v1/events/$EVENT_ID/collaborator-invites" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$other_invite_payload" "201" "Create invite for a different user to test access control"
+
+        local other_invite_id=""
+        if [ "$LAST_HTTP_CODE" = "201" ]; then
+            other_invite_id="$(echo "$LAST_BODY" | jq -r '.inviteId // empty')"
+        fi
+        if [ -z "$other_invite_id" ]; then
+            run_test "List Event Invites For Other User" "GET" "/api/v1/events/$EVENT_ID/collaborator-invites?page=0&size=50" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List invites to find other user's invite"
+            other_invite_id="$(echo "$LAST_BODY" | jq -r --arg uid "$DISCOVERED_USER_ID" '.content[] | select(.inviteeUserId==$uid and .status=="PENDING") | .inviteId' | head -n 1)"
+        fi
+
+        # Try to accept someone else's invite (should fail)
+        if [ -n "$other_invite_id" ]; then
+            run_test "Cannot Accept Others Invite" "POST" "/api/v1/collaborator-invites/$other_invite_id/accept" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "{}" "400" "Verify invited user cannot accept invite meant for another user"
+        fi
+    fi
+
+    # List all event invites (as event owner)
+    run_test "List All Event Invites" "GET" "/api/v1/events/$EVENT_ID/collaborator-invites?page=0&size=50" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all invites for the event as owner"
+
+    # Revoke a pending invite (as event owner)
+    if [ -n "$INVITE_ID" ]; then
+        # Get a pending invite to revoke
+        local revoke_invite_id=""
+        if [ "$LAST_HTTP_CODE" = "200" ]; then
+            revoke_invite_id="$(echo "$LAST_BODY" | jq -r '.content[] | select(.status=="PENDING") | .inviteId' | head -n 1)"
+        fi
+        if [ -n "$revoke_invite_id" ]; then
+            run_test "Revoke Collaborator Invite" "DELETE" "/api/v1/events/$EVENT_ID/collaborator-invites/$revoke_invite_id" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Revoke a pending collaborator invite as event owner"
+        fi
+    fi
 
     echo -e "${PURPLE}📊 Test Summary${NC}"
     echo "==============="

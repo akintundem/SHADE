@@ -25,7 +25,6 @@ public class EventUserResponse {
     private RegistrationStatus registrationStatus;
     private LocalDateTime registrationDate;
     private List<EventRoleResponse> roles;
-    private String notes;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     

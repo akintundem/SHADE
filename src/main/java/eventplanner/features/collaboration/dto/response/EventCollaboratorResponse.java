@@ -41,9 +41,6 @@ public class EventCollaboratorResponse {
     @Schema(description = "Registration status")
     private String registrationStatus;
 
-    @Schema(description = "Notes")
-    private String notes;
-
     @Schema(description = "Whether invitation was sent")
     private Boolean invitationSent;
 

@@ -64,12 +64,9 @@ public class EventCollaboratorService {
         EventUser collaborator = new EventUser();
         collaborator.setEvent(event);
         collaborator.setUser(user);
-        collaborator.setEmail(user.getEmail());
-        collaborator.setName(user.getName());
         collaborator.setUserType(request.getRole());
         collaborator.setRegistrationStatus(RegistrationStatus.CONFIRMED);
         collaborator.setRegistrationDate(LocalDateTime.now());
-        collaborator.setNotes(request.getNotes());
 
         EventUser saved = eventUserRepository.save(collaborator);
         return toResponse(saved, request.getPermissions(), false, null);
@@ -92,14 +89,9 @@ public class EventCollaboratorService {
                         throw new IllegalArgumentException("User is already a collaborator on this event");
                     });
             collaborator.setUser(user);
-            collaborator.setEmail(user.getEmail());
-            collaborator.setName(user.getName());
         }
         if (request != null && request.getRole() != null) {
             collaborator.setUserType(request.getRole());
-        }
-        if (request != null && request.getNotes() != null) {
-            collaborator.setNotes(request.getNotes());
         }
 
         EventUser saved = eventUserRepository.save(collaborator);
@@ -123,12 +115,11 @@ public class EventCollaboratorService {
         response.setCollaboratorId(eventUser.getId());
         response.setEventId(eventUser.getEvent() != null ? eventUser.getEvent().getId() : null);
         response.setUserId(eventUser.getUser() != null ? eventUser.getUser().getId() : null);
-        response.setEmail(eventUser.getEmail());
-        response.setUserName(eventUser.getName());
+        response.setEmail(eventUser.getUser() != null ? eventUser.getUser().getEmail() : null);
+        response.setUserName(eventUser.getUser() != null ? eventUser.getUser().getName() : null);
         response.setRole(eventUser.getUserType());
         response.setPermissions(permissions != null ? permissions : Collections.emptyList());
         response.setRegistrationStatus(eventUser.getRegistrationStatus() != null ? eventUser.getRegistrationStatus().name() : null);
-        response.setNotes(eventUser.getNotes());
         response.setInvitationSent(invitationSent);
         response.setInvitationSentAt(invitationSentAt);
         response.setAddedAt(eventUser.getCreatedAt());

@@ -585,18 +585,9 @@ public class AttendeeManagementService {
         EventUser eventUser = eventUserRepository.findByEventIdAndUserId(eventId, userId)
                 .orElseThrow(() -> new RuntimeException("Event user not found"));
         
-        if (request.getName() != null) {
-            eventUser.setName(request.getName());
-        }
-        if (request.getEmail() != null) {
-            eventUser.setEmail(request.getEmail());
-        }
-        if (request.getPhone() != null) {
-            // EventUser doesn't have phone, but we can store in notes if needed
-        }
-        if (request.getNotes() != null) {
-            eventUser.setNotes(request.getNotes());
-        }
+        // Name and email are derived from UserAccount, so we don't update them here
+        // If name/email need to be updated, they should be updated in the UserAccount entity
+        // Notes, special requirements, dietary restrictions, and emergency contact are also derived from UserAccount
         
         EventUser saved = eventUserRepository.save(eventUser);
         return convertToEventUserResponse(saved);
@@ -791,13 +782,12 @@ public class AttendeeManagementService {
         response.setId(eventUser.getId());
         response.setEventId(eventUser.getEvent() != null ? eventUser.getEvent().getId() : null);
         response.setUserId(eventUser.getUser() != null ? eventUser.getUser().getId() : null);
-        response.setUserName(eventUser.getName());
-        response.setUserEmail(eventUser.getEmail());
+        response.setUserName(eventUser.getUser() != null ? eventUser.getUser().getName() : null);
+        response.setUserEmail(eventUser.getUser() != null ? eventUser.getUser().getEmail() : null);
         response.setUserType(eventUser.getUserType());
         response.setRegistrationStatus(eventUser.getRegistrationStatus());
         response.setRegistrationDate(eventUser.getRegistrationDate());
         response.setRoles(roleResponses);
-        response.setNotes(eventUser.getNotes());
         response.setCreatedAt(eventUser.getCreatedAt());
         response.setUpdatedAt(eventUser.getUpdatedAt());
         

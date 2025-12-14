@@ -109,7 +109,7 @@ public class EventRecipientResolverService {
             .collect(Collectors.toSet());
         
         Set<String> emails = collaborators.stream()
-            .map(EventUser::getEmail)
+            .map(eu -> eu.getUser() != null ? eu.getUser().getEmail() : null)
             .filter(Objects::nonNull)
             .filter(email -> !email.isBlank())
             .collect(Collectors.toSet());
@@ -129,7 +129,7 @@ public class EventRecipientResolverService {
             .collect(Collectors.toSet());
         
         Set<String> emails = vendors.stream()
-            .map(EventUser::getEmail)
+            .map(eu -> eu.getUser() != null ? eu.getUser().getEmail() : null)
             .filter(Objects::nonNull)
             .filter(email -> !email.isBlank())
             .collect(Collectors.toSet());

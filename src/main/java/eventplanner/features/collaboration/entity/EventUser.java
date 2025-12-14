@@ -48,30 +48,6 @@ public class EventUser extends BaseEntity {
     @Column(name = "registration_date")
     private java.time.LocalDateTime registrationDate;
 
-    @Column(name = "check_in_time")
-    private java.time.LocalDateTime checkInTime;
-
-    @Column(name = "check_out_time")
-    private java.time.LocalDateTime checkOutTime;
-
-    @Column(name = "special_requirements")
-    private String specialRequirements;
-
-    @Column(name = "dietary_restrictions")
-    private String dietaryRestrictions;
-
-    @Column(name = "emergency_contact")
-    private String emergencyContact;
-    
-    @Column(name = "name")
-    private String name;
-    
-    @Column(name = "email")
-    private String email;
-    
-    @Column(name = "notes", columnDefinition = "TEXT")
-    private String notes;
-
     @Column(name = "is_volunteer", nullable = false)
     private Boolean isVolunteer = false;
 

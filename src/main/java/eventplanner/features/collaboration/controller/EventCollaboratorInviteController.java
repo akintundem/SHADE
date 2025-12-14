@@ -108,6 +108,7 @@ public class EventCollaboratorInviteController {
     }
 
     @GetMapping("/api/v1/collaborator-invites/incoming")
+    @RequiresPermission(value = RbacPermissions.ROLE_READ)
     @Operation(summary = "List my collaborator invites", description = "List pending collaborator invites for the authenticated user")
     public ResponseEntity<List<CollaboratorInviteResponse>> myInvites(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
@@ -121,6 +122,7 @@ public class EventCollaboratorInviteController {
     }
 
     @PostMapping("/api/v1/collaborator-invites/{inviteId}/accept")
+    @RequiresPermission(value = RbacPermissions.ROLE_ASSIGN, resources = {"invite_id=#inviteId"})
     @Operation(summary = "Accept collaborator invite", description = "Accept a collaborator invite (in-app)")
     public ResponseEntity<EventCollaboratorResponse> acceptInvite(
             @PathVariable UUID inviteId,
@@ -136,8 +138,8 @@ public class EventCollaboratorInviteController {
             response.setCollaboratorId(membership.getId());
             response.setEventId(membership.getEvent() != null ? membership.getEvent().getId() : null);
             response.setUserId(membership.getUser() != null ? membership.getUser().getId() : null);
-            response.setEmail(membership.getEmail());
-            response.setUserName(membership.getName());
+            response.setEmail(membership.getUser() != null ? membership.getUser().getEmail() : null);
+            response.setUserName(membership.getUser() != null ? membership.getUser().getName() : null);
             response.setRole(membership.getUserType());
             response.setRegistrationStatus(membership.getRegistrationStatus() != null ? membership.getRegistrationStatus().name() : null);
             response.setAddedAt(membership.getCreatedAt());
@@ -149,6 +151,7 @@ public class EventCollaboratorInviteController {
     }
 
     @PostMapping("/api/v1/collaborator-invites/accept")
+    @RequiresPermission(value = RbacPermissions.ROLE_ASSIGN)
     @Operation(summary = "Accept collaborator invite by token", description = "Accept a collaborator invite using an email token (requires authentication)")
     public ResponseEntity<EventCollaboratorResponse> acceptInviteByToken(
             @RequestParam String token,
@@ -163,8 +166,8 @@ public class EventCollaboratorInviteController {
             r.setCollaboratorId(membership.getId());
             r.setEventId(membership.getEvent() != null ? membership.getEvent().getId() : null);
             r.setUserId(membership.getUser() != null ? membership.getUser().getId() : null);
-            r.setEmail(membership.getEmail());
-            r.setUserName(membership.getName());
+            r.setEmail(membership.getUser() != null ? membership.getUser().getEmail() : null);
+            r.setUserName(membership.getUser() != null ? membership.getUser().getName() : null);
             r.setRole(membership.getUserType());
             r.setRegistrationStatus(membership.getRegistrationStatus() != null ? membership.getRegistrationStatus().name() : null);
             r.setAddedAt(membership.getCreatedAt());
@@ -176,6 +179,7 @@ public class EventCollaboratorInviteController {
     }
 
     @PostMapping("/api/v1/collaborator-invites/{inviteId}/decline")
+    @RequiresPermission(value = RbacPermissions.ROLE_READ, resources = {"invite_id=#inviteId"})
     @Operation(summary = "Decline collaborator invite", description = "Decline a collaborator invite")
     public ResponseEntity<Void> declineInvite(
             @PathVariable UUID inviteId,

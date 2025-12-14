@@ -29,9 +29,6 @@ public class EventCollaboratorRequest {
     @Schema(description = "Custom permissions for the collaborator")
     private List<String> permissions;
 
-    @Schema(description = "Notes about the collaborator")
-    private String notes;
-
     @Schema(description = "Whether to send invitation email (optional, currently not used)")
     private Boolean sendInvitation = false;
 }

@@ -196,8 +196,13 @@ public class EventCollaboratorInviteService {
         if (principal == null) {
             throw new IllegalArgumentException("Authentication required");
         }
+        if (principal.getUser() == null) {
+            throw new IllegalArgumentException("User account information is required");
+        }
         EventCollaboratorInvite invite = inviteRepository.findById(inviteId)
                 .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
+        // Verify the logged-in user is the one who can accept this invite
+        verifyInviteBelongsToPrincipal(invite, principal);
         return acceptInvite(invite, principal);
     }
 
@@ -205,12 +210,17 @@ public class EventCollaboratorInviteService {
         if (principal == null) {
             throw new IllegalArgumentException("Authentication required");
         }
+        if (principal.getUser() == null) {
+            throw new IllegalArgumentException("User account information is required");
+        }
         if (token == null || token.trim().isEmpty()) {
             throw new IllegalArgumentException("token is required");
         }
         String tokenHash = TokenHashUtil.sha256(token.trim());
         EventCollaboratorInvite invite = inviteRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
+        // Verify the logged-in user is the one who can accept this invite (even with token)
+        verifyInviteBelongsToPrincipal(invite, principal);
         return acceptInvite(invite, principal);
     }
 
@@ -218,9 +228,13 @@ public class EventCollaboratorInviteService {
         if (principal == null) {
             throw new IllegalArgumentException("Authentication required");
         }
+        if (principal.getUser() == null) {
+            throw new IllegalArgumentException("User account information is required");
+        }
         EventCollaboratorInvite invite = inviteRepository.findById(inviteId)
                 .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
 
+        // Verify the logged-in user is the one who can decline this invite
         verifyInviteBelongsToPrincipal(invite, principal);
 
         if (invite.getStatus() != CollaboratorInviteStatus.PENDING) {
@@ -249,6 +263,8 @@ public class EventCollaboratorInviteService {
     }
 
     private EventUser acceptInvite(EventCollaboratorInvite invite, UserPrincipal principal) {
+        // Double-check that the principal matches the invite (defense in depth)
+        // This is already verified in acceptInviteById/acceptInviteByToken, but we check again here
         verifyInviteBelongsToPrincipal(invite, principal);
 
         if (invite.getStatus() != CollaboratorInviteStatus.PENDING) {
@@ -286,8 +302,6 @@ public class EventCollaboratorInviteService {
         EventUser membership = new EventUser();
         membership.setEvent(event);
         membership.setUser(user);
-        membership.setEmail(principal.getUser() != null ? principal.getUser().getEmail() : invite.getInviteeEmail());
-        membership.setName(principal.getUser() != null ? principal.getUser().getName() : null);
         membership.setUserType(invite.getRole() != null ? invite.getRole() : EventUserType.COLLABORATOR);
         membership.setRegistrationStatus(RegistrationStatus.CONFIRMED);
         membership.setRegistrationDate(LocalDateTime.now(ZoneOffset.UTC));
@@ -302,18 +316,47 @@ public class EventCollaboratorInviteService {
     }
 
     private void verifyInviteBelongsToPrincipal(EventCollaboratorInvite invite, UserPrincipal principal) {
+        if (principal == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        if (principal.getUser() == null) {
+            throw new IllegalArgumentException("User account information is required");
+        }
+
         UUID principalId = principal.getId();
-        String principalEmail = principal.getUser() != null ? principal.getUser().getEmail() : null;
+        String principalEmail = principal.getUser().getEmail();
+
+        if (principalId == null) {
+            throw new IllegalArgumentException("User ID is required");
+        }
+        if (principalEmail == null || principalEmail.trim().isEmpty()) {
+            throw new IllegalArgumentException("User email is required");
+        }
 
         UUID inviteeUserId = invite.getInvitee() != null ? invite.getInvitee().getId() : null;
-        boolean matchesUserId = inviteeUserId != null && inviteeUserId.equals(principalId);
-        boolean matchesEmail = invite.getInviteeEmail() != null
-                && principalEmail != null
-                && invite.getInviteeEmail().equalsIgnoreCase(principalEmail);
+        String inviteeEmail = invite.getInviteeEmail();
 
+        // Check if invite was sent to a specific user ID
+        boolean matchesUserId = inviteeUserId != null && inviteeUserId.equals(principalId);
+        
+        // Check if invite was sent to an email (normalize for comparison)
+        boolean matchesEmail = inviteeEmail != null 
+                && !inviteeEmail.trim().isEmpty()
+                && principalEmail != null
+                && inviteeEmail.trim().equalsIgnoreCase(principalEmail.trim());
+
+        // The invite must match either by userId OR by email
         if (!matchesUserId && !matchesEmail) {
-            throw new IllegalArgumentException("Invite does not belong to authenticated user");
+            String errorMessage = String.format(
+                "Invite does not belong to authenticated user. Invite is for userId=%s or email=%s, but authenticated user is userId=%s, email=%s",
+                inviteeUserId != null ? inviteeUserId.toString() : "null",
+                inviteeEmail != null ? inviteeEmail : "null",
+                principalId.toString(),
+                principalEmail
+            );
+            throw new IllegalArgumentException(errorMessage);
         }
+
     }
 
     private void sendPushInvite(EventCollaboratorInvite invite) {
