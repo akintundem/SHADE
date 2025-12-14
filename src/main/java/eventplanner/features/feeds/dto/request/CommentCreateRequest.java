@@ -13,6 +13,6 @@ public class CommentCreateRequest {
 
     @NotBlank(message = "Comment content is required")
     @Size(max = 2000, message = "Comment content must not exceed 2000 characters")
-    @Schema(description = "Comment content", example = "Great post!", required = true)
+    @Schema(description = "Comment content", example = "Great post!")
     private String content;
 }

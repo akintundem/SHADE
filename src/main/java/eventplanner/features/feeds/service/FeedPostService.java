@@ -24,8 +24,6 @@ import eventplanner.features.feeds.repository.FeedPostRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.features.feeds.service.PostLikeService;
-import eventplanner.features.feeds.service.PostCommentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -210,8 +208,6 @@ public class FeedPostService {
             accessControlService.requireMediaManage(principal, eventId);
         }
 
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
         String expectedKey = buildObjectKey(eventId, mediaId);
         
         // Use generic presigned upload service

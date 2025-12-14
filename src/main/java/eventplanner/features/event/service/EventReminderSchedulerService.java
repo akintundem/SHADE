@@ -8,7 +8,6 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventReminder;
 import eventplanner.features.event.enums.EmailTemplateType;
 import eventplanner.features.event.repository.EventReminderRepository;
-import eventplanner.features.event.repository.EventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -32,7 +31,6 @@ public class EventReminderSchedulerService {
 
     private final EventReminderRepository reminderRepository;
     private final NotificationService notificationService;
-    private final EventRepository eventRepository;
     private final EventEmailTemplateService emailTemplateService;
     private final EventTemplateVariableService templateVariableService;
 
