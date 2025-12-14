@@ -1355,14 +1355,29 @@ EOF
     # Send Notification Tests
     local notification_data='{
         "channel": "EMAIL",
-        "subject": "Event Update",
-        "content": "This is a test notification",
+        "subject": "Event Announcement - Test",
+        "content": "This is a test announcement notification. Please check your email at mayokak@gmail.com",
+        "emailTemplateType": "ANNOUNCEMENT",
         "recipientUserIds": ["'$USER_ID'"],
-        "recipientEmails": ["test@example.com"],
+        "recipientEmails": ["mayokak@gmail.com"],
         "scheduledAt": null,
-        "priority": "NORMAL"
+        "priority": "NORMAL",
+        "includeEventDetails": true
     }'
-    run_test "Send Event Notification" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_data" "200" "Send event notification"
+    run_test "Send Event Notification (Announcement)" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_data" "200" "Send event announcement notification to mayokak@gmail.com"
+    
+    # Test cancellation notification
+    local cancellation_data='{
+        "channel": "EMAIL",
+        "subject": "Event Cancellation - Test",
+        "content": "We regret to inform you that this test event has been cancelled due to unforeseen circumstances.",
+        "emailTemplateType": "CANCEL_EVENT",
+        "recipientEmails": ["mayokak@gmail.com"],
+        "scheduledAt": null,
+        "priority": "NORMAL",
+        "includeEventDetails": true
+    }'
+    run_test "Send Event Notification (Cancellation)" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cancellation_data" "200" "Send event cancellation notification to mayokak@gmail.com"
     
     # Reminder Tests
     run_test "Get Event Reminders" "GET" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event reminders"
@@ -1377,9 +1392,9 @@ EOF
     "channel": "email",
     "reminderType": "custom",
     "isActive": true,
-    "customMessage": "Custom reminder message",
+    "customMessage": "Custom reminder message - Test reminder sent to mayokak@gmail.com",
     "recipientUserIds": ["$USER_ID"],
-    "recipientEmails": ["test@example.com"]
+    "recipientEmails": ["mayokak@gmail.com"]
 }
 EOF
 )
@@ -1395,12 +1410,12 @@ EOF
     "title": "Updated Event Reminder",
     "description": "Updated reminder description",
     "reminderTime": "$reminder_update_time",
-    "channel": "sms",
+    "channel": "email",
     "reminderType": "custom",
     "isActive": true,
-    "customMessage": "Updated reminder message",
+    "customMessage": "Updated reminder message - Test reminder sent to mayokak@gmail.com",
     "recipientUserIds": ["$USER_ID"],
-    "recipientEmails": ["test@example.com"]
+    "recipientEmails": ["mayokak@gmail.com"]
 }
 EOF
 )

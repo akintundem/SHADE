@@ -105,9 +105,9 @@ REPORTS_DIR="${SCRIPT_DIR}/reports"
 
 # Configuration
 REPORT_FILE="${REPORTS_DIR}/feeds_test_report_$(date +%Y%m%d_%H%M%S).md"
-TEST_USER_EMAIL="testfeeds@example.com"
+TEST_USER_EMAIL="testuser@example.com"
 TEST_USER_PASSWORD="Password123!"
-TEST_USER_NAME="Test Feeds User"
+TEST_USER_NAME="Test User"
 TEST_USER_PHONE="+1234567890"
 
 # Test counters

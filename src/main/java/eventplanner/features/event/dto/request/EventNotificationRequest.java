@@ -1,5 +1,6 @@
 package eventplanner.features.event.dto.request;
 
+import eventplanner.features.event.enums.EmailTemplateType;
 import eventplanner.features.event.enums.EventNotificationChannel;
 import eventplanner.features.event.enums.EventNotificationPriority;
 import eventplanner.features.event.enums.RecipientType;
@@ -55,6 +56,10 @@ public class EventNotificationRequest {
     @Schema(description = "Notification priority", example = "NORMAL")
     private EventNotificationPriority priority = EventNotificationPriority.NORMAL;
 
-    @Schema(description = "Custom template ID")
+    @Schema(description = "Email template type (required for EMAIL channel). Options: ANNOUNCEMENT, CANCEL_EVENT", 
+            example = "ANNOUNCEMENT")
+    private EmailTemplateType emailTemplateType;
+
+    @Schema(description = "Custom template ID (optional, overrides emailTemplateType if provided)")
     private String templateId;
 }

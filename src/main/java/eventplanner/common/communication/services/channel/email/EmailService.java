@@ -71,6 +71,11 @@ public class EmailService {
             template.put("variables", variables != null ? variables : new HashMap<>());
             requestBody.put("template", template);
 
+            // Log request details for debugging
+            log.info("Sending email via Resend - To: {}, Template ID: {}, From: {}", 
+                    to, templateId, resendConfig.getDefaultFromEmail());
+            log.debug("Email template variables: {}", variables);
+            
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
             ResponseEntity<String> response = restTemplate.exchange(
                     RESEND_API_URL,
@@ -78,6 +83,8 @@ public class EmailService {
                     request,
                     String.class
             );
+            
+            log.debug("Resend API response status: {}, body: {}", response.getStatusCode(), response.getBody());
 
             if (response.getStatusCode().is2xxSuccessful()) {
                 JsonNode responseJson = objectMapper.readTree(response.getBody());
@@ -103,28 +110,45 @@ public class EmailService {
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             // Handle HTTP client errors (like domain verification issues)
             String errorMessage = e.getMessage();
+            String responseBody = e.getResponseBodyAsString();
+            
+            log.error("Resend API HTTP error - Status: {}, Response: {}", e.getStatusCode(), responseBody);
+            
             if (e.getStatusCode().value() == 403) {
                 // Parse the error response to get the actual message
                 try {
-                    if (e.getResponseBodyAsString() != null) {
-                        JsonNode errorJson = objectMapper.readTree(e.getResponseBodyAsString());
+                    if (responseBody != null) {
+                        JsonNode errorJson = objectMapper.readTree(responseBody);
                         if (errorJson.has("message")) {
                             errorMessage = errorJson.get("message").asText();
                         }
                     }
                 } catch (Exception parseEx) {
-                    // If parsing fails, use the original message
+                    log.warn("Failed to parse error response: {}", parseEx.getMessage());
                 }
                 log.warn("Email sending failed due to domain/configuration issue: {}", errorMessage);
+            } else if (e.getStatusCode().value() == 422) {
+                // Validation error - template or variables issue
+                try {
+                    if (responseBody != null) {
+                        JsonNode errorJson = objectMapper.readTree(responseBody);
+                        if (errorJson.has("message")) {
+                            errorMessage = errorJson.get("message").asText();
+                        }
+                    }
+                } catch (Exception parseEx) {
+                    log.warn("Failed to parse validation error: {}", parseEx.getMessage());
+                }
+                log.error("Email validation error: {}", errorMessage);
             } else {
-                log.error("Error sending email: {}", errorMessage);
+                log.error("Error sending email - HTTP {}: {}", e.getStatusCode(), errorMessage);
             }
             return EmailResult.builder()
                     .success(false)
                     .errorMessage(errorMessage)
                     .build();
         } catch (Exception e) {
-            log.error("Error sending email: {}", e.getMessage(), e);
+            log.error("Unexpected error sending email to {}: {}", to, e.getMessage(), e);
             return EmailResult.builder()
                     .success(false)
                     .errorMessage(e.getMessage())
