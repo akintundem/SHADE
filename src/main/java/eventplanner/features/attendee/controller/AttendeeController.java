@@ -14,6 +14,8 @@ import eventplanner.common.domain.enums.ActionType;
 import eventplanner.features.attendee.service.AttendeeIdempotencyService;
 import eventplanner.features.attendee.service.AttendeeInvitationService;
 import eventplanner.features.attendee.service.AttendeeService;
+import eventplanner.features.event.entity.Event;
+import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
@@ -55,6 +57,7 @@ public class AttendeeController {
 	private final AuthorizationService authorizationService;
 	private final AttendeeInvitationService attendeeInvitationService;
 	private final AttendeeRepository attendeeRepository;
+	private final EventRepository eventRepository;
 	private final AuditLogService auditLogService;
 	private final AttendeeIdempotencyService idempotencyService;
 	private final ObjectMapper objectMapper = new ObjectMapper();
@@ -78,9 +81,13 @@ public class AttendeeController {
 			Attendee attendee = attendeeOpt.get();
 			
 			// Verify user can access the event this attendee belongs to
-			if (!authorizationService.canAccessEvent(principal, attendee.getEventId())) {
+			if (attendee.getEvent() == null) {
+				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for attendee");
+			}
+			UUID eventId = attendee.getEvent().getId();
+			if (!authorizationService.canAccessEvent(principal, eventId)) {
 				throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-					"Access denied to event: " + attendee.getEventId());
+					"Access denied to event: " + eventId);
 			}
 			
 			AttendeeResponse response = attendeeService.toResponse(attendee);
@@ -111,9 +118,13 @@ public class AttendeeController {
 			Attendee existing = existingOpt.get();
 			
 			// Verify user can access the event
-			if (!authorizationService.canAccessEvent(principal, existing.getEventId())) {
+			if (existing.getEvent() == null) {
+				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for attendee");
+			}
+			UUID eventId = existing.getEvent().getId();
+			if (!authorizationService.canAccessEvent(principal, eventId)) {
 				throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-					"Access denied to event: " + existing.getEventId());
+					"Access denied to event: " + eventId);
 			}
 			
 			// Map request to entity
@@ -151,7 +162,7 @@ public class AttendeeController {
 				.user(principal.getUser().getId(), null, principal.getUser().getEmail())
 				.description("Attendee updated")
 				.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), null)
-				.eventId(existing.getEventId())
+				.eventId(eventId)
 				.oldValue(oldValue)
 				.newValue(newValue)
 				.log();
@@ -183,9 +194,13 @@ public class AttendeeController {
 			Attendee attendee = attendeeOpt.get();
 			
 			// Verify user can access the event
-			if (!authorizationService.canAccessEvent(principal, attendee.getEventId())) {
+			if (attendee.getEvent() == null) {
+				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for attendee");
+			}
+			UUID eventId = attendee.getEvent().getId();
+			if (!authorizationService.canAccessEvent(principal, eventId)) {
 				throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-					"Access denied to event: " + attendee.getEventId());
+					"Access denied to event: " + eventId);
 			}
 			
 			// Delete
@@ -207,7 +222,7 @@ public class AttendeeController {
 				.user(principal.getUser().getId(), null, principal.getUser().getEmail())
 				.description("Attendee deleted")
 				.request(getClientIp(httpRequest), httpRequest.getHeader("User-Agent"), null)
-				.eventId(attendee.getEventId())
+				.eventId(eventId)
 				.metadata(metadata)
 				.log();
 			
@@ -243,10 +258,15 @@ public class AttendeeController {
 				"Access denied to event: " + request.getEventId());
 		}
 		
+		// Fetch the event to set the relationship
+		Event event = eventRepository.findById(request.getEventId())
+			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
+				"Event not found: " + request.getEventId()));
+		
 		// Map attendee info to Attendee entities
 		List<Attendee> toSave = request.getAttendees().stream().map(attendeeInfo -> {
 			Attendee attendee = new Attendee();
-			attendee.setEventId(request.getEventId());
+			attendee.setEvent(event);
 			attendee.setName(attendeeInfo.getName());
 			attendee.setEmail(attendeeInfo.getEmail());
 			attendee.setPhone(attendeeInfo.getPhone());
@@ -381,7 +401,7 @@ public class AttendeeController {
 					"Attendee not found: " + attendeeId));
 			
 			// Verify attendee belongs to the specified event
-			if (!eventUuid.equals(attendee.getEventId())) {
+			if (attendee.getEvent() == null || !eventUuid.equals(attendee.getEvent().getId())) {
 				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
 					"Attendee does not belong to the specified event");
 			}
@@ -452,10 +472,10 @@ public class AttendeeController {
 					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
 						"Attendee not found: " + attendeeId));
 				
-				// Verify attendee belongs to the specified event
-				if (!eventUuid.equals(attendee.getEventId())) {
-					throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-						"Attendee does not belong to the specified event");
+			// Verify attendee belongs to the specified event
+			if (attendee.getEvent() == null || !eventUuid.equals(attendee.getEvent().getId())) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+					"Attendee does not belong to the specified event");
 				}
 				
 				Optional<Attendee> checkedIn = attendeeService.checkIn(attendeeUuid);

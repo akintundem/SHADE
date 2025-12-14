@@ -134,8 +134,8 @@ public class EventCollaboratorInviteController {
             var membership = inviteService.acceptInviteById(inviteId, principal);
             EventCollaboratorResponse response = new EventCollaboratorResponse();
             response.setCollaboratorId(membership.getId());
-            response.setEventId(membership.getEventId());
-            response.setUserId(membership.getUserId());
+            response.setEventId(membership.getEvent() != null ? membership.getEvent().getId() : null);
+            response.setUserId(membership.getUser() != null ? membership.getUser().getId() : null);
             response.setEmail(membership.getEmail());
             response.setUserName(membership.getName());
             response.setRole(membership.getUserType());
@@ -161,8 +161,8 @@ public class EventCollaboratorInviteController {
             var membership = inviteService.acceptInviteByToken(token, principal);
             EventCollaboratorResponse r = new EventCollaboratorResponse();
             r.setCollaboratorId(membership.getId());
-            r.setEventId(membership.getEventId());
-            r.setUserId(membership.getUserId());
+            r.setEventId(membership.getEvent() != null ? membership.getEvent().getId() : null);
+            r.setUserId(membership.getUser() != null ? membership.getUser().getId() : null);
             r.setEmail(membership.getEmail());
             r.setUserName(membership.getName());
             r.setRole(membership.getUserType());

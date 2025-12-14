@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Scheduled service to automatically send reminders when their time is up
@@ -62,11 +63,13 @@ public class EventReminderSchedulerService {
                     reminder.setWasSent(true);
                     reminderRepository.save(reminder);
                     successCount++;
-                    log.debug("Successfully sent reminder {} for event {}", reminder.getId(), reminder.getEventId());
+                    UUID eventId = reminder.getEvent() != null ? reminder.getEvent().getId() : null;
+                    log.debug("Successfully sent reminder {} for event {}", reminder.getId(), eventId);
                 } catch (Exception e) {
                     failureCount++;
+                    UUID eventId = reminder.getEvent() != null ? reminder.getEvent().getId() : null;
                     log.error("Failed to send reminder {} for event {}: {}", 
-                            reminder.getId(), reminder.getEventId(), e.getMessage(), e);
+                            reminder.getId(), eventId, e.getMessage(), e);
                     // Don't mark as sent if it failed - will retry on next run
                 }
             }
@@ -84,8 +87,10 @@ public class EventReminderSchedulerService {
         CommunicationType communicationType = mapChannelToCommunicationType(reminder.getChannel());
         
         // Fetch event details for template variables
-        Event event = eventRepository.findById(reminder.getEventId())
-                .orElseThrow(() -> new IllegalStateException("Event not found: " + reminder.getEventId()));
+        if (reminder.getEvent() == null) {
+            throw new IllegalStateException("Event not found for reminder: " + reminder.getId());
+        }
+        Event event = reminder.getEvent();
         
         // Prepare message content
         String subject = reminder.getTitle();
@@ -132,7 +137,7 @@ public class EventReminderSchedulerService {
                             .subject(subject)
                             .templateId(templateId)
                             .templateVariables(templateVariables)
-                            .eventId(reminder.getEventId())
+                            .eventId(event.getId())
                             .build();
 
                     NotificationResponse response = notificationService.send(notificationRequest);
@@ -164,7 +169,7 @@ public class EventReminderSchedulerService {
                             .to(userIdStr)
                             .subject(subject)
                             .templateVariables(pushData)
-                            .eventId(reminder.getEventId())
+                            .eventId(event.getId())
                             .build();
 
                     NotificationResponse response = notificationService.send(notificationRequest);

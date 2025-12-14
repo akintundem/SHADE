@@ -2,6 +2,8 @@ package eventplanner.features.timeline.service;
 
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.common.domain.enums.TimelineStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
@@ -35,6 +37,7 @@ public class TimelineTaskService {
     
     private final TimelineItemRepository repository;
     private final EventRepository eventRepository;
+    private final UserAccountRepository userAccountRepository;
     private final AuthorizationService authorizationService;
     private final TimelineHistoryService timelineHistoryService;
     
@@ -77,8 +80,9 @@ public class TimelineTaskService {
         ensureEventExists(request.getEventId());
         
         // Create parent task
+        Event event = ensureEventExists(request.getEventId());
         TimelineItem task = new TimelineItem();
-        task.setEventId(request.getEventId());
+        task.setEvent(event);
         task.setTitle(request.getTitle());
         task.setDescription(request.getDescription());
         task.setStartDate(request.getStartDate() != null ? request.getStartDate() : LocalDateTime.now());
@@ -87,9 +91,20 @@ public class TimelineTaskService {
         task.setDurationMinutes(request.getDurationMinutes());
         task.setPriority(request.getPriority() != null ? request.getPriority() : "MEDIUM");
         task.setCategory(request.getCategory());
-        task.setAssignedTo(request.getAssignedTo());
+        if (request.getAssignedTo() != null) {
+            UserAccount assignedUser = userAccountRepository.findById(request.getAssignedTo())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
+                    "User not found: " + request.getAssignedTo()));
+            task.setAssignedTo(assignedUser);
+        }
         task.setStatus(request.getStatus() != null ? request.getStatus() : TimelineStatus.TO_DO);
-        task.setParentTaskId(request.getParentTaskId());
+        if (request.getParentTaskId() != null) {
+            TimelineItem parentTask = repository.findById(request.getParentTaskId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
+                    "Parent task not found: " + request.getParentTaskId()));
+            validateParentTask(request.getParentTaskId(), request.getEventId(), null);
+            task.setParentTask(parentTask);
+        }
         task.setTaskOrder(request.getTaskOrder());
         task.setIsPreview(request.getIsPreview() != null ? request.getIsPreview() : false);
         task.setProgressPercentage(0);
@@ -125,7 +140,7 @@ public class TimelineTaskService {
             int order = 0;
             for (CreateTaskRequest.CreateSubtaskRequest subtaskReq : request.getSubtasks()) {
                 TimelineItem subtask = new TimelineItem();
-                subtask.setEventId(request.getEventId());
+                subtask.setEvent(event);
                 subtask.setTitle(subtaskReq.getTitle());
                 subtask.setDescription(subtaskReq.getDescription());
                 subtask.setStartDate(subtaskReq.getStartDate() != null ? subtaskReq.getStartDate() : task.getStartDate());
@@ -133,9 +148,14 @@ public class TimelineTaskService {
                 subtask.setScheduledAt(subtask.getStartDate());
                 subtask.setDurationMinutes(subtaskReq.getDurationMinutes());
                 subtask.setPriority(subtaskReq.getPriority() != null ? subtaskReq.getPriority() : "MEDIUM");
-                subtask.setAssignedTo(subtaskReq.getAssignedTo());
+                if (subtaskReq.getAssignedTo() != null) {
+                    UserAccount assignedUser = userAccountRepository.findById(subtaskReq.getAssignedTo())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
+                            "User not found: " + subtaskReq.getAssignedTo()));
+                    subtask.setAssignedTo(assignedUser);
+                }
                 subtask.setStatus(subtaskReq.getStatus() != null ? subtaskReq.getStatus() : TimelineStatus.TO_DO);
-                subtask.setParentTaskId(task.getId());
+                subtask.setParentTask(task);
                 subtask.setTaskOrder(subtaskReq.getTaskOrder() != null ? subtaskReq.getTaskOrder() : order++);
                 subtask.setIsParentTask(false);
                 subtask.setIsPreview(subtaskReq.getIsPreview() != null ? subtaskReq.getIsPreview() : false);
@@ -167,11 +187,14 @@ public class TimelineTaskService {
      * Owners can update everything, assigned users can only update their assigned tasks
      */
     private void validateTaskUpdatePermission(TimelineItem task, UserPrincipal user, boolean isOwnerUpdate) {
-        validateEventAccess(user, task.getEventId());
+        if (task.getEvent() == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for task");
+        }
+        validateEventAccess(user, task.getEvent().getId());
         
         // If user is not owner, check if they are assigned to this task
         if (!isOwnerUpdate && task.getAssignedTo() != null) {
-            if (!task.getAssignedTo().equals(user.getId())) {
+            if (!task.getAssignedTo().getId().equals(user.getId())) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
                     "You can only update tasks assigned to you");
             }
@@ -193,7 +216,7 @@ public class TimelineTaskService {
         TimelineItem task = repository.findById(taskId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
         
-        boolean isOwner = isEventOwner(user, task.getEventId());
+        boolean isOwner = task.getEvent() != null && isEventOwner(user, task.getEvent().getId());
         
         // Restrict certain fields to owners only
         if (!isOwner) {
@@ -219,19 +242,35 @@ public class TimelineTaskService {
         if (request.getDurationMinutes() != null) task.setDurationMinutes(request.getDurationMinutes());
         if (request.getPriority() != null) task.setPriority(request.getPriority());
         if (request.getCategory() != null) task.setCategory(request.getCategory());
-        if (request.getAssignedTo() != null) task.setAssignedTo(request.getAssignedTo());
+        if (request.getAssignedTo() != null) {
+            UserAccount assignedUser = userAccountRepository.findById(request.getAssignedTo())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
+                    "User not found: " + request.getAssignedTo()));
+            task.setAssignedTo(assignedUser);
+        }
         if (request.getStatus() != null) task.setStatus(request.getStatus());
         if (request.getProgressPercentage() != null) {
             task.setProgressPercentage(Math.max(0, Math.min(100, request.getProgressPercentage())));
         }
         if (request.getIsPreview() != null) task.setIsPreview(request.getIsPreview());
         if (request.getParentTaskId() != null) {
-            validateParentTask(request.getParentTaskId(), task.getEventId(), taskId);
-            task.setParentTaskId(request.getParentTaskId());
+            UUID eventId = task.getEvent() != null ? task.getEvent().getId() : null;
+            if (eventId == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for task");
+            }
+            validateParentTask(request.getParentTaskId(), eventId, taskId);
+            TimelineItem parentTask = repository.findById(request.getParentTaskId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
+                    "Parent task not found: " + request.getParentTaskId()));
+            task.setParentTask(parentTask);
         }
         if (request.getTaskOrder() != null) task.setTaskOrder(request.getTaskOrder());
         if (request.getDependencies() != null) {
-            validateDependencies(task.getEventId(), request.getDependencies());
+            UUID eventId = task.getEvent() != null ? task.getEvent().getId() : null;
+            if (eventId == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for task");
+            }
+            validateDependencies(eventId, request.getDependencies());
             task.setDependencies(request.getDependencies().toArray(new UUID[0]));
         }
         
@@ -268,8 +307,8 @@ public class TimelineTaskService {
         task = repository.save(task);
         
         // Recalculate parent progress if this is a subtask
-        if (task.getParentTaskId() != null) {
-            recalculateParentProgress(task.getParentTaskId());
+        if (task.getParentTask() != null) {
+            recalculateParentProgress(task.getParentTask().getId());
         }
         
         // Load subtasks if parent
@@ -289,7 +328,10 @@ public class TimelineTaskService {
         TimelineItem task = repository.findById(taskId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
         
-        validateEventAccess(user, task.getEventId());
+        if (task.getEvent() == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for task");
+        }
+        validateEventAccess(user, task.getEvent().getId());
         
         task.setStartDate(request.getStartDate());
         task.setScheduledAt(request.getStartDate());
@@ -338,7 +380,7 @@ public class TimelineTaskService {
         List<TimelineItem> filteredTasks = allTasks.stream()
             .filter(task -> {
                 if (status != null && task.getStatus() != status) return false;
-                if (assigneeId != null && !assigneeId.equals(task.getAssignedTo())) return false;
+                if (assigneeId != null && (task.getAssignedTo() == null || !assigneeId.equals(task.getAssignedTo().getId()))) return false;
                 if (category != null && !category.equals(task.getCategory())) return false;
                 if (startDate != null && task.getStartDate() != null && task.getStartDate().isBefore(startDate)) return false;
                 if (endDate != null && task.getStartDate() != null && task.getStartDate().isAfter(endDate)) return false;
@@ -351,10 +393,10 @@ public class TimelineTaskService {
         List<TimelineItem> parentTasks = new ArrayList<>();
         
         for (TimelineItem task : filteredTasks) {
-            if (task.getParentTaskId() == null) {
+            if (task.getParentTask() == null) {
                 parentTasks.add(task);
             } else {
-                subtaskMap.computeIfAbsent(task.getParentTaskId(), k -> new ArrayList<>()).add(task);
+                subtaskMap.computeIfAbsent(task.getParentTask().getId(), k -> new ArrayList<>()).add(task);
             }
         }
         
@@ -418,7 +460,7 @@ public class TimelineTaskService {
         }
         if (assigneeId != null) {
             tasks = tasks.stream()
-                .filter(t -> assigneeId.equals(t.getAssignedTo()))
+                .filter(t -> t.getAssignedTo() != null && assigneeId.equals(t.getAssignedTo().getId()))
                 .collect(Collectors.toList());
         }
         if (category != null) {
@@ -432,10 +474,10 @@ public class TimelineTaskService {
         List<TimelineItem> parentTasks = new ArrayList<>();
         
         for (TimelineItem task : tasks) {
-            if (task.getParentTaskId() == null) {
+            if (task.getParentTask() == null) {
                 parentTasks.add(task);
             } else {
-                subtaskMap.computeIfAbsent(task.getParentTaskId(), k -> new ArrayList<>()).add(task);
+                subtaskMap.computeIfAbsent(task.getParentTask().getId(), k -> new ArrayList<>()).add(task);
             }
         }
         
@@ -504,7 +546,7 @@ public class TimelineTaskService {
         Map<UUID, TimelineSummaryResponse.AssigneeTaskSummary> tasksByAssignee = new HashMap<>();
         allTasks.stream()
             .filter(t -> t.getAssignedTo() != null)
-            .collect(Collectors.groupingBy(TimelineItem::getAssignedTo))
+            .collect(Collectors.groupingBy(t -> t.getAssignedTo().getId()))
             .forEach((assigneeId, assigneeTasks) -> {
                 int totalTasks = assigneeTasks.size();
                 int completedTasks = (int) assigneeTasks.stream()
@@ -647,10 +689,10 @@ public class TimelineTaskService {
         TimelineItem task = repository.findById(taskId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
         
-        boolean isOwner = isEventOwner(user, task.getEventId());
+        boolean isOwner = task.getEvent() != null && isEventOwner(user, task.getEvent().getId());
         
         // Only assigned user or owner can upload proof
-        if (!isOwner && (task.getAssignedTo() == null || !task.getAssignedTo().equals(user.getId()))) {
+        if (!isOwner && (task.getAssignedTo() == null || !task.getAssignedTo().getId().equals(user.getId()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
                 "You can only upload proof images for tasks assigned to you");
         }
@@ -665,9 +707,12 @@ public class TimelineTaskService {
         TimelineItem task = repository.findById(taskId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
         
-        validateEventAccess(user, task.getEventId());
+        if (task.getEvent() == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for task");
+        }
+        validateEventAccess(user, task.getEvent().getId());
         
-        UUID parentTaskId = task.getParentTaskId();
+        UUID parentTaskId = task.getParentTask() != null ? task.getParentTask().getId() : null;
         
         // Delete subtasks first
         List<TimelineItem> subtasks = getSubtasks(taskId);
@@ -696,7 +741,7 @@ public class TimelineTaskService {
             TimelineItem dep = repository.findById(depId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                     "Dependency not found: " + depId));
-            if (!dep.getEventId().equals(eventId)) {
+            if (dep.getEvent() == null || !dep.getEvent().getId().equals(eventId)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                     "Dependency must belong to the same event");
             }
@@ -711,7 +756,7 @@ public class TimelineTaskService {
         TimelineItem parent = repository.findById(parentId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                 "Parent task not found: " + parentId));
-        if (!parent.getEventId().equals(eventId)) {
+        if (parent.getEvent() == null || !parent.getEvent().getId().equals(eventId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                 "Parent task must belong to the same event");
         }
@@ -760,10 +805,10 @@ public class TimelineTaskService {
         TimelineItem task = repository.findById(taskId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
         
-        boolean isOwner = isEventOwner(user, task.getEventId());
+        boolean isOwner = task.getEvent() != null && isEventOwner(user, task.getEvent().getId());
         
         // Only assigned user or owner can upload proof
-        if (!isOwner && (task.getAssignedTo() == null || !task.getAssignedTo().equals(user.getId()))) {
+        if (!isOwner && (task.getAssignedTo() == null || !task.getAssignedTo().getId().equals(user.getId()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
                 "You can only upload proof images for tasks assigned to you");
         }
@@ -813,7 +858,7 @@ public class TimelineTaskService {
         
         return TaskResponse.builder()
             .id(entity.getId())
-            .eventId(entity.getEventId())
+            .eventId(entity.getEvent() != null ? entity.getEvent().getId() : null)
             .title(entity.getTitle())
             .description(entity.getDescription())
             .startDate(entity.getStartDate())
@@ -827,8 +872,9 @@ public class TimelineTaskService {
             .progressPercentage(entity.getProgressPercentage())
             .completedSubtasksCount(entity.getCompletedSubtasksCount())
             .totalSubtasksCount(entity.getTotalSubtasksCount())
-            .assignedTo(entity.getAssignedTo())
-            .parentTaskId(entity.getParentTaskId())
+            .assignedTo(entity.getAssignedTo() != null ? entity.getAssignedTo().getId() : null)
+            .assignedToName(entity.getAssignedTo() != null ? entity.getAssignedTo().getName() : null)
+            .parentTaskId(entity.getParentTask() != null ? entity.getParentTask().getId() : null)
             .taskOrder(entity.getTaskOrder())
             .isParentTask(entity.getIsParentTask())
             .isPreview(entity.getIsPreview())
@@ -863,8 +909,9 @@ public class TimelineTaskService {
             .priority(task.getPriority())
             .category(task.getCategory())
             .progressPercentage(task.getProgressPercentage())
-            .assignedTo(task.getAssignedTo())
-            .parentTaskId(task.getParentTaskId())
+            .assignedTo(task.getAssignedTo() != null ? task.getAssignedTo().getId() : null)
+            .assignedToName(task.getAssignedTo() != null ? task.getAssignedTo().getName() : null)
+            .parentTaskId(task.getParentTask() != null ? task.getParentTask().getId() : null)
             .isParentTask(task.getIsParentTask())
             .isPreview(task.getIsPreview())
             .subtasks(subtaskBars)
@@ -883,7 +930,7 @@ public class TimelineTaskService {
             .filter(t -> t.getStatus() == TimelineStatus.COMPLETED || t.getStatus() == TimelineStatus.DONE)
             .count();
         int overdue = (int) tasks.stream()
-            .filter(t -> repository.findOverdueTasks(t.getEventId(), LocalDateTime.now()).contains(t))
+            .filter(t -> t.getEvent() != null && repository.findOverdueTasks(t.getEvent().getId(), LocalDateTime.now()).contains(t))
             .count();
         
         return TimelineViewResponse.StatusSummary.builder()
@@ -899,7 +946,7 @@ public class TimelineTaskService {
         return tasks.stream()
             .filter(t -> t.getAssignedTo() != null)
             .collect(Collectors.groupingBy(
-                TimelineItem::getAssignedTo,
+                t -> t.getAssignedTo().getId(),
                 Collectors.collectingAndThen(Collectors.counting(), Long::intValue)
             ));
     }
@@ -920,7 +967,8 @@ public class TimelineTaskService {
             .status(task.getStatus() != null ? task.getStatus().name() : "PENDING")
             .priority(task.getPriority())
             .dueDate(task.getDueDate())
-            .assignedTo(task.getAssignedTo())
+            .assignedTo(task.getAssignedTo() != null ? task.getAssignedTo().getId() : null)
+            .assignedToName(task.getAssignedTo() != null ? task.getAssignedTo().getName() : null)
             .build();
     }
 }

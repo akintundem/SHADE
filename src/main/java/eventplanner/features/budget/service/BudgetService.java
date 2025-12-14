@@ -138,7 +138,10 @@ public class BudgetService {
 
     public BudgetLineItem addLineItem(BudgetLineItem item) {
         BudgetLineItem saved = lineItemRepository.save(item);
-        recalculateBudgetTotals(item.getBudgetId());
+        UUID budgetId = item.getBudget() != null ? item.getBudget().getId() : null;
+        if (budgetId != null) {
+            recalculateBudgetTotals(budgetId);
+        }
         return saved;
     }
 
@@ -167,16 +170,23 @@ public class BudgetService {
         }
         
         BudgetLineItem saved = lineItemRepository.save(item);
-        recalculateBudgetTotals(item.getBudgetId());
+        UUID budgetId = item.getBudget() != null ? item.getBudget().getId() : null;
+        if (budgetId != null) {
+            recalculateBudgetTotals(budgetId);
+        }
         return saved;
     }
 
     public void deleteLineItem(UUID itemId) {
         BudgetLineItem item = lineItemRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException("Line item not found"));
-        UUID budgetId = item.getBudgetId();
-        lineItemRepository.deleteById(itemId);
-        recalculateBudgetTotals(budgetId);
+        UUID budgetId = item.getBudget() != null ? item.getBudget().getId() : null;
+        if (budgetId != null) {
+            lineItemRepository.deleteById(itemId);
+            recalculateBudgetTotals(budgetId);
+        } else {
+            lineItemRepository.deleteById(itemId);
+        }
     }
 
     public List<BudgetLineItem> addBulkLineItems(BulkLineItemRequest request) {

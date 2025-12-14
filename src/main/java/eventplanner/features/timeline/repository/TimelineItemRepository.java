@@ -19,29 +19,38 @@ import java.util.UUID;
 public interface TimelineItemRepository extends JpaRepository<TimelineItem, UUID> {
     
     // Basic queries
-    List<TimelineItem> findByEventIdOrderByScheduledAtAsc(UUID eventId);
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId ORDER BY t.scheduledAt ASC")
+    List<TimelineItem> findByEventIdOrderByScheduledAtAsc(@Param("eventId") UUID eventId);
     
-    List<TimelineItem> findByEventId(UUID eventId);
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId")
+    List<TimelineItem> findByEventId(@Param("eventId") UUID eventId);
     
-    Optional<TimelineItem> findByIdAndEventId(UUID id, UUID eventId);
+    @Query("SELECT t FROM TimelineItem t WHERE t.id = :id AND t.event.id = :eventId")
+    Optional<TimelineItem> findByIdAndEventId(@Param("id") UUID id, @Param("eventId") UUID eventId);
     
     // Hierarchy queries
-    List<TimelineItem> findByEventIdAndParentTaskIdIsNullOrderByTaskOrderAsc(UUID eventId);
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId AND t.parentTask IS NULL ORDER BY t.taskOrder ASC")
+    List<TimelineItem> findByEventIdAndParentTaskIdIsNullOrderByTaskOrderAsc(@Param("eventId") UUID eventId);
     
-    List<TimelineItem> findByParentTaskIdOrderByTaskOrderAsc(UUID parentTaskId);
+    @Query("SELECT t FROM TimelineItem t WHERE t.parentTask.id = :parentTaskId ORDER BY t.taskOrder ASC")
+    List<TimelineItem> findByParentTaskIdOrderByTaskOrderAsc(@Param("parentTaskId") UUID parentTaskId);
     
-    List<TimelineItem> findByEventIdAndIsParentTaskTrue(UUID eventId);
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId AND t.isParentTask = true")
+    List<TimelineItem> findByEventIdAndIsParentTaskTrue(@Param("eventId") UUID eventId);
     
     // Status queries
-    List<TimelineItem> findByEventIdAndStatus(UUID eventId, TimelineStatus status);
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId AND t.status = :status")
+    List<TimelineItem> findByEventIdAndStatus(@Param("eventId") UUID eventId, @Param("status") TimelineStatus status);
     
-    long countByEventIdAndStatus(UUID eventId, TimelineStatus status);
+    @Query("SELECT COUNT(t) FROM TimelineItem t WHERE t.event.id = :eventId AND t.status = :status")
+    long countByEventIdAndStatus(@Param("eventId") UUID eventId, @Param("status") TimelineStatus status);
     
     // Assignee queries
-    List<TimelineItem> findByEventIdAndAssignedTo(UUID eventId, UUID assignedTo);
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId AND t.assignedTo.id = :assignedTo")
+    List<TimelineItem> findByEventIdAndAssignedTo(@Param("eventId") UUID eventId, @Param("assignedTo") UUID assignedTo);
     
     // Date range queries
-    @Query("SELECT t FROM TimelineItem t WHERE t.eventId = :eventId " +
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId " +
            "AND t.startDate IS NOT NULL " +
            "AND t.startDate >= :startDate AND t.startDate <= :endDate " +
            "ORDER BY t.startDate ASC")
@@ -51,7 +60,7 @@ public interface TimelineItemRepository extends JpaRepository<TimelineItem, UUID
         @Param("endDate") LocalDateTime endDate
     );
     
-    @Query("SELECT t FROM TimelineItem t WHERE t.eventId = :eventId " +
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId " +
            "AND t.dueDate IS NOT NULL " +
            "AND t.dueDate < :currentDate " +
            "AND t.status NOT IN (eventplanner.common.domain.enums.TimelineStatus.COMPLETED, " +
@@ -63,7 +72,7 @@ public interface TimelineItemRepository extends JpaRepository<TimelineItem, UUID
         @Param("currentDate") LocalDateTime currentDate
     );
     
-    @Query("SELECT t FROM TimelineItem t WHERE t.eventId = :eventId " +
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId " +
            "AND t.dueDate IS NOT NULL " +
            "AND t.dueDate >= :currentDate " +
            "AND t.dueDate <= :futureDate " +
@@ -77,12 +86,14 @@ public interface TimelineItemRepository extends JpaRepository<TimelineItem, UUID
     );
     
     // Category and priority queries
-    List<TimelineItem> findByEventIdAndCategory(UUID eventId, String category);
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId AND t.category = :category")
+    List<TimelineItem> findByEventIdAndCategory(@Param("eventId") UUID eventId, @Param("category") String category);
     
-    List<TimelineItem> findByEventIdAndPriority(UUID eventId, String priority);
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId AND t.priority = :priority")
+    List<TimelineItem> findByEventIdAndPriority(@Param("eventId") UUID eventId, @Param("priority") String priority);
     
     // Search queries
-    @Query("SELECT t FROM TimelineItem t WHERE t.eventId = :eventId " +
+    @Query("SELECT t FROM TimelineItem t WHERE t.event.id = :eventId " +
            "AND (LOWER(t.title) LIKE LOWER(CONCAT('%', :query, '%')) " +
            "OR LOWER(t.description) LIKE LOWER(CONCAT('%', :query, '%'))) " +
            "ORDER BY t.startDate ASC")
@@ -92,18 +103,18 @@ public interface TimelineItemRepository extends JpaRepository<TimelineItem, UUID
     );
     
     // Progress and statistics queries
-    @Query("SELECT COUNT(t) FROM TimelineItem t WHERE t.eventId = :eventId")
+    @Query("SELECT COUNT(t) FROM TimelineItem t WHERE t.event.id = :eventId")
     long countByEventId(@Param("eventId") UUID eventId);
     
     @Query("SELECT COALESCE(AVG(t.progressPercentage), 0) FROM TimelineItem t " +
-           "WHERE t.eventId = :eventId AND t.isParentTask = true")
+           "WHERE t.event.id = :eventId AND t.isParentTask = true")
     Double getAverageProgressForEvent(@Param("eventId") UUID eventId);
     
-    @Query("SELECT MIN(t.startDate) FROM TimelineItem t WHERE t.eventId = :eventId AND t.startDate IS NOT NULL")
+    @Query("SELECT MIN(t.startDate) FROM TimelineItem t WHERE t.event.id = :eventId AND t.startDate IS NOT NULL")
     LocalDateTime getEarliestDate(@Param("eventId") UUID eventId);
     
     @Query("SELECT MAX(COALESCE(t.endTime, t.dueDate, t.startDate)) FROM TimelineItem t " +
-           "WHERE t.eventId = :eventId AND (t.endTime IS NOT NULL OR t.dueDate IS NOT NULL OR t.startDate IS NOT NULL)")
+           "WHERE t.event.id = :eventId AND (t.endTime IS NOT NULL OR t.dueDate IS NOT NULL OR t.startDate IS NOT NULL)")
     LocalDateTime getLatestDate(@Param("eventId") UUID eventId);
     
     // Note: Dependencies checking handled in service layer due to UUID array limitations

@@ -32,8 +32,8 @@ public class AttendeeSearchService {
     private AttendanceDetailResponse convertToDetailResponse(EventAttendance attendance) {
         return new AttendanceDetailResponse(
                 attendance.getId(),
-                attendance.getEventId(),
-                attendance.getUserId(),
+                attendance.getEvent() != null ? attendance.getEvent().getId() : null,
+                attendance.getUser() != null ? attendance.getUser().getId() : null,
                 attendance.getName(),
                 attendance.getEmail(),
                 attendance.getPhone(),

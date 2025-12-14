@@ -14,6 +14,7 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventStoredObject;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.event.repository.EventStoredObjectRepository;
+import eventplanner.common.util.UserAccountUtil;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import org.springframework.util.StringUtils;
@@ -264,14 +265,16 @@ public class EventMediaService {
 
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found"));
-        UserAccount owner = userAccountRepository.findById(ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        
+        // Get managed UserAccount entity for JPA relationship (optional)
+        UserAccount uploadedByUser = UserAccountUtil.getManagedUserAccount(principal, userAccountRepository)
+            .orElse(null);
         
         EventStoredObject item = storedObjectRepository.findById(objectId).orElseGet(EventStoredObject::new);
         item.setId(objectId);
         item.setEvent(event);
         item.setPurpose(purpose);
-        item.setUploadedBy(owner);
+        item.setOwnerId(ownerId);
         item.setObjectKey(expectedObjectKey);
         item.setResourceUrl(StringUtils.hasText(request.getResourceUrl())
             ? normalizeAndStripUrl(request.getResourceUrl())
@@ -283,7 +286,7 @@ public class EventMediaService {
         item.setDescription(request.getDescription());
         item.setTags(request.getTags());
         item.setMetadata(request.getMetadata());
-        item.setUploadedBy(principal != null ? principal.getId() : null);
+        item.setUploadedBy(uploadedByUser); // Set user entity relationship
         return storedObjectRepository.save(item);
     }
 

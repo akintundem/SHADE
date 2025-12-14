@@ -104,7 +104,7 @@ public class EventRecipientResolverService {
         List<EventUser> collaborators = eventUserRepository.findByEventIdAndUserTypeIn(eventId, collaboratorTypes);
         
         Set<UUID> userIds = collaborators.stream()
-            .map(EventUser::getUserId)
+            .map(eu -> eu.getUser() != null ? eu.getUser().getId() : null)
             .filter(Objects::nonNull)
             .collect(Collectors.toSet());
         
@@ -124,7 +124,7 @@ public class EventRecipientResolverService {
         List<EventUser> vendors = eventUserRepository.findByEventIdAndUserType(eventId, EventUserType.VENDOR);
         
         Set<UUID> userIds = vendors.stream()
-            .map(EventUser::getUserId)
+            .map(eu -> eu.getUser() != null ? eu.getUser().getId() : null)
             .filter(Objects::nonNull)
             .collect(Collectors.toSet());
         

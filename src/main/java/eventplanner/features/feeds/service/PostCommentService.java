@@ -46,7 +46,7 @@ public class PostCommentService {
         EventFeedPost post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         
-        if (!eventId.equals(post.getEventId())) {
+        if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
 
@@ -84,14 +84,14 @@ public class PostCommentService {
         EventFeedPost post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         
-        if (!eventId.equals(post.getEventId())) {
+        if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
 
         PostComment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
         
-        if (!postId.equals(comment.getPostId())) {
+        if (comment.getPost() == null || !postId.equals(comment.getPost().getId())) {
             throw new IllegalArgumentException("Comment does not belong to post");
         }
 
@@ -126,7 +126,7 @@ public class PostCommentService {
         EventFeedPost post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         
-        if (!eventId.equals(post.getEventId())) {
+        if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
 
@@ -157,7 +157,7 @@ public class PostCommentService {
         EventFeedPost post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         
-        if (!eventId.equals(post.getEventId())) {
+        if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
 

@@ -61,7 +61,7 @@ public class AttendeeQRCodeService {
         
         return AttendeeQRCodeResponse.builder()
                 .attendanceId(attendance.getId())
-                .eventId(attendance.getEventId())
+                .eventId(attendance.getEvent() != null ? attendance.getEvent().getId() : null)
                 .qrCode(qrCode)
                 .qrCodeImageBase64(rendered.getBase64DataUri())
                 .qrCodeUsed(attendance.getQrCodeUsed())
@@ -74,7 +74,9 @@ public class AttendeeQRCodeService {
      */
     public AttendeeQRCodeResponse regenerateQRCodePayload(UUID attendanceId) {
         EventAttendance attendance = loadAttendance(attendanceId);
-        String newQrCode = generateQRCode(attendance.getEventId(), attendance.getUserId());
+        UUID eventId = attendance.getEvent() != null ? attendance.getEvent().getId() : null;
+        UUID userId = attendance.getUser() != null ? attendance.getUser().getId() : null;
+        String newQrCode = generateQRCode(eventId, userId);
         attendance.setQrCode(newQrCode);
         attendance.setQrCodeUsed(false);
         attendance.setQrCodeUsedAt(null);
@@ -84,7 +86,7 @@ public class AttendeeQRCodeService {
         
         return AttendeeQRCodeResponse.builder()
                 .attendanceId(attendance.getId())
-                .eventId(attendance.getEventId())
+                .eventId(attendance.getEvent() != null ? attendance.getEvent().getId() : null)
                 .qrCode(newQrCode)
                 .qrCodeImageBase64(rendered.getBase64DataUri())
                 .qrCodeUsed(attendance.getQrCodeUsed())
@@ -101,13 +103,15 @@ public class AttendeeQRCodeService {
      */
     public String regenerateQRCode(UUID attendanceId) {
         EventAttendance attendance = loadAttendance(attendanceId);
-        String newQrCode = generateQRCode(attendance.getEventId(), attendance.getUserId());
+        UUID eventId = attendance.getEvent() != null ? attendance.getEvent().getId() : null;
+        UUID userId = attendance.getUser() != null ? attendance.getUser().getId() : null;
+        String newQrCode = generateQRCode(eventId, userId);
         attendance.setQrCode(newQrCode);
         attendance.setQrCodeUsed(false);
         attendance.setQrCodeUsedAt(null);
         attendanceRepository.save(attendance);
         
-        log.info("Regenerated QR code for attendance {} in event {}", attendanceId, attendance.getEventId());
+        log.info("Regenerated QR code for attendance {} in event {}", attendanceId, eventId);
         
         return newQrCode;
     }
@@ -128,7 +132,10 @@ public class AttendeeQRCodeService {
         EventAttendance attendance = attendanceRepository.findById(attendanceId)
                 .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
         
-        eventValidationUtil.validateEventExists(attendance.getEventId());
+        if (attendance.getEvent() == null) {
+            throw new IllegalArgumentException("Event not found for attendance");
+        }
+        eventValidationUtil.validateEventExists(attendance.getEvent().getId());
         return attendance;
     }
     
@@ -137,7 +144,9 @@ public class AttendeeQRCodeService {
             return attendance.getQrCode();
         }
         
-        String qrCode = generateQRCode(attendance.getEventId(), attendance.getUserId());
+        UUID eventId = attendance.getEvent() != null ? attendance.getEvent().getId() : null;
+        UUID userId = attendance.getUser() != null ? attendance.getUser().getId() : null;
+        String qrCode = generateQRCode(eventId, userId);
         attendance.setQrCode(qrCode);
         attendance.setQrCodeUsed(false);
         attendance.setQrCodeUsedAt(null);
@@ -187,7 +196,7 @@ public class AttendeeQRCodeService {
         
         return new CheckInResponse(
                 saved.getId(),
-                saved.getEventId(),
+                saved.getEvent() != null ? saved.getEvent().getId() : null,
                 saved.getName(),
                 saved.getEmail(),
                 previousStatus,

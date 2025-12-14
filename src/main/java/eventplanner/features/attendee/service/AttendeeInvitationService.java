@@ -71,7 +71,7 @@ public class AttendeeInvitationService {
         
         // Filter to only attendees for this event
         List<Attendee> eventAttendees = attendees.stream()
-                .filter(a -> a.getEventId().equals(eventId))
+                .filter(a -> a.getEvent() != null && a.getEvent().getId().equals(eventId))
                 .toList();
         
         if (eventAttendees.isEmpty()) {

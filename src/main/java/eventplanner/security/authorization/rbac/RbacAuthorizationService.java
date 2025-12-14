@@ -258,7 +258,7 @@ public class RbacAuthorizationService {
         }
         try {
             return timelineItemRepository.findById(taskId)
-                    .map(item -> item.getEventId())
+                    .map(item -> item.getEvent() != null ? item.getEvent().getId() : null)
                     .orElse(null);
         } catch (Exception e) {
             log.debug("Failed to resolve event_id from task_id {}: {}", taskId, e.getMessage());

@@ -40,7 +40,7 @@ public class PostLikeService {
         EventFeedPost post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         
-        if (!eventId.equals(post.getEventId())) {
+        if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
 
@@ -71,7 +71,7 @@ public class PostLikeService {
         EventFeedPost post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
         
-        if (!eventId.equals(post.getEventId())) {
+        if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
 

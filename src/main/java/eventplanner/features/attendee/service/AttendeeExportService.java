@@ -4,6 +4,10 @@ import eventplanner.features.attendee.dto.response.AttendanceDetailResponse;
 import eventplanner.features.attendee.dto.response.ExportResponse;
 import eventplanner.features.attendee.entity.EventAttendance;
 import eventplanner.features.attendee.repository.EventAttendanceRepository;
+import eventplanner.features.event.entity.Event;
+import eventplanner.features.event.repository.EventRepository;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.common.domain.enums.AttendanceStatus;
 import eventplanner.common.util.EventValidationUtil;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +29,8 @@ import java.util.*;
 public class AttendeeExportService {
     
     private final EventAttendanceRepository attendanceRepository;
+    private final EventRepository eventRepository;
+    private final UserAccountRepository userAccountRepository;
     private final AttendeeQRCodeService qrCodeService;
     private final EventValidationUtil eventValidationUtil;
     
@@ -122,17 +128,39 @@ public class AttendeeExportService {
                 String phone = fields.length > 2 ? fields[2].trim() : null;
                 String ticketType = fields.length > 3 ? fields[3].trim() : "REGULAR";
                 
-                // Create attendance directly
+                // Fetch Event entity
+                Event event = eventRepository.findById(eventId)
+                    .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+                
+                // Try to find user by email, or create attendance without user if not found
+                // Note: EventAttendance entity requires user, so we need to find or handle appropriately
+                UserAccount user = userAccountRepository.findByEmailIgnoreCase(email)
+                    .orElse(null);
+                
+                // Create attendance with proper entity relationships
                 EventAttendance attendance = new EventAttendance();
-                attendance.setEventId(eventId);
-                attendance.setUserId(UUID.randomUUID()); // Generate a UUID for import
+                attendance.setEvent(event);
+                if (user != null) {
+                    attendance.setUser(user);
+                } else {
+                    // If user doesn't exist, we need to handle this case
+                    // Since the entity requires a user (nullable = false), we'll skip this row
+                    // or create a minimal user. For now, we'll skip and log a warning.
+                    log.warn("Skipping CSV row {}: User with email {} not found. User is required for EventAttendance.", i + 1, email);
+                    failureCount++;
+                    continue;
+                }
+                
                 attendance.setName(name);
                 attendance.setEmail(email);
                 attendance.setPhone(phone);
                 attendance.setAttendanceStatus(AttendanceStatus.REGISTERED);
                 attendance.setRegistrationDate(LocalDateTime.now());
                 attendance.setTicketType(ticketType);
-                attendance.setQrCode(qrCodeService.generateQRCode(eventId, attendance.getUserId()));
+                
+                // Generate QR code using entity IDs
+                UUID userId = user.getId();
+                attendance.setQrCode(qrCodeService.generateQRCode(eventId, userId));
                 attendance.setNotes("");
                 
                 EventAttendance saved = attendanceRepository.save(attendance);
@@ -159,8 +187,8 @@ public class AttendeeExportService {
     private AttendanceDetailResponse convertToResponse(EventAttendance attendance) {
         AttendanceDetailResponse response = new AttendanceDetailResponse();
         response.setId(attendance.getId());
-        response.setEventId(attendance.getEventId());
-        response.setUserId(attendance.getUserId());
+        response.setEventId(attendance.getEvent() != null ? attendance.getEvent().getId() : null);
+        response.setUserId(attendance.getUser() != null ? attendance.getUser().getId() : null);
         response.setName(attendance.getName());
         response.setEmail(attendance.getEmail());
         response.setPhone(attendance.getPhone());

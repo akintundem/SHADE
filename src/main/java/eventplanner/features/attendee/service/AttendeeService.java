@@ -35,16 +35,17 @@ public class AttendeeService {
         validateAttendee(attendee);
         
         // Check for duplicate email in the same event
-        if (attendee.getEmail() != null && !attendee.getEmail().isEmpty()) {
-            Optional<Attendee> existing = repository.findByEventIdAndEmail(attendee.getEventId(), attendee.getEmail());
+        if (attendee.getEmail() != null && !attendee.getEmail().isEmpty() && attendee.getEvent() != null) {
+            UUID eventId = attendee.getEvent().getId();
+            Optional<Attendee> existing = repository.findByEventIdAndEmail(eventId, attendee.getEmail());
             if (existing.isPresent()) {
-                log.warn("Duplicate attendee detected for email {} in event {}", attendee.getEmail(), attendee.getEventId());
+                log.warn("Duplicate attendee detected for email {} in event {}", attendee.getEmail(), eventId);
                 throw new IllegalArgumentException("An attendee with this email already exists for this event");
             }
         }
         
         Attendee saved = repository.save(attendee);
-        log.info("Created attendee {} for event {}", saved.getId(), saved.getEventId());
+        log.info("Created attendee {} for event {}", saved.getId(), saved.getEvent() != null ? saved.getEvent().getId() : null);
         return saved;
     }
     
@@ -225,7 +226,7 @@ public class AttendeeService {
     public AttendeeResponse toResponse(Attendee attendee) {
         return AttendeeResponse.builder()
                 .id(attendee.getId())
-                .eventId(attendee.getEventId())
+                .eventId(attendee.getEvent() != null ? attendee.getEvent().getId() : null)
                 .name(attendee.getName())
                 .email(attendee.getEmail())
                 .phone(attendee.getPhone())
@@ -258,8 +259,8 @@ public class AttendeeService {
     // Validation methods
     
     private void validateAttendee(Attendee attendee) {
-        if (attendee.getEventId() == null) {
-            throw new IllegalArgumentException("Event ID is required");
+        if (attendee.getEvent() == null) {
+            throw new IllegalArgumentException("Event is required");
         }
         if (attendee.getName() == null || attendee.getName().trim().isEmpty()) {
             throw new IllegalArgumentException("Attendee name is required");

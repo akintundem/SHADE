@@ -4,8 +4,13 @@ import eventplanner.features.budget.dto.BudgetLineItemCreateRequest;
 import eventplanner.features.budget.dto.BudgetUpsertRequest;
 import eventplanner.features.budget.dto.request.*;
 import eventplanner.features.budget.dto.response.*;
+import eventplanner.common.util.UserAccountUtil;
 import eventplanner.features.budget.entity.Budget;
 import eventplanner.features.budget.entity.BudgetLineItem;
+import eventplanner.features.event.entity.Event;
+import eventplanner.features.event.repository.EventRepository;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.features.budget.service.BudgetService;
 import eventplanner.features.budget.service.BudgetIdempotencyService;
 import eventplanner.features.budget.service.BudgetRateLimitService;
@@ -43,19 +48,25 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 public class BudgetController {
 
 	private final BudgetService budgetService;
+	private final EventRepository eventRepository;
+	private final UserAccountRepository userAccountRepository;
 	private final BudgetIdempotencyService idempotencyService;
 	private final BudgetRateLimitService rateLimitService;
 	private final BudgetExportService exportService;
 	private final BudgetImportService importService;
 	private final ObjectMapper objectMapper;
 
-	public BudgetController(BudgetService budgetService, 
+	public BudgetController(BudgetService budgetService,
+	                        EventRepository eventRepository,
+	                        UserAccountRepository userAccountRepository,
 	                        BudgetIdempotencyService idempotencyService,
 	                        BudgetRateLimitService rateLimitService,
 	                        BudgetExportService exportService,
 	                        BudgetImportService importService,
 	                        ObjectMapper objectMapper) {
 		this.budgetService = budgetService;
+		this.eventRepository = eventRepository;
+		this.userAccountRepository = userAccountRepository;
 		this.idempotencyService = idempotencyService;
 		this.rateLimitService = rateLimitService;
 		this.exportService = exportService;
@@ -122,9 +133,21 @@ public class BudgetController {
 				"Budget already exists for this event. Use PUT to update.");
 		}
 		
+		// Fetch Event entity
+		Event event = eventRepository.findById(budget.getEventId())
+			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
+				"Event not found: " + budget.getEventId()));
+		
+		// Get managed UserAccount entity for owner (required for JPA relationship)
+		UserAccount owner = UserAccountUtil.getManagedUserAccountOrThrow(
+			user, 
+			userAccountRepository, 
+			"User not found"
+		);
+		
 		Budget entity = new Budget();
-		entity.setEventId(budget.getEventId());
-		entity.setOwnerId(user.getUser().getId());
+		entity.setEvent(event);
+		entity.setOwner(owner); // Set owner entity relationship
 		entity.setTotalBudget(budget.getTotalBudget());
 		entity.setCurrency(budget.getCurrency());
 		entity.setContingencyPercentage(budget.getContingencyPercentage());
@@ -132,7 +155,7 @@ public class BudgetController {
 		
 		Budget saved = budgetService.createOrUpdate(entity);
 		return ResponseEntity.status(HttpStatus.CREATED)
-				.header("Location", "/api/v1/budgets/events/" + saved.getEventId() + "/budgets/" + saved.getId())
+				.header("Location", "/api/v1/budgets/events/" + (saved.getEvent() != null ? saved.getEvent().getId() : budget.getEventId()) + "/budgets/" + saved.getId())
 				.body(convertToDetailResponse(saved));
 	}
 
@@ -164,7 +187,7 @@ public class BudgetController {
 			Budget existing = budgetService.getById(uuid)
 					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
 			
-			if (!existing.getOwnerId().equals(user.getUser().getId())) {
+			if (existing.getOwner() == null || !existing.getOwner().getId().equals(user.getUser().getId())) {
 				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to update this budget");
 			}
 
@@ -216,7 +239,7 @@ public class BudgetController {
 			Budget existing = budgetService.getById(uuid)
 					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
 			
-			if (!existing.getOwnerId().equals(user.getUser().getId())) {
+			if (existing.getOwner() == null || !existing.getOwner().getId().equals(user.getUser().getId())) {
 				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to delete this budget");
 			}
 			
@@ -244,8 +267,12 @@ public class BudgetController {
 		try {
 			UUID budgetUuid = UUID.fromString(budgetId);
             
+            // Fetch Budget entity
+			Budget budget = budgetService.getById(budgetUuid)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
+            
             BudgetLineItem item = new BudgetLineItem();
-			item.setBudgetId(budgetUuid);
+			item.setBudget(budget); // Set budget entity relationship
             item.setCategory(payload.getCategory());
             item.setDescription(payload.getDescription());
             item.setEstimatedCost(payload.getEstimatedCost());
@@ -820,7 +847,7 @@ public class BudgetController {
 	private BudgetDetailResponse convertToDetailResponse(Budget entity) {
 		BudgetDetailResponse response = new BudgetDetailResponse();
 		response.setId(entity.getId());
-		response.setEventId(entity.getEventId());
+		response.setEventId(entity.getEvent() != null ? entity.getEvent().getId() : null);
 		response.setTotalBudget(entity.getTotalBudget());
 		response.setCurrency(entity.getCurrency());
 		response.setContingencyPercentage(entity.getContingencyPercentage());
@@ -850,7 +877,7 @@ public class BudgetController {
 	private BudgetLineItemResponse convertToLineItemResponse(BudgetLineItem entity) {
 		BudgetLineItemResponse response = new BudgetLineItemResponse();
 		response.setId(entity.getId());
-		response.setBudgetId(entity.getBudgetId());
+		response.setBudgetId(entity.getBudget() != null ? entity.getBudget().getId() : null);
 		response.setCategory(entity.getCategory());
 		response.setSubcategory(entity.getSubcategory());
 		response.setDescription(entity.getDescription());

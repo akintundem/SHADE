@@ -382,8 +382,12 @@ public class TimelineTaskController {
         eventplanner.features.timeline.entity.TimelineItem task = timelineTaskService.getTaskEntityForUpload(taskId, user);
         
         // Generate presigned URL using event media service
+        if (task.getEvent() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.NOT_FOUND, "Event not found for task");
+        }
         EventPresignedUploadResponse response = eventMediaService.createMediaUpload(
-            task.getEventId(), user, request
+            task.getEvent().getId(), user, request
         );
         
         return ResponseEntity.ok(response);

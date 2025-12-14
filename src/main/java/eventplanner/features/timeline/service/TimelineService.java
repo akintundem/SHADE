@@ -12,6 +12,9 @@ import eventplanner.features.timeline.dto.request.UpdateTimelineItemRequest;
 import eventplanner.features.timeline.dto.response.TimelineItemResponse;
 import eventplanner.features.timeline.entity.TimelineItem;
 import eventplanner.features.timeline.repository.TimelineItemRepository;
+import eventplanner.common.util.UserAccountUtil;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +43,7 @@ public class TimelineService {
 
     private final TimelineItemRepository timelineItemRepository;
     private final EventRepository eventRepository;
+    private final UserAccountRepository userAccountRepository;
     private final TimelineHistoryService timelineHistoryService;
 
     @Transactional(readOnly = true)
@@ -58,7 +62,7 @@ public class TimelineService {
         Event event = ensureEventExists(request.getEventId());
 
         TimelineItem item = new TimelineItem();
-        item.setEventId(request.getEventId());
+        item.setEvent(event);
         item.setTitle(request.getTitle());
         item.setDescription(request.getDescription());
 
@@ -76,7 +80,12 @@ public class TimelineService {
         }
         item.setDueDate(item.getEndTime());
 
-        item.setAssignedTo(request.getAssignedTo());
+        if (request.getAssignedTo() != null) {
+            UserAccount assignedUser = userAccountRepository.findById(request.getAssignedTo())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
+                    "User not found: " + request.getAssignedTo()));
+            item.setAssignedTo(assignedUser);
+        }
         item.setCategory(request.getCategory());
         item.setTaskOrder(Optional.ofNullable(request.getTaskOrder())
                 .orElse(determineNextTaskOrder(request.getEventId())));
@@ -174,7 +183,7 @@ public class TimelineService {
         }
 
         for (TimelineItem item : items) {
-            if (!item.getEventId().equals(eventId)) {
+            if (item.getEvent() == null || !item.getEvent().getId().equals(eventId)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Timeline item does not belong to event");
             }
             TimelineReorderRequest.ItemOrderUpdate update = updates.get(item.getId());
@@ -222,7 +231,7 @@ public class TimelineService {
         }
 
         for (TimelineItem item : items) {
-            if (!item.getEventId().equals(eventId)) {
+            if (item.getEvent() == null || !item.getEvent().getId().equals(eventId)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Timeline item does not belong to event");
             }
             TimelineDependencyBatchRequest.DependencyUpdate update = updates.get(item.getId());
@@ -264,7 +273,16 @@ public class TimelineService {
         event.setTimelinePublishMessage(request.getMessage());
         if (publish) {
             event.setTimelinePublishedAt(LocalDateTime.now());
-            event.setTimelinePublishedBy(user != null ? user.getId() : null);
+            if (user != null) {
+                UserAccount publishedBy = UserAccountUtil.getManagedUserAccountOrThrow(
+                    user, 
+                    userAccountRepository, 
+                    "User not found: " + (user.getId() != null ? user.getId() : "null")
+                );
+                event.setTimelinePublishedBy(publishedBy);
+            } else {
+                event.setTimelinePublishedBy(null);
+            }
         } else {
             event.setTimelinePublishedAt(null);
             event.setTimelinePublishedBy(null);
@@ -295,7 +313,7 @@ public class TimelineService {
 
     private TimelineItem ensureItem(UUID eventId, UUID itemId) {
         return timelineItemRepository.findById(itemId)
-                .filter(item -> item.getEventId().equals(eventId))
+                .filter(item -> item.getEvent() != null && item.getEvent().getId().equals(eventId))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Timeline item not found"));
     }
 
@@ -326,7 +344,10 @@ public class TimelineService {
             }
         }
         if (request.getAssignedTo() != null) {
-            item.setAssignedTo(request.getAssignedTo());
+            UserAccount assignedUser = userAccountRepository.findById(request.getAssignedTo())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
+                    "User not found: " + request.getAssignedTo()));
+            item.setAssignedTo(assignedUser);
         }
         if (request.getCategory() != null) {
             item.setCategory(request.getCategory());
@@ -366,7 +387,7 @@ public class TimelineService {
         }
 
         boolean allSameEvent = referencedItems.stream()
-                .allMatch(item -> item.getEventId().equals(eventId));
+                .allMatch(item -> item.getEvent() != null && item.getEvent().getId().equals(eventId));
 
         if (!allSameEvent) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Dependencies must belong to the same event");
@@ -390,14 +411,14 @@ public class TimelineService {
 
         return TimelineItemResponse.builder()
                 .id(item.getId())
-                .eventId(item.getEventId())
+                .eventId(item.getEvent() != null ? item.getEvent().getId() : null)
                 .title(item.getTitle())
                 .description(item.getDescription())
                 .scheduledAt(item.getScheduledAt())
                 .startDate(item.getStartDate())
                 .endTime(item.getEndTime())
                 .durationMinutes(item.getDurationMinutes())
-                .assignedTo(item.getAssignedTo())
+                .assignedTo(item.getAssignedTo() != null ? item.getAssignedTo().getId() : null)
                 .dependencies(dependencies)
                 .status(item.getStatus())
                 .category(item.getCategory())

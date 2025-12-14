@@ -91,7 +91,7 @@ public class AuthorizationService {
             return false;
         }
         return eventRepository.findById(eventId)
-            .map(Event::getOwnerId)
+            .map(event -> event.getOwner() != null ? event.getOwner().getId() : null)
             .filter(userId::equals)
             .isPresent();
     }

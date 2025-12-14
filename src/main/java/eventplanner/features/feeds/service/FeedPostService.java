@@ -6,6 +6,7 @@ import eventplanner.common.storage.upload.PresignedUploadCompleteRequest;
 import eventplanner.common.storage.upload.PresignedUploadRequest;
 import eventplanner.common.storage.upload.PresignedUploadService;
 import eventplanner.common.storage.upload.UploadCompletionCallback;
+import eventplanner.common.util.UserAccountUtil;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventStoredObject;
 import eventplanner.features.event.repository.EventRepository;
@@ -120,14 +121,10 @@ public class FeedPostService {
         post.setPostType(type);
         post.setContent(content);
         
-        // Set createdBy relationship
-        if (principal != null && principal.getId() != null) {
-            UserAccount creator = userAccountRepository.findById(principal.getId())
-                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
-            post.setCreatedBy(creator);
-        } else {
-            post.setCreatedBy(null);
-        }
+        // Set createdBy relationship using managed entity
+        UserAccount creator = UserAccountUtil.getManagedUserAccount(principal, userAccountRepository)
+                .orElse(null);
+        post.setCreatedBy(creator);
         
         // Set initial status: TEXT posts are complete, IMAGE/VIDEO start as PENDING
         if (type == EventFeedPost.PostType.TEXT) {

@@ -2,8 +2,13 @@ package eventplanner.common.storage.upload;
 
 import eventplanner.common.exception.BadRequestException;
 import eventplanner.common.storage.s3.services.S3StorageService;
+import eventplanner.common.util.UserAccountUtil;
+import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventStoredObject;
+import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.event.repository.EventStoredObjectRepository;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,12 +34,18 @@ public class PresignedUploadService {
     private static final String DEFAULT_BUCKET_ALIAS = "event";
     
     private final S3StorageService storageService;
+    private final EventRepository eventRepository;
     private final EventStoredObjectRepository storedObjectRepository;
+    private final UserAccountRepository userAccountRepository;
     
     public PresignedUploadService(S3StorageService storageService,
-                                  EventStoredObjectRepository storedObjectRepository) {
+                                  EventRepository eventRepository,
+                                  EventStoredObjectRepository storedObjectRepository,
+                                  UserAccountRepository userAccountRepository) {
         this.storageService = storageService;
+        this.eventRepository = eventRepository;
         this.storedObjectRepository = storedObjectRepository;
+        this.userAccountRepository = userAccountRepository;
     }
     
     /**
@@ -115,10 +126,18 @@ public class PresignedUploadService {
             throw new IllegalArgumentException("fileName is required");
         }
         
+        // Fetch Event entity
+        Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        
+        // Get managed UserAccount entity for JPA relationship (optional)
+        UserAccount uploadedByUser = UserAccountUtil.getManagedUserAccount(principal, userAccountRepository)
+            .orElse(null);
+        
         // Save stored object metadata
         EventStoredObject item = storedObjectRepository.findById(mediaId).orElseGet(EventStoredObject::new);
         item.setId(mediaId);
-        item.setEventId(eventId);
+        item.setEvent(event);
         item.setPurpose(purpose);
         item.setOwnerId(ownerId);
         item.setObjectKey(request.getObjectKey());
@@ -132,7 +151,7 @@ public class PresignedUploadService {
         item.setDescription(request.getDescription());
         item.setTags(request.getTags());
         item.setMetadata(request.getMetadata());
-        item.setUploadedBy(principal != null ? principal.getId() : null);
+        item.setUploadedBy(uploadedByUser); // Set user entity relationship
         
         EventStoredObject saved = storedObjectRepository.save(item);
         

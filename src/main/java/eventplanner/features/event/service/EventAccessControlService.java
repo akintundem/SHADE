@@ -104,7 +104,7 @@ public class EventAccessControlService {
     }
 
     private boolean isOwner(UserPrincipal principal, Event event) {
-        return principal != null && event.getOwnerId() != null && event.getOwnerId().equals(principal.getId());
+        return principal != null && event.getOwner() != null && event.getOwner().getId().equals(principal.getId());
     }
 
     private Optional<EventUser> getMembership(UUID eventId, UUID userId) {

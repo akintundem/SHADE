@@ -5,6 +5,9 @@ import eventplanner.features.attendee.dto.request.*;
 import eventplanner.features.attendee.dto.response.*;
 import eventplanner.features.attendee.entity.EventAttendance;
 import eventplanner.features.attendee.repository.EventAttendanceRepository;
+import eventplanner.features.event.entity.Event;
+import eventplanner.features.event.repository.EventRepository;
+import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.features.collaboration.entity.EventUser;
 import eventplanner.features.collaboration.repository.EventUserRepository;
@@ -26,6 +29,7 @@ import java.util.stream.Collectors;
 public class AttendeeManagementService {
     
     private final EventAttendanceRepository attendanceRepository;
+    private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final EventUserRepository eventUserRepository;
     private final EventRoleRepository eventRoleRepository;
@@ -39,6 +43,7 @@ public class AttendeeManagementService {
     
     public AttendeeManagementService(
             EventAttendanceRepository attendanceRepository,
+            EventRepository eventRepository,
             UserAccountRepository userAccountRepository,
             EventUserRepository eventUserRepository,
             EventRoleRepository eventRoleRepository,
@@ -48,6 +53,7 @@ public class AttendeeManagementService {
             AttendeeExportService exportService,
             AttendeeSearchService searchService) {
         this.attendanceRepository = attendanceRepository;
+        this.eventRepository = eventRepository;
         this.userAccountRepository = userAccountRepository;
         this.eventUserRepository = eventUserRepository;
         this.eventRoleRepository = eventRoleRepository;
@@ -70,8 +76,17 @@ public class AttendeeManagementService {
         
         eventValidationUtil.validateEventExists(request.getEventId());
         
-        // Check if user is already registered
+        // Fetch Event entity
+        Event event = eventRepository.findById(request.getEventId())
+            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.getEventId()));
+        
+        // Fetch UserAccount - required for EventAttendance entity
+        UserAccount user = null;
         if (request.getUserId() != null) {
+            user = userAccountRepository.findById(request.getUserId())
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + request.getUserId()));
+            
+            // Check if user is already registered
             Optional<EventAttendance> existing = attendanceRepository.findByEventIdAndUserId(
                     request.getEventId(), request.getUserId());
             if (existing.isPresent() && existing.get().getAttendanceStatus() != AttendanceStatus.CANCELLED) {
@@ -79,18 +94,25 @@ public class AttendeeManagementService {
             }
             
             // Auto-fill details from UserAccount if available
-            userAccountRepository.findById(request.getUserId()).ifPresent(user -> {
-                request.setEmail(user.getEmail());
-                request.setName(user.getName());
-                if (request.getPhone() == null || request.getPhone().isEmpty()) {
-                    request.setPhone(user.getPhoneNumber());
-                }
-            });
+            request.setEmail(user.getEmail());
+            request.setName(user.getName());
+            if (request.getPhone() == null || request.getPhone().isEmpty()) {
+                request.setPhone(user.getPhoneNumber());
+            }
+        } else if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
+            // Try to find user by email if userId not provided
+            user = userAccountRepository.findByEmailIgnoreCase(request.getEmail())
+                .orElse(null);
+        }
+        
+        // EventAttendance entity requires a user (nullable = false)
+        if (user == null) {
+            throw new IllegalArgumentException("User is required. Please provide userId or ensure a user exists with the provided email.");
         }
         
         EventAttendance attendance = new EventAttendance();
-        attendance.setEventId(request.getEventId());
-        attendance.setUserId(request.getUserId());
+        attendance.setEvent(event);
+        attendance.setUser(user); // Set user entity relationship
         attendance.setName(request.getName());
         attendance.setEmail(request.getEmail());
         attendance.setPhone(request.getPhone());
@@ -104,7 +126,8 @@ public class AttendeeManagementService {
         attendance.setEmergencyContact(request.getEmergencyContact());
         attendance.setEmergencyPhone(request.getEmergencyPhone());
         attendance.setNotes(request.getNotes() != null ? request.getNotes() : "");
-        attendance.setQrCode(qrCodeService.generateQRCode(request.getEventId(), request.getUserId()));
+        // Generate QR code using entity IDs
+        attendance.setQrCode(qrCodeService.generateQRCode(event.getId(), user.getId()));
         
         EventAttendance saved = attendanceRepository.save(attendance);
         return convertToDetailResponse(saved);
@@ -121,12 +144,36 @@ public class AttendeeManagementService {
             throw new IllegalArgumentException("Attendees list cannot be empty");
         }
         eventValidationUtil.validateEventExists(request.getEventId());
+        
+        // Fetch Event entity once
+        Event event = eventRepository.findById(request.getEventId())
+            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.getEventId()));
 
         List<EventAttendance> attendances = request.getAttendees().stream()
                 .map(attendee -> {
+                    // Fetch UserAccount - required for EventAttendance entity
+                    UserAccount attendeeUser = null;
+                    if (attendee.getUserId() != null) {
+                        attendeeUser = userAccountRepository.findById(attendee.getUserId())
+                            .orElse(null);
+                    }
+                    
+                    // Try to find user by email if userId not provided or not found
+                    if (attendeeUser == null && attendee.getEmail() != null && !attendee.getEmail().trim().isEmpty()) {
+                        attendeeUser = userAccountRepository.findByEmailIgnoreCase(attendee.getEmail())
+                            .orElse(null);
+                    }
+                    
+                    // EventAttendance entity requires a user (nullable = false)
+                    if (attendeeUser == null) {
+                        throw new IllegalArgumentException(
+                            String.format("User is required for attendee %s. Please provide userId or ensure a user exists with email %s.", 
+                                attendee.getName(), attendee.getEmail()));
+                    }
+                    
                     EventAttendance attendance = new EventAttendance();
-                    attendance.setEventId(request.getEventId());
-                    attendance.setUserId(attendee.getUserId());
+                    attendance.setEvent(event);
+                    attendance.setUser(attendeeUser); // Set user entity relationship
                     attendance.setName(attendee.getName());
                     attendance.setEmail(attendee.getEmail());
                     attendance.setPhone(attendee.getPhone());
@@ -141,7 +188,8 @@ public class AttendeeManagementService {
                     attendance.setEmergencyContact(attendee.getEmergencyContact());
                     attendance.setEmergencyPhone(attendee.getEmergencyPhone());
                     attendance.setNotes(attendee.getNotes() != null ? attendee.getNotes() : "");
-                    attendance.setQrCode(qrCodeService.generateQRCode(request.getEventId(), attendee.getUserId()));
+                    // Generate QR code using entity IDs
+                    attendance.setQrCode(qrCodeService.generateQRCode(event.getId(), attendeeUser.getId()));
                     return attendance;
                 })
                 .collect(Collectors.toList());
@@ -161,7 +209,10 @@ public class AttendeeManagementService {
         EventAttendance attendance = attendanceRepository.findById(attendanceId)
                 .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
         
-        eventValidationUtil.validateEventExists(attendance.getEventId());
+        if (attendance.getEvent() == null) {
+            throw new IllegalArgumentException("Event not found for attendance");
+        }
+        eventValidationUtil.validateEventExists(attendance.getEvent().getId());
         // Note: Event-level authorization is enforced by RBAC at controller level
         
         if (request.getName() != null) attendance.setName(request.getName());
@@ -190,7 +241,10 @@ public class AttendeeManagementService {
         EventAttendance attendance = attendanceRepository.findById(attendanceId)
                 .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
         
-        eventValidationUtil.validateEventExists(attendance.getEventId());
+        if (attendance.getEvent() == null) {
+            throw new IllegalArgumentException("Event not found for attendance");
+        }
+        eventValidationUtil.validateEventExists(attendance.getEvent().getId());
         
         attendance.setAttendanceStatus(AttendanceStatus.CANCELLED);
         attendanceRepository.save(attendance);
@@ -214,7 +268,10 @@ public class AttendeeManagementService {
         }
         EventAttendance attendance = attendanceRepository.findById(attendanceId)
                 .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
-        eventValidationUtil.validateEventExists(attendance.getEventId());
+        if (attendance.getEvent() == null) {
+            throw new IllegalArgumentException("Event not found for attendance");
+        }
+        eventValidationUtil.validateEventExists(attendance.getEvent().getId());
         return convertToDetailResponse(attendance);
     }
     
@@ -242,7 +299,10 @@ public class AttendeeManagementService {
         EventAttendance attendance = attendanceRepository.findById(attendanceId)
                 .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
         
-        eventValidationUtil.validateEventExists(attendance.getEventId());
+        if (attendance.getEvent() == null) {
+            throw new IllegalArgumentException("Event not found for attendance");
+        }
+        eventValidationUtil.validateEventExists(attendance.getEvent().getId());
         
         // Prevent duplicate check-ins
         if (attendance.getAttendanceStatus() == AttendanceStatus.CHECKED_IN) {
@@ -298,7 +358,7 @@ public class AttendeeManagementService {
         
         return new CheckInResponse(
                 saved.getId(),
-                saved.getEventId(),
+                saved.getEvent() != null ? saved.getEvent().getId() : null,
                 saved.getName(),
                 saved.getEmail(),
                 previousStatus,
@@ -323,7 +383,7 @@ public class AttendeeManagementService {
         
         return new CheckInResponse(
                 saved.getId(),
-                saved.getEventId(),
+                saved.getEvent() != null ? saved.getEvent().getId() : null,
                 saved.getName(),
                 saved.getEmail(),
                 previousStatus,
@@ -342,9 +402,15 @@ public class AttendeeManagementService {
     
     // User-Event Relationship Management
     public EventUserResponse addUserToEvent(UUID eventId, UUID userId, EventUserType userType) {
+        // Fetch Event and User entities
+        Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        UserAccount user = userAccountRepository.findById(userId)
+            .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+        
         EventUser eventUser = new EventUser();
-        eventUser.setEventId(eventId);
-        eventUser.setUserId(userId);
+        eventUser.setEvent(event);
+        eventUser.setUser(user);
         eventUser.setUserType(userType);
         eventUser.setRegistrationStatus(RegistrationStatus.CONFIRMED);
         eventUser.setRegistrationDate(LocalDateTime.now());
@@ -389,7 +455,12 @@ public class AttendeeManagementService {
             }
         } else {
             // Create new role
+            // Note: EventRole may use eventId/userId directly if it's not a JPA relationship
+            // Check if EventRole has @ManyToOne relationships or direct UUID fields
             role = new EventRole();
+            // If EventRole uses direct UUID fields (not relationships), keep setEventId
+            // Otherwise, fetch Event and User entities and use setEvent/setUser
+            // For now, assuming EventRole has direct UUID fields based on the pattern
             role.setEventId(eventId);
             role.setUserId(request.getUserId());
             role.setRoleName(request.getRoleName());
@@ -406,9 +477,15 @@ public class AttendeeManagementService {
         EventUser eventUser = eventUserRepository.findByEventIdAndUserId(eventId, request.getUserId())
                 .orElse(null);
         if (eventUser == null) {
+            // Fetch Event and User entities
+            Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+            UserAccount user = userAccountRepository.findById(request.getUserId())
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + request.getUserId()));
+            
             eventUser = new EventUser();
-            eventUser.setEventId(eventId);
-            eventUser.setUserId(request.getUserId());
+            eventUser.setEvent(event);
+            eventUser.setUser(user);
             eventUser.setUserType(EventUserType.STAFF);
             eventUser.setRegistrationStatus(RegistrationStatus.CONFIRMED);
             eventUser.setRegistrationDate(LocalDateTime.now());
@@ -454,8 +531,8 @@ public class AttendeeManagementService {
     private AttendanceDetailResponse convertToDetailResponse(EventAttendance attendance) {
         return new AttendanceDetailResponse(
                 attendance.getId(),
-                attendance.getEventId(),
-                attendance.getUserId(),
+                attendance.getEvent() != null ? attendance.getEvent().getId() : null,
+                attendance.getUser() != null ? attendance.getUser().getId() : null,
                 attendance.getName(),
                 attendance.getEmail(),
                 attendance.getPhone(),
@@ -611,7 +688,7 @@ public class AttendeeManagementService {
         for (UUID attendanceId : request.getAttendanceIds()) {
             try {
                 EventAttendance attendance = attendanceRepository.findById(attendanceId)
-                        .filter(a -> a.getEventId().equals(eventId))
+                        .filter(a -> a.getEvent() != null && a.getEvent().getId().equals(eventId))
                         .orElseThrow(() -> new RuntimeException("Attendance not found: " + attendanceId));
                 
                 if (request.getAttendanceStatus() != null) {
@@ -639,7 +716,7 @@ public class AttendeeManagementService {
         
         for (UUID attendanceId : request.getAttendanceIds()) {
             attendanceRepository.findById(attendanceId)
-                    .filter(a -> a.getEventId().equals(eventId))
+                    .filter(a -> a.getEvent() != null && a.getEvent().getId().equals(eventId))
                     .ifPresent(attendanceRepository::delete);
         }
     }
@@ -687,7 +764,18 @@ public class AttendeeManagementService {
     
     
     private EventUserResponse convertToEventUserResponse(EventUser eventUser) {
-        List<EventRole> roles = eventRoleRepository.findByEventIdAndUserId(eventUser.getEventId(), eventUser.getUserId());
+        UUID eventId = eventUser.getEvent() != null ? eventUser.getEvent().getId() : null;
+        UUID userId = eventUser.getUser() != null ? eventUser.getUser().getId() : null;
+        if (eventId == null || userId == null) {
+            // Return empty response if event or user is not loaded
+            EventUserResponse response = new EventUserResponse();
+            response.setId(eventUser.getId());
+            response.setEventId(eventId);
+            response.setUserId(userId);
+            response.setRoles(Collections.emptyList());
+            return response;
+        }
+        List<EventRole> roles = eventRoleRepository.findByEventIdAndUserId(eventId, userId);
         List<EventUserResponse.EventRoleResponse> roleResponses = roles.stream()
                 .map(role -> new EventUserResponse.EventRoleResponse(
                         role.getId(),
@@ -701,8 +789,8 @@ public class AttendeeManagementService {
         
         EventUserResponse response = new EventUserResponse();
         response.setId(eventUser.getId());
-        response.setEventId(eventUser.getEventId());
-        response.setUserId(eventUser.getUserId());
+        response.setEventId(eventUser.getEvent() != null ? eventUser.getEvent().getId() : null);
+        response.setUserId(eventUser.getUser() != null ? eventUser.getUser().getId() : null);
         response.setUserName(eventUser.getName());
         response.setUserEmail(eventUser.getEmail());
         response.setUserType(eventUser.getUserType());

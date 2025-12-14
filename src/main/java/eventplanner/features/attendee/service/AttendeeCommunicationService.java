@@ -129,7 +129,7 @@ public class AttendeeCommunicationService {
         eventValidationUtil.validateEventExists(eventId);
         
         EventAttendance attendance = attendanceRepository.findById(attendanceId)
-                .filter(a -> a.getEventId().equals(eventId))
+                .filter(a -> a.getEvent() != null && a.getEvent().getId().equals(eventId))
                 .orElseThrow(() -> new RuntimeException("Attendance not found for event: " + eventId));
         
         if (attendance.getEmail() == null || attendance.getEmail().trim().isEmpty()) {

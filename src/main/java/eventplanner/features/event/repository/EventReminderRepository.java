@@ -5,6 +5,8 @@ import eventplanner.features.event.entity.EventReminder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -15,11 +17,14 @@ import java.util.UUID;
 public interface EventReminderRepository extends JpaRepository<EventReminder, UUID> {
 
     // UUID-based queries (for backward compatibility)
-    List<EventReminder> findByEventIdOrderByReminderTimeAsc(UUID eventId);
+    @Query("SELECT r FROM EventReminder r WHERE r.event.id = :eventId ORDER BY r.reminderTime ASC")
+    List<EventReminder> findByEventIdOrderByReminderTimeAsc(@Param("eventId") UUID eventId);
 
-    List<EventReminder> findByEventIdAndReminderTimeAfterOrderByReminderTimeAsc(UUID eventId, LocalDateTime after);
+    @Query("SELECT r FROM EventReminder r WHERE r.event.id = :eventId AND r.reminderTime > :after ORDER BY r.reminderTime ASC")
+    List<EventReminder> findByEventIdAndReminderTimeAfterOrderByReminderTimeAsc(@Param("eventId") UUID eventId, @Param("after") LocalDateTime after);
 
-    Page<EventReminder> findByEventId(UUID eventId, Pageable pageable);
+    @Query("SELECT r FROM EventReminder r WHERE r.event.id = :eventId")
+    Page<EventReminder> findByEventId(@Param("eventId") UUID eventId, Pageable pageable);
     
     // Relationship-based queries
     List<EventReminder> findByEventOrderByReminderTimeAsc(Event event);

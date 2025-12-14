@@ -5,6 +5,8 @@ import eventplanner.features.collaboration.dto.request.EventCollaboratorRequest;
 import eventplanner.features.collaboration.dto.response.EventCollaboratorResponse;
 import eventplanner.features.collaboration.entity.EventUser;
 import eventplanner.features.collaboration.repository.EventUserRepository;
+import eventplanner.features.event.entity.Event;
+import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import org.springframework.data.domain.PageRequest;
@@ -21,10 +23,14 @@ import java.util.UUID;
 public class EventCollaboratorService {
 
     private final EventUserRepository eventUserRepository;
+    private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
 
-    public EventCollaboratorService(EventUserRepository eventUserRepository, UserAccountRepository userAccountRepository) {
+    public EventCollaboratorService(EventUserRepository eventUserRepository, 
+                                   EventRepository eventRepository,
+                                   UserAccountRepository userAccountRepository) {
         this.eventUserRepository = eventUserRepository;
+        this.eventRepository = eventRepository;
         this.userAccountRepository = userAccountRepository;
     }
 
@@ -51,9 +57,13 @@ public class EventCollaboratorService {
             throw new IllegalArgumentException("User is already a collaborator on this event");
         }
 
+        // Fetch Event entity
+        Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        
         EventUser collaborator = new EventUser();
-        collaborator.setEventId(eventId);
-        collaborator.setUserId(user.getId());
+        collaborator.setEvent(event);
+        collaborator.setUser(user);
         collaborator.setEmail(user.getEmail());
         collaborator.setName(user.getName());
         collaborator.setUserType(request.getRole());
@@ -69,7 +79,7 @@ public class EventCollaboratorService {
         EventUser collaborator = eventUserRepository.findById(collaboratorId)
                 .orElseThrow(() -> new IllegalArgumentException("Collaborator not found"));
 
-        if (!collaborator.getEventId().equals(eventId)) {
+        if (collaborator.getEvent() == null || !collaborator.getEvent().getId().equals(eventId)) {
             throw new IllegalArgumentException("Collaborator does not belong to event");
         }
 
@@ -81,7 +91,7 @@ public class EventCollaboratorService {
                     .ifPresent(existing -> {
                         throw new IllegalArgumentException("User is already a collaborator on this event");
                     });
-            collaborator.setUserId(user.getId());
+            collaborator.setUser(user);
             collaborator.setEmail(user.getEmail());
             collaborator.setName(user.getName());
         }
@@ -99,7 +109,7 @@ public class EventCollaboratorService {
     public void removeCollaborator(UUID eventId, UUID collaboratorId) {
         EventUser collaborator = eventUserRepository.findById(collaboratorId)
                 .orElseThrow(() -> new IllegalArgumentException("Collaborator not found"));
-        if (!collaborator.getEventId().equals(eventId)) {
+        if (collaborator.getEvent() == null || !collaborator.getEvent().getId().equals(eventId)) {
             throw new IllegalArgumentException("Collaborator does not belong to event");
         }
         eventUserRepository.delete(collaborator);
@@ -111,8 +121,8 @@ public class EventCollaboratorService {
                                                  LocalDateTime invitationSentAt) {
         EventCollaboratorResponse response = new EventCollaboratorResponse();
         response.setCollaboratorId(eventUser.getId());
-        response.setEventId(eventUser.getEventId());
-        response.setUserId(eventUser.getUserId());
+        response.setEventId(eventUser.getEvent() != null ? eventUser.getEvent().getId() : null);
+        response.setUserId(eventUser.getUser() != null ? eventUser.getUser().getId() : null);
         response.setEmail(eventUser.getEmail());
         response.setUserName(eventUser.getName());
         response.setRole(eventUser.getUserType());

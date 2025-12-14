@@ -420,7 +420,13 @@ public class EventService {
         
         event.setIsArchived(true);
         event.setArchivedAt(LocalDateTime.now());
-        event.setArchivedBy(archivedBy);
+        if (archivedBy != null) {
+            UserAccount archivedByUser = userAccountRepository.findById(archivedBy)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + archivedBy));
+            event.setArchivedBy(archivedByUser);
+        } else {
+            event.setArchivedBy(null);
+        }
         event.setArchiveReason(reason);
         
         return eventRepository.save(event);
@@ -442,7 +448,13 @@ public class EventService {
         
         event.setIsArchived(false);
         event.setRestoredAt(LocalDateTime.now());
-        event.setRestoredBy(restoredBy);
+        if (restoredBy != null) {
+            UserAccount restoredByUser = userAccountRepository.findById(restoredBy)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + restoredBy));
+            event.setRestoredBy(restoredByUser);
+        } else {
+            event.setRestoredBy(null);
+        }
         // Clear archive fields but keep for audit trail
         // event.setArchivedAt(null);
         // event.setArchivedBy(null);
@@ -758,6 +770,7 @@ public class EventService {
                 Set<java.util.UUID> authorIds = eventPosts.stream()
                         .map(EventFeedPost::getCreatedBy)
                         .filter(java.util.Objects::nonNull)
+                        .map(UserAccount::getId)
                         .collect(Collectors.toSet());
                 if (!authorIds.isEmpty()) {
                     authorsById = userAccountRepository.findAllById(authorIds).stream()
@@ -772,14 +785,14 @@ public class EventService {
                 fp.setContent(p.getContent());
                 fp.setPostedAt(p.getCreatedAt());
 
-                UserAccount author = p.getCreatedBy() != null ? authorsById.get(p.getCreatedBy()) : null;
+                UserAccount author = p.getCreatedBy() != null ? authorsById.get(p.getCreatedBy().getId()) : null;
                 fp.setAuthorName(author != null ? author.getName() : null);
                 fp.setAuthorAvatarUrl(author != null ? author.getProfileImageUrl() : null);
 
                 // Attach media if available
                 if (p.getMediaObjectId() != null && eventStoredObjectRepository != null && s3StorageService != null) {
                     eventStoredObjectRepository.findById(p.getMediaObjectId()).ifPresent(obj -> {
-                        if (event.getId().equals(obj.getEventId())) {
+                        if (obj.getEvent() != null && event.getId().equals(obj.getEvent().getId())) {
                             fp.setMediaUrl(s3StorageService.generatePresignedGetUrl("event", obj.getObjectKey(), java.time.Duration.ofMinutes(10)).toString());
                         }
                     });

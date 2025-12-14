@@ -14,22 +14,27 @@ import java.util.UUID;
 @Repository
 public interface EventAttendanceRepository extends JpaRepository<EventAttendance, UUID> {
     
-    List<EventAttendance> findByEventId(UUID eventId);
+    @Query("SELECT ea FROM EventAttendance ea WHERE ea.event.id = :eventId")
+    List<EventAttendance> findByEventId(@Param("eventId") UUID eventId);
     
-    List<EventAttendance> findByEventIdAndAttendanceStatus(UUID eventId, AttendanceStatus status);
+    @Query("SELECT ea FROM EventAttendance ea WHERE ea.event.id = :eventId AND ea.attendanceStatus = :status")
+    List<EventAttendance> findByEventIdAndAttendanceStatus(@Param("eventId") UUID eventId, @Param("status") AttendanceStatus status);
     
-    Optional<EventAttendance> findByEventIdAndUserId(UUID eventId, UUID userId);
+    @Query("SELECT ea FROM EventAttendance ea WHERE ea.event.id = :eventId AND ea.user.id = :userId")
+    Optional<EventAttendance> findByEventIdAndUserId(@Param("eventId") UUID eventId, @Param("userId") UUID userId);
     
-    Optional<EventAttendance> findByEventIdAndQrCode(UUID eventId, String qrCode);
+    @Query("SELECT ea FROM EventAttendance ea WHERE ea.event.id = :eventId AND ea.qrCode = :qrCode")
+    Optional<EventAttendance> findByEventIdAndQrCode(@Param("eventId") UUID eventId, @Param("qrCode") String qrCode);
     
-    List<EventAttendance> findByEventIdAndQrCodeUsed(UUID eventId, Boolean qrCodeUsed);
+    @Query("SELECT ea FROM EventAttendance ea WHERE ea.event.id = :eventId AND ea.qrCodeUsed = :qrCodeUsed")
+    List<EventAttendance> findByEventIdAndQrCodeUsed(@Param("eventId") UUID eventId, @Param("qrCodeUsed") Boolean qrCodeUsed);
     
-    @Query("SELECT ea FROM EventAttendance ea WHERE ea.eventId = :eventId AND ea.attendanceStatus IN :statuses")
+    @Query("SELECT ea FROM EventAttendance ea WHERE ea.event.id = :eventId AND ea.attendanceStatus IN :statuses")
     List<EventAttendance> findByEventIdAndAttendanceStatusIn(@Param("eventId") UUID eventId, @Param("statuses") List<AttendanceStatus> statuses);
     
-    @Query("SELECT COUNT(ea) FROM EventAttendance ea WHERE ea.eventId = :eventId AND ea.attendanceStatus = :status")
+    @Query("SELECT COUNT(ea) FROM EventAttendance ea WHERE ea.event.id = :eventId AND ea.attendanceStatus = :status")
     Long countByEventIdAndAttendanceStatus(@Param("eventId") UUID eventId, @Param("status") AttendanceStatus status);
     
-    @Query("SELECT ea FROM EventAttendance ea WHERE ea.eventId = :eventId AND ea.checkInTime IS NOT NULL ORDER BY ea.checkInTime ASC")
+    @Query("SELECT ea FROM EventAttendance ea WHERE ea.event.id = :eventId AND ea.checkInTime IS NOT NULL ORDER BY ea.checkInTime ASC")
     List<EventAttendance> findCheckedInByEventIdOrderByCheckInTime(@Param("eventId") UUID eventId);
 }

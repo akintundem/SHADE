@@ -10,8 +10,11 @@ import eventplanner.features.collaboration.entity.EventUser;
 import eventplanner.features.collaboration.enums.CollaboratorInviteStatus;
 import eventplanner.features.collaboration.repository.EventCollaboratorInviteRepository;
 import eventplanner.features.collaboration.repository.EventUserRepository;
+import eventplanner.features.event.entity.Event;
+import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.event.dto.request.CreateCollaboratorInviteRequest;
 import eventplanner.features.event.dto.response.CollaboratorInviteResponse;
+import eventplanner.common.util.UserAccountUtil;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -42,6 +45,7 @@ public class EventCollaboratorInviteService {
 
     private final EventCollaboratorInviteRepository inviteRepository;
     private final EventUserRepository eventUserRepository;
+    private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
 
@@ -50,12 +54,14 @@ public class EventCollaboratorInviteService {
     public EventCollaboratorInviteService(
             EventCollaboratorInviteRepository inviteRepository,
             EventUserRepository eventUserRepository,
+            EventRepository eventRepository,
             UserAccountRepository userAccountRepository,
             NotificationService notificationService,
             @Value("${app.base-url:http://localhost:8080}") String appBaseUrl
     ) {
         this.inviteRepository = inviteRepository;
         this.eventUserRepository = eventUserRepository;
+        this.eventRepository = eventRepository;
         this.userAccountRepository = userAccountRepository;
         this.notificationService = notificationService;
         this.appBaseUrl = appBaseUrl;
@@ -115,10 +121,30 @@ public class EventCollaboratorInviteService {
             }
         }
 
+        // Fetch Event entity
+        Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        
+        // Get managed UserAccount entity for inviter (required for JPA relationship)
+        UserAccount inviterUser = UserAccountUtil.getManagedUserAccountOrThrow(
+            inviter, 
+            userAccountRepository, 
+            "Inviter user not found"
+        );
+        
+        // Fetch invitee UserAccount if userId is provided
+        UserAccount inviteeUser = null;
+        if (inviteeUserId != null) {
+            inviteeUser = userAccountRepository.findById(inviteeUserId)
+                .orElse(null); // Optional - may not exist yet if invite is by email
+        }
+        
         EventCollaboratorInvite invite = new EventCollaboratorInvite();
-        invite.setEventId(eventId);
-        invite.setInviterUserId(inviter.getId());
-        invite.setInviteeUserId(inviteeUserId);
+        invite.setEvent(event);
+        invite.setInviter(inviterUser);
+        if (inviteeUser != null) {
+            invite.setInvitee(inviteeUser);
+        }
         invite.setInviteeEmail(inviteeEmail);
         invite.setRole(request.getRole());
         invite.setStatus(CollaboratorInviteStatus.PENDING);
@@ -135,7 +161,7 @@ public class EventCollaboratorInviteService {
         EventCollaboratorInvite saved = inviteRepository.save(invite);
 
         // Notify invitee via push (in-app) if possible
-        if (Boolean.TRUE.equals(request.getSendPush()) && saved.getInviteeUserId() != null) {
+        if (Boolean.TRUE.equals(request.getSendPush()) && saved.getInvitee() != null) {
             sendPushInvite(saved);
         }
 
@@ -237,7 +263,11 @@ public class EventCollaboratorInviteService {
             throw new IllegalArgumentException("Invite has expired");
         }
 
-        UUID eventId = invite.getEventId();
+        Event event = invite.getEvent();
+        if (event == null) {
+            throw new IllegalArgumentException("Event not found for invite");
+        }
+        UUID eventId = event.getId();
         UUID userId = principal.getId();
 
         // If they already joined somehow, mark invite accepted and return existing membership.
@@ -249,9 +279,13 @@ public class EventCollaboratorInviteService {
             return existingMembership.get();
         }
 
+        // Fetch UserAccount for membership
+        UserAccount user = userAccountRepository.findById(userId)
+            .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+        
         EventUser membership = new EventUser();
-        membership.setEventId(eventId);
-        membership.setUserId(userId);
+        membership.setEvent(event);
+        membership.setUser(user);
         membership.setEmail(principal.getUser() != null ? principal.getUser().getEmail() : invite.getInviteeEmail());
         membership.setName(principal.getUser() != null ? principal.getUser().getName() : null);
         membership.setUserType(invite.getRole() != null ? invite.getRole() : EventUserType.COLLABORATOR);
@@ -271,7 +305,8 @@ public class EventCollaboratorInviteService {
         UUID principalId = principal.getId();
         String principalEmail = principal.getUser() != null ? principal.getUser().getEmail() : null;
 
-        boolean matchesUserId = invite.getInviteeUserId() != null && invite.getInviteeUserId().equals(principalId);
+        UUID inviteeUserId = invite.getInvitee() != null ? invite.getInvitee().getId() : null;
+        boolean matchesUserId = inviteeUserId != null && inviteeUserId.equals(principalId);
         boolean matchesEmail = invite.getInviteeEmail() != null
                 && principalEmail != null
                 && invite.getInviteeEmail().equalsIgnoreCase(principalEmail);
@@ -282,25 +317,40 @@ public class EventCollaboratorInviteService {
     }
 
     private void sendPushInvite(EventCollaboratorInvite invite) {
+        Event event = invite.getEvent();
+        if (event == null) {
+            return; // Cannot send notification without event
+        }
+        
         Map<String, Object> data = new HashMap<>();
         data.put("body", "You have been invited to collaborate on an event.");
         data.put("inviteId", invite.getId().toString());
-        data.put("eventId", invite.getEventId().toString());
+        data.put("eventId", event.getId().toString());
         data.put("role", invite.getRole() != null ? invite.getRole().name() : null);
+
+        UUID inviteeUserId = invite.getInvitee() != null ? invite.getInvitee().getId() : null;
+        if (inviteeUserId == null) {
+            return; // Cannot send push without user ID
+        }
 
         notificationService.send(NotificationRequest.builder()
                 .type(CommunicationType.PUSH_NOTIFICATION)
-                .to(invite.getInviteeUserId().toString())
+                .to(inviteeUserId.toString())
                 .subject("Event collaboration invite")
                 .templateVariables(data)
-                .eventId(invite.getEventId())
+                .eventId(event.getId())
                 .build());
     }
 
     private void sendEmailInvite(EventCollaboratorInvite invite, String rawToken, UserAccount inviterUser) {
+        Event event = invite.getEvent();
+        if (event == null) {
+            return; // Cannot send notification without event
+        }
+        
         Map<String, Object> variables = new HashMap<>();
         variables.put("inviterName", inviterUser != null ? inviterUser.getName() : "Someone");
-        variables.put("eventId", invite.getEventId().toString());
+        variables.put("eventId", event.getId().toString());
         variables.put("role", invite.getRole() != null ? invite.getRole().name() : null);
         if (invite.getMessage() != null) {
             variables.put("customMessage", invite.getMessage());
@@ -316,16 +366,16 @@ public class EventCollaboratorInviteService {
                 // Reuse existing template to avoid missing template failures.
                 .templateId("event-invitation")
                 .templateVariables(variables)
-                .eventId(invite.getEventId())
+                .eventId(event.getId())
                 .build());
     }
 
     private CollaboratorInviteResponse toResponse(EventCollaboratorInvite invite) {
         CollaboratorInviteResponse res = new CollaboratorInviteResponse();
         res.setInviteId(invite.getId());
-        res.setEventId(invite.getEventId());
-        res.setInviterUserId(invite.getInviterUserId());
-        res.setInviteeUserId(invite.getInviteeUserId());
+        res.setEventId(invite.getEvent() != null ? invite.getEvent().getId() : null);
+        res.setInviterUserId(invite.getInviter() != null ? invite.getInviter().getId() : null);
+        res.setInviteeUserId(invite.getInvitee() != null ? invite.getInvitee().getId() : null);
         res.setInviteeEmail(invite.getInviteeEmail());
         res.setRole(invite.getRole());
         res.setStatus(invite.getStatus());
