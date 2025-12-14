@@ -1,6 +1,5 @@
 package eventplanner.features.event.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.features.event.dto.request.CreateEventWithCoverUploadRequest;
 import eventplanner.features.event.dto.request.EventListRequest;
 import eventplanner.features.event.dto.request.UpdateEventWithCoverUploadRequest;
@@ -56,18 +55,15 @@ public class EventCrudController {
     private final EventMediaService eventMediaService;
     private final AuthorizationService authorizationService;
     private final EventIdempotencyService idempotencyService;
-    private final ObjectMapper objectMapper;
 
     public EventCrudController(EventService eventService, 
                               EventMediaService eventMediaService,
                               AuthorizationService authorizationService,
-                              EventIdempotencyService idempotencyService,
-                              ObjectMapper objectMapper) {
+                              EventIdempotencyService idempotencyService) {
         this.eventService = eventService;
         this.eventMediaService = eventMediaService;
         this.authorizationService = authorizationService;
         this.idempotencyService = idempotencyService;
-        this.objectMapper = objectMapper;
     }
 
 
@@ -233,17 +229,13 @@ public class EventCrudController {
             
             // Check idempotency - return cached result if available
             if (StringUtils.hasText(idempotencyKey)) {
-                Optional<String> cachedResult = idempotencyService.getProcessedResult(idempotencyKey);
+                Optional<CreateEventWithCoverUploadResponse> cachedResult = idempotencyService.getProcessedResult(idempotencyKey);
                 if (cachedResult.isPresent()) {
-                    try {
-                        CreateEventWithCoverUploadResponse cached = objectMapper.readValue(cachedResult.get(), CreateEventWithCoverUploadResponse.class);
-                        return ResponseEntity.ok()
-                                .header("X-Idempotency-Replay", "true")
-                                .header(HttpHeaders.LOCATION, "/api/v1/events/" + cached.getEvent().getId())
-                                .body(cached);
-                    } catch (Exception e) {
-                        // Log but continue with normal creation
-                    }
+                    CreateEventWithCoverUploadResponse cached = cachedResult.get();
+                    return ResponseEntity.ok()
+                            .header("X-Idempotency-Replay", "true")
+                            .header(HttpHeaders.LOCATION, "/api/v1/events/" + cached.getEvent().getId())
+                            .body(cached);
                 }
                 
                 // Mark as processing to prevent concurrent requests
@@ -265,12 +257,7 @@ public class EventCrudController {
                 
                 // Store result for idempotency
                 if (StringUtils.hasText(idempotencyKey)) {
-                    try {
-                        String resultJson = objectMapper.writeValueAsString(response);
-                        idempotencyService.storeResult(idempotencyKey, resultJson);
-                    } catch (Exception e) {
-                        // Log but don't fail the request
-                    }
+                    idempotencyService.storeResult(idempotencyKey, response);
                 }
                 
                 URI location = URI.create("/api/v1/events/" + created.getId());

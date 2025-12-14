@@ -1,5 +1,6 @@
 package eventplanner.features.event.service;
 
+import eventplanner.features.event.dto.response.CreateEventWithCoverUploadResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -17,32 +18,35 @@ import java.util.Optional;
 @Slf4j
 public class EventIdempotencyService {
     
-    private final RedisTemplate<String, String> redisTemplate;
+    private final RedisTemplate<String, Object> redisTemplate;
     private static final String IDEMPOTENCY_KEY_PREFIX = "event:idempotency:";
     private static final Duration IDEMPOTENCY_TTL = Duration.ofHours(24);
     
     /**
      * Check if an event creation with this idempotency key has already been processed
      */
-    public Optional<String> getProcessedResult(String idempotencyKey) {
+    public Optional<CreateEventWithCoverUploadResponse> getProcessedResult(String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return Optional.empty();
         }
         
         String key = IDEMPOTENCY_KEY_PREFIX + idempotencyKey;
-        String result = redisTemplate.opsForValue().get(key);
+        Object result = redisTemplate.opsForValue().get(key);
         
         if (result != null) {
             log.info("Found cached idempotent result for key: {}", idempotencyKey);
+            if (result instanceof CreateEventWithCoverUploadResponse) {
+                return Optional.of((CreateEventWithCoverUploadResponse) result);
+            }
         }
         
-        return Optional.ofNullable(result);
+        return Optional.empty();
     }
     
     /**
      * Store the result of an event creation with this idempotency key
      */
-    public void storeResult(String idempotencyKey, String result) {
+    public void storeResult(String idempotencyKey, CreateEventWithCoverUploadResponse result) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return;
         }
