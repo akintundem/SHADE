@@ -1,4 +1,4 @@
-package eventplanner.features.attendee.dto;
+package eventplanner.features.attendee.dto.request;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
@@ -28,4 +28,3 @@ public class BulkAttendeeCreateRequest {
     @Valid
     private List<AttendeeInfo> attendees;
 }
-

@@ -1,4 +1,4 @@
-package eventplanner.features.attendee.dto;
+package eventplanner.features.attendee.dto.request;
 
 import jakarta.validation.constraints.Email;
 import lombok.AllArgsConstructor;
@@ -33,4 +33,3 @@ public class AttendeeInfo {
      */
     private String name;
 }
-

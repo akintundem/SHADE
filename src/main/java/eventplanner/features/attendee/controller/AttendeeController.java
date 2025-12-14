@@ -1,6 +1,6 @@
 package eventplanner.features.attendee.controller;
 
-import eventplanner.features.attendee.dto.BulkAttendeeCreateRequest;
+import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
 import eventplanner.features.attendee.dto.request.UpdateAttendeeRequest;
 import eventplanner.features.attendee.dto.response.AttendeeResponse;
 import eventplanner.features.attendee.entity.Attendee;
