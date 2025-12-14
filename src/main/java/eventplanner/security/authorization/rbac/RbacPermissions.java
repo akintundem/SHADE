@@ -63,7 +63,6 @@ public final class RbacPermissions {
     public static final String EVENT_COMPLETE = "event.complete";
     public static final String EVENT_CREATE = "event.create";
     public static final String EVENT_DELETE = "event.delete";
-    public static final String EVENT_DUPLICATE = "event.duplicate";
     public static final String EVENT_MEDIA_DELETE = "event.media.delete";
     public static final String EVENT_MEDIA_READ = "event.media.read";
     public static final String EVENT_MEDIA_UPDATE = "event.media.update";

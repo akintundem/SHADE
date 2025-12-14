@@ -1078,57 +1078,6 @@ public class EventService {
         return eventRepository.save(event);
     }
 
-    // ==================== EVENT DUPLICATION & TEMPLATES METHODS ====================
-
-    /**
-     * Duplicate event
-     */
-    public Event duplicateEvent(UUID eventId, String newEventName) {
-        Event originalEvent = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        Event duplicatedEvent = new Event();
-        duplicatedEvent.setName(newEventName != null ? newEventName : originalEvent.getName() + " (Copy)");
-        duplicatedEvent.setDescription(originalEvent.getDescription());
-        duplicatedEvent.setOwnerId(originalEvent.getOwnerId());
-        duplicatedEvent.setEventType(originalEvent.getEventType());
-        duplicatedEvent.setEventStatus(EventStatus.DRAFT); // Start as draft
-        duplicatedEvent.setCapacity(originalEvent.getCapacity());
-        duplicatedEvent.setIsPublic(false); // Start as private
-        duplicatedEvent.setRequiresApproval(originalEvent.getRequiresApproval());
-        duplicatedEvent.setTheme(originalEvent.getTheme());
-        duplicatedEvent.setObjectives(originalEvent.getObjectives());
-        duplicatedEvent.setTargetAudience(originalEvent.getTargetAudience());
-        duplicatedEvent.setSuccessMetrics(originalEvent.getSuccessMetrics());
-        duplicatedEvent.setBrandingGuidelines(originalEvent.getBrandingGuidelines());
-        duplicatedEvent.setVenueRequirements(originalEvent.getVenueRequirements());
-        duplicatedEvent.setTechnicalRequirements(originalEvent.getTechnicalRequirements());
-        duplicatedEvent.setAccessibilityFeatures(originalEvent.getAccessibilityFeatures());
-        duplicatedEvent.setEmergencyPlan(originalEvent.getEmergencyPlan());
-        duplicatedEvent.setBackupPlan(originalEvent.getBackupPlan());
-        duplicatedEvent.setPostEventTasks(originalEvent.getPostEventTasks());
-        
-        // Copy venue
-        duplicatedEvent.setVenueId(originalEvent.getVenueId());
-        if (originalEvent.getVenue() != null) {
-            // Create a new Venue instance with copied values
-            Venue copiedVenue = new Venue();
-            Venue originalVenue = originalEvent.getVenue();
-            copiedVenue.setAddress(originalVenue.getAddress());
-            copiedVenue.setCity(originalVenue.getCity());
-            copiedVenue.setState(originalVenue.getState());
-            copiedVenue.setCountry(originalVenue.getCountry());
-            copiedVenue.setZipCode(originalVenue.getZipCode());
-            copiedVenue.setLatitude(originalVenue.getLatitude());
-            copiedVenue.setLongitude(originalVenue.getLongitude());
-            copiedVenue.setGooglePlaceId(originalVenue.getGooglePlaceId());
-            copiedVenue.setGooglePlaceData(originalVenue.getGooglePlaceData());
-            duplicatedEvent.setVenue(copiedVenue);
-        }
-        
-        return eventRepository.save(duplicatedEvent);
-    }
-
     // ==================== HELPER METHODS ====================
 
     /**

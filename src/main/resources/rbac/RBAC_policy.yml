@@ -336,15 +336,6 @@ policy:
         owns_scope: true
         is_member: true
     -
-      name: event.duplicate
-      scope: EVENT
-      resources: id
-      description: Duplicate event
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
       name: event.media.delete
       scope: EVENT
       resources: id,media_id
@@ -1155,7 +1146,6 @@ policy:
         - event.coverimage.delete
         - event.coverimage.update
         - event.delete
-        - event.duplicate
         - event.media.delete
         - event.media.read
         - event.media.update
@@ -1221,7 +1211,6 @@ policy:
         - event.coverimage.delete
         - event.coverimage.update
         - event.delete
-        - event.duplicate
         - event.media.delete
         - event.media.read
         - event.media.update

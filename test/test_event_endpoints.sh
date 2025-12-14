@@ -1149,13 +1149,6 @@ EOF
     }'
     run_test "Make Event Private (via Update Event)" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_private_data" "200" "Make event private via PUT /events/{id}"
     
-    # Duplication Tests
-    local duplicate_data='{
-        "newEventName": "Duplicated Test Event"
-    }'
-    run_test "Duplicate Event" "POST" "/api/v1/events/$EVENT_ID/duplicate" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$duplicate_data" "200" "Duplicate event"
-    echo ""
-    
     # Step 6: Media Management Tests
     echo -e "${CYAN}📸 Step 6: Media Management Tests${NC}"
     echo "=================================="

@@ -1,6 +1,5 @@
 package eventplanner.features.event.controller;
 
-import eventplanner.features.event.dto.request.EventDuplicateRequest;
 import eventplanner.features.event.dto.request.EventShareRequest;
 import jakarta.validation.Valid;
 import eventplanner.features.event.dto.response.EventResponse;
@@ -193,22 +192,6 @@ public class EventManagementController {
         }
 
         return ResponseEntity.ok(response);
-    }
-
-    // ==================== 8. EVENT DUPLICATION & TEMPLATES ENDPOINTS ====================
-
-    @PostMapping("/{id}/duplicate")
-    @RequiresPermission(value = RbacPermissions.EVENT_DUPLICATE, resources = {"event_id=#id"})
-    @Operation(summary = "Duplicate event", description = "Create a duplicate of an existing event")
-    public ResponseEntity<EventResponse> duplicateEvent(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @Valid @RequestBody EventDuplicateRequest request) {
-        try {
-            Event duplicatedEvent = eventService.duplicateEvent(id, request.getNewEventName());
-            return ResponseEntity.ok(eventService.toResponse(duplicatedEvent));
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
     }
 
     // ==================== HELPER METHODS ====================
