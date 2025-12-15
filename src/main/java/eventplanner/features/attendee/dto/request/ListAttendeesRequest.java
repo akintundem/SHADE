@@ -12,7 +12,7 @@ import java.util.UUID;
 @Schema(description = "Request to list and filter attendees for an event")
 public class ListAttendeesRequest {
 
-    @Schema(description = "Event ID (required)", required = true)
+    @Schema(description = "Event ID (required)")
     private UUID eventId;
 
     @Schema(description = "Filter by RSVP status (comma-separated): PENDING,CONFIRMED,DECLINED,TENTATIVE,NO_SHOW")

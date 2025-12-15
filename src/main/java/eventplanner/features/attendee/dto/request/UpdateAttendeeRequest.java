@@ -2,7 +2,6 @@ package eventplanner.features.attendee.dto.request;
 
 import eventplanner.features.attendee.entity.Attendee;
 import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 /**

@@ -1,6 +1,8 @@
 package eventplanner.features.attendee.service;
 
-import eventplanner.features.attendee.dto.request.AttendeeInfo;
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.domain.enums.CommunicationType;
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
 import eventplanner.features.attendee.dto.response.AttendeeResponse;
 import eventplanner.features.attendee.entity.Attendee;
@@ -36,6 +38,7 @@ public class AttendeeService {
     private final AttendeeRepository repository;
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
+    private final NotificationService notificationService;
 
     /**
      * Create a single attendee
@@ -348,7 +351,63 @@ public class AttendeeService {
             return attendee;
         }).collect(Collectors.toList());
         
-        return addAll(toSave);
+        List<Attendee> saved = addAll(toSave);
+        
+        // Send welcome/confirmation communications to newly created attendees
+        sendAttendeeWelcomeCommunications(event, saved);
+        
+        return saved;
+    }
+    
+    /**
+     * Send welcome communications to newly created attendees
+     */
+    private void sendAttendeeWelcomeCommunications(Event event, List<Attendee> attendees) {
+        if (event == null || attendees == null || attendees.isEmpty()) {
+            return;
+        }
+        
+        Map<String, Object> templateVariables = new HashMap<>();
+        templateVariables.put("eventName", event.getName());
+        templateVariables.put("eventId", event.getId().toString());
+        if (event.getStartDateTime() != null) {
+            templateVariables.put("eventStartDate", event.getStartDateTime().toString());
+        }
+        if (event.getVenueRequirements() != null) {
+            templateVariables.put("eventVenue", event.getVenueRequirements());
+        }
+        
+        for (Attendee attendee : attendees) {
+            try {
+                // Send email if available
+                if (attendee.getEmail() != null && !attendee.getEmail().trim().isEmpty()) {
+                    notificationService.send(NotificationRequest.builder()
+                            .type(CommunicationType.EMAIL)
+                            .to(attendee.getEmail())
+                            .subject("You've been added to: " + event.getName())
+                            .templateId("attendee-welcome")
+                            .templateVariables(templateVariables)
+                            .eventId(event.getId())
+                            .build());
+                }
+                
+                // Send push notification if user account is linked
+                if (attendee.getUser() != null && attendee.getUser().getId() != null) {
+                    Map<String, Object> pushData = new HashMap<>(templateVariables);
+                    pushData.put("body", "You've been added as an attendee to: " + event.getName());
+                    
+                    notificationService.send(NotificationRequest.builder()
+                            .type(CommunicationType.PUSH_NOTIFICATION)
+                            .to(attendee.getUser().getId().toString())
+                            .subject("Event attendance confirmed")
+                            .templateVariables(pushData)
+                            .eventId(event.getId())
+                            .build());
+                }
+            } catch (Exception e) {
+                // Don't fail the entire operation if communication fails
+            }
+        }
     }
     
     /**

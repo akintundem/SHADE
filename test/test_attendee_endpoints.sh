@@ -155,8 +155,8 @@ DEVICE_ID=""
 USER_ID=""
 EVENT_ID=""
 ATTENDEE_ID=""
-ATTENDANCE_ID=""
-ATTENDANCE_ID_2=""
+ATTENDEE_ID_2=""
+INVITE_ID=""
 QR_CODE=""
 
 verify_email_in_database() {
@@ -248,14 +248,11 @@ cat > "$REPORT_FILE" << EOF
 |---------------|-------|--------|--------|--------------|
 | Health Check | 0 | 0 | 0 | 0% |
 | Basic Attendee Operations | 0 | 0 | 0 | 0% |
-| Attendance Management | 0 | 0 | 0 | 0% |
-| Check-in/Check-out | 0 | 0 | 0 | 0% |
+| Attendee Invite Management | 0 | 0 | 0 | 0% |
+| Check-in Operations | 0 | 0 | 0 | 0% |
 | QR Code Management | 0 | 0 | 0 | 0% |
-| Analytics & Reporting | 0 | 0 | 0 | 0% |
 | Search & Filtering | 0 | 0 | 0 | 0% |
 | Bulk Operations | 0 | 0 | 0 | 0% |
-| Export & Import | 0 | 0 | 0 | 0% |
-| Communication | 0 | 0 | 0 | 0% |
 | **TOTAL** | 0 | 0 | 0 | 0% |
 
 ---
@@ -405,19 +402,20 @@ run_test() {
             "Create Event")
                 EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
                 ;;
-            "Bulk Add Attendees")
+            "Bulk Add Attendees by Email"|"Bulk Add Attendees by UserId"|"Bulk Add More Attendees")
+                # Extract first attendee ID from array response
                 ATTENDEE_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-                ;;
-            "Register for Event")
-                ATTENDANCE_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-                ;;
-            "Bulk Register Attendees")
-                if [ -z "$ATTENDANCE_ID_2" ]; then
-                    ATTENDANCE_ID_2=$(echo "$response_body" | grep -o '"id":"[^"]*"' | tail -1 | cut -d'"' -f4)
+                # Extract second attendee ID if available
+                if [ -z "$ATTENDEE_ID_2" ]; then
+                    ATTENDEE_ID_2=$(echo "$response_body" | grep -o '"id":"[^"]*"' | tail -1 | cut -d'"' -f4)
                 fi
                 ;;
-            "Get Attendee QR Code")
-                QR_CODE=$(echo "$response_body" | tr -d '"')
+            "Create Attendee Invite by Email"|"Create Attendee Invite by UserId")
+                INVITE_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+                ;;
+            "Accept Attendee Invite")
+                # After accepting invite, we get an attendee response
+                ATTENDEE_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
                 ;;
         esac
     fi
@@ -617,15 +615,12 @@ main() {
     echo "2. Authenticate user"
     echo "3. Create test event"
     echo "4. Test basic attendee operations"
-    echo "5. Test attendance management"
-    echo "6. Test check-in/check-out operations"
-    echo "7. Test QR code management"
-    echo "8. Test analytics and reporting"
-    echo "9. Test search and filtering"
-    echo "10. Test bulk operations"
-    echo "11. Test export and import"
-    echo "12. Test communication features"
-    echo "13. Clean up test data"
+    echo "5. Test attendee invite management"
+    echo "6. Test check-in operations"
+    echo "7. Test QR code management (if available)"
+    echo "8. Test search and filtering"
+    echo "9. Test additional bulk operations"
+    echo "10. Clean up test data"
     echo ""
     
     # Step 1: Check service availability
@@ -659,285 +654,181 @@ main() {
     echo -e "${CYAN}👤 Step 4: Basic Attendee Operations Tests${NC}"
     echo "==========================================="
     
-    # Test bulk add attendees
+    # Test bulk add attendees (by email)
     local bulk_attendee_data='{
         "eventId": "'$EVENT_ID'",
         "attendees": [
             {
                 "name": "John Doe",
-                "email": "john.doe@example.com",
-                "phone": "+1234567891"
+                "email": "john.doe@example.com"
             },
             {
                 "name": "Jane Smith",
-                "email": "jane.smith@example.com",
-                "phone": "+1234567892"
+                "email": "jane.smith@example.com"
             }
         ]
     }'
-    run_test "Bulk Add Attendees" "POST" "/api/v1/attendees" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$bulk_attendee_data" "200" "Bulk add attendees to event"
+    run_test "Bulk Add Attendees by Email" "POST" "/api/v1/attendees" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$bulk_attendee_data" "200" "Bulk add attendees to event by email"
     
-    # Test list attendees by event
-    run_test "List Attendees by Event" "GET" "/api/v1/attendees/event/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all attendees for event"
-    
-    # Test update RSVP status
-    if [ -n "$ATTENDEE_ID" ]; then
-        run_test "Update RSVP Status" "PATCH" "/api/v1/attendees/events/$EVENT_ID/attendees/$ATTENDEE_ID/rsvp?status=CONFIRMED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Update attendee RSVP status"
+    # Test bulk add attendees (by userId)
+    if [ -n "$USER_ID" ]; then
+        local bulk_attendee_user_data='{
+            "eventId": "'$EVENT_ID'",
+            "attendees": [
+                {
+                    "userId": "'$USER_ID'"
+                }
+            ]
+        }'
+        run_test "Bulk Add Attendees by UserId" "POST" "/api/v1/attendees" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$bulk_attendee_user_data" "200" "Bulk add attendees to event by userId"
     fi
     
-    # Test check-in attendee (basic)
+    # Test list attendees by event (with query params)
+    run_test "List Attendees by Event" "GET" "/api/v1/attendees?eventId=$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all attendees for event"
+    
+    # Test get attendee by ID
     if [ -n "$ATTENDEE_ID" ]; then
-        run_test "Check-in Attendee (Basic)" "POST" "/api/v1/attendees/events/$EVENT_ID/attendees/$ATTENDEE_ID/check-in" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Check-in attendee using basic endpoint"
+        run_test "Get Attendee by ID" "GET" "/api/v1/attendees/$ATTENDEE_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific attendee details"
+    fi
+    
+    # Test update attendee
+    if [ -n "$ATTENDEE_ID" ]; then
+        local update_attendee_data='{
+            "name": "Updated John Doe",
+            "email": "updated.john.doe@example.com",
+            "rsvpStatus": "CONFIRMED"
+        }'
+        run_test "Update Attendee" "PUT" "/api/v1/attendees/$ATTENDEE_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_attendee_data" "200" "Update attendee information"
+    fi
+    
+    # Test delete attendee
+    if [ -n "$ATTENDEE_ID" ]; then
+        run_test "Delete Attendee" "DELETE" "/api/v1/attendees/$ATTENDEE_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete attendee from event"
     fi
     echo ""
     
-    # Step 5: Attendance Management Tests
-    echo -e "${CYAN}📋 Step 5: Attendance Management Tests${NC}"
-    echo "========================================"
+    # Step 5: Attendee Invite Management Tests
+    echo -e "${CYAN}📋 Step 5: Attendee Invite Management Tests${NC}"
+    echo "=========================================="
     
-    # Test register for event
-    local attendance_data='{
-        "userId": "'$USER_ID'",
-        "name": "Test Attendee",
-        "email": "test.attendee@example.com",
-        "phone": "+1234567893",
-        "attendanceStatus": "REGISTERED",
-        "ticketType": "VIP",
-        "dietaryRestrictions": "Vegetarian",
-        "accessibilityNeeds": "Wheelchair access",
-        "emergencyContact": "Emergency Contact Name",
-        "emergencyPhone": "+1234567894",
-        "notes": "Test notes"
+    # Test create attendee invite (by email)
+    local invite_data='{
+        "email": "invite.test@example.com"
     }'
-    run_test "Register for Event" "POST" "/api/v1/events/$EVENT_ID/attendances" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$attendance_data" "201" "Register user for event"
+    run_test "Create Attendee Invite by Email" "POST" "/api/v1/events/$EVENT_ID/attendee-invites" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invite_data" "201" "Create attendee invite by email"
     
-    # Test bulk register attendees
-    local bulk_attendance_data='{
-        "attendances": [
-            {
-                "userId": "'$USER_ID'",
-                "name": "Bulk Attendee 1",
-                "email": "bulk1@example.com",
-                "phone": "+1234567895",
-                "ticketType": "REGULAR"
-            },
-            {
-                "userId": "'$USER_ID'",
-                "name": "Bulk Attendee 2",
-                "email": "bulk2@example.com",
-                "phone": "+1234567896",
-                "ticketType": "REGULAR"
-            }
-        ]
-    }'
-    run_test "Bulk Register Attendees" "POST" "/api/v1/events/$EVENT_ID/attendances/bulk" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$bulk_attendance_data" "201" "Bulk register attendees"
-    
-    # Test get all attendees
-    run_test "Get All Attendees" "GET" "/api/v1/events/$EVENT_ID/attendances" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all attendees for event"
-    
-    # Test get specific attendance
-    if [ -n "$ATTENDANCE_ID" ]; then
-        run_test "Get Specific Attendance" "GET" "/api/v1/events/$EVENT_ID/attendances/$ATTENDANCE_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific attendance details"
+    # Test create attendee invite (by userId)
+    if [ -n "$USER_ID" ]; then
+        local invite_user_data='{
+            "userId": "'$USER_ID'"
+        }'
+        run_test "Create Attendee Invite by UserId" "POST" "/api/v1/events/$EVENT_ID/attendee-invites" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invite_user_data" "201" "Create attendee invite by userId"
     fi
     
-    # Test update attendance
-    if [ -n "$ATTENDANCE_ID" ]; then
-        local update_attendance_data='{
-            "name": "Updated Test Attendee",
-            "email": "updated.attendee@example.com",
-            "phone": "+1234567897",
-            "ticketType": "PREMIUM",
-            "dietaryRestrictions": "Vegan",
-            "notes": "Updated notes"
-        }'
-        run_test "Update Attendance" "PUT" "/api/v1/events/$EVENT_ID/attendances/$ATTENDANCE_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_attendance_data" "200" "Update attendance details"
+    # Test list event attendee invites
+    run_test "List Event Attendee Invites" "GET" "/api/v1/events/$EVENT_ID/attendee-invites" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all attendee invites for event"
+    
+    # Test list my incoming invites
+    run_test "List My Incoming Invites" "GET" "/api/v1/attendee-invites/incoming" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List pending attendee invites for authenticated user"
+    
+    # Test accept invite (if we have an invite ID)
+    if [ -n "$INVITE_ID" ]; then
+        run_test "Accept Attendee Invite" "POST" "/api/v1/attendee-invites/$INVITE_ID/accept" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Accept an attendee invite"
+    fi
+    
+    # Test decline invite (if we have an invite ID)
+    if [ -n "$INVITE_ID" ]; then
+        run_test "Decline Attendee Invite" "POST" "/api/v1/attendee-invites/$INVITE_ID/decline" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Decline an attendee invite"
+    fi
+    
+    # Test revoke invite (if we have an invite ID)
+    if [ -n "$INVITE_ID" ]; then
+        run_test "Revoke Attendee Invite" "DELETE" "/api/v1/events/$EVENT_ID/attendee-invites/$INVITE_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Revoke an attendee invite"
     fi
     echo ""
     
-    # Step 6: Check-in/Check-out Tests
-    echo -e "${CYAN}✅ Step 6: Check-in/Check-out Tests${NC}"
-    echo "===================================="
+    # Step 6: Check-in Tests
+    echo -e "${CYAN}✅ Step 6: Check-in Tests${NC}"
+    echo "=============================="
     
-    # Test check-in attendee
-    if [ -n "$ATTENDANCE_ID" ]; then
-        local checkin_data='{
-            "checkInMethod": "MANUAL",
-            "checkInLocation": "Main Entrance",
-            "notes": "Checked in manually"
-        }'
-        run_test "Check-in Attendee" "POST" "/api/v1/events/$EVENT_ID/attendances/$ATTENDANCE_ID/check-in" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$checkin_data" "200" "Check-in attendee with details"
-    fi
+    # Note: Check-in functionality is handled through the attendee service
+    # Check-in is done by setting checkedInAt timestamp, not through a separate endpoint
+    # This would typically be done through a service method, but we can test the filtered list
     
-    # Test get checked-in attendees
-    run_test "Get Checked-in Attendees" "GET" "/api/v1/events/$EVENT_ID/attendances/checked-in" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all checked-in attendees"
+    # Test get checked-in attendees (filtered list)
+    run_test "Get Checked-in Attendees" "GET" "/api/v1/attendees?eventId=$EVENT_ID&checkedIn=true" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all checked-in attendees"
     
-    
-    # Test check-out attendee
-    if [ -n "$ATTENDANCE_ID" ]; then
-        run_test "Check-out Attendee" "POST" "/api/v1/events/$EVENT_ID/attendances/$ATTENDANCE_ID/check-out" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Check-out attendee"
-    fi
+    # Test get not checked-in attendees
+    run_test "Get Not Checked-in Attendees" "GET" "/api/v1/attendees?eventId=$EVENT_ID&checkedIn=false" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all attendees who haven't checked in"
     echo ""
     
     # Step 7: QR Code Management Tests
+    # Note: QR code functionality may be handled separately or not yet implemented
+    # These tests are commented out until QR code endpoints are available
     echo -e "${CYAN}📱 Step 7: QR Code Management Tests${NC}"
     echo "===================================="
-    
-    # Test get attendee QR code (text)
-    if [ -n "$ATTENDANCE_ID" ]; then
-        run_test "Get Attendee QR Code" "GET" "/api/v1/events/$EVENT_ID/attendances/$ATTENDANCE_ID/qr-code" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get QR code for attendee"
-    fi
-    
-    # Test get attendee QR code (rendered with base64)
-    if [ -n "$ATTENDANCE_ID" ]; then
-        run_test "Get Attendee QR Code Rendered" "GET" "/api/v1/events/$EVENT_ID/attendances/$ATTENDANCE_ID/qr-code/rendered" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get rendered QR code with base64 image"
-    fi
-    
-    # Test get attendee QR code (PNG image)
-    if [ -n "$ATTENDANCE_ID" ]; then
-        run_test "Get Attendee QR Code Image" "GET" "/api/v1/events/$EVENT_ID/attendances/$ATTENDANCE_ID/qr-code/image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get QR code as PNG image"
-    fi
-    
-    # Test scan QR code
-    if [ -n "$QR_CODE" ]; then
-        run_test "Scan QR Code" "POST" "/api/v1/events/$EVENT_ID/attendances/scan-qr?qrCode=$QR_CODE" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Scan QR code for check-in"
-    fi
-    
-    # Test regenerate QR code
-    if [ -n "$ATTENDANCE_ID" ]; then
-        run_test "Regenerate QR Code" "POST" "/api/v1/events/$EVENT_ID/attendances/$ATTENDANCE_ID/regenerate-qr" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Regenerate QR code"
-        
-        # Test get regenerated QR code image
-        run_test "Get Regenerated QR Code Image" "GET" "/api/v1/events/$EVENT_ID/attendances/$ATTENDANCE_ID/qr-code/image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get regenerated QR code as PNG image"
-    fi
+    echo -e "${YELLOW}⚠️  QR code endpoints not yet implemented in attendee API${NC}"
     echo ""
     
     # Step 8: Search and Filtering Tests
     echo -e "${CYAN}🔍 Step 8: Search and Filtering Tests${NC}"
     echo "======================================"
     
-    # Test search attendees
-    run_test "Search Attendees by Name" "GET" "/api/v1/events/$EVENT_ID/attendances/search?name=Test" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search attendees by name"
+    # Test search attendees by name/email
+    run_test "Search Attendees" "GET" "/api/v1/attendees?eventId=$EVENT_ID&search=John" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search attendees by name or email"
     
-    run_test "Search Attendees by Email" "GET" "/api/v1/events/$EVENT_ID/attendances/search?email=example.com" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search attendees by email"
+    # Test filter attendees by RSVP status
+    run_test "Filter Attendees by Status (CONFIRMED)" "GET" "/api/v1/attendees?eventId=$EVENT_ID&status=CONFIRMED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Filter attendees by RSVP status (CONFIRMED)"
     
-    # Test filter attendees
-    run_test "Filter Attendees by Status" "GET" "/api/v1/events/$EVENT_ID/attendances/filter?status=REGISTERED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Filter attendees by status"
+    run_test "Filter Attendees by Status (PENDING)" "GET" "/api/v1/attendees?eventId=$EVENT_ID&status=PENDING" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Filter attendees by RSVP status (PENDING)"
     
-    run_test "Filter Attendees by Ticket Type" "GET" "/api/v1/events/$EVENT_ID/attendances/filter?ticketType=VIP" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Filter attendees by ticket type"
+    run_test "Filter Attendees by Multiple Statuses" "GET" "/api/v1/attendees?eventId=$EVENT_ID&status=CONFIRMED,PENDING" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Filter attendees by multiple RSVP statuses"
     
-    run_test "Filter Attendees with Dietary Restrictions" "GET" "/api/v1/events/$EVENT_ID/attendances/filter?hasDietaryRestrictions=true" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Filter attendees with dietary restrictions"
+    # Test filter by email
+    run_test "Filter Attendees by Email" "GET" "/api/v1/attendees?eventId=$EVENT_ID&email=john.doe@example.com" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Filter attendees by email"
+    
+    # Test filter by userId
+    if [ -n "$USER_ID" ]; then
+        run_test "Filter Attendees by UserId" "GET" "/api/v1/attendees?eventId=$EVENT_ID&userId=$USER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Filter attendees by userId"
+    fi
+    
+    # Test pagination
+    run_test "List Attendees with Pagination" "GET" "/api/v1/attendees?eventId=$EVENT_ID&page=0&size=10" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List attendees with pagination"
+    
+    # Test sorting
+    run_test "List Attendees Sorted by Name" "GET" "/api/v1/attendees?eventId=$EVENT_ID&sortBy=name&sortDirection=ASC" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List attendees sorted by name"
+    
+    run_test "List Attendees Sorted by Created Date" "GET" "/api/v1/attendees?eventId=$EVENT_ID&sortBy=createdAt&sortDirection=DESC" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List attendees sorted by creation date"
     echo ""
     
-    # Step 10: Bulk Operations Tests
-    echo -e "${CYAN}🔢 Step 10: Bulk Operations Tests${NC}"
-    echo "=================================="
+    # Step 9: Additional Bulk Operations Tests
+    echo -e "${CYAN}🔢 Step 9: Additional Bulk Operations Tests${NC}"
+    echo "=========================================="
     
-    # Test bulk update attendees
-    if [ -n "$ATTENDANCE_ID" ] && [ -n "$ATTENDANCE_ID_2" ]; then
-        local bulk_update_data='{
-            "attendanceIds": ["'$ATTENDANCE_ID'", "'$ATTENDANCE_ID_2'"],
-            "updates": {
-                "ticketType": "UPDATED",
-                "notes": "Bulk updated"
+    # Test bulk add more attendees
+    local bulk_attendee_data_2='{
+        "eventId": "'$EVENT_ID'",
+        "attendees": [
+            {
+                "name": "Alice Johnson",
+                "email": "alice.johnson@example.com"
+            },
+            {
+                "name": "Bob Williams",
+                "email": "bob.williams@example.com"
             }
-        }'
-        run_test "Bulk Update Attendees" "POST" "/api/v1/events/$EVENT_ID/attendances/bulk-update" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$bulk_update_data" "200" "Bulk update attendees"
-    fi
-    
-    # Test validate attendee data
-    run_test "Validate Attendee Data" "GET" "/api/v1/events/$EVENT_ID/attendances/validate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Validate attendee data"
-    
-    # Test find duplicate attendees
-    run_test "Find Duplicate Attendees" "GET" "/api/v1/events/$EVENT_ID/attendances/duplicates" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Find duplicate attendees"
-    
-    # Test find incomplete profiles
-    run_test "Find Incomplete Profiles" "GET" "/api/v1/events/$EVENT_ID/attendances/incomplete" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Find incomplete attendee profiles"
-    
+        ]
+    }'
+    run_test "Bulk Add More Attendees" "POST" "/api/v1/attendees" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$bulk_attendee_data_2" "200" "Bulk add more attendees to event"
     echo ""
     
-    # Step 10: Export and Import Tests
-    echo -e "${CYAN}💾 Step 10: Export and Import Tests${NC}"
-    echo "===================================="
-    
-    # Test export to CSV
-    run_test "Export Attendees to CSV" "GET" "/api/v1/events/$EVENT_ID/attendances/export/csv" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Export attendee list to CSV"
-    
-    # Test export to Excel
-    run_test "Export Attendees to Excel" "GET" "/api/v1/events/$EVENT_ID/attendances/export/excel" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Export attendee list to Excel"
-    
-    # Test import from CSV
-    local csv_data='name,email,phone,ticketType
-Import Test 1,import1@example.com,+1234567897,REGULAR
-Import Test 2,import2@example.com,+1234567898,VIP'
-    run_test "Import Attendees from CSV" "POST" "/api/v1/events/$EVENT_ID/attendances/import/csv" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: text/plain'" "$csv_data" "201" "Import attendees from CSV"
-    echo ""
-    
-    # Step 12: Communication Tests
-    echo -e "${CYAN}📧 Step 12: Communication Tests${NC}"
+    # Step 10: Clean up test data
+    echo -e "${CYAN}🧹 Step 10: Clean Up Test Data${NC}"
     echo "================================"
     
-    # Test send invitations
-    local invitation_data='{
-        "recipients": ["test1@example.com", "test2@example.com"],
-        "subject": "Event Invitation",
-        "message": "You are invited to our event!",
-        "includeQRCode": true
-    }'
-    run_test "Send Invitations" "POST" "/api/v1/events/$EVENT_ID/invitations/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invitation_data" "200" "Send event invitations"
-    
-    # Test get sent invitations
-    run_test "Get Sent Invitations" "GET" "/api/v1/events/$EVENT_ID/invitations" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all sent invitations"
-    
-    # Test send bulk email
-    local bulk_email_data='{
-        "subject": "Event Update",
-        "message": "Important event update for all attendees",
-        "recipientType": "ALL"
-    }'
-    run_test "Send Bulk Email" "POST" "/api/v1/events/$EVENT_ID/attendances/bulk-email" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$bulk_email_data" "200" "Send bulk email to attendees"
-    
-    # Test send notification to specific attendee
-    if [ -n "$ATTENDANCE_ID" ]; then
-        local notification_data='{
-            "subject": "Personal Notification",
-            "message": "This is a personal notification",
-            "channels": ["EMAIL"]
-        }'
-        run_test "Send Notification to Attendee" "POST" "/api/v1/events/$EVENT_ID/attendances/$ATTENDANCE_ID/notify" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_data" "200" "Send notification to specific attendee"
-    fi
-    
-    # Test get communication history
-    run_test "Get Communication History" "GET" "/api/v1/events/$EVENT_ID/attendances/communication-history" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get communication history"
-    
-    # Test send invites (async)
-    if [ -n "$ATTENDEE_ID" ]; then
-        local send_invites_data='{
-            "eventId": "'$EVENT_ID'",
-            "attendeeIds": ["'$ATTENDEE_ID'"],
-            "sendEmail": true,
-            "sendPush": false,
-            "customMessage": "Looking forward to seeing you at the event!"
-        }'
-        run_test "Send Invites (Async)" "POST" "/api/v1/attendees/invites/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$send_invites_data" "202" "Send invites asynchronously"
-    fi
-    echo ""
-    
-    # Step 13: Clean up test data
-    echo -e "${CYAN}🧹 Step 13: Clean Up Test Data${NC}"
-    echo "================================"
-    
-    # Test cancel attendance
-    if [ -n "$ATTENDANCE_ID" ]; then
-        run_test "Cancel Attendance" "DELETE" "/api/v1/events/$EVENT_ID/attendances/$ATTENDANCE_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Cancel user attendance"
-    fi
-    
-    # Test bulk delete attendees
-    if [ -n "$ATTENDANCE_ID_2" ]; then
-        local bulk_delete_data='{
-            "attendanceIds": ["'$ATTENDANCE_ID_2'"]
-        }'
-        run_test "Bulk Delete Attendees" "POST" "/api/v1/events/$EVENT_ID/attendances/bulk-delete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$bulk_delete_data" "204" "Bulk delete attendees"
-    fi
+    # Delete test attendees (if we have IDs)
+    # Note: We'll delete attendees that were created during testing
+    # The script will attempt to delete the first attendee ID captured
     
     # Delete test event
     if [ -n "$EVENT_ID" ]; then

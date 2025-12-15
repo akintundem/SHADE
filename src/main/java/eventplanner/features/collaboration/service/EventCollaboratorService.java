@@ -1,5 +1,8 @@
 package eventplanner.features.collaboration.service;
 
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.domain.enums.CommunicationType;
 import eventplanner.common.domain.enums.RegistrationStatus;
 import eventplanner.features.collaboration.dto.request.EventCollaboratorRequest;
 import eventplanner.features.collaboration.dto.response.EventCollaboratorResponse;
@@ -15,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -25,13 +30,16 @@ public class EventCollaboratorService {
     private final EventUserRepository eventUserRepository;
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
+    private final NotificationService notificationService;
 
     public EventCollaboratorService(EventUserRepository eventUserRepository, 
                                    EventRepository eventRepository,
-                                   UserAccountRepository userAccountRepository) {
+                                   UserAccountRepository userAccountRepository,
+                                   NotificationService notificationService) {
         this.eventUserRepository = eventUserRepository;
         this.eventRepository = eventRepository;
         this.userAccountRepository = userAccountRepository;
+        this.notificationService = notificationService;
     }
 
     public List<EventCollaboratorResponse> getCollaborators(UUID eventId, int page, int size) {
@@ -69,7 +77,61 @@ public class EventCollaboratorService {
         collaborator.setRegistrationDate(LocalDateTime.now());
 
         EventUser saved = eventUserRepository.save(collaborator);
+        
+        // Send notification to the newly added collaborator
+        sendCollaboratorWelcomeCommunication(event, saved);
+        
         return toResponse(saved, request.getPermissions(), false, null);
+    }
+    
+    /**
+     * Send welcome communication to newly added collaborator
+     */
+    private void sendCollaboratorWelcomeCommunication(Event event, EventUser collaborator) {
+        if (event == null || collaborator == null || collaborator.getUser() == null) {
+            return;
+        }
+        
+        try {
+            Map<String, Object> templateVariables = new HashMap<>();
+            templateVariables.put("eventName", event.getName());
+            templateVariables.put("eventId", event.getId().toString());
+            templateVariables.put("role", collaborator.getUserType() != null ? collaborator.getUserType().name() : "COLLABORATOR");
+            if (event.getStartDateTime() != null) {
+                templateVariables.put("eventStartDate", event.getStartDateTime().toString());
+            }
+            if (event.getVenueRequirements() != null) {
+                templateVariables.put("eventVenue", event.getVenueRequirements());
+            }
+            
+            UserAccount user = collaborator.getUser();
+            
+            // Send email if available
+            if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
+                notificationService.send(NotificationRequest.builder()
+                        .type(CommunicationType.EMAIL)
+                        .to(user.getEmail())
+                        .subject("You've been added as a collaborator: " + event.getName())
+                        .templateId("collaborator-welcome")
+                        .templateVariables(templateVariables)
+                        .eventId(event.getId())
+                        .build());
+            }
+            
+            // Send push notification
+            Map<String, Object> pushData = new HashMap<>(templateVariables);
+            pushData.put("body", "You've been added as a collaborator to: " + event.getName());
+            
+            notificationService.send(NotificationRequest.builder()
+                    .type(CommunicationType.PUSH_NOTIFICATION)
+                    .to(user.getId().toString())
+                    .subject("Event collaboration confirmed")
+                    .templateVariables(pushData)
+                    .eventId(event.getId())
+                    .build());
+        } catch (Exception e) {
+            // Don't fail the entire operation if communication fails
+        }
     }
 
     public EventCollaboratorResponse updateCollaborator(UUID eventId, UUID collaboratorId, EventCollaboratorRequest request) {
