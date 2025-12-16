@@ -34,7 +34,6 @@ public final class RbacPermissions {
     public static final String ATTENDEE_QR_REGENERATE = "attendee.qrcode.regenerate";
     public static final String ATTENDEE_QR_SCAN = "attendee.qrcode.scan";
     public static final String ATTENDEE_READ = "attendee.read";
-    public static final String ATTENDEE_UPDATE = "attendee.update";
     public static final String ATTENDEE_VALIDATE = "attendee.validate";
     public static final String AUTH_LOGOUT = "auth.logout";
     public static final String AUTH_ME = "auth.me";

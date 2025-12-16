@@ -2,9 +2,10 @@ package eventplanner.features.attendee.controller;
 
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
 import eventplanner.features.attendee.dto.request.ListAttendeesRequest;
-import eventplanner.features.attendee.dto.request.UpdateAttendeeRequest;
 import eventplanner.features.attendee.dto.response.AttendeeResponse;
 import eventplanner.features.attendee.entity.Attendee;
+import eventplanner.features.attendee.enums.AttendeeInviteStatus;
+import eventplanner.features.attendee.service.AttendeeInviteService;
 import eventplanner.features.attendee.service.AttendeeService;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
@@ -22,13 +23,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Controller for attendee management with full CRUD operations
- * Returns DTOs instead of JPA entities to avoid leaking internal fields
- * Supports pagination, filtering, sorting, and idempotency
+ * Controller for attendee management operations
  */
 @RestController
 @RequestMapping("/api/v1/attendees")
@@ -37,53 +35,13 @@ import java.util.UUID;
 public class AttendeeController {
 
 	private final AttendeeService attendeeService;
+	private final AttendeeInviteService inviteService;
 	private final AuthorizationService authorizationService;
 
 	// ==================== Individual Attendee CRUD Operations ====================
 
-	@PutMapping("/{id}")
-	@Operation(summary = "Update attendee", description = "Update attendee information")
-	@RequiresPermission(value = RbacPermissions.ATTENDEE_UPDATE, resources = {"attendance_id=#id"})
-	public ResponseEntity<AttendeeResponse> updateAttendee(
-			@PathVariable String id,
-			@Valid @RequestBody UpdateAttendeeRequest request,
-			@AuthenticationPrincipal UserPrincipal principal) {
-		try {
-			UUID attendeeId = UUID.fromString(id);
-			
-			// Get existing attendee and verify access
-			Attendee existing = attendeeService.getAttendeeById(attendeeId);
-			if (existing.getEvent() == null) {
-				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for attendee");
-			}
-			UUID eventId = existing.getEvent().getId();
-			if (!authorizationService.canAccessEvent(principal, eventId)) {
-				throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-					"Access denied to event: " + eventId);
-			}
-			
-			// Map request to entity
-			Attendee updates = new Attendee();
-			updates.setName(request.getName());
-			updates.setEmail(request.getEmail());
-			updates.setRsvpStatus(request.getRsvpStatus());
-			
-			// Update
-			Optional<Attendee> updated = attendeeService.update(attendeeId, updates);
-			if (updated.isEmpty()) {
-				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Attendee not found: " + id);
-			}
-			
-			AttendeeResponse response = attendeeService.toResponse(updated.get());
-			return ResponseEntity.ok(response);
-			
-		} catch (IllegalArgumentException e) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-		}
-	}
-
 	@DeleteMapping("/{id}")
-	@Operation(summary = "Delete attendee", description = "Remove an attendee from an event")
+	@Operation(summary = "Delete attendee", description = "Remove an attendee from an event. Works for both user-linked attendees (added by userId) and email-only guests (added by email).")
 	@RequiresPermission(value = RbacPermissions.ATTENDEE_DELETE, resources = {"attendance_id=#id"})
 	public ResponseEntity<Void> deleteAttendee(
 			@PathVariable String id,
@@ -118,7 +76,8 @@ public class AttendeeController {
 	// ==================== Add Attendees (Single or Bulk) ====================
 
 	@PostMapping
-	@Operation(summary = "Add attendees", description = "Add one or more attendees to an event. Supports adding by userId (from directory) or email. Works for both single and multiple attendees.")
+	@Operation(summary = "Add attendees", 
+		description = "Add one or more attendees to an event. Supports adding by userId (from directory) or email. Works for both single and multiple attendees. Optional notification preferences allow event owner to send email, SMS, or push notifications to newly added attendees.")
 	@RequiresPermission(value = RbacPermissions.ATTENDEE_CREATE, resources = {"event_id=#request.eventId"})
 	public ResponseEntity<List<AttendeeResponse>> add(
 			@Valid @RequestBody BulkAttendeeCreateRequest request,
@@ -145,7 +104,7 @@ public class AttendeeController {
 	// ==================== Get Single Attendee ====================
 
 	@GetMapping("/{id}")
-	@Operation(summary = "Get attendee by ID", description = "Retrieve detailed information about a specific attendee")
+	@Operation(summary = "Get attendee by ID", description = "Retrieve detailed information about a specific attendee. Returns both user-linked attendees (with userId) and email-only guests (without userId).")
 	@RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"attendance_id=#id"})
 	public ResponseEntity<AttendeeResponse> getAttendee(
 			@PathVariable String id,
@@ -176,7 +135,7 @@ public class AttendeeController {
 
 	@GetMapping
 	@Operation(summary = "List or filter attendees", 
-		description = "List and filter attendees for an event with pagination. Requires eventId as query parameter. Supports filtering by status, check-in status, search, userId, and email.")
+		description = "List and filter attendees for an event with pagination. Returns a combination of both user-linked attendees (added by userId) and email-only guests (added by email). Requires eventId as query parameter. Supports filtering by status, check-in status, search, userId, and email.")
 	@RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#request.eventId"})
 	public ResponseEntity<Page<AttendeeResponse>> listAttendees(
 			@Valid @ModelAttribute ListAttendeesRequest request,
@@ -214,6 +173,51 @@ public class AttendeeController {
 		}
 	}
 
+	// ==================== Update Invite RSVP Status ====================
 
+	@PostMapping("/invites")
+	@Operation(summary = "Update attendee invite RSVP status", 
+		description = "Update attendee invite RSVP status. Can update by inviteId or token (query parameters). Status can be any valid AttendeeInviteStatus (ACCEPTED, DECLINED, REVOKED, EXPIRED). Works for both user-linked attendees and email-only guests.")
+	@RequiresPermission(value = RbacPermissions.ATTENDEE_CREATE)
+	public ResponseEntity<AttendeeResponse> updateInviteStatus(
+			@RequestParam(required = false) UUID inviteId,
+			@RequestParam(required = false) String token,
+			@RequestParam String status,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			if (inviteId == null && (token == null || token.trim().isEmpty())) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+					"Either inviteId or token must be provided");
+			}
+			
+			if (status == null || status.trim().isEmpty()) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+					"Status is required");
+			}
+			
+			// Parse status
+			AttendeeInviteStatus inviteStatus;
+			try {
+				inviteStatus = AttendeeInviteStatus.valueOf(status.toUpperCase().trim());
+			} catch (IllegalArgumentException e) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+					"Invalid status. Valid values are: ACCEPTED, DECLINED, REVOKED, EXPIRED");
+			}
+			
+			Attendee attendee = inviteService.updateInviteStatus(inviteId, token, inviteStatus, principal);
+			
+			if (inviteStatus == AttendeeInviteStatus.ACCEPTED) {
+				// Return attendee response
+				AttendeeResponse response = attendeeService.toResponse(attendee);
+				return ResponseEntity.ok(response);
+			} else {
+				// Other statuses - return no content
+				return ResponseEntity.noContent().build();
+			}
+			
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+		}
+	}
 
 }

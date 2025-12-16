@@ -1,5 +1,6 @@
 package eventplanner.features.attendee.entity;
 
+import eventplanner.features.attendee.enums.AttendeeStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.security.auth.entity.UserAccount;
 import jakarta.persistence.*;
@@ -27,63 +28,6 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Attendee {
-
-    /**
-     * RSVP status enumeration for attendees.
-     * Maps to the attendees table rsvp_status column
-     */
-    public enum Status {
-        PENDING("pending"),
-        CONFIRMED("confirmed"),
-        DECLINED("declined"),
-        TENTATIVE("tentative"),
-        NO_SHOW("no_show");
-        
-        private final String value;
-        
-        Status(String value) {
-            this.value = value;
-        }
-        
-        public String getValue() {
-            return value;
-        }
-        
-        /**
-         * Parse from string value (case-insensitive)
-         */
-        public static Status fromString(String value) {
-            if (value == null) {
-                return PENDING;
-            }
-            
-            String normalized = value.toLowerCase().trim();
-            for (Status status : Status.values()) {
-                if (status.value.equals(normalized) || status.name().equalsIgnoreCase(normalized)) {
-                    return status;
-                }
-            }
-            
-            throw new IllegalArgumentException("Invalid attendee status: " + value + 
-                ". Valid values are: pending, confirmed, declined, tentative, no_show");
-        }
-        
-        /**
-         * Check if a string is a valid status
-         */
-        public static boolean isValid(String value) {
-            if (value == null) {
-                return false;
-            }
-            
-            try {
-                fromString(value);
-                return true;
-            } catch (IllegalArgumentException e) {
-                return false;
-            }
-        }
-    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -113,7 +57,7 @@ public class Attendee {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "rsvp_status")
-    private Status rsvpStatus;
+    private AttendeeStatus rsvpStatus;
 
     @Column(name = "checked_in_at")
     private LocalDateTime checkedInAt;
@@ -130,7 +74,7 @@ public class Attendee {
     @PrePersist
     public void prePersist() {
         if (rsvpStatus == null) {
-            rsvpStatus = Status.PENDING;
+            rsvpStatus = AttendeeStatus.PENDING;
         }
     }
     
