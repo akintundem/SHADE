@@ -112,7 +112,7 @@ public class AttendeeInviteController {
     }
 
     @GetMapping("/api/v1/attendee-invites/incoming")
-    @RequiresPermission(value = RbacPermissions.ATTENDEE_READ)
+    @RequiresPermission(value = RbacPermissions.AUTH_ME)
     @Operation(summary = "List my attendee invites", description = "List pending attendee invites for the authenticated user")
     public ResponseEntity<List<AttendeeInviteResponse>> myInvites(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {

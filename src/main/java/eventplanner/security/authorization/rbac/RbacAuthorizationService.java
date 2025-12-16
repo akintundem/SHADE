@@ -1,5 +1,6 @@
 package eventplanner.security.authorization.rbac;
 
+import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.features.timeline.repository.TimelineItemRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
@@ -30,6 +31,7 @@ public class RbacAuthorizationService {
     private final RbacPolicyStore policyStore;
     private final AuthorizationService authorizationService;
     private final TimelineItemRepository timelineItemRepository;
+    private final AttendeeRepository attendeeRepository;
 
     public void assertAuthorized(UserPrincipal principal, String permissionName, Map<String, Object> resources) {
         if (!isAuthorized(principal, permissionName, resources)) {
@@ -94,11 +96,20 @@ public class RbacAuthorizationService {
             }
             case EVENT -> {
                 UUID eventId = extractUuid(resources, "event_id");
-                // If event_id is missing, try to resolve it from task_id
+                // If event_id is missing, try to resolve it from task_id or attendance_id
                 if (eventId == null) {
                     UUID taskId = extractUuid(resources, "task_id");
                     if (taskId != null) {
                         eventId = resolveEventIdFromTaskId(taskId);
+                        if (eventId != null) {
+                            resources.put("event_id", eventId);
+                        }
+                    }
+                }
+                if (eventId == null) {
+                    UUID attendanceId = extractUuid(resources, "attendance_id");
+                    if (attendanceId != null) {
+                        eventId = resolveEventIdFromAttendanceId(attendanceId);
                         if (eventId != null) {
                             resources.put("event_id", eventId);
                         }
@@ -162,11 +173,20 @@ public class RbacAuthorizationService {
             }
             case EVENT -> {
                 UUID eventId = extractUuid(resources, "event_id");
-                // If event_id is missing, try to resolve it from task_id
+                // If event_id is missing, try to resolve it from task_id or attendance_id
                 if (eventId == null) {
                     UUID taskId = extractUuid(resources, "task_id");
                     if (taskId != null) {
                         eventId = resolveEventIdFromTaskId(taskId);
+                        if (eventId != null) {
+                            resources.put("event_id", eventId);
+                        }
+                    }
+                }
+                if (eventId == null) {
+                    UUID attendanceId = extractUuid(resources, "attendance_id");
+                    if (attendanceId != null) {
+                        eventId = resolveEventIdFromAttendanceId(attendanceId);
                         if (eventId != null) {
                             resources.put("event_id", eventId);
                         }
@@ -191,11 +211,17 @@ public class RbacAuthorizationService {
             case SYSTEM -> true;
             case EVENT -> {
                 UUID eventId = extractUuid(resources, "event_id");
-                // If event_id is missing, try to resolve it from task_id
+                // If event_id is missing, try to resolve it from task_id or attendance_id
                 if (eventId == null) {
                     UUID taskId = extractUuid(resources, "task_id");
                     if (taskId != null) {
                         eventId = resolveEventIdFromTaskId(taskId);
+                    }
+                }
+                if (eventId == null) {
+                    UUID attendanceId = extractUuid(resources, "attendance_id");
+                    if (attendanceId != null) {
+                        eventId = resolveEventIdFromAttendanceId(attendanceId);
                     }
                 }
                 if (eventId == null) {
@@ -262,6 +288,23 @@ public class RbacAuthorizationService {
                     .orElse(null);
         } catch (Exception e) {
             log.debug("Failed to resolve event_id from task_id {}: {}", taskId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Resolve event_id from attendance_id by looking up the attendee
+     */
+    private UUID resolveEventIdFromAttendanceId(UUID attendanceId) {
+        if (attendanceId == null) {
+            return null;
+        }
+        try {
+            return attendeeRepository.findById(attendanceId)
+                    .map(attendee -> attendee.getEvent() != null ? attendee.getEvent().getId() : null)
+                    .orElse(null);
+        } catch (Exception e) {
+            log.debug("Failed to resolve event_id from attendance_id {}: {}", attendanceId, e.getMessage());
             return null;
         }
     }

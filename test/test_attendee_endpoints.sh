@@ -138,9 +138,10 @@ QR_CODES_DIR="${SCRIPT_DIR}/qr-codes"
 
 # Configuration
 REPORT_FILE="${REPORTS_DIR}/attendee_test_report_$(date +%Y%m%d_%H%M%S).md"
-TEST_USER_EMAIL="attendeetest@example.com"
-TEST_USER_PASSWORD="Password123!"
-TEST_USER_NAME="Attendee Test User"
+# Use existing test user from create_test_users.sh
+TEST_USER_EMAIL="admin@test.com"
+TEST_USER_PASSWORD="Admin123!@#"
+TEST_USER_NAME="Admin User"
 TEST_USER_PHONE="+1234567890"
 
 # Test counters
@@ -490,35 +491,8 @@ check_service() {
 authenticate_user() {
     echo -e "${YELLOW}🔐 Authenticating user...${NC}"
     
-    # First, try to register a new user
-    local registration_data='{
-        "email": "'$TEST_USER_EMAIL'",
-        "name": "'$TEST_USER_NAME'",
-        "password": "'$TEST_USER_PASSWORD'",
-        "confirmPassword": "'$TEST_USER_PASSWORD'",
-        "phoneNumber": "'$TEST_USER_PHONE'",
-        "dateOfBirth": "1990-01-01",
-        "acceptTerms": true,
-        "acceptPrivacy": true,
-        "marketingOptIn": false
-    }'
-    
-    local response=$(curl -s -w '%{http_code}' -X POST \
-                -H "Content-Type: application/json" \
-        -d "$registration_data" \
-        "$BASE_URL/api/v1/auth/register")
-    
-    local http_code="${response: -3}"
-    local response_body="${response%???}"
-    
-    if [ "$http_code" = "201" ]; then
-        echo -e "${GREEN}✅ User registered${NC}"
-        verify_email_in_database "$TEST_USER_EMAIL"
-    elif [ "$http_code" != "400" ]; then
-        echo -e "${RED}❌ Failed to register user${NC}"
-        return 1
-    fi
-    
+    # Use existing test user (created by create_test_users.sh)
+    # Skip registration and go straight to login
     local login_data='{
         "email": "'$TEST_USER_EMAIL'",
         "password": "'$TEST_USER_PASSWORD'",
@@ -567,20 +541,43 @@ create_test_event() {
     local start_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
     local end_date=$(date -u -v+1d -v+2H '+%Y-%m-%dT%H:%M:%S')
     
-    local event_data='{
-        "name": "Test Event for Attendees",
-        "description": "This is a test event for attendee endpoint testing",
-        "eventType": "CONFERENCE",
-        "startDateTime": "'$start_date'",
-        "endDateTime": "'$end_date'",
-        "venueRequirements": "Test Venue - Conference Hall",
-        "capacity": 100,
-        "isPublic": true,
-        "requiresApproval": false,
-        "coverImageUrl": "https://example.com/cover.jpg",
-        "eventWebsiteUrl": "https://example.com/event",
-        "hashtag": "#TestEvent"
-    }'
+    local event_data
+    event_data=$(cat <<EOF
+{
+  "event": {
+    "name": "Test Event for Attendees",
+    "description": "This is a test event for attendee endpoint testing",
+    "eventType": "CONFERENCE",
+    "startDateTime": "$start_date",
+    "endDateTime": "$end_date",
+    "venueRequirements": "Test Venue - Conference Hall",
+    "capacity": 100,
+    "isPublic": true,
+    "requiresApproval": false,
+    "eventWebsiteUrl": "https://example.com/event",
+    "hashtag": "#TestEvent",
+    "venue": {
+      "address": "123 Main Street",
+      "city": "San Francisco",
+      "state": "California",
+      "country": "United States",
+      "zipCode": "94102",
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+      "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
+    }
+  },
+  "coverUpload": {
+    "fileName": "attendee-test-cover.jpg",
+    "contentType": "image/jpeg",
+    "category": "cover",
+    "isPublic": true,
+    "description": "Cover image for attendee test event"
+  }
+}
+EOF
+)
     
     local response=$(curl -s -w '%{http_code}' -X POST \
         -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -593,7 +590,13 @@ create_test_event() {
     local response_body="${response%???}"
     
     if [ "$http_code" = "201" ] || [ "$http_code" = "200" ]; then
-        EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+        # Extract event ID from the new response format: { "event": { "id": "..." } }
+        if command -v jq &> /dev/null; then
+            EVENT_ID=$(echo "$response_body" | jq -r '.event.id // empty')
+        else
+            # Fallback to grep if jq is not available
+            EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+        fi
         if [ -z "$EVENT_ID" ]; then
             echo -e "${RED}❌ Failed to extract event ID from response${NC}"
             echo -e "${RED}Response: $response_body${NC}"
@@ -713,14 +716,14 @@ main() {
     
     # Test create attendee invite (by email)
     local invite_data='{
-        "email": "invite.test@example.com"
+        "inviteeEmail": "invite.test@example.com"
     }'
     run_test "Create Attendee Invite by Email" "POST" "/api/v1/events/$EVENT_ID/attendee-invites" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invite_data" "201" "Create attendee invite by email"
     
     # Test create attendee invite (by userId)
     if [ -n "$USER_ID" ]; then
         local invite_user_data='{
-            "userId": "'$USER_ID'"
+            "inviteeUserId": "'$USER_ID'"
         }'
         run_test "Create Attendee Invite by UserId" "POST" "/api/v1/events/$EVENT_ID/attendee-invites" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invite_user_data" "201" "Create attendee invite by userId"
     fi

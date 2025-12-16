@@ -177,7 +177,7 @@ public class AttendeeController {
 	@GetMapping
 	@Operation(summary = "List or filter attendees", 
 		description = "List and filter attendees for an event with pagination. Requires eventId as query parameter. Supports filtering by status, check-in status, search, userId, and email.")
-	@RequiresPermission(value = RbacPermissions.ATTENDEE_READ)
+	@RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#request.eventId"})
 	public ResponseEntity<Page<AttendeeResponse>> listAttendees(
 			@Valid @ModelAttribute ListAttendeesRequest request,
 			@AuthenticationPrincipal UserPrincipal principal) {
