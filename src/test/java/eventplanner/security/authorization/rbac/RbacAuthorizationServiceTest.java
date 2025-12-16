@@ -1,6 +1,8 @@
 package eventplanner.security.authorization.rbac;
 
 import eventplanner.common.domain.enums.UserType;
+import eventplanner.features.attendee.repository.AttendeeInviteRepository;
+import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.features.timeline.repository.TimelineItemRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -25,6 +27,8 @@ class RbacAuthorizationServiceTest {
     private RbacPolicyStore policyStore;
     private AuthorizationService authorizationService;
     private TimelineItemRepository timelineItemRepository;
+    private AttendeeRepository attendeeRepository;
+    private AttendeeInviteRepository attendeeInviteRepository;
     private RbacAuthorizationService authorization;
 
     @BeforeEach
@@ -35,7 +39,9 @@ class RbacAuthorizationServiceTest {
 
         authorizationService = Mockito.mock(AuthorizationService.class);
         timelineItemRepository = Mockito.mock(TimelineItemRepository.class);
-        authorization = new RbacAuthorizationService(policyStore, authorizationService, timelineItemRepository);
+        attendeeRepository = Mockito.mock(AttendeeRepository.class);
+        attendeeInviteRepository = Mockito.mock(AttendeeInviteRepository.class);
+        authorization = new RbacAuthorizationService(policyStore, authorizationService, timelineItemRepository, attendeeRepository, attendeeInviteRepository);
     }
 
     @AfterEach
