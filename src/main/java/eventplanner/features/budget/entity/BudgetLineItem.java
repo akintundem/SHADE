@@ -3,6 +3,8 @@ package eventplanner.features.budget.entity;
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.PlanningStatus;
 import jakarta.persistence.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -23,9 +25,16 @@ public class BudgetLineItem extends BaseEntity {
 
     /**
      * Many-to-one relationship with the budget this line item belongs to.
+     * Foreign key constraint with ON DELETE CASCADE ensures line items are deleted
+     * when the budget is deleted at the database level.
      */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "budget_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @OnDelete(action = OnDeleteAction.CASCADE)
+    @JoinColumn(
+        name = "budget_id", 
+        nullable = false,
+        foreignKey = @ForeignKey(name = "fk_budget_line_items_budget", value = ConstraintMode.CONSTRAINT)
+    )
     private Budget budget;
 
     @Column(name = "category", nullable = false)
@@ -71,12 +80,20 @@ public class BudgetLineItem extends BaseEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    /**
+     * Indicates if this line item is a draft (auto-saved) or finalized.
+     * Drafts are saved without full validation and don't trigger budget recalculation.
+     */
+    @Column(name = "is_draft", nullable = false)
+    private Boolean isDraft = false;
+
     @PrePersist
     public void prePersist() {
         if (quantity == null) quantity = 1;
         if (planningStatus == null) planningStatus = PlanningStatus.PLANNED;
         if (isEssential == null) isEssential = false;
         if (priority == null) priority = "MEDIUM";
+        if (isDraft == null) isDraft = false;
     }
 }
 

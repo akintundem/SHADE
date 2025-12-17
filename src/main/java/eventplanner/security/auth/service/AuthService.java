@@ -62,7 +62,6 @@ public class AuthService {
     private final EnvironmentUtil environmentUtil;
     private final RateLimitingService rateLimitingService;
     private final ProfileImageService profileImageService;
-    private final eventplanner.common.audit.service.AuditLogService auditLogService;
     private final JwtValidationUtil jwtValidationUtil;
 
     @Value("${auth.session.max-concurrent}")
@@ -95,7 +94,6 @@ public class AuthService {
                        EnvironmentUtil environmentUtil,
                        RateLimitingService rateLimitingService,
                        ProfileImageService profileImageService,
-                       eventplanner.common.audit.service.AuditLogService auditLogService,
                        JwtValidationUtil jwtValidationUtil) {
         this.userAccountRepository = userAccountRepository;
         this.sessionRepository = sessionRepository;
@@ -107,7 +105,6 @@ public class AuthService {
         this.environmentUtil = environmentUtil;
         this.rateLimitingService = rateLimitingService;
         this.profileImageService = profileImageService;
-        this.auditLogService = auditLogService;
         this.jwtValidationUtil = jwtValidationUtil;
     }
 
@@ -117,15 +114,6 @@ public class AuthService {
         // Email-based + IP-based rate limiting for registration endpoint
         String endpoint = "/api/v1/auth/register";
         if (!rateLimitingService.isIpAndEmailWithinRateLimit(clientIp, normalizedEmail, endpoint)) {
-            auditLogService.builder()
-                .domain("SECURITY")
-                .action(eventplanner.common.domain.enums.ActionType.RATE_LIMIT_EXCEEDED)
-                .user(null, null, normalizedEmail)
-                .description("Registration rate limit exceeded")
-                .request(clientIp, null, null)
-                .status("BLOCKED")
-                .riskLevel("MEDIUM")
-                .log();
             throw new BadRequestException("RATE_LIMIT_EXCEEDED", 
                 "Too many registration attempts. Please try again later.");
         }
@@ -205,18 +193,6 @@ public class AuthService {
             log.debug("Skipping verification email in dev mode for user: {}", user.getEmail());
         }
         
-        // Audit log successful registration
-        auditLogService.builder()
-            .domain("SECURITY")
-            .entityType("UserAccount")
-            .entityId(user.getId())
-            .action(eventplanner.common.domain.enums.ActionType.REGISTRATION_SUCCESS)
-            .user(user.getId(), null, normalizedEmail)
-            .description("User registered successfully")
-            .request(clientIp, null, null)
-            .status("SUCCESS")
-            .log();
-        
         // Registration complete - user must verify email and login to get tokens/deviceId
     }
     
@@ -226,15 +202,6 @@ public class AuthService {
         // Email-based + IP-based rate limiting for login endpoint
         String endpoint = "/api/v1/auth/login";
         if (!rateLimitingService.isIpAndEmailWithinRateLimit(clientIp, normalizedEmail, endpoint)) {
-            auditLogService.builder()
-                .domain("SECURITY")
-                .action(eventplanner.common.domain.enums.ActionType.RATE_LIMIT_EXCEEDED)
-                .user(null, null, normalizedEmail)
-                .description("Login rate limit exceeded")
-                .request(clientIp, null, null)
-                .status("BLOCKED")
-                .riskLevel("MEDIUM")
-                .log();
             throw new BadRequestException("RATE_LIMIT_EXCEEDED", 
                 "Too many login attempts. Please try again later.");
         }
@@ -254,19 +221,6 @@ public class AuthService {
             if (userOpt.isPresent()) {
                 handleFailedLoginAttempt(userOpt.get());
             }
-            // Audit log failed login attempt
-            UUID userId = userOpt.map(UserAccount::getId).orElse(null);
-            auditLogService.builder()
-                .domain("SECURITY")
-                .entityType("UserAccount")
-                .entityId(userId)
-                .action(eventplanner.common.domain.enums.ActionType.LOGIN_FAILURE)
-                .user(userId, null, normalizedEmail)
-                .description("Login failed: Invalid credentials")
-                .request(clientIp, null, null)
-                .status("FAILURE")
-                .riskLevel("LOW")
-                .log();
             // Always return the same error message and status code to prevent account enumeration
             throw new BadRequestException("INVALID_CREDENTIALS", "Invalid credentials");
         }
@@ -279,18 +233,6 @@ public class AuthService {
                 LocalDateTime.now(ZoneOffset.UTC), 
                 user.getLockedUntil()
             ).toMinutes();
-            // Audit log locked account access attempt
-            auditLogService.builder()
-                .domain("SECURITY")
-                .entityType("UserAccount")
-                .entityId(user.getId())
-                .action(eventplanner.common.domain.enums.ActionType.LOGIN_FAILURE)
-                .user(user.getId(), null, normalizedEmail)
-                .description("Login failed: Account locked")
-                .request(clientIp, null, null)
-                .status("BLOCKED")
-                .riskLevel("HIGH")
-                .log();
             throw new BadRequestException("ACCOUNT_LOCKED", 
                 String.format("Account is temporarily locked due to multiple failed login attempts. Please try again in %d minute(s).", 
                     minutesRemaining));
@@ -299,17 +241,6 @@ public class AuthService {
         // Check email verification
         // Return same error as invalid credentials to prevent account enumeration so that attacker cannot determine if an account exists and has correct password but unverified email
         if (!user.isEmailVerified()) {
-            auditLogService.builder()
-                .domain("SECURITY")
-                .entityType("UserAccount")
-                .entityId(user.getId())
-                .action(eventplanner.common.domain.enums.ActionType.LOGIN_FAILURE)
-                .user(user.getId(), null, normalizedEmail)
-                .description("Login failed: Email not verified")
-                .request(clientIp, null, null)
-                .status("FAILURE")
-                .riskLevel("LOW")
-                .log();
             throw new BadRequestException("INVALID_CREDENTIALS", "Invalid credentials");
         }
         
@@ -326,18 +257,6 @@ public class AuthService {
         // Server generates deviceId for this session
         // DeviceId is returned to the client for use in subsequent requests (security and logging)
         SecureAuthResponse response = issueAuthResponse(user, request.isRememberMe(), clientIp, "Login successful", onboardingRequired);
-        
-        // Audit log successful login
-        auditLogService.builder()
-            .domain("SECURITY")
-            .entityType("UserAccount")
-            .entityId(user.getId())
-            .action(eventplanner.common.domain.enums.ActionType.LOGIN_SUCCESS)
-            .user(user.getId(), null, normalizedEmail)
-            .description("User logged in successfully")
-            .request(clientIp, null, response.getDeviceId())
-            .status("SUCCESS")
-            .log();
         
         return response;
     }
@@ -506,34 +425,12 @@ public class AuthService {
         
         // Validate email is verified
         if (!user.isEmailVerified()) {
-            auditLogService.builder()
-                .domain("SECURITY")
-                .entityType("UserAccount")
-                .entityId(user.getId())
-                .action(eventplanner.common.domain.enums.ActionType.PERMISSION_DENIED)
-                .user(user.getId(), null, user.getEmail())
-                .description("Onboarding attempt failed: Email not verified")
-                .request(clientIp, null, null)
-                .status("FAILURE")
-                .riskLevel("MEDIUM")
-                .log();
             throw new BadRequestException("EMAIL_NOT_VERIFIED", 
                 "Email must be verified before completing onboarding");
         }
         
         // Validate profile is not already completed
         if (isProfileComplete(user)) {
-            auditLogService.builder()
-                .domain("SECURITY")
-                .entityType("UserAccount")
-                .entityId(user.getId())
-                .action(eventplanner.common.domain.enums.ActionType.UPDATE)
-                .user(user.getId(), null, user.getEmail())
-                .description("Onboarding attempt failed: Profile already completed")
-                .request(clientIp, null, null)
-                .status("FAILURE")
-                .riskLevel("LOW")
-                .log();
             throw new BadRequestException("PROFILE_ALREADY_COMPLETED", 
                 "Profile has already been completed");
         }
@@ -575,18 +472,6 @@ public class AuthService {
         }
         user.setProfileCompleted(true);
         userAccountRepository.save(user);
-        
-        // Audit log successful onboarding completion
-        auditLogService.builder()
-            .domain("SECURITY")
-            .entityType("UserAccount")
-            .entityId(user.getId())
-            .action(eventplanner.common.domain.enums.ActionType.UPDATE)
-            .user(user.getId(), null, user.getEmail())
-            .description("User completed profile onboarding")
-            .request(clientIp, null, null)
-            .status("SUCCESS")
-            .log();
         
         log.info("User completed onboarding: {}", user.getEmail());
         return AuthMapper.toSecureUserResponse(user);
@@ -749,28 +634,14 @@ public class AuthService {
             if (shouldUpdate) {
                 user.setLockedUntil(lockoutUntil);
                 
-                // Calculate lockout duration in minutes
-                long lockoutDurationMinutes = java.time.Duration.between(now, lockoutUntil).toMinutes();
-                
                 if (isCurrentlyLocked) {
                     // Account was already locked - extending lockout due to continued attempts
                     log.warn("Account lockout extended due to continued failed attempts: {} attempts (was {}), " +
                             "locked until {}", newAttempts, currentAttempts, lockoutUntil);
                 } else {
-                    // First time locking this account - audit log the lockout
+                    // First time locking this account
                     log.warn("Account locked due to {} failed login attempts: {}, locked until {}", 
                             newAttempts, user.getEmail(), lockoutUntil);
-                    auditLogService.builder()
-                        .domain("SECURITY")
-                        .entityType("UserAccount")
-                        .entityId(user.getId())
-                        .action(eventplanner.common.domain.enums.ActionType.ACCOUNT_LOCKED)
-                        .user(user.getId(), null, user.getEmail())
-                        .description(String.format("Account locked for %d minutes after %d failed attempts", 
-                            lockoutDurationMinutes, newAttempts))
-                        .status("SUCCESS")
-                        .riskLevel("HIGH")
-                        .log();
                 }
             }
         }

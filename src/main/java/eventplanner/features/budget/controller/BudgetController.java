@@ -4,13 +4,12 @@ import eventplanner.features.budget.dto.BudgetLineItemCreateRequest;
 import eventplanner.features.budget.dto.BudgetUpsertRequest;
 import eventplanner.features.budget.dto.request.*;
 import eventplanner.features.budget.dto.response.*;
-import eventplanner.common.util.UserAccountUtil;
+import eventplanner.common.util.EventUtil;
 import eventplanner.features.budget.entity.Budget;
 import eventplanner.features.budget.entity.BudgetLineItem;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.auth.entity.UserAccount;
-import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.features.budget.service.BudgetService;
 import eventplanner.features.budget.service.BudgetIdempotencyService;
 import eventplanner.features.budget.service.BudgetRateLimitService;
@@ -49,7 +48,6 @@ public class BudgetController {
 
 	private final BudgetService budgetService;
 	private final EventRepository eventRepository;
-	private final UserAccountRepository userAccountRepository;
 	private final BudgetIdempotencyService idempotencyService;
 	private final BudgetRateLimitService rateLimitService;
 	private final BudgetExportService exportService;
@@ -58,7 +56,6 @@ public class BudgetController {
 
 	public BudgetController(BudgetService budgetService,
 	                        EventRepository eventRepository,
-	                        UserAccountRepository userAccountRepository,
 	                        BudgetIdempotencyService idempotencyService,
 	                        BudgetRateLimitService rateLimitService,
 	                        BudgetExportService exportService,
@@ -66,7 +63,6 @@ public class BudgetController {
 	                        ObjectMapper objectMapper) {
 		this.budgetService = budgetService;
 		this.eventRepository = eventRepository;
-		this.userAccountRepository = userAccountRepository;
 		this.idempotencyService = idempotencyService;
 		this.rateLimitService = rateLimitService;
 		this.exportService = exportService;
@@ -134,16 +130,14 @@ public class BudgetController {
 		}
 		
 		// Fetch Event entity
-		Event event = eventRepository.findById(budget.getEventId())
-			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
-				"Event not found: " + budget.getEventId()));
-		
-		// Get managed UserAccount entity for owner (required for JPA relationship)
-		UserAccount owner = UserAccountUtil.getManagedUserAccountOrThrow(
-			user, 
-			userAccountRepository, 
-			"User not found"
+		Event event = EventUtil.getEventByIdOrThrowResponseStatus(
+			budget.getEventId(), 
+			eventRepository, 
+			"Event not found: " + budget.getEventId()
 		);
+		
+		// Get UserAccount from UserPrincipal
+		UserAccount owner = user.getUser();
 		
 		Budget entity = new Budget();
 		entity.setEvent(event);
@@ -454,6 +448,58 @@ public class BudgetController {
 			return ResponseEntity.noContent().build();
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid ID format", e);
+		} catch (RuntimeException e) {
+			throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+		}
+	}
+
+	@PatchMapping("/events/{eventId}/budgets/{budgetId}/line-items/{itemId}/draft")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_UPDATE, resources = {"event_id=#eventId", "budget_id=#budgetId"})
+	@Operation(summary = "Auto-save line item draft", description = "Save line item as draft without full validation. Designed for frequent auto-save operations (e.g., debounced on every keystroke). Drafts don't trigger budget recalculation.")
+	@ApiResponses(value = {
+		@ApiResponse(responseCode = "200", description = "Draft saved successfully"),
+		@ApiResponse(responseCode = "404", description = "Line item not found"),
+		@ApiResponse(responseCode = "400", description = "Invalid request data")
+	})
+	public ResponseEntity<BudgetLineItemResponse> autoSaveDraft(
+			@PathVariable String eventId,
+			@PathVariable String budgetId,
+			@PathVariable String itemId,
+			@RequestBody UpdateBudgetLineItemRequest request) {
+		try {
+			UUID itemUuid = UUID.fromString(itemId);
+			BudgetLineItem saved = budgetService.autoSaveLineItemDraft(itemUuid, request);
+			return ResponseEntity.ok(convertToLineItemResponse(saved));
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid ID format", e);
+		} catch (IllegalStateException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+		} catch (RuntimeException e) {
+			throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+		}
+	}
+
+	@PutMapping("/events/{eventId}/budgets/{budgetId}/line-items/{itemId}/finalize")
+    @RequiresPermission(value = RbacPermissions.BUDGET_LINEITEM_UPDATE, resources = {"event_id=#eventId", "budget_id=#budgetId"})
+	@Operation(summary = "Finalize line item", description = "Convert a draft line item to finalized. Applies full validation and triggers budget recalculation.")
+	@ApiResponses(value = {
+		@ApiResponse(responseCode = "200", description = "Line item finalized successfully"),
+		@ApiResponse(responseCode = "404", description = "Line item not found"),
+		@ApiResponse(responseCode = "400", description = "Invalid request data or validation failed")
+	})
+	public ResponseEntity<BudgetLineItemResponse> finalizeLineItem(
+			@PathVariable String eventId,
+			@PathVariable String budgetId,
+			@PathVariable String itemId,
+			@Valid @RequestBody UpdateBudgetLineItemRequest request) {
+		try {
+			UUID itemUuid = UUID.fromString(itemId);
+			BudgetLineItem finalized = budgetService.finalizeLineItem(itemUuid, request);
+			return ResponseEntity.ok(convertToLineItemResponse(finalized));
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+		} catch (IllegalStateException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
 		} catch (RuntimeException e) {
 			throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
 		}
@@ -891,6 +937,7 @@ public class BudgetController {
 		response.setIsEssential(entity.getIsEssential());
 		response.setPriority(entity.getPriority());
 		response.setNotes(entity.getNotes());
+		response.setIsDraft(entity.getIsDraft());
 		response.setCreatedAt(entity.getCreatedAt());
 		response.setUpdatedAt(entity.getUpdatedAt());
 		return response;

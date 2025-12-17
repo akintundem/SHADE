@@ -29,6 +29,7 @@ public class BudgetLineItemResponse {
     private Boolean isEssential;
     private String priority;
     private String notes;
+    private Boolean isDraft;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
