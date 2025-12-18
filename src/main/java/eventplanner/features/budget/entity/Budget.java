@@ -10,7 +10,6 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,10 +24,10 @@ import java.util.List;
 public class Budget extends BaseEntity {
 
     /**
-     * Many-to-one relationship with the event this budget belongs to.
+     * One-to-one relationship with the event this budget belongs to.
      */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "event_id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false, unique = true)
     private Event event;
 
     /**
@@ -65,21 +64,15 @@ public class Budget extends BaseEntity {
     @Column(name = "budget_status")
     private String budgetStatus;
 
-    @Column(name = "approved_by")
-    private String approvedBy;
-
-    @Column(name = "approved_date")
-    private LocalDateTime approvedDate;
-
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
     /**
-     * One-to-many relationship with budget line items.
-     * Lazy loaded to avoid N+1 queries.
+     * One-to-many relationship with budget categories.
+     * Categories organize the budget into sections with allocated amounts.
      */
     @OneToMany(mappedBy = "budget", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private List<BudgetLineItem> lineItems = new ArrayList<>();
+    private List<BudgetCategory> categories = new ArrayList<>();
 
     @PrePersist
     public void prePersist() {

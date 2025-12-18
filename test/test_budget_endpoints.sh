@@ -128,9 +128,8 @@ ACCESS_TOKEN=""
 DEVICE_ID=""
 USER_ID=""
 EVENT_ID=""
-BUDGET_ID=""
+CATEGORY_ID=""
 LINE_ITEM_ID=""
-LINE_ITEM_ID_2=""
 
 # Create report file
 mkdir -p reports
@@ -146,10 +145,9 @@ cat > "$REPORT_FILE" << EOF
 | Test Category | Total | Passed | Failed | Success Rate |
 |---------------|-------|--------|--------|--------------|
 | Health Check | 0 | 0 | 0 | 0% |
-| Budget CRUD | 0 | 0 | 0 | 0% |
-| Line Item Management | 0 | 0 | 0 | 0% |
-| Analytics | 0 | 0 | 0 | 0% |
-| Approval Workflow | 0 | 0 | 0 | 0% |
+| Budget Management | 0 | 0 | 0 | 0% |
+| Category List | 0 | 0 | 0 | 0% |
+| Line Item Flow | 0 | 0 | 0 | 0% |
 | Validation Tests | 0 | 0 | 0 | 0% |
 | **TOTAL** | 0 | 0 | 0 | 0% |
 
@@ -216,13 +214,13 @@ run_test() {
     local response_body="${response%???}"
     
     # Check if test passed
-    if [ "$http_code" = "$expected_status" ]; then
+    if [[ "$http_code" == "$expected_status" ]]; then
         echo -e "${GREEN}✅ PASSED${NC} - Status: $http_code"
         PASSED_TESTS=$((PASSED_TESTS + 1))
         local status_icon="✅"
     else
         echo -e "${RED}❌ FAILED${NC} - Expected: $expected_status, Got: $http_code"
-        if [ "$http_code" = "403" ] || [ "$http_code" = "401" ]; then
+        if [ "$http_code" = "403" ] || [ "$http_code" = "401" ] || [ "$http_code" = "400" ]; then
             echo -e "${YELLOW}   Response: $response_body${NC}"
         fi
         FAILED_TESTS=$((FAILED_TESTS + 1))
@@ -251,7 +249,7 @@ run_test() {
     } >> "$REPORT_FILE"
     
     # Extract IDs from successful responses
-    if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
+    if [[ "$http_code" == "200" || "$http_code" == "201" ]]; then
         case "$test_name" in
             "User Login")
                 ACCESS_TOKEN=$(echo "$response_body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
@@ -261,16 +259,11 @@ run_test() {
             "Create Event")
                 EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
                 ;;
-            "Create Budget")
-                BUDGET_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+            "Get Categories")
+                CATEGORY_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
                 ;;
-            "Add Line Item")
+            "Auto-save New Line Item")
                 LINE_ITEM_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-                ;;
-            "Add Bulk Line Items")
-                if [ -z "$LINE_ITEM_ID_2" ]; then
-                    LINE_ITEM_ID_2=$(echo "$response_body" | grep -o '"id":"[^"]*"' | tail -1 | cut -d'"' -f4)
-                fi
                 ;;
         esac
     fi
@@ -404,13 +397,12 @@ main() {
     echo -e "${PURPLE}📋 Test Plan:${NC}"
     echo "1. Check service availability"
     echo "2. Authenticate user"
-    echo "3. Create test event"
-    echo "4. Test budget CRUD operations"
-    echo "5. Test line item management"
-    echo "6. Test analytics endpoints"
-    echo "7. Test approval workflow"
-    echo "8. Test validation"
-    echo "9. Clean up"
+    echo "3. Create test event (auto-creates budget)"
+    echo "4. Test budget retrieval and update"
+    echo "5. Test category listing"
+    echo "6. Test line item flow (Auto-save, Finalize, Delete)"
+    echo "7. Test validation"
+    echo "8. Clean up"
     echo ""
     
     # Step 1: Check service
@@ -440,177 +432,119 @@ main() {
     fi
     echo ""
     
-    # Step 4: Budget CRUD Tests
-    echo -e "${CYAN}💰 Step 4: Budget CRUD Operations${NC}"
-    echo "=================================="
+    # Step 4: Budget Retrieval and Update
+    echo -e "${CYAN}💰 Step 4: Budget Retrieval and Update${NC}"
+    echo "======================================="
     
-    # Create budget
-    local budget_data='{
-        "eventId": "'$EVENT_ID'",
-        "totalBudget": 50000.00,
-        "currency": "USD"
-    }'
-    run_test "Create Budget" "POST" "/api/v1/budgets" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$budget_data" "201" "Create a new budget for the event"
-    
-    # Get budget by event ID
-    run_test "Get Budget by Event ID" "GET" "/api/v1/budgets/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Retrieve budget for event"
+    # Get budget
+    run_test "Get Budget" "GET" "/api/v1/events/$EVENT_ID/budget" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Retrieve the auto-created budget for the event"
     
     # Update budget
-    if [ -n "$BUDGET_ID" ]; then
-        local update_budget_data='{
-            "totalBudget": 60000.00,
-            "contingencyPercentage": 15.00,
-            "currency": "USD",
-            "notes": "Updated budget"
-        }'
-        run_test "Update Budget" "PUT" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_budget_data" "200" "Update budget details"
-    fi
-    
-    # Recalculate totals
-    if [ -n "$BUDGET_ID" ]; then
-        run_test "Recalculate Totals" "POST" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/recalculate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Force recalculation of budget totals"
-    fi
+    local update_budget_data='{
+        "totalBudget": 60000.00,
+        "contingencyPercentage": 10.0,
+        "currency": "USD",
+        "notes": "Updated budget via test script"
+    }'
+    run_test "Update Budget" "PUT" "/api/v1/events/$EVENT_ID/budget" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_budget_data" "200" "Update budget details"
     echo ""
     
-    # Step 5: Line Item Management
-    echo -e "${CYAN}📝 Step 5: Line Item Management${NC}"
-    echo "================================"
+    # Step 5: Category Listing
+    echo -e "${CYAN}📂 Step 5: Category Listing${NC}"
+    echo "============================"
     
-    # Add single line item
-    if [ -n "$BUDGET_ID" ]; then
-        local line_item_data='{
-            "category": "Venue & Facilities",
-            "description": "Conference hall rental",
-            "estimatedCost": 10000.00,
-            "actualCost": 9500.00,
+    run_test "Get Categories" "GET" "/api/v1/events/$EVENT_ID/budget/categories" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all auto-seeded categories"
+    echo ""
+    
+    # Step 6: Line Item Flow
+    echo -e "${CYAN}📝 Step 6: Line Item Flow${NC}"
+    echo "=========================="
+    
+    # Auto-save new line item (Draft)
+    if [ -n "$CATEGORY_ID" ]; then
+        local autosave_new_data='{
+            "budgetCategoryId": "'$CATEGORY_ID'",
+            "description": "Draft item from test",
+            "estimatedCost": 1000.00,
             "quantity": 1
         }'
-        run_test "Add Line Item" "POST" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$line_item_data" "200" "Add a single line item"
+        run_test "Auto-save New Line Item" "PATCH" "/api/v1/events/$EVENT_ID/budget/line-items/auto-save" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$autosave_new_data" "200" "Create a new line item in draft mode"
     fi
     
-    # Add bulk line items
-    if [ -n "$BUDGET_ID" ]; then
-        local bulk_line_items='{
-            "lineItems": [
-                {
-                    "category": "Catering & Food",
-                    "description": "Lunch for attendees",
-                    "estimatedCost": 5000.00,
-                    "actualCost": 4800.00
-                },
-                {
-                    "category": "Technical Equipment",
-                    "description": "AV equipment rental",
-                    "estimatedCost": 3000.00,
-                    "actualCost": 3200.00
-                }
-            ]
+    # Auto-save update existing line item
+    if [ -n "$LINE_ITEM_ID" ]; then
+        local autosave_update_data='{
+            "id": "'$LINE_ITEM_ID'",
+            "description": "Updated draft item",
+            "estimatedCost": 1200.00,
+            "actualCost": 1100.00
         }'
-        run_test "Add Bulk Line Items" "POST" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items/bulk" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$bulk_line_items" "200" "Add multiple line items"
+        run_test "Auto-save Update Line Item" "PATCH" "/api/v1/events/$EVENT_ID/budget/line-items/auto-save" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$autosave_update_data" "200" "Update an existing draft line item"
     fi
     
-    # Get all line items
-    if [ -n "$BUDGET_ID" ]; then
-        run_test "Get All Line Items" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all line items"
-    fi
+    # List line items
+    run_test "Get All Line Items" "GET" "/api/v1/events/$EVENT_ID/budget/line-items" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all line items for the budget"
     
-    # Get specific line item
-    if [ -n "$BUDGET_ID" ] && [ -n "$LINE_ITEM_ID" ]; then
-        run_test "Get Specific Line Item" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items/$LINE_ITEM_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get line item details"
-    fi
-    
-    # Update line item
-    if [ -n "$BUDGET_ID" ] && [ -n "$LINE_ITEM_ID" ]; then
-        local update_line_item='{
-            "description": "Updated conference hall rental",
-            "actualCost": 9800.00,
-            "notes": "Final cost after negotiation"
+    # Finalize line item
+    if [ -n "$LINE_ITEM_ID" ]; then
+        local finalize_data='{
+            "description": "Finalized item",
+            "estimatedCost": 1200.00,
+            "actualCost": 1150.00
         }'
-        run_test "Update Line Item" "PUT" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items/$LINE_ITEM_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_line_item" "200" "Update line item details"
+        run_test "Finalize Line Item" "PUT" "/api/v1/events/$EVENT_ID/budget/line-items/$LINE_ITEM_ID/finalize" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$finalize_data" "200" "Mark the line item as non-draft and update totals"
+    fi
+    
+    # Finalize empty line item (Should result in deletion/204)
+    # First create another draft
+    local empty_draft_data='{
+        "budgetCategoryId": "'$CATEGORY_ID'",
+        "description": "To be emptied"
+    }'
+    local empty_draft_response=$(curl -s -X PATCH -H "Authorization: Bearer $ACCESS_TOKEN" -H "X-Device-ID: $DEVICE_ID" -H "Content-Type: application/json" -d "$empty_draft_data" "$BASE_URL/api/v1/events/$EVENT_ID/budget/line-items/auto-save")
+    local TEMP_ITEM_ID=$(echo "$empty_draft_response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    
+    if [ -n "$TEMP_ITEM_ID" ]; then
+        local empty_finalize_data='{
+            "description": "",
+            "estimatedCost": 0,
+            "actualCost": 0
+        }'
+        run_test "Finalize Empty Item (Auto-delete)" "PUT" "/api/v1/events/$EVENT_ID/budget/line-items/$TEMP_ITEM_ID/finalize" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$empty_finalize_data" "204" "Finalizing an empty item should delete it"
     fi
     echo ""
     
-    # Step 6: Analytics Tests
-    echo -e "${CYAN}📊 Step 6: Analytics Endpoints${NC}"
-    echo "==============================="
-    
-    if [ -n "$BUDGET_ID" ]; then
-        run_test "Get Budget Summary" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/summary" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get comprehensive budget summary"
-        
-        run_test "Get Variance Analysis" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/variance-analysis" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get variance analysis by category"
-        
-        run_test "Get Contingency Analysis" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/contingency-analysis" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get contingency usage and recommendations"
-        
-        run_test "Get Category Breakdown" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/category-breakdown" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get spending breakdown by category"
-        
-        run_test "Get Rollup Total" "GET" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/rollup" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Compute rollup total"
-    fi
-    
-    run_test "Get Standard Categories" "GET" "/api/v1/budgets/categories" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get list of standard budget categories"
-    echo ""
-    
-    # Step 7: Approval Workflow Tests
-    echo -e "${CYAN}✅ Step 7: Approval Workflow${NC}"
-    echo "=============================="
-    
-    if [ -n "$BUDGET_ID" ]; then
-        run_test "Submit for Approval" "POST" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/submit-for-approval" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Submit budget for approval"
-        
-        local approval_data='{
-            "approvedBy": "Budget Manager",
-            "notes": "Approved with recommendations"
-        }'
-        run_test "Approve Budget" "POST" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/approve" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$approval_data" "200" "Approve the budget"
-    fi
-    echo ""
-    
-    # Step 8: Validation Tests
-    echo -e "${CYAN}🔒 Step 8: Validation Tests${NC}"
+    # Step 7: Validation Tests
+    echo -e "${CYAN}🔒 Step 7: Validation Tests${NC}"
     echo "============================"
     
     # Test negative budget (should fail)
     local negative_budget='{
-        "eventId": "'$EVENT_ID'",
-        "totalBudget": -1000.00,
-        "currency": "USD"
+        "totalBudget": -1000.00
     }'
-    run_test "Create Negative Budget (Should Fail)" "POST" "/api/v1/budgets" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$negative_budget" "400" "Attempt to create budget with negative amount"
+    run_test "Update Negative Budget (Should Fail)" "PUT" "/api/v1/events/$EVENT_ID/budget" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$negative_budget" "400" "Attempt to set negative budget"
     
-    # Test invalid currency (should fail)
-    local invalid_currency='{
-        "eventId": "'$EVENT_ID'",
+    # Test invalid contingency percentage (should fail - max 50%)
+    local invalid_contingency='{
         "totalBudget": 5000.00,
-        "currency": "XYZ"
+        "contingencyPercentage": 75.00
     }'
-    run_test "Create Budget with Invalid Currency (Should Fail)" "POST" "/api/v1/budgets" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invalid_currency" "400" "Attempt to create budget with invalid currency"
-    
-    # Test invalid contingency percentage (should fail)
-    if [ -n "$BUDGET_ID" ]; then
-        local invalid_contingency='{
-            "contingencyPercentage": 150.00
-        }'
-        run_test "Update with Invalid Contingency (Should Fail)" "PUT" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invalid_contingency" "400" "Attempt to set contingency > 100%"
-    fi
+    run_test "Update with Invalid Contingency (Should Fail)" "PUT" "/api/v1/events/$EVENT_ID/budget" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invalid_contingency" "400" "Attempt to set contingency > 50%"
     
     # Test unauthenticated access (should fail)
-    run_test "Get Budget Without Auth (Should Fail)" "GET" "/api/v1/budgets/$EVENT_ID" "" "" "401" "Attempt to access budget without authentication"
+    run_test "Get Budget Without Auth (Should Fail)" "GET" "/api/v1/events/$EVENT_ID/budget" "" "" "401" "Attempt to access budget without authentication"
     echo ""
     
-    # Step 9: Clean Up
-    echo -e "${CYAN}🧹 Step 9: Clean Up${NC}"
+    # Step 8: Clean Up
+    echo -e "${CYAN}🧹 Step 8: Clean Up${NC}"
     echo "===================="
     
     # Delete line item
-    if [ -n "$BUDGET_ID" ] && [ -n "$LINE_ITEM_ID" ]; then
-        run_test "Delete Line Item" "DELETE" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID/line-items/$LINE_ITEM_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete a line item"
+    if [ -n "$LINE_ITEM_ID" ]; then
+        run_test "Delete Line Item" "DELETE" "/api/v1/events/$EVENT_ID/budget/line-items/$LINE_ITEM_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete the finalized line item"
     fi
     
-    # Delete budget
-    if [ -n "$BUDGET_ID" ]; then
-        run_test "Delete Budget" "DELETE" "/api/v1/budgets/events/$EVENT_ID/budgets/$BUDGET_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete the budget"
-    fi
-    
-    # Delete event
+    # Archive event (which would normally lead to budget deletion if we had it, but for now we just archive)
     if [ -n "$EVENT_ID" ]; then
         run_test "Archive Test Event" "POST" "/api/v1/events/$EVENT_ID/archive" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Archive test event"
     fi

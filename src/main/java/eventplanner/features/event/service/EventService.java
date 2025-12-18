@@ -17,6 +17,7 @@ import eventplanner.features.event.dto.response.FeedPost;
 import eventplanner.features.feeds.entity.EventFeedPost;
 import eventplanner.features.feeds.repository.FeedPostRepository;
 import eventplanner.features.event.repository.EventStoredObjectRepository;
+import eventplanner.features.budget.service.BudgetService;
 import eventplanner.common.storage.s3.services.S3StorageService;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
@@ -68,6 +69,9 @@ public class EventService {
 
     @Autowired(required = false)
     private AuthorizationService authorizationService;
+    
+    @Autowired
+    private BudgetService budgetService;
     
 
     /**
@@ -265,6 +269,10 @@ public class EventService {
         
         Event savedEvent = eventRepository.save(event);
         assignOwnerOrganizerRole(savedEvent.getId(), ownerId);
+        
+        // Auto-create budget for the event
+        budgetService.createInitialBudget(savedEvent, owner);
+        
         return savedEvent;
     }
 

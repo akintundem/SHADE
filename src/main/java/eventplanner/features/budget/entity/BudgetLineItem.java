@@ -14,7 +14,12 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
-@Table(name = "budget_line_items")
+@Table(name = "budget_line_items", indexes = {
+    @Index(name = "idx_budget_line_items_budget_category", columnList = "budget_category_id"),
+    @Index(name = "idx_budget_line_items_budget", columnList = "budget_id"),
+    @Index(name = "idx_budget_line_items_subcategory", columnList = "subcategory"),
+    @Index(name = "idx_budget_line_items_is_draft", columnList = "is_draft")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -37,8 +42,17 @@ public class BudgetLineItem extends BaseEntity {
     )
     private Budget budget;
 
-    @Column(name = "category", nullable = false)
-    private String category;
+    /**
+     * Many-to-one relationship with the budget category this line item belongs to.
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @OnDelete(action = OnDeleteAction.CASCADE)
+    @JoinColumn(
+        name = "budget_category_id", 
+        nullable = false,
+        foreignKey = @ForeignKey(name = "fk_budget_line_items_category", value = ConstraintMode.CONSTRAINT)
+    )
+    private BudgetCategory budgetCategory;
 
     @Column(name = "subcategory")
     private String subcategory;

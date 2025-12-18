@@ -1,12 +1,14 @@
 package eventplanner.features.budget.service;
 
 import eventplanner.features.budget.dto.request.UpdateBudgetRequest;
-import eventplanner.features.budget.dto.request.UpdateBudgetLineItemRequest;
-import eventplanner.features.budget.dto.request.BudgetApprovalRequest;
-import eventplanner.features.budget.dto.request.BulkLineItemRequest;
-import eventplanner.features.budget.dto.response.*;
+import eventplanner.features.budget.dto.request.BudgetLineItemAutoSaveRequest;
 import eventplanner.features.budget.entity.Budget;
+import eventplanner.features.budget.entity.BudgetCategory;
 import eventplanner.features.budget.entity.BudgetLineItem;
+import eventplanner.features.event.entity.Event;
+import eventplanner.features.event.repository.EventRepository;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.features.budget.repository.BudgetCategoryRepository;
 import eventplanner.features.budget.repository.BudgetLineItemRepository;
 import eventplanner.features.budget.repository.BudgetRepository;
 import org.springframework.stereotype.Service;
@@ -14,20 +16,26 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @Transactional
 public class BudgetService {
     private final BudgetRepository budgetRepository;
+    private final BudgetCategoryRepository categoryRepository;
     private final BudgetLineItemRepository lineItemRepository;
+    private final EventRepository eventRepository;
 
-    public BudgetService(BudgetRepository budgetRepository, 
-                        BudgetLineItemRepository lineItemRepository) {
+    public BudgetService(BudgetRepository budgetRepository,
+                        BudgetCategoryRepository categoryRepository,
+                        BudgetLineItemRepository lineItemRepository,
+                        EventRepository eventRepository) {
         this.budgetRepository = budgetRepository;
+        this.categoryRepository = categoryRepository;
         this.lineItemRepository = lineItemRepository;
+        this.eventRepository = eventRepository;
     }
 
     public Optional<Budget> getByEventId(UUID eventId) {
@@ -38,720 +46,228 @@ public class BudgetService {
         return budgetRepository.findById(budgetId);
     }
 
-    public Budget createOrUpdate(Budget budget) {
-        validateBudget(budget);
+    private static final List<String> STANDARD_CATEGORIES = List.of(
+        "Venue & Facilities", "Catering & Food", "Marketing & Promotion",
+        "Audio & Visual", "Speakers & Talent", "Decorations & Flowers",
+        "Printing & Signage", "Logistics & Transport", "Staff & Security",
+        "Technology & Software", "Gifts & Swag", "Insurance & Permits",
+        "Photography & Video", "Registration & Admin", "Travel & Accommodation",
+        "Sponsorship Activation", "Emergency & Contingency", "Equipment Rental",
+        "Volunteer Support", "Awards & Trophies", "Miscellaneous"
+    );
+
+    public Budget createInitialBudget(Event event, UserAccount owner) {
+        Budget budget = new Budget();
+        budget.setEvent(event);
+        budget.setOwner(owner);
+        budget.setTotalBudget(BigDecimal.ZERO);
+        budget.setCurrency("USD");
+        budget.setBudgetStatus("DRAFT");
         
-        if (budget.getContingencyPercentage() != null && budget.getTotalBudget() != null) {
-            budget.setContingencyAmount(budget.getTotalBudget().multiply(budget.getContingencyPercentage()).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP));
+        Budget savedBudget = budgetRepository.save(budget);
+        seedStandardCategories(savedBudget);
+        return savedBudget;
+    }
+
+    private void seedStandardCategories(Budget budget) {
+        int order = 0;
+        for (String categoryName : STANDARD_CATEGORIES) {
+            BudgetCategory category = new BudgetCategory();
+            category.setBudget(budget);
+            category.setName(categoryName);
+            category.setAllocatedAmount(BigDecimal.ZERO);
+            category.setDisplayOrder(order++);
+            categoryRepository.save(category);
         }
-        
-        Budget saved = budgetRepository.save(budget);
-        return saved;
+    }
+
+    public Budget getOrCreateByEventId(UUID eventId) {
+        return budgetRepository.findByEventId(eventId)
+                .orElseGet(() -> {
+                    Event event = eventRepository.findById(eventId)
+                            .orElseThrow(() -> new RuntimeException("Event not found"));
+                    return createInitialBudget(event, event.getOwner());
+                });
     }
 
     public Budget updateBudget(UUID budgetId, UpdateBudgetRequest request) {
-        Budget oldBudget = budgetRepository.findById(budgetId)
+        Budget budget = budgetRepository.findById(budgetId)
                 .orElseThrow(() -> new RuntimeException("Budget not found"));
         
         if (request.getTotalBudget() != null) {
             validatePositiveAmount(request.getTotalBudget(), "Total budget");
-            oldBudget.setTotalBudget(request.getTotalBudget());
+            budget.setTotalBudget(request.getTotalBudget());
         }
         if (request.getContingencyPercentage() != null) {
             validatePercentage(request.getContingencyPercentage(), "Contingency percentage");
-            oldBudget.setContingencyPercentage(request.getContingencyPercentage());
+            budget.setContingencyPercentage(request.getContingencyPercentage());
         }
         if (request.getCurrency() != null) {
             validateCurrency(request.getCurrency());
-            oldBudget.setCurrency(request.getCurrency());
+            budget.setCurrency(request.getCurrency());
         }
         if (request.getNotes() != null) {
-            oldBudget.setNotes(request.getNotes());
+            budget.setNotes(request.getNotes());
         }
         
-        // Recalculate contingency amount
-        if (oldBudget.getContingencyPercentage() != null && oldBudget.getTotalBudget() != null) {
-            oldBudget.setContingencyAmount(oldBudget.getTotalBudget().multiply(oldBudget.getContingencyPercentage()).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP));
-        }
-        
-        Budget saved = budgetRepository.save(oldBudget);
-        return saved;
-    }
-
-    public BudgetLineItem addLineItem(BudgetLineItem item) {
-        // Enforce that line items must be connected to a budget
-        if (item.getBudget() == null) {
-            throw new IllegalArgumentException("Line item must be associated with a budget");
-        }
-        
-        // Verify the budget exists and is not deleted
-        UUID budgetId = item.getBudget().getId();
-        Budget budget = budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new IllegalArgumentException("Budget not found: " + budgetId));
-        
-        // Ensure the line item references the managed budget entity
-        item.setBudget(budget);
-        
-        BudgetLineItem saved = lineItemRepository.save(item);
-        recalculateBudgetTotals(budgetId);
-        return saved;
-    }
-
-    public BudgetLineItem updateLineItem(UUID itemId, UpdateBudgetLineItemRequest request) {
-        BudgetLineItem item = lineItemRepository.findById(itemId)
-                .orElseThrow(() -> new RuntimeException("Line item not found"));
-        
-        // Enforce that line items must remain connected to their budget
-        if (item.getBudget() == null) {
-            throw new IllegalStateException("Line item is not associated with a budget");
-        }
-        
-        // Verify the budget still exists and is not deleted
-        UUID budgetId = item.getBudget().getId();
-        budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new IllegalStateException("Budget not found for line item: " + budgetId));
-        
-        if (request.getCategory() != null) item.setCategory(request.getCategory());
-        if (request.getSubcategory() != null) item.setSubcategory(request.getSubcategory());
-        if (request.getDescription() != null) item.setDescription(request.getDescription());
-        if (request.getEstimatedCost() != null) item.setEstimatedCost(request.getEstimatedCost());
-        if (request.getActualCost() != null) item.setActualCost(request.getActualCost());
-        if (request.getQuantity() != null) item.setQuantity(request.getQuantity());
-        if (request.getUnitCost() != null) item.setUnitCost(request.getUnitCost());
-        if (request.getPlanningStatus() != null) item.setPlanningStatus(request.getPlanningStatus());
-        if (request.getIsEssential() != null) item.setIsEssential(request.getIsEssential());
-        if (request.getPriority() != null) item.setPriority(request.getPriority());
-        if (request.getNotes() != null) item.setNotes(request.getNotes());
-        
-        // Calculate variance
-        if (item.getActualCost() != null && item.getEstimatedCost() != null) {
-            item.setVariance(item.getActualCost().subtract(item.getEstimatedCost()));
-            if (item.getEstimatedCost().compareTo(BigDecimal.ZERO) > 0) {
-                item.setVariancePercentage(item.getVariance().divide(item.getEstimatedCost(), 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")));
-            }
-        }
-        
-        BudgetLineItem saved = lineItemRepository.save(item);
-        // Recalculate totals using the budgetId we already validated above
-        recalculateBudgetTotals(budgetId);
-        return saved;
+        recalculateContingency(budget);
+        return budgetRepository.save(budget);
     }
 
     /**
-     * Auto-save a line item as draft without full validation.
-     * This method is designed for frequent auto-save operations (e.g., on every keystroke with debouncing).
-     * Drafts don't trigger budget recalculation to reduce database load.
+     * Auto-save a line item as draft.
      */
-    public BudgetLineItem autoSaveLineItemDraft(UUID itemId, UpdateBudgetLineItemRequest request) {
-        BudgetLineItem item = lineItemRepository.findById(itemId)
-                .orElseThrow(() -> new RuntimeException("Line item not found"));
+    public BudgetLineItem autoSaveLineItemDraft(UUID budgetId, BudgetLineItemAutoSaveRequest request) {
+        BudgetLineItem item;
         
-        // Enforce that line items must remain connected to their budget
-        if (item.getBudget() == null) {
-            throw new IllegalStateException("Line item is not associated with a budget");
+        if (request.getId() == null) {
+            if (request.getBudgetCategoryId() == null) {
+                throw new IllegalArgumentException("Budget category ID is required for new line items");
+            }
+            Budget budget = budgetRepository.findById(budgetId)
+                    .orElseThrow(() -> new IllegalArgumentException("Budget not found"));
+            BudgetCategory category = categoryRepository.findById(request.getBudgetCategoryId())
+                    .orElseThrow(() -> new IllegalArgumentException("Category not found"));
+            
+            item = new BudgetLineItem();
+            item.setBudget(budget);
+            item.setBudgetCategory(category);
+            item.setIsDraft(true);
+        } else {
+            item = lineItemRepository.findById(request.getId())
+                    .orElseThrow(() -> new RuntimeException("Line item not found"));
+            if (!item.getBudget().getId().equals(budgetId)) {
+                throw new IllegalArgumentException("Line item does not belong to this budget");
+            }
         }
         
-        // Verify the budget still exists and is not deleted
-        UUID budgetId = item.getBudget().getId();
-        budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new IllegalStateException("Budget not found for line item: " + budgetId));
-        
-        // Update fields without full validation (for draft saves)
-        if (request.getCategory() != null) item.setCategory(request.getCategory());
-        if (request.getSubcategory() != null) item.setSubcategory(request.getSubcategory());
-        if (request.getDescription() != null) item.setDescription(request.getDescription());
-        if (request.getEstimatedCost() != null) item.setEstimatedCost(request.getEstimatedCost());
-        if (request.getActualCost() != null) item.setActualCost(request.getActualCost());
-        if (request.getQuantity() != null) item.setQuantity(request.getQuantity());
-        if (request.getUnitCost() != null) item.setUnitCost(request.getUnitCost());
-        if (request.getPlanningStatus() != null) item.setPlanningStatus(request.getPlanningStatus());
-        if (request.getIsEssential() != null) item.setIsEssential(request.getIsEssential());
-        if (request.getPriority() != null) item.setPriority(request.getPriority());
-        if (request.getNotes() != null) item.setNotes(request.getNotes());
-        
-        // Mark as draft - don't calculate variance or recalculate totals yet
-        item.setIsDraft(true);
-        
-        BudgetLineItem saved = lineItemRepository.save(item);
-        // Don't recalculate totals for drafts - wait until finalize
-        return saved;
+        updateLineItemFields(item, request);
+        return lineItemRepository.save(item);
     }
 
     /**
-     * Finalize a draft line item, applying full validation and triggering budget recalculation.
-     * This converts a draft to a finalized line item.
+     * Finalize a draft line item with auto-cleanup.
      */
-    public BudgetLineItem finalizeLineItem(UUID itemId, UpdateBudgetLineItemRequest request) {
+    public Optional<BudgetLineItem> finalizeLineItem(UUID itemId, BudgetLineItemAutoSaveRequest request) {
         BudgetLineItem item = lineItemRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException("Line item not found"));
         
-        // Enforce that line items must remain connected to their budget
-        if (item.getBudget() == null) {
-            throw new IllegalStateException("Line item is not associated with a budget");
+        updateLineItemFields(item, request);
+
+        if (isLineItemEmpty(item)) {
+            deleteLineItem(itemId);
+            return Optional.empty();
         }
-        
-        // Verify the budget still exists and is not deleted
-        UUID budgetId = item.getBudget().getId();
-        budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new IllegalStateException("Budget not found for line item: " + budgetId));
-        
-        // Update fields with full validation
-        if (request.getCategory() != null) {
-            if (request.getCategory().trim().isEmpty()) {
-                throw new IllegalArgumentException("Category cannot be empty");
-            }
-            item.setCategory(request.getCategory());
-        }
-        if (request.getSubcategory() != null) item.setSubcategory(request.getSubcategory());
-        if (request.getDescription() != null) item.setDescription(request.getDescription());
-        if (request.getEstimatedCost() != null) {
-            if (request.getEstimatedCost().compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Estimated cost cannot be negative");
-            }
-            item.setEstimatedCost(request.getEstimatedCost());
-        }
-        if (request.getActualCost() != null) {
-            if (request.getActualCost().compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Actual cost cannot be negative");
-            }
-            item.setActualCost(request.getActualCost());
-        }
-        if (request.getQuantity() != null) {
-            if (request.getQuantity() < 1) {
-                throw new IllegalArgumentException("Quantity must be at least 1");
-            }
-            item.setQuantity(request.getQuantity());
-        }
-        if (request.getUnitCost() != null) {
-            if (request.getUnitCost().compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Unit cost cannot be negative");
-            }
-            item.setUnitCost(request.getUnitCost());
-        }
-        if (request.getPlanningStatus() != null) item.setPlanningStatus(request.getPlanningStatus());
-        if (request.getIsEssential() != null) item.setIsEssential(request.getIsEssential());
-        if (request.getPriority() != null) item.setPriority(request.getPriority());
-        if (request.getNotes() != null) item.setNotes(request.getNotes());
-        
-        // Calculate variance
-        if (item.getActualCost() != null && item.getEstimatedCost() != null) {
-            item.setVariance(item.getActualCost().subtract(item.getEstimatedCost()));
-            if (item.getEstimatedCost().compareTo(BigDecimal.ZERO) > 0) {
-                item.setVariancePercentage(item.getVariance().divide(item.getEstimatedCost(), 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")));
-            }
-        }
-        
-        // Mark as finalized
+
+        calculateLineItemVariance(item);
         item.setIsDraft(false);
-        
         BudgetLineItem saved = lineItemRepository.save(item);
-        // Recalculate totals now that it's finalized
-        recalculateBudgetTotals(budgetId);
-        return saved;
+        
+        recalculateCategoryTotals(saved.getBudgetCategory().getId());
+        recalculateBudgetTotals(saved.getBudget().getId());
+        
+        return Optional.of(saved);
+    }
+
+    private void updateLineItemFields(BudgetLineItem item, BudgetLineItemAutoSaveRequest request) {
+        if (request.getSubcategory() != null) item.setSubcategory(request.getSubcategory());
+        if (request.getDescription() != null) item.setDescription(request.getDescription());
+        if (request.getEstimatedCost() != null) item.setEstimatedCost(request.getEstimatedCost());
+        if (request.getActualCost() != null) item.setActualCost(request.getActualCost());
+        if (request.getQuantity() != null) item.setQuantity(request.getQuantity());
+        if (request.getUnitCost() != null) item.setUnitCost(request.getUnitCost());
+        if (request.getPlanningStatus() != null) item.setPlanningStatus(request.getPlanningStatus());
+        if (request.getIsEssential() != null) item.setIsEssential(request.getIsEssential());
+        if (request.getPriority() != null) item.setPriority(request.getPriority());
+        if (request.getNotes() != null) item.setNotes(request.getNotes());
+        if (request.getVendorId() != null) item.setVendorId(request.getVendorId());
+    }
+
+    private boolean isLineItemEmpty(BudgetLineItem item) {
+        return (item.getDescription() == null || item.getDescription().isBlank()) &&
+               (item.getEstimatedCost() == null || item.getEstimatedCost().compareTo(BigDecimal.ZERO) == 0) &&
+               (item.getActualCost() == null || item.getActualCost().compareTo(BigDecimal.ZERO) == 0);
+    }
+
+    private void calculateLineItemVariance(BudgetLineItem item) {
+        if (item.getActualCost() != null && item.getEstimatedCost() != null) {
+            item.setVariance(item.getActualCost().subtract(item.getEstimatedCost()));
+            if (item.getEstimatedCost().compareTo(BigDecimal.ZERO) > 0) {
+                item.setVariancePercentage(item.getVariance()
+                    .divide(item.getEstimatedCost(), 4, RoundingMode.HALF_UP)
+                    .multiply(new BigDecimal("100")));
+            }
+        }
     }
 
     public void deleteLineItem(UUID itemId) {
-        BudgetLineItem item = lineItemRepository.findById(itemId)
-                .orElseThrow(() -> new RuntimeException("Line item not found"));
-        UUID budgetId = item.getBudget() != null ? item.getBudget().getId() : null;
-        if (budgetId != null) {
-            lineItemRepository.deleteById(itemId);
-            recalculateBudgetTotals(budgetId);
-        } else {
-            lineItemRepository.deleteById(itemId);
-        }
-    }
+        BudgetLineItem item = lineItemRepository.findById(itemId).orElse(null);
+        if (item == null) return;
 
-    public List<BudgetLineItem> addBulkLineItems(BulkLineItemRequest request) {
-        List<BudgetLineItem> items = request.getLineItems().stream()
-                .map(req -> {
-                    Budget budget = budgetRepository.findById(request.getBudgetId())
-                            .orElseThrow(() -> new IllegalArgumentException("Budget not found"));
-                    BudgetLineItem item = new BudgetLineItem();
-                    item.setBudget(budget);
-                    item.setCategory(req.getCategory());
-                    item.setDescription(req.getDescription());
-                    item.setEstimatedCost(req.getEstimatedCost());
-                    item.setActualCost(req.getActualCost());
-                    item.setVendorId(req.getVendorId());
-                    return item;
-                })
-                .collect(Collectors.toList());
+        UUID budgetId = item.getBudget().getId();
+        UUID categoryId = item.getBudgetCategory().getId();
+        boolean wasFinalized = !Boolean.TRUE.equals(item.getIsDraft());
+
+        lineItemRepository.deleteById(itemId);
         
-        List<BudgetLineItem> saved = lineItemRepository.saveAll(items);
-        recalculateBudgetTotals(request.getBudgetId());
-        return saved;
+        if (wasFinalized) {
+            recalculateCategoryTotals(categoryId);
+            recalculateBudgetTotals(budgetId);
+        }
     }
 
     public List<BudgetLineItem> listLineItems(UUID budgetId) {
         return lineItemRepository.findByBudgetId(budgetId);
     }
 
-    public Optional<BudgetLineItem> getLineItem(UUID itemId) {
-        return lineItemRepository.findById(itemId);
+    public List<BudgetCategory> listCategories(UUID budgetId) {
+        return categoryRepository.findByBudgetIdOrderByDisplayOrderAsc(budgetId);
     }
-
-    public BigDecimal computeRollup(UUID budgetId) {
-        return listLineItems(budgetId).stream()
-                .map(it -> it.getActualCost() != null ? it.getActualCost() : (it.getEstimatedCost() != null ? it.getEstimatedCost() : BigDecimal.ZERO))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    
+    public Optional<BudgetCategory> getCategory(UUID categoryId) {
+        return categoryRepository.findById(categoryId);
     }
-
-    public Budget approveBudget(UUID budgetId, BudgetApprovalRequest request) {
-        Budget budget = budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new RuntimeException("Budget not found"));
+    
+    public void recalculateCategoryTotals(UUID categoryId) {
+        BudgetCategory category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new RuntimeException("Category not found"));
         
-        if (!"DRAFT".equals(budget.getBudgetStatus()) && !"SUBMITTED".equals(budget.getBudgetStatus())) {
-            throw new RuntimeException("Budget cannot be approved in current status: " + budget.getBudgetStatus());
-        }
+        BigDecimal totalEstimated = lineItemRepository.sumEstimatedCostByCategoryId(categoryId);
+        BigDecimal totalActual = lineItemRepository.sumActualCostByCategoryId(categoryId);
         
-        budget.setBudgetStatus("APPROVED");
-        budget.setApprovedBy(request.getApprovedBy());
-        budget.setApprovedDate(LocalDateTime.now());
-        if (request.getNotes() != null) {
-            budget.setNotes(request.getNotes());
-        }
+        category.setTotalEstimated(totalEstimated != null ? totalEstimated : BigDecimal.ZERO);
+        category.setTotalActual(totalActual != null ? totalActual : BigDecimal.ZERO);
+        category.setRemaining(category.getAllocatedAmount().subtract(category.getTotalActual()));
         
-        Budget saved = budgetRepository.save(budget);
-        return saved;
-    }
-
-    public Budget rejectBudget(UUID budgetId, BudgetApprovalRequest request) {
-        Budget budget = budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new RuntimeException("Budget not found"));
-        
-        if (!"SUBMITTED".equals(budget.getBudgetStatus())) {
-            throw new RuntimeException("Budget cannot be rejected in current status: " + budget.getBudgetStatus());
-        }
-        
-        budget.setBudgetStatus("REJECTED");
-        budget.setApprovedBy(request.getApprovedBy());
-        budget.setApprovedDate(LocalDateTime.now());
-        if (request.getNotes() != null) {
-            budget.setNotes(request.getNotes());
-        }
-        
-        Budget saved = budgetRepository.save(budget);
-        return saved;
-    }
-
-    public Budget submitForApproval(UUID budgetId) {
-        Budget budget = budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new RuntimeException("Budget not found"));
-        
-        if (!"DRAFT".equals(budget.getBudgetStatus())) {
-            throw new RuntimeException("Budget cannot be submitted in current status: " + budget.getBudgetStatus());
-        }
-        
-        budget.setBudgetStatus("SUBMITTED");
-        Budget saved = budgetRepository.save(budget);
-        return saved;
-    }
-
-    public BudgetSummaryResponse getBudgetSummary(UUID budgetId) {
-        Budget budget = budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new RuntimeException("Budget not found"));
-        
-        List<BudgetLineItem> lineItems = listLineItems(budgetId);
-        
-        BigDecimal totalEstimated = lineItems.stream()
-                .map(item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        BigDecimal totalActual = lineItems.stream()
-                .map(item -> item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        BigDecimal remainingBudget = budget.getTotalBudget().subtract(totalActual);
-        BigDecimal contingencyUsed = budget.getContingencyAmount() != null ? 
-                budget.getContingencyAmount().subtract(remainingBudget) : BigDecimal.ZERO;
-        
-        BigDecimal variance = totalActual.subtract(totalEstimated);
-        BigDecimal variancePercentage = totalEstimated.compareTo(BigDecimal.ZERO) > 0 ? 
-                variance.divide(totalEstimated, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")) : BigDecimal.ZERO;
-        
-        BigDecimal spentPercentage = budget.getTotalBudget().compareTo(BigDecimal.ZERO) > 0 ? 
-                totalActual.divide(budget.getTotalBudget(), 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")) : BigDecimal.ZERO;
-        
-        String riskLevel = determineRiskLevel(spentPercentage, variancePercentage);
-        
-        return new BudgetSummaryResponse(
-                budget.getTotalBudget(),
-                totalEstimated,
-                totalActual,
-                remainingBudget,
-                budget.getContingencyAmount(),
-                contingencyUsed,
-                budget.getContingencyAmount() != null ? budget.getContingencyAmount().subtract(contingencyUsed) : BigDecimal.ZERO,
-                variance,
-                variancePercentage,
-                budget.getBudgetStatus(),
-                spentPercentage,
-                spentPercentage,
-                getCategoryBreakdown(lineItems),
-                riskLevel,
-                generateRecommendations(variance, spentPercentage, riskLevel)
-        );
-    }
-
-    public BudgetVarianceAnalysisResponse getVarianceAnalysis(UUID budgetId) {
-        List<BudgetLineItem> lineItems = listLineItems(budgetId);
-        
-        List<BudgetVarianceAnalysisResponse.CategoryVariance> categoryVariances = lineItems.stream()
-                .collect(Collectors.groupingBy(BudgetLineItem::getCategory))
-                .entrySet().stream()
-                .map(entry -> {
-                    String category = entry.getKey();
-                    List<BudgetLineItem> items = entry.getValue();
-                    
-                    BigDecimal estimated = items.stream()
-                            .map(item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    
-                    BigDecimal actual = items.stream()
-                            .map(item -> item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    
-                    BigDecimal variance = actual.subtract(estimated);
-                    BigDecimal variancePercentage = estimated.compareTo(BigDecimal.ZERO) > 0 ? 
-                            variance.divide(estimated, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")) : BigDecimal.ZERO;
-                    
-                    String status = variance.compareTo(BigDecimal.ZERO) > 0 ? "OVER_BUDGET" : 
-                                  variance.compareTo(BigDecimal.ZERO) < 0 ? "UNDER_BUDGET" : "ON_BUDGET";
-                    
-                    return new BudgetVarianceAnalysisResponse.CategoryVariance(category, estimated, actual, variance, variancePercentage, status);
-                })
-                .sorted((a, b) -> b.getVariance().compareTo(a.getVariance()))
-                .collect(Collectors.toList());
-        
-        BigDecimal totalVariance = categoryVariances.stream()
-                .map(BudgetVarianceAnalysisResponse.CategoryVariance::getVariance)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        BigDecimal totalEstimated = categoryVariances.stream()
-                .map(BudgetVarianceAnalysisResponse.CategoryVariance::getEstimatedAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        BigDecimal totalVariancePercentage = totalEstimated.compareTo(BigDecimal.ZERO) > 0 ? 
-                totalVariance.divide(totalEstimated, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")) : BigDecimal.ZERO;
-        
-        Map<String, BigDecimal> topVarianceCategories = categoryVariances.stream()
-                .limit(5)
-                .collect(Collectors.toMap(
-                        BudgetVarianceAnalysisResponse.CategoryVariance::getCategory,
-                        BudgetVarianceAnalysisResponse.CategoryVariance::getVariance
-                ));
-        
-        return new BudgetVarianceAnalysisResponse(
-                totalVariance,
-                totalVariancePercentage,
-                categoryVariances,
-                topVarianceCategories,
-                generateVarianceAnalysisSummary(totalVariance, categoryVariances)
-        );
-    }
-
-    public BudgetContingencyResponse getContingencyAnalysis(UUID budgetId) {
-        Budget budget = budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new RuntimeException("Budget not found"));
-        
-        List<BudgetLineItem> lineItems = listLineItems(budgetId);
-        BigDecimal totalActual = lineItems.stream()
-                .map(item -> item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        BigDecimal totalEstimated = lineItems.stream()
-                .map(item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        BigDecimal overBudgetAmount = totalActual.subtract(totalEstimated);
-        BigDecimal contingencyUsed = overBudgetAmount.max(BigDecimal.ZERO);
-        BigDecimal contingencyRemaining = budget.getContingencyAmount() != null ? 
-                budget.getContingencyAmount().subtract(contingencyUsed) : BigDecimal.ZERO;
-        
-        String contingencyStatus = determineContingencyStatus(contingencyRemaining, budget.getContingencyAmount());
-        
-        // Create usage breakdown by category for over-budget items
-        List<BudgetContingencyResponse.ContingencyUsage> usageBreakdown = lineItems.stream()
-                .filter(item -> {
-                    BigDecimal variance = BigDecimal.ZERO;
-                    if (item.getActualCost() != null && item.getEstimatedCost() != null) {
-                        variance = item.getActualCost().subtract(item.getEstimatedCost());
-                    }
-                    return variance.compareTo(BigDecimal.ZERO) > 0;
-                })
-                .collect(Collectors.groupingBy(BudgetLineItem::getCategory))
-                .entrySet().stream()
-                .map(entry -> {
-                    String category = entry.getKey();
-                    List<BudgetLineItem> categoryItems = entry.getValue();
-                    BigDecimal categoryOverage = categoryItems.stream()
-                            .map(item -> {
-                                BigDecimal actual = item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO;
-                                BigDecimal estimated = item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO;
-                                return actual.subtract(estimated);
-                            })
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    
-                    String reason = "Over budget by " + categoryOverage + " across " + categoryItems.size() + " items";
-                    String date = LocalDateTime.now().toString();
-                    
-                    return new BudgetContingencyResponse.ContingencyUsage(category, categoryOverage, reason, date);
-                })
-                .sorted((a, b) -> b.getAmount().compareTo(a.getAmount()))
-                .collect(Collectors.toList());
-        
-        return new BudgetContingencyResponse(
-                budget.getContingencyAmount(),
-                contingencyUsed,
-                contingencyRemaining,
-                budget.getContingencyPercentage(),
-                contingencyStatus,
-                usageBreakdown,
-                generateContingencyRecommendations(contingencyStatus, contingencyRemaining)
-        );
-    }
-
-    public CategoryBreakdownResponse getCategoryBreakdown(UUID budgetId) {
-        List<BudgetLineItem> lineItems = listLineItems(budgetId);
-        
-        Map<String, BigDecimal> estimatedByCategory = getCategoryBreakdown(lineItems);
-        Map<String, BigDecimal> actualByCategory = getCategoryActualBreakdown(lineItems);
-        Map<String, BigDecimal> varianceByCategory = getCategoryVarianceBreakdown(lineItems);
-        
-        BigDecimal grandTotalEstimated = lineItems.stream()
-                .map(item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        List<CategoryBreakdownResponse.CategorySummary> categorySummaries = lineItems.stream()
-                .collect(Collectors.groupingBy(BudgetLineItem::getCategory))
-                .entrySet().stream()
-                .map(entry -> {
-                    String category = entry.getKey();
-                    List<BudgetLineItem> items = entry.getValue();
-                    
-                    BigDecimal estimated = items.stream()
-                            .map(item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    
-                    BigDecimal actual = items.stream()
-                            .map(item -> item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    
-                    BigDecimal variance = actual.subtract(estimated);
-                    
-                    BigDecimal percentageOfTotal = grandTotalEstimated.compareTo(BigDecimal.ZERO) > 0 ?
-                            estimated.divide(grandTotalEstimated, 4, RoundingMode.HALF_UP)
-                                    .multiply(new BigDecimal("100")) : BigDecimal.ZERO;
-                    
-                    String status = variance.compareTo(BigDecimal.ZERO) > 0 ? "OVER_BUDGET" :
-                                  variance.compareTo(BigDecimal.ZERO) < 0 ? "UNDER_BUDGET" : "ON_BUDGET";
-                    
-                    return new CategoryBreakdownResponse.CategorySummary(category, estimated, actual, variance, percentageOfTotal, status);
-                })
-                .collect(Collectors.toList());
-        
-        BigDecimal totalEstimated = lineItems.stream()
-                .map(item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        BigDecimal totalActual = lineItems.stream()
-                .map(item -> item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        BigDecimal totalVariance = totalActual.subtract(totalEstimated);
-        
-        return new CategoryBreakdownResponse(
-                estimatedByCategory,
-                actualByCategory,
-                varianceByCategory,
-                categorySummaries,
-                totalEstimated,
-                totalActual,
-                totalVariance
-        );
-    }
-
-    public void deleteBudget(UUID budgetId) {
-        Budget budget = budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new RuntimeException("Budget not found"));
-        
-        // Load line items to ensure they're in the persistence context for cascade
-        // This ensures proper cascade deletion (both hard and soft delete)
-        List<BudgetLineItem> lineItems = budget.getLineItems();
-        if (lineItems == null || lineItems.isEmpty()) {
-            // Fallback: fetch from repository if not loaded
-            lineItems = lineItemRepository.findByBudgetId(budgetId);
-        }
-        
-        int lineItemCount = lineItems != null ? lineItems.size() : 0;
-        
-        // Delete the budget - JPA cascade (CascadeType.ALL, orphanRemoval=true) will handle
-        // line items deletion in the same transaction. For soft deletes, @SQLDelete doesn't
-        // cascade automatically, so we need to explicitly soft-delete line items first.
-        // However, since we're using @OnDelete(action = OnDeleteAction.CASCADE) at the
-        // database level, hard deletes will cascade automatically.
-        
-        // For soft deletes: explicitly soft-delete all line items first
-        // (since @SQLDelete doesn't cascade automatically)
-        if (lineItemCount > 0) {
-            lineItemRepository.deleteAll(lineItems);
-        }
-        
-        // Now delete the budget (soft delete due to @SQLDelete annotation)
-        // Database-level ON DELETE CASCADE will handle hard deletes automatically
-        budgetRepository.delete(budget);
-    }
-
-    public Budget recalculateTotals(UUID budgetId) {
-        Budget budget = budgetRepository.findById(budgetId)
-                .orElseThrow(() -> new RuntimeException("Budget not found"));
-        
-        recalculateBudgetTotals(budgetId);
-        return budgetRepository.findById(budgetId).orElse(budget);
+        categoryRepository.save(category);
     }
 
     private void recalculateBudgetTotals(UUID budgetId) {
         Budget budget = budgetRepository.findById(budgetId).orElse(null);
         if (budget == null) return;
         
-        List<BudgetLineItem> lineItems = listLineItems(budgetId);
+        BigDecimal totalEstimated = lineItemRepository.sumEstimatedCostByBudgetId(budgetId);
+        BigDecimal totalActual = lineItemRepository.sumActualCostByBudgetId(budgetId);
         
-        BigDecimal totalEstimated = lineItems.stream()
-                .map(item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        budget.setTotalEstimated(totalEstimated != null ? totalEstimated : BigDecimal.ZERO);
+        budget.setTotalActual(totalActual != null ? totalActual : BigDecimal.ZERO);
+        budget.setVariance(budget.getTotalActual().subtract(budget.getTotalEstimated()));
         
-        BigDecimal totalActual = lineItems.stream()
-                .map(item -> item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        budget.setTotalEstimated(totalEstimated);
-        budget.setTotalActual(totalActual);
-        budget.setVariance(totalActual.subtract(totalEstimated));
-        
-        if (totalEstimated.compareTo(BigDecimal.ZERO) > 0) {
-            budget.setVariancePercentage(budget.getVariance().divide(totalEstimated, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")));
+        if (budget.getTotalEstimated().compareTo(BigDecimal.ZERO) > 0) {
+            budget.setVariancePercentage(budget.getVariance()
+                .divide(budget.getTotalEstimated(), 4, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("100")));
         }
         
+        recalculateContingency(budget);
         budgetRepository.save(budget);
     }
 
-    private Map<String, BigDecimal> getCategoryBreakdown(List<BudgetLineItem> lineItems) {
-        return lineItems.stream()
-                .collect(Collectors.groupingBy(
-                        BudgetLineItem::getCategory,
-                        Collectors.reducing(BigDecimal.ZERO,
-                                item -> item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO,
-                                BigDecimal::add)
-                ));
-    }
-
-    private Map<String, BigDecimal> getCategoryActualBreakdown(List<BudgetLineItem> lineItems) {
-        return lineItems.stream()
-                .collect(Collectors.groupingBy(
-                        BudgetLineItem::getCategory,
-                        Collectors.reducing(BigDecimal.ZERO,
-                                item -> item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO,
-                                BigDecimal::add)
-                ));
-    }
-
-    private Map<String, BigDecimal> getCategoryVarianceBreakdown(List<BudgetLineItem> lineItems) {
-        return lineItems.stream()
-                .collect(Collectors.groupingBy(
-                        BudgetLineItem::getCategory,
-                        Collectors.reducing(BigDecimal.ZERO,
-                                item -> {
-                                    BigDecimal actual = item.getActualCost() != null ? item.getActualCost() : BigDecimal.ZERO;
-                                    BigDecimal estimated = item.getEstimatedCost() != null ? item.getEstimatedCost() : BigDecimal.ZERO;
-                                    return actual.subtract(estimated);
-                                },
-                                BigDecimal::add)
-                ));
-    }
-
-    private String determineRiskLevel(BigDecimal spentPercentage, BigDecimal variancePercentage) {
-        if (spentPercentage.compareTo(new BigDecimal("90")) > 0 || variancePercentage.compareTo(new BigDecimal("20")) > 0) {
-            return "CRITICAL";
-        } else if (spentPercentage.compareTo(new BigDecimal("75")) > 0 || variancePercentage.compareTo(new BigDecimal("10")) > 0) {
-            return "HIGH";
-        } else if (spentPercentage.compareTo(new BigDecimal("50")) > 0 || variancePercentage.compareTo(new BigDecimal("5")) > 0) {
-            return "MEDIUM";
-        } else {
-            return "LOW";
-        }
-    }
-
-    private String determineContingencyStatus(BigDecimal contingencyRemaining, BigDecimal totalContingency) {
-        if (contingencyRemaining.compareTo(BigDecimal.ZERO) < 0) {
-            return "CRITICAL";
-        } else if (totalContingency != null && contingencyRemaining.divide(totalContingency, 4, RoundingMode.HALF_UP).compareTo(new BigDecimal("0.2")) < 0) {
-            return "WARNING";
-        } else {
-            return "SAFE";
-        }
-    }
-
-    private String generateRecommendations(BigDecimal variance, BigDecimal spentPercentage, String riskLevel) {
-        List<String> recommendations = new ArrayList<>();
-        
-        if (variance.compareTo(BigDecimal.ZERO) > 0) {
-            recommendations.add("Consider reducing costs in over-budget categories");
-        }
-        
-        if (spentPercentage.compareTo(new BigDecimal("80")) > 0) {
-            recommendations.add("Monitor spending closely - approaching budget limit");
-        }
-        
-        if ("CRITICAL".equals(riskLevel)) {
-            recommendations.add("Immediate action required - budget at risk");
-        }
-        
-        return String.join("; ", recommendations);
-    }
-
-    private String generateVarianceAnalysisSummary(BigDecimal totalVariance, List<BudgetVarianceAnalysisResponse.CategoryVariance> categoryVariances) {
-        if (totalVariance.compareTo(BigDecimal.ZERO) > 0) {
-            return "Budget is over by " + totalVariance + " across " + categoryVariances.size() + " categories";
-        } else if (totalVariance.compareTo(BigDecimal.ZERO) < 0) {
-            return "Budget is under by " + totalVariance.abs() + " - good cost control";
-        } else {
-            return "Budget is exactly on target";
-        }
-    }
-
-    private String generateContingencyRecommendations(String contingencyStatus, BigDecimal contingencyRemaining) {
-        switch (contingencyStatus) {
-            case "CRITICAL":
-                return "Contingency exhausted - immediate budget review required";
-            case "WARNING":
-                return "Contingency running low - monitor spending carefully";
-            default:
-                return "Contingency levels are healthy";
-        }
-    }
-
-    // ==================== VALIDATION METHODS ====================
-
-    private void validateBudget(Budget budget) {
-        if (budget.getTotalBudget() != null) {
-            validatePositiveAmount(budget.getTotalBudget(), "Total budget");
-        }
-        
-        if (budget.getContingencyPercentage() != null) {
-            validatePercentage(budget.getContingencyPercentage(), "Contingency percentage");
-        }
-        
-        if (budget.getCurrency() != null) {
-            validateCurrency(budget.getCurrency());
-        }
-        
-        if (budget.getEvent() == null) {
-            throw new IllegalArgumentException("Event is required");
-        }
-
-        if (budget.getOwner() == null) {
-            throw new IllegalArgumentException("Owner is required");
+    private void recalculateContingency(Budget budget) {
+        if (budget.getContingencyPercentage() != null && budget.getTotalBudget() != null) {
+            budget.setContingencyAmount(budget.getTotalBudget()
+                .multiply(budget.getContingencyPercentage())
+                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP));
         }
     }
 
@@ -762,36 +278,14 @@ public class BudgetService {
     }
 
     private void validatePercentage(BigDecimal percentage, String fieldName) {
-        if (percentage != null) {
-            if (percentage.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException(fieldName + " cannot be negative");
-            }
-            if (percentage.compareTo(new BigDecimal("100")) > 0) {
-                throw new IllegalArgumentException(fieldName + " cannot exceed 100%");
-            }
+        if (percentage != null && (percentage.compareTo(BigDecimal.ZERO) < 0 || percentage.compareTo(new BigDecimal("100")) > 0)) {
+            throw new IllegalArgumentException(fieldName + " must be between 0 and 100");
         }
     }
 
     private void validateCurrency(String currency) {
-        if (currency == null || currency.trim().isEmpty()) {
-            throw new IllegalArgumentException("Currency cannot be empty");
-        }
-        if (currency.length() != 3) {
-            throw new IllegalArgumentException("Currency must be a 3-letter ISO code (e.g., USD, EUR, GBP)");
-        }
-        // List of common ISO 4217 currency codes
-        List<String> validCurrencies = List.of(
-            "USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "NZD", 
-            "CNY", "INR", "BRL", "ZAR", "MXN", "SGD", "HKD", "SEK", 
-            "NOK", "DKK", "PLN", "THB", "IDR", "MYR", "PHP", "CZK", 
-            "HUF", "ILS", "CLP", "ARS", "COP", "PEN", "RUB", "TRY",
-            "KRW", "TWD", "SAR", "AED", "QAR", "KWD", "BHD", "OMR",
-            "EGP", "NGN", "KES", "GHS", "MAD", "TND", "XOF", "XAF"
-        );
-        if (!validCurrencies.contains(currency.toUpperCase())) {
-            throw new IllegalArgumentException("Invalid currency code: " + currency + ". Must be a valid ISO 4217 code.");
+        if (currency == null || currency.length() != 3) {
+            throw new IllegalArgumentException("Invalid currency code");
         }
     }
 }
-
-

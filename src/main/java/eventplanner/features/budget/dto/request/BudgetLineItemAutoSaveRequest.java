@@ -8,14 +8,18 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class UpdateBudgetLineItemRequest {
+public class BudgetLineItemAutoSaveRequest {
     
-    // All fields optional for partial updates
-    private String category;
+    // Optional - if provided, updates existing. If null, creates new.
+    private UUID id;
+
+    // Required for creation, optional for updates
+    private UUID budgetCategoryId;
     
     private String subcategory;
     
@@ -40,4 +44,7 @@ public class UpdateBudgetLineItemRequest {
     private String priority;
     
     private String notes;
+
+    private UUID vendorId;
 }
+

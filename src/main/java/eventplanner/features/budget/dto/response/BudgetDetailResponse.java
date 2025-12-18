@@ -31,4 +31,33 @@ public class BudgetDetailResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<BudgetLineItemResponse> lineItems;
+
+    public static BudgetDetailResponse fromEntity(eventplanner.features.budget.entity.Budget entity) {
+        if (entity == null) return null;
+        BudgetDetailResponse response = new BudgetDetailResponse();
+        response.setId(entity.getId());
+        response.setEventId(entity.getEvent() != null ? entity.getEvent().getId() : null);
+        response.setTotalBudget(entity.getTotalBudget());
+        response.setCurrency(entity.getCurrency());
+        response.setContingencyPercentage(entity.getContingencyPercentage());
+        response.setContingencyAmount(entity.getContingencyAmount());
+        response.setTotalEstimated(entity.getTotalEstimated());
+        response.setTotalActual(entity.getTotalActual());
+        response.setVariance(entity.getVariance());
+        response.setVariancePercentage(entity.getVariancePercentage());
+        response.setBudgetStatus(entity.getBudgetStatus());
+        response.setApprovedBy(entity.getApprovedBy());
+        response.setApprovedDate(entity.getApprovedDate());
+        response.setNotes(entity.getNotes());
+        response.setCreatedAt(entity.getCreatedAt());
+        response.setUpdatedAt(entity.getUpdatedAt());
+        
+        if (entity.getLineItems() != null) {
+            response.setLineItems(entity.getLineItems().stream()
+                    .map(BudgetLineItemResponse::fromEntity)
+                    .toList());
+        }
+        
+        return response;
+    }
 }

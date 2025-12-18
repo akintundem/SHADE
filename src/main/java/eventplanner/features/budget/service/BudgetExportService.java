@@ -32,7 +32,7 @@ public class BudgetExportService {
             
             // Header section
             writer.println("Budget Export");
-            writer.println("Event ID," + (budget.getEvent() != null ? budget.getEvent().getId() : "N/A"));
+            writer.println("Event ID," + budget.getEventId());
             writer.println("Total Budget," + formatCurrency(budget.getTotalBudget(), budget.getCurrency()));
             writer.println("Currency," + budget.getCurrency());
             writer.println("Contingency," + budget.getContingencyPercentage() + "%");
