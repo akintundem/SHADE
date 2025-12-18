@@ -654,33 +654,6 @@ policy:
         owns_scope: false
         is_member: false
     -
-      name: weather.geocode
-      scope: PUBLIC
-      resources: null
-      description: Geocode location name
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
-      name: weather.read
-      scope: PUBLIC
-      resources: null
-      description: Get weather forecast (coordinates); Get weather forecast (location name)
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
-      name: weather.viability.read
-      scope: PUBLIC
-      resources: null
-      description: Check outdoor event viability
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
       name: admin.analytics.events
       scope: SYSTEM
       resources: null

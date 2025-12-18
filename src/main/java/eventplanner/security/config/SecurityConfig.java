@@ -106,7 +106,6 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/verify-email").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/verify-email/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/validate-token").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/weather/**").permitAll()
                 .anyRequest().authenticated()
             )
             .httpBasic(httpBasic -> httpBasic.disable())

@@ -108,7 +108,4 @@ public final class RbacPermissions {
     public static final String VENDOR_CREATE = "vendor.create";
     public static final String VENDOR_READ = "vendor.read";
     public static final String VENDOR_SEARCH = "vendor.search";
-    public static final String WEATHER_GEOCODE = "weather.geocode";
-    public static final String WEATHER_READ = "weather.read";
-    public static final String WEATHER_VIABILITY_READ = "weather.viability.read";
 }
