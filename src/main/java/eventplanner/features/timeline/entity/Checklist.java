@@ -35,6 +35,7 @@ public class Checklist extends BaseEntity {
     @Column(name = "due_date")
     private LocalDateTime dueDate;
 
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     private TimelineStatus status = TimelineStatus.PENDING;
 
@@ -45,6 +46,7 @@ public class Checklist extends BaseEntity {
     @Column(name = "task_order")
     private Integer taskOrder;
 
+    @Builder.Default
     @Column(name = "is_draft")
     private Boolean isDraft = true;
 

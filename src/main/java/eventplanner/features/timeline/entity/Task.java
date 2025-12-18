@@ -41,15 +41,18 @@ public class Task extends BaseEntity {
     @Column(name = "due_date")
     private LocalDateTime dueDate;
 
+    @Builder.Default
     @Column(name = "priority")
     private String priority = "MEDIUM";
 
     @Column(name = "category")
     private String category;
 
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     private TimelineStatus status = TimelineStatus.PENDING;
 
+    @Builder.Default
     @Column(name = "progress_percentage")
     private Integer progressPercentage = 0;
 
@@ -60,12 +63,15 @@ public class Task extends BaseEntity {
     @Column(name = "task_order")
     private Integer taskOrder;
 
+    @Builder.Default
     @Column(name = "is_draft")
     private Boolean isDraft = true;
 
+    @Builder.Default
     @Column(name = "completed_subtasks_count")
     private Integer completedSubtasksCount = 0;
 
+    @Builder.Default
     @Column(name = "total_subtasks_count")
     private Integer totalSubtasksCount = 0;
 
