@@ -32,7 +32,7 @@ public class BudgetExportService {
             
             // Header section
             writer.println("Budget Export");
-            writer.println("Event ID," + budget.getEventId());
+            writer.println("Event ID," + (budget.getEvent() != null ? budget.getEvent().getId() : "N/A"));
             writer.println("Total Budget," + formatCurrency(budget.getTotalBudget(), budget.getCurrency()));
             writer.println("Currency," + budget.getCurrency());
             writer.println("Contingency," + budget.getContingencyPercentage() + "%");
@@ -44,18 +44,22 @@ public class BudgetExportService {
             writer.println("Line Items");
             writer.println("Category,Description,Estimated Cost,Actual Cost,Quantity,Status,Priority,Notes");
             
-            if (budget.getLineItems() != null && !budget.getLineItems().isEmpty()) {
-                for (BudgetLineItem item : budget.getLineItems()) {
-                    writer.printf("%s,%s,%s,%s,%d,%s,%s,%s%n",
-                        escapeCSV(item.getCategory()),
-                        escapeCSV(item.getDescription()),
-                        formatAmount(item.getEstimatedCost()),
-                        formatAmount(item.getActualCost()),
-                        item.getQuantity() != null ? item.getQuantity() : 1,
-                        item.getPlanningStatus() != null ? item.getPlanningStatus().toString() : "",
-                        escapeCSV(item.getPriority()),
-                        escapeCSV(item.getNotes())
-                    );
+            if (budget.getCategories() != null && !budget.getCategories().isEmpty()) {
+                for (var category : budget.getCategories()) {
+                    if (category.getLineItems() != null && !category.getLineItems().isEmpty()) {
+                        for (BudgetLineItem item : category.getLineItems()) {
+                            writer.printf("%s,%s,%s,%s,%d,%s,%s,%s%n",
+                                escapeCSV(category.getName()),
+                                escapeCSV(item.getDescription()),
+                                formatAmount(item.getEstimatedCost()),
+                                formatAmount(item.getActualCost()),
+                                item.getQuantity() != null ? item.getQuantity() : 1,
+                                item.getPlanningStatus() != null ? item.getPlanningStatus().toString() : "",
+                                escapeCSV(item.getPriority()),
+                                escapeCSV(item.getNotes())
+                            );
+                        }
+                    }
                 }
             }
             

@@ -25,12 +25,10 @@ public class BudgetDetailResponse {
     private BigDecimal variance;
     private BigDecimal variancePercentage;
     private String budgetStatus;
-    private String approvedBy;
-    private LocalDateTime approvedDate;
     private String notes;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private List<BudgetLineItemResponse> lineItems;
+    private List<BudgetCategoryResponse> categories;
 
     public static BudgetDetailResponse fromEntity(eventplanner.features.budget.entity.Budget entity) {
         if (entity == null) return null;
@@ -46,15 +44,13 @@ public class BudgetDetailResponse {
         response.setVariance(entity.getVariance());
         response.setVariancePercentage(entity.getVariancePercentage());
         response.setBudgetStatus(entity.getBudgetStatus());
-        response.setApprovedBy(entity.getApprovedBy());
-        response.setApprovedDate(entity.getApprovedDate());
         response.setNotes(entity.getNotes());
         response.setCreatedAt(entity.getCreatedAt());
         response.setUpdatedAt(entity.getUpdatedAt());
         
-        if (entity.getLineItems() != null) {
-            response.setLineItems(entity.getLineItems().stream()
-                    .map(BudgetLineItemResponse::fromEntity)
+        if (entity.getCategories() != null) {
+            response.setCategories(entity.getCategories().stream()
+                    .map(BudgetCategoryResponse::fromEntity)
                     .toList());
         }
         

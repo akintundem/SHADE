@@ -1,6 +1,6 @@
 package eventplanner.features.budget.service;
 
-import eventplanner.features.budget.dto.BudgetLineItemCreateRequest;
+import eventplanner.features.budget.dto.request.BudgetLineItemAutoSaveRequest;
 import eventplanner.features.budget.dto.request.BulkLineItemRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +31,7 @@ public class BudgetImportService {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
             
-            List<BudgetLineItemCreateRequest> lineItems = new ArrayList<>();
+            List<BudgetLineItemAutoSaveRequest> lineItems = new ArrayList<>();
             String line;
             boolean inDataSection = false;
             
@@ -55,7 +55,7 @@ public class BudgetImportService {
                 
                 // Parse data rows
                 if (inDataSection) {
-                    BudgetLineItemCreateRequest item = parseLineItem(line);
+                    BudgetLineItemAutoSaveRequest item = parseLineItem(line);
                     if (item != null) {
                         lineItems.add(item);
                     }
@@ -79,15 +79,15 @@ public class BudgetImportService {
         }
     }
     
-    private BudgetLineItemCreateRequest parseLineItem(String line) {
+    private BudgetLineItemAutoSaveRequest parseLineItem(String line) {
         try {
             String[] parts = parseCSVLine(line);
             if (parts.length < 3) {
                 return null; // Invalid row
             }
             
-            BudgetLineItemCreateRequest item = new BudgetLineItemCreateRequest();
-            item.setCategory(parts[0].trim());
+            BudgetLineItemAutoSaveRequest item = new BudgetLineItemAutoSaveRequest();
+            item.setCategoryName(parts[0].trim());
             item.setDescription(parts.length > 1 ? parts[1].trim() : "");
             
             // Parse estimated cost

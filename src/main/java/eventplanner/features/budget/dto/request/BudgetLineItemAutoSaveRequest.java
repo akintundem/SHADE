@@ -21,6 +21,9 @@ public class BudgetLineItemAutoSaveRequest {
     // Required for creation, optional for updates
     private UUID budgetCategoryId;
     
+    // Used for imports when ID is not known
+    private String categoryName;
+    
     private String subcategory;
     
     private String description;
