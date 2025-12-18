@@ -16,7 +16,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import java.util.UUID;
 
@@ -55,7 +54,7 @@ public class PostCommentService {
         }
 
         String content = request != null ? safeTrimToNull(request.getContent()) : null;
-        if (!StringUtils.hasText(content)) {
+        if (content == null) {
             throw new IllegalArgumentException("Comment content is required");
         }
         if (content.length() > 2000) {
@@ -105,7 +104,7 @@ public class PostCommentService {
         }
 
         String content = request != null ? safeTrimToNull(request.getContent()) : null;
-        if (!StringUtils.hasText(content)) {
+        if (content == null) {
             throw new IllegalArgumentException("Comment content is required");
         }
         if (content.length() > 2000) {
