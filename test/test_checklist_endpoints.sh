@@ -126,7 +126,7 @@ get_testing_environment "$@"
 
 # Configuration
 CLIENT_ID="web-app"
-REPORT_FILE="reports/checklist_test_report_$(date +%Y%m%d_%H%M%S).md"
+REPORT_FILE="test/reports/checklist_test_report_$(date +%Y%m%d_%H%M%S).md"
 TEST_USER_EMAIL="testuser@example.com"
 TEST_USER_PASSWORD="Password123!"
 TEST_USER_NAME="Test User"
@@ -145,7 +145,7 @@ EVENT_ID=""
 CHECKLIST_ITEM_ID=""
 
 # Create report file
-mkdir -p reports
+mkdir -p test/reports
 cat > "$REPORT_FILE" << EOF
 # Checklist Controller Endpoints Test Report
 

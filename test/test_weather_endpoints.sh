@@ -133,7 +133,7 @@ get_testing_environment "$@"
 
 # Configuration
 CLIENT_ID="web-app"
-REPORT_FILE="reports/weather_test_report_$(date +%Y%m%d_%H%M%S).md"
+REPORT_FILE="test/reports/weather_test_report_$(date +%Y%m%d_%H%M%S).md"
 SERVICE_RESTART_MESSAGE="Pending"
 
 # Test counters
@@ -163,7 +163,7 @@ SEATTLE_LAT="47.6062"
 SEATTLE_LON="-122.3321"
 
 # Create report file
-mkdir -p reports
+mkdir -p test/reports
 initialize_report() {
 cat > "$REPORT_FILE" << EOF
 # Weather Controller Endpoints Test Report

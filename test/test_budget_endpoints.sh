@@ -113,7 +113,7 @@ get_testing_environment() {
 get_testing_environment "$@"
 
 # Configuration
-REPORT_FILE="reports/budget_test_report_$(date +%Y%m%d_%H%M%S).md"
+REPORT_FILE="test/reports/budget_test_report_$(date +%Y%m%d_%H%M%S).md"
 TEST_USER_EMAIL="budgettest@example.com"
 TEST_USER_PASSWORD="Password123!"
 TEST_USER_NAME="Budget Test User"
@@ -132,7 +132,7 @@ CATEGORY_ID=""
 LINE_ITEM_ID=""
 
 # Create report file
-mkdir -p reports
+mkdir -p test/reports
 cat > "$REPORT_FILE" << EOF
 # Budget Controller Endpoints Test Report
 
@@ -362,14 +362,20 @@ create_test_event() {
     local end_date=$(date -u -v+1d -v+2H '+%Y-%m-%dT%H:%M:%S' 2>/dev/null || date -u -d '+1 day +2 hours' '+%Y-%m-%dT%H:%M:%S')
     
     local event_data='{
-        "name": "Test Event for Budget",
-        "description": "Budget testing event",
-        "eventType": "CONFERENCE",
-        "startDateTime": "'$start_date'",
-        "endDateTime": "'$end_date'",
-        "capacity": 100,
-        "isPublic": true,
-        "requiresApproval": false
+        "event": {
+            "name": "Test Event for Budget",
+            "description": "Budget testing event",
+            "eventType": "CONFERENCE",
+            "startDateTime": "'$start_date'",
+            "endDateTime": "'$end_date'",
+            "capacity": 100,
+            "isPublic": true,
+            "requiresApproval": false
+        },
+        "coverUpload": {
+            "fileName": "test_cover.jpg",
+            "contentType": "image/jpeg"
+        }
     }'
     
     local response=$(curl -s -w '%{http_code}' -X POST \

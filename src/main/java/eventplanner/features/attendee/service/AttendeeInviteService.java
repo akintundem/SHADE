@@ -48,11 +48,8 @@ public class AttendeeInviteService {
      * @return Created attendee if status is ACCEPTED, null otherwise
      */
     public Attendee updateInviteStatus(UUID inviteId, String token, AttendeeInviteStatus status, UserPrincipal principal) {
-        if (principal == null) {
-            throw new IllegalArgumentException("Authentication required");
-        }
-        if (principal.getUser() == null) {
-            throw new IllegalArgumentException("User account information is required");
+        if (principal == null || principal.getUser() == null) {
+            throw new IllegalArgumentException("Authentication and user account information are required");
         }
         if (status == null) {
             throw new IllegalArgumentException("Status is required");
@@ -84,7 +81,7 @@ public class AttendeeInviteService {
         }
         
         // Check expiry
-        if (invite.getExpiresAt() != null && LocalDateTime.now(ZoneOffset.UTC).isAfter(invite.getExpiresAt())) {
+        if (isExpired(invite)) {
             invite.setStatus(AttendeeInviteStatus.EXPIRED);
             invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
             inviteRepository.save(invite);
@@ -103,22 +100,11 @@ public class AttendeeInviteService {
         }
     }
 
+    private boolean isExpired(AttendeeInvite invite) {
+        return invite.getExpiresAt() != null && LocalDateTime.now(ZoneOffset.UTC).isAfter(invite.getExpiresAt());
+    }
+
     private Attendee acceptInviteInternal(AttendeeInvite invite, UserPrincipal principal) {
-        // Double-check that the principal matches the invite (defense in depth)
-        verifyInviteBelongsToPrincipal(invite, principal);
-
-        if (invite.getStatus() != AttendeeInviteStatus.PENDING) {
-            throw new IllegalArgumentException("Invite is not pending");
-        }
-
-        // Expiry check
-        if (invite.getExpiresAt() != null && LocalDateTime.now(ZoneOffset.UTC).isAfter(invite.getExpiresAt())) {
-            invite.setStatus(AttendeeInviteStatus.EXPIRED);
-            invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
-            inviteRepository.save(invite);
-            throw new IllegalArgumentException("Invite has expired");
-        }
-
         Event event = invite.getEvent();
         if (event == null) {
             throw new IllegalArgumentException("Event not found for invite");
@@ -129,9 +115,7 @@ public class AttendeeInviteService {
         // If they already registered somehow, mark invite accepted and return existing attendee.
         Optional<Attendee> existingAttendee = attendeeRepository.findByEventIdAndUserId(eventId, userId);
         if (existingAttendee.isPresent()) {
-            invite.setStatus(AttendeeInviteStatus.ACCEPTED);
-            invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
-            inviteRepository.save(invite);
+            finalizeInvite(invite, AttendeeInviteStatus.ACCEPTED);
             return existingAttendee.get();
         }
 
@@ -150,27 +134,21 @@ public class AttendeeInviteService {
         } else {
             throw new IllegalArgumentException("User name is required");
         }
-        if (user.getEmail() != null) {
-            attendee.setEmail(user.getEmail());
-        }
+        attendee.setEmail(user.getEmail());
 
         Attendee savedAttendee = attendeeRepository.save(attendee);
-
-        invite.setStatus(AttendeeInviteStatus.ACCEPTED);
-        invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
-        inviteRepository.save(invite);
+        finalizeInvite(invite, AttendeeInviteStatus.ACCEPTED);
 
         return savedAttendee;
     }
 
-    private void verifyInviteBelongsToPrincipal(AttendeeInvite invite, UserPrincipal principal) {
-        if (principal == null) {
-            throw new IllegalArgumentException("Authentication required");
-        }
-        if (principal.getUser() == null) {
-            throw new IllegalArgumentException("User account information is required");
-        }
+    private void finalizeInvite(AttendeeInvite invite, AttendeeInviteStatus status) {
+        invite.setStatus(status);
+        invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+        inviteRepository.save(invite);
+    }
 
+    private void verifyInviteBelongsToPrincipal(AttendeeInvite invite, UserPrincipal principal) {
         UUID principalId = principal.getId();
         String principalEmail = principal.getUser().getEmail();
 
@@ -204,7 +182,6 @@ public class AttendeeInviteService {
             );
             throw new IllegalArgumentException(errorMessage);
         }
-
     }
 
 }

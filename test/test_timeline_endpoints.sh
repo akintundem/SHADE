@@ -132,7 +132,7 @@ get_testing_environment() {
 get_testing_environment "$@"
 
 # Configuration
-REPORT_FILE="reports/timeline_test_report_$(date +%Y%m%d_%H%M%S).md"
+REPORT_FILE="test/reports/timeline_test_report_$(date +%Y%m%d_%H%M%S).md"
 TEST_USER_EMAIL="timelinetest@example.com"
 TEST_USER_PASSWORD="Password123!"
 TEST_USER_NAME="Timeline Test User"
@@ -161,7 +161,7 @@ verify_email_in_database() {
 }
 
 # Create report file
-mkdir -p reports
+mkdir -p test/reports
 cat > "$REPORT_FILE" << EOF
 # Timeline Controller Endpoints Test Report
 
