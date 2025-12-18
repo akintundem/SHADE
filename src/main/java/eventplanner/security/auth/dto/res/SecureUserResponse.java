@@ -25,7 +25,7 @@ public class SecureUserResponse {
     UserType userType;
     boolean emailVerified;
     boolean marketingOptIn;
-    String profileImageUrl;
+    String profilePictureUrl;
     String preferences;
     LocalDateTime createdAt;
     LocalDateTime updatedAt;

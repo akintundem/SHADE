@@ -5,6 +5,9 @@ import eventplanner.security.auth.dto.req.LogoutRequest;
 import eventplanner.security.auth.dto.req.OnboardingRequest;
 import eventplanner.security.auth.dto.req.RefreshTokenRequest;
 import eventplanner.security.auth.dto.req.RegisterRequest;
+import eventplanner.security.auth.dto.res.CompleteOnboardingWithImageResponse;
+import eventplanner.security.auth.dto.req.CompleteOnboardingWithImageRequest;
+import eventplanner.security.auth.dto.res.ProfileImageUploadResponse;
 import eventplanner.security.auth.dto.res.SecureAuthResponse;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.entity.EmailVerificationToken;
@@ -466,15 +469,38 @@ public class AuthService {
         user.setAcceptTerms(true);
         user.setAcceptPrivacy(true);
         user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
-        String profileImageUrl = safeTrim(request.getProfileImageUrl());
-        if (StringUtils.hasText(profileImageUrl)) {
-            user.setProfileImageUrl(profileImageService.normalizeResourceUrl(profileImageUrl));
+        String profilePictureUrl = safeTrim(request.getProfilePictureUrl());
+        if (StringUtils.hasText(profilePictureUrl)) {
+            user.setProfilePictureUrl(profileImageService.normalizeResourceUrl(profilePictureUrl));
         }
         user.setProfileCompleted(true);
         userAccountRepository.save(user);
         
         log.info("User completed onboarding: {}", user.getEmail());
         return AuthMapper.toSecureUserResponse(user);
+    }
+
+    /**
+     * Combined onboarding completion and profile image upload URL generation.
+     */
+    public CompleteOnboardingWithImageResponse completeOnboardingWithImage(
+            CompleteOnboardingWithImageRequest request, 
+            UserAccount user, 
+            String clientIp) {
+        
+        // 1. Complete basic onboarding
+        SecureUserResponse userResponse = completeOnboarding(request.getOnboarding(), user, clientIp);
+        
+        // 2. Generate upload URL if requested
+        ProfileImageUploadResponse imageUpload = null;
+        if (request.getImageUpload() != null) {
+            imageUpload = profileImageService.createProfileImageUpload(user, request.getImageUpload());
+        }
+        
+        return CompleteOnboardingWithImageResponse.builder()
+            .user(userResponse)
+            .imageUpload(imageUpload)
+            .build();
     }
 
     private String generateCandidateUsernameFromNameOrEmail(String name, String email) {

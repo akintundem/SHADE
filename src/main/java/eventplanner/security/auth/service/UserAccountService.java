@@ -52,7 +52,7 @@ public class UserAccountService {
             }
         }
         user.setPhoneNumber(safeTrim(request.getPhoneNumber()));
-        user.setProfileImageUrl(safeTrim(request.getProfileImageUrl()));
+        user.setProfilePictureUrl(safeTrim(request.getProfilePictureUrl()));
         user.setUserType(request.getUserType());
         user.setPreferences(safeTrim(request.getPreferences()));
         user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
@@ -110,7 +110,7 @@ public class UserAccountService {
                 .id(user.getId())
                 .name(user.getName())
                 .username(user.getUsername())
-                .profileImageUrl(user.getProfileImageUrl())
+                .profilePictureUrl(user.getProfilePictureUrl())
                 .build();
     }
 

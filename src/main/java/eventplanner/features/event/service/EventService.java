@@ -795,7 +795,7 @@ public class EventService {
 
                 UserAccount author = p.getCreatedBy() != null ? authorsById.get(p.getCreatedBy().getId()) : null;
                 fp.setAuthorName(author != null ? author.getName() : null);
-                fp.setAuthorAvatarUrl(author != null ? author.getProfileImageUrl() : null);
+                fp.setAuthorAvatarUrl(author != null ? author.getProfilePictureUrl() : null);
 
                 // Attach media if available
                 if (p.getMediaObjectId() != null && eventStoredObjectRepository != null && s3StorageService != null) {

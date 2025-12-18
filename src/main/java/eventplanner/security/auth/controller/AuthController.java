@@ -1,5 +1,7 @@
 package eventplanner.security.auth.controller;
 
+import eventplanner.security.auth.dto.req.CompleteOnboardingWithImageRequest;
+import eventplanner.security.auth.dto.res.CompleteOnboardingWithImageResponse;
 import eventplanner.security.auth.dto.req.LoginRequest;
 import eventplanner.security.auth.dto.req.LogoutRequest;
 import eventplanner.security.auth.dto.req.OnboardingRequest;
@@ -119,6 +121,24 @@ public class AuthController {
         }
 
         SecureUserResponse response = authService.completeOnboarding(
+            request, 
+            principal.getUser(), 
+            resolveClientIp(httpRequest)
+        );
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/complete-onboarding-with-image")
+    @RequiresPermission(value = RbacPermissions.AUTH_ME, resources = {"user_id=#principal.id"})
+    public ResponseEntity<CompleteOnboardingWithImageResponse> completeOnboardingWithImage(
+            @Valid @RequestBody CompleteOnboardingWithImageRequest request,
+            @AuthenticationPrincipal UserPrincipal principal,
+            HttpServletRequest httpRequest) {
+        if (principal == null) {
+            throw new ResourceNotFoundException("User not found");
+        }
+
+        CompleteOnboardingWithImageResponse response = authService.completeOnboardingWithImage(
             request, 
             principal.getUser(), 
             resolveClientIp(httpRequest)

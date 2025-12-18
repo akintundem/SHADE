@@ -78,11 +78,11 @@ public class ProfileImageService {
             throw new BadRequestException("INVALID_RESOURCE_URL", "Invalid resourceUrl");
         }
 
-        user.setProfileImageUrl(normalized);
+        user.setProfilePictureUrl(normalized);
         userAccountRepository.save(user);
 
         return ProfileImageCompleteResponse.builder()
-            .profileImageUrl(normalized)
+            .profilePictureUrl(normalized)
             .updatedAt(LocalDateTime.now(ZoneOffset.UTC))
             .build();
     }

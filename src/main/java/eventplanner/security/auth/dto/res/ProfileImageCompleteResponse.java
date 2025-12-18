@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @Builder
 @Schema(description = "Result of completing a profile image upload")
 public class ProfileImageCompleteResponse {
-    String profileImageUrl;
+    String profilePictureUrl;
     LocalDateTime updatedAt;
 }
 

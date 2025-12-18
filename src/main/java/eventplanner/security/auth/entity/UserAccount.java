@@ -74,8 +74,8 @@ public class UserAccount extends BaseEntity {
     @Column(name = "marketing_opt_in", nullable = false)
     private boolean marketingOptIn;
 
-    @Column(name = "profile_image_url", length = 500)
-    private String profileImageUrl;
+    @Column(name = "profile_picture_url", length = 500)
+    private String profilePictureUrl;
 
     @Column(name = "preferences", columnDefinition = "TEXT")
     private String preferences;

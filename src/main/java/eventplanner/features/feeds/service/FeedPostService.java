@@ -377,7 +377,7 @@ public class FeedPostService {
         if (post.getCreatedBy() != null) {
             resp.setCreatedBy(post.getCreatedBy().getId());
             resp.setAuthorName(post.getCreatedBy().getName());
-            resp.setAuthorAvatarUrl(post.getCreatedBy().getProfileImageUrl());
+            resp.setAuthorAvatarUrl(post.getCreatedBy().getProfilePictureUrl());
         } else {
             resp.setCreatedBy(null);
         }

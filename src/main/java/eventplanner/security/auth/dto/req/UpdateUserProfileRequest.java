@@ -25,7 +25,7 @@ public class UpdateUserProfileRequest {
     private String phoneNumber;
 
     @Size(max = 500)
-    private String profileImageUrl;
+    private String profilePictureUrl;
 
     private UserType userType = UserType.INDIVIDUAL;
 

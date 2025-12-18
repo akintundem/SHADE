@@ -32,7 +32,7 @@ public final class AuthMapper {
                 .userType(user.getUserType())
                 .emailVerified(user.isEmailVerified())
                 .marketingOptIn(user.isMarketingOptIn())
-                .profileImageUrl(user.getProfileImageUrl())
+                .profilePictureUrl(user.getProfilePictureUrl())
                 .preferences(user.getPreferences())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())

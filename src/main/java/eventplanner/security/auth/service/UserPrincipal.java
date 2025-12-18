@@ -115,6 +115,10 @@ public class UserPrincipal implements UserDetails {
         return user.getName();
     }
 
+    public String getProfilePictureUrl() {
+        return user.getProfilePictureUrl();
+    }
+
     public java.time.LocalDateTime getLastLoginAt() {
         return user.getLastLoginAt();
     }

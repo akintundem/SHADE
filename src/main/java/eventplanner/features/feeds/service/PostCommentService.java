@@ -181,7 +181,7 @@ public class PostCommentService {
         if (comment.getUser() != null) {
             resp.setUserId(comment.getUser().getId());
             resp.setAuthorName(comment.getUser().getName());
-            resp.setAuthorAvatarUrl(comment.getUser().getProfileImageUrl());
+            resp.setAuthorAvatarUrl(comment.getUser().getProfilePictureUrl());
         }
 
         return resp;
