@@ -2,7 +2,7 @@ package eventplanner.security.authorization.rbac;
 
 import eventplanner.features.attendee.repository.AttendeeInviteRepository;
 import eventplanner.features.attendee.repository.AttendeeRepository;
-import eventplanner.features.timeline.repository.TimelineItemRepository;
+import eventplanner.features.timeline.repository.TaskRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
@@ -31,7 +31,7 @@ public class RbacAuthorizationService {
 
     private final RbacPolicyStore policyStore;
     private final AuthorizationService authorizationService;
-    private final TimelineItemRepository timelineItemRepository;
+    private final TaskRepository taskRepository;
     private final AttendeeRepository attendeeRepository;
     private final AttendeeInviteRepository attendeeInviteRepository;
 
@@ -318,7 +318,7 @@ public class RbacAuthorizationService {
             return null;
         }
         try {
-            return timelineItemRepository.findById(taskId)
+            return taskRepository.findById(taskId)
                     .map(item -> item.getEvent() != null ? item.getEvent().getId() : null)
                     .orElse(null);
         } catch (Exception e) {

@@ -20,14 +20,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "eventplanner.features.timeline.repository",
     "eventplanner.features.budget.repository",
     "eventplanner.features.collaboration.repository",
-    "eventplanner.features.checklist.repository",
     "eventplanner.features.vendor.repository",
     "eventplanner.features.feeds.repository",
     "eventplanner.common.communication.repository",
-    "eventplanner.common.audit.repository",
     "eventplanner.security.auth.repository",
     "eventplanner.security.authorization.domain.repository",
-    "eventplanner.assistant.repository",
     "eventplanner.admin.repository"
 })
 @EntityScan(basePackages = {
@@ -36,7 +33,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "eventplanner.features.timeline.entity",
     "eventplanner.features.budget.entity",
     "eventplanner.features.collaboration.entity",
-    "eventplanner.features.checklist.entity",
     "eventplanner.features.vendor.entity",
     "eventplanner.features.feeds.entity",
     "eventplanner.common.communication.model",
@@ -44,7 +40,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "eventplanner.common.domain.entity",
     "eventplanner.security.auth.entity",
     "eventplanner.security.authorization.domain.entity",
-    "eventplanner.assistant.entity",
     "eventplanner.admin.entity"
 })
 public class EventPlannerApplication {
