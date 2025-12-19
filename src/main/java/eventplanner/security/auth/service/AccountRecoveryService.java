@@ -13,13 +13,11 @@ import eventplanner.security.auth.repository.PasswordResetTokenRepository;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.repository.UserSessionRepository;
 import eventplanner.common.exception.UnauthorizedException;
-import eventplanner.common.util.EnvironmentUtil;
 import eventplanner.security.util.TokenHashUtil;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.services.channel.email.EmailService;
 import eventplanner.common.domain.enums.CommunicationType;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -37,7 +35,6 @@ import static eventplanner.security.util.SecureTokenUtil.generateSecureToken;
 
 @Service
 @Transactional
-@Slf4j
 public class AccountRecoveryService {
 
     private final UserAccountRepository userAccountRepository;
@@ -46,7 +43,6 @@ public class AccountRecoveryService {
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final NotificationService notificationService;
-    private final EnvironmentUtil environmentUtil;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -56,15 +52,13 @@ public class AccountRecoveryService {
                                   PasswordResetTokenRepository passwordResetTokenRepository,
                                   EmailVerificationTokenRepository emailVerificationTokenRepository,
                                   PasswordEncoder passwordEncoder,
-                                  NotificationService notificationService,
-                                  EnvironmentUtil environmentUtil) {
+                                  NotificationService notificationService) {
         this.userAccountRepository = userAccountRepository;
         this.sessionRepository = sessionRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.notificationService = notificationService;
-        this.environmentUtil = environmentUtil;
     }
 
     public void changePassword(UserAccount user, ChangePasswordRequest request) {
@@ -133,7 +127,6 @@ public class AccountRecoveryService {
         String normalizedEmail = normalizeEmail(request.getEmail());
         UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizedEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Email not found. Please check your email address."));
-        log.debug("Resend verification requested for {} (verified={})", normalizedEmail, user.isEmailVerified());
         
         if (user.isEmailVerified()) {
             throw new IllegalArgumentException("Email is already verified. You can log in directly.");
@@ -157,51 +150,66 @@ public class AccountRecoveryService {
             .build();
         emailVerificationTokenRepository.save(token);
         
-        // Send verification email (skip in dev mode)
-        if (!environmentUtil.isDevelopmentEnvironment()) {
-            try {
-                // Use query parameter instead of path parameter
-                String confirmLink = baseUrl + "/api/v1/auth/verify-email?token=" + rawToken;
-                Map<String, Object> templateVariables = new HashMap<>();
-                templateVariables.put("user_name", user.getName() != null && !user.getName().trim().isEmpty() 
-                    ? user.getName() : "there");
-                templateVariables.put("confirm_link", confirmLink);
-                templateVariables.put("baseUrl", baseUrl);
-                
-                NotificationRequest notificationRequest = NotificationRequest.builder()
-                        .type(CommunicationType.EMAIL)
-                        .to(user.getEmail())
-                        .subject("Verify Your Email - SHDE")
-                        .templateId(EmailService.TEMPLATE_EMAIL_VERIFICATION)
-                        .templateVariables(templateVariables)
-                        .eventId(null)
-                        .build();
-                
-                notificationService.send(notificationRequest);
-                log.info("Verification email resent to user: {}", user.getEmail());
-            } catch (Exception ex) {
-                log.error("Failed to send verification email to user: {}", user.getEmail(), ex);
-                throw new RuntimeException("Failed to send verification email. Please try again later.");
-            }
-        } else {
-            log.debug("Skipping verification email in dev mode for user: {}", user.getEmail());
-        }
+        // Send verification email
+        String confirmLink = baseUrl + "/api/v1/auth/verify-email?token=" + rawToken;
+        Map<String, Object> templateVariables = new HashMap<>();
+        templateVariables.put("user_name", user.getName() != null && !user.getName().trim().isEmpty() 
+            ? user.getName() : "there");
+        templateVariables.put("confirm_link", confirmLink);
+        templateVariables.put("baseUrl", baseUrl);
+        
+        NotificationRequest notificationRequest = NotificationRequest.builder()
+                .type(CommunicationType.EMAIL)
+                .to(user.getEmail())
+                .subject("Verify Your Email - SHDE")
+                .templateId(EmailService.TEMPLATE_EMAIL_VERIFICATION)
+                .templateVariables(templateVariables)
+                .eventId(null)
+                .build();
+        
+        notificationService.send(notificationRequest);
         
         return "Verification email sent. Please check your inbox and verify your email before logging in.";
     }
 
+    /**
+     * Verifies email address using a verification token.
+     * 
+     * @param tokenValue The raw verification token from the email link
+     * @return true if verification was successful, false otherwise
+     */
     public boolean verifyEmailToken(String tokenValue) {
-        String hashed = TokenHashUtil.sha256(tokenValue);
+        if (tokenValue == null || tokenValue.trim().isEmpty()) {
+            return false;
+        }
+        
+        String hashed = TokenHashUtil.sha256(tokenValue.trim());
         return emailVerificationTokenRepository.findByToken(hashed)
             .map(token -> {
-                if (token.isConsumed() || token.getExpiresAt().isBefore(LocalDateTime.now(ZoneOffset.UTC))) {
+                LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+                
+                // Check if token is already consumed
+                if (token.isConsumed()) {
                     return false;
                 }
+                
+                // Check if token has expired
+                if (token.getExpiresAt().isBefore(now)) {
+                    return false;
+                }
+                
                 UserAccount user = token.getUser();
-                user.setEmailVerified(true);
-                userAccountRepository.save(user);
+                
+                // Mark email as verified (idempotent - safe if already verified)
+                if (!user.isEmailVerified()) {
+                    user.setEmailVerified(true);
+                    userAccountRepository.save(user);
+                }
+                
+                // Mark token as consumed to prevent reuse
                 token.setConsumed(true);
                 emailVerificationTokenRepository.save(token);
+                
                 return true;
             })
             .orElse(false);

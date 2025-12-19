@@ -13,7 +13,6 @@ import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.repository.UserSessionRepository;
 import eventplanner.security.auth.validation.RegistrationValidator;
 import eventplanner.common.domain.enums.UserType;
-import eventplanner.common.util.EnvironmentUtil;
 import eventplanner.security.util.AuthMapper;
 import eventplanner.common.exception.UnauthorizedException;
 import eventplanner.common.exception.BadRequestException;
@@ -54,7 +53,6 @@ public class AuthService {
     private final TokenService tokenService;
     private final NotificationService notificationService;
     private final RegistrationValidator registrationValidator;
-    private final EnvironmentUtil environmentUtil;
     private final RateLimitingService rateLimitingService;
     private final JwtValidationUtil jwtValidationUtil;
 
@@ -85,7 +83,6 @@ public class AuthService {
                        TokenService tokenService,
                        NotificationService notificationService,
                        RegistrationValidator registrationValidator,
-                       EnvironmentUtil environmentUtil,
                        RateLimitingService rateLimitingService,
                        JwtValidationUtil jwtValidationUtil) {
         this.userAccountRepository = userAccountRepository;
@@ -95,7 +92,6 @@ public class AuthService {
         this.tokenService = tokenService;
         this.notificationService = notificationService;
         this.registrationValidator = registrationValidator;
-        this.environmentUtil = environmentUtil;
         this.rateLimitingService = rateLimitingService;
         this.jwtValidationUtil = jwtValidationUtil;
     }
@@ -157,33 +153,23 @@ public class AuthService {
             .build();
         emailVerificationTokenRepository.save(verificationToken);
 
-        // Send confirmation email (skip in dev mode)
-        if (environmentUtil.isProductionEnvironment()) {
-            try {
-                // Use query parameter to match endpoint format
-                String confirmLink = baseUrl + "/api/v1/auth/verify-email?token=" + rawToken;
-                Map<String, Object> templateVariables = new HashMap<>();
-                templateVariables.put("user_name", ""); // Name not collected yet during minimal registration
-                templateVariables.put("confirm_link", confirmLink);
-                templateVariables.put("baseUrl", baseUrl);
-                
-                NotificationRequest notificationRequest = NotificationRequest.builder()
-                        .type(CommunicationType.EMAIL)
-                        .to(user.getEmail())
-                        .subject("Welcome to SHDE - Confirm Your Email")
-                        .templateId(EmailService.TEMPLATE_EMAIL_VERIFICATION)
-                        .templateVariables(templateVariables)
-                        .eventId(null) // No eventId for auth emails
-                        .build();
-                
-                notificationService.send(notificationRequest);
-                log.info("Welcome email sent using template to user: {}", user.getEmail());
-            } catch (Exception ex) {
-                log.error("Failed to send welcome email to user: {}", user.getEmail(), ex);
-            }
-        } else {
-            log.debug("Skipping verification email in dev mode for user: {}", user.getEmail());
-        }
+        // Send confirmation email - registration fails if email cannot be sent
+        String confirmLink = baseUrl + "/api/v1/auth/verify-email?token=" + rawToken;
+        Map<String, Object> templateVariables = new HashMap<>();
+        templateVariables.put("user_name", ""); // Name not collected yet during minimal registration
+        templateVariables.put("confirm_link", confirmLink);
+        templateVariables.put("baseUrl", baseUrl);
+        
+        NotificationRequest notificationRequest = NotificationRequest.builder()
+                .type(CommunicationType.EMAIL)
+                .to(user.getEmail())
+                .subject("Welcome to SHDE - Confirm Your Email")
+                .templateId(EmailService.TEMPLATE_EMAIL_VERIFICATION)
+                .templateVariables(templateVariables)
+                .eventId(null) // No eventId for auth emails
+                .build();
+        
+        notificationService.send(notificationRequest);
         
         // Registration complete - user must verify email and login to get tokens/deviceId
     }
