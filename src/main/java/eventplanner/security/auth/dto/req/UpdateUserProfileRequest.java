@@ -2,9 +2,12 @@ package eventplanner.security.auth.dto.req;
 
 import eventplanner.common.domain.enums.UserType;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+
+import java.time.LocalDate;
 
 @Data
 public class UpdateUserProfileRequest {
@@ -26,6 +29,13 @@ public class UpdateUserProfileRequest {
 
     @Size(max = 500)
     private String profilePictureUrl;
+
+    @Past(message = "Date of birth must be in the past")
+    private LocalDate dateOfBirth;
+
+    private Boolean acceptTerms;
+
+    private Boolean acceptPrivacy;
 
     private UserType userType = UserType.INDIVIDUAL;
 

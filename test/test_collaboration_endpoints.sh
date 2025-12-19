@@ -295,9 +295,14 @@ authenticate_user() {
         local onboarding_required
         onboarding_required=$(echo "$LAST_BODY" | jq -r '.onboardingRequired // false')
         if [ "$onboarding_required" = "true" ]; then
-            local uname="testcollab_$(date +%s | cut -c1-8)"
-            local onboarding='{"name":"'"$TEST_USER_NAME"'","username":"'"$uname"'","phoneNumber":"'"$TEST_USER_PHONE"'","dateOfBirth":"1990-01-01","acceptTerms":true,"acceptPrivacy":true,"marketingOptIn":false}'
-            run_test "Complete Onboarding" "POST" "/api/v1/auth/complete-onboarding" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$onboarding" "200" "Complete onboarding (ensure username exists)"
+            # Get user ID from /me endpoint
+            local me_response=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE_URL/api/v1/auth/me")
+            local user_id=$(echo "$me_response" | jq -r '.id // empty')
+            if [ -n "$user_id" ]; then
+                local uname="testcollab_$(date +%s | cut -c1-8)"
+                local onboarding='{"name":"'"$TEST_USER_NAME"'","username":"'"$uname"'","phoneNumber":"'"$TEST_USER_PHONE"'","dateOfBirth":"1990-01-01","acceptTerms":true,"acceptPrivacy":true,"marketingOptIn":false}'
+                run_test "Complete Onboarding" "PUT" "/api/v1/auth/users/$user_id" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$onboarding" "200" "Complete onboarding (ensure username exists)"
+            fi
         fi
     fi
 }
@@ -366,14 +371,19 @@ seed_directory_users() {
                 local did="$(echo "$lb" | jq -r '.deviceId // empty')"
                 local onboarding_required="$(echo "$lb" | jq -r '.onboardingRequired // false')"
                 if [ "$onboarding_required" = "true" ] && [ -n "$tok" ] && [ -n "$did" ]; then
-                    local uname="diruser_${suffix}"
-                    local onboarding="{\"name\":\"Directory User $count\",\"username\":\"$uname\",\"acceptTerms\":true,\"acceptPrivacy\":true}"
-                    curl -sS -X POST \
-                      -H "Authorization: Bearer $tok" \
-                      -H "X-Device-ID: $did" \
-                      -H "Content-Type: application/json" \
-                      -d "$onboarding" \
-                      "$BASE_URL/api/v1/auth/complete-onboarding" >/dev/null 2>&1
+                    # Get user ID from /me endpoint
+                    local me_resp=$(curl -s -X GET -H "Authorization: Bearer $tok" "$BASE_URL/api/v1/auth/me")
+                    local uid=$(echo "$me_resp" | jq -r '.id // empty')
+                    if [ -n "$uid" ]; then
+                        local uname="diruser_${suffix}"
+                        local onboarding="{\"name\":\"Directory User $count\",\"username\":\"$uname\",\"acceptTerms\":true,\"acceptPrivacy\":true}"
+                        curl -sS -X PUT \
+                          -H "Authorization: Bearer $tok" \
+                          -H "X-Device-ID: $did" \
+                          -H "Content-Type: application/json" \
+                          -d "$onboarding" \
+                          "$BASE_URL/api/v1/auth/users/$uid" >/dev/null 2>&1
+                    fi
                 fi
             fi
         fi
@@ -401,9 +411,14 @@ authenticate_invited_user() {
         local onboarding_required
         onboarding_required=$(echo "$LAST_BODY" | jq -r '.onboardingRequired // false')
         if [ "$onboarding_required" = "true" ]; then
-            local uname="invited_$(date +%s | cut -c1-8)"
-            local onboarding='{"name":"Invited Test User","username":"'"$uname"'","phoneNumber":"+1234567891","dateOfBirth":"1990-01-01","acceptTerms":true,"acceptPrivacy":true,"marketingOptIn":false}'
-            run_test "Complete Invited User Onboarding" "POST" "/api/v1/auth/complete-onboarding" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "$onboarding" "200" "Complete onboarding for invited user"
+            # Get user ID from /me endpoint
+            local me_response=$(curl -s -X GET -H "Authorization: Bearer $INVITED_USER_TOKEN" "$BASE_URL/api/v1/auth/me")
+            local user_id=$(echo "$me_response" | jq -r '.id // empty')
+            if [ -n "$user_id" ]; then
+                local uname="invited_$(date +%s | cut -c1-8)"
+                local onboarding='{"name":"Invited Test User","username":"'"$uname"'","phoneNumber":"+1234567891","dateOfBirth":"1990-01-01","acceptTerms":true,"acceptPrivacy":true,"marketingOptIn":false}'
+                run_test "Complete Invited User Onboarding" "PUT" "/api/v1/auth/users/$user_id" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "$onboarding" "200" "Complete onboarding for invited user"
+            fi
         fi
     fi
 }

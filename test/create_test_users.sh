@@ -92,7 +92,19 @@ complete_onboarding() {
         return 1
     fi
     
-    # Complete onboarding
+    # Get user ID from /me endpoint
+    local me_response=$(curl -s -X GET \
+        -H "Authorization: Bearer $access_token" \
+        "$BASE_URL/api/v1/auth/me")
+    
+    local user_id=$(echo "$me_response" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+    
+    if [ -z "$user_id" ]; then
+        echo -e "${RED}❌ Failed to get user ID${NC}" >&2
+        return 1
+    fi
+    
+    # Complete onboarding using profile update endpoint
     local onboarding_data="{
         \"name\": \"${name}\",
         \"phoneNumber\": \"+1234567890\",
@@ -102,12 +114,12 @@ complete_onboarding() {
         \"marketingOptIn\": false
     }"
     
-    local onboarding_response=$(curl -s -w '%{http_code}' -X POST \
+    local onboarding_response=$(curl -s -w '%{http_code}' -X PUT \
         -H "Authorization: Bearer $access_token" \
         -H "X-Device-ID: $device_id" \
         -H "Content-Type: application/json" \
         -d "$onboarding_data" \
-        "$BASE_URL/api/v1/auth/complete-onboarding")
+        "$BASE_URL/api/v1/auth/users/$user_id")
     
     local onboarding_http_code="${onboarding_response: -3}"
     

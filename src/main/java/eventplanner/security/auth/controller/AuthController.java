@@ -1,10 +1,7 @@
 package eventplanner.security.auth.controller;
 
-import eventplanner.security.auth.dto.req.CompleteOnboardingWithImageRequest;
-import eventplanner.security.auth.dto.res.CompleteOnboardingWithImageResponse;
 import eventplanner.security.auth.dto.req.LoginRequest;
 import eventplanner.security.auth.dto.req.LogoutRequest;
-import eventplanner.security.auth.dto.req.OnboardingRequest;
 import eventplanner.security.auth.dto.req.RefreshTokenRequest;
 import eventplanner.security.auth.dto.req.RegisterRequest;
 import eventplanner.security.auth.dto.res.SecureAuthResponse;
@@ -108,42 +105,6 @@ public class AuthController {
 
         authService.logout(request, principal.getUser(), deviceId.trim());
         return ResponseEntity.ok(ApiMessageResponse.success("Logged out successfully from this device"));
-    }
-
-    @PostMapping("/complete-onboarding")
-    @RequiresPermission(value = RbacPermissions.AUTH_ME, resources = {"user_id=#principal.id"})
-    public ResponseEntity<SecureUserResponse> completeOnboarding(
-            @Valid @RequestBody OnboardingRequest request,
-            @AuthenticationPrincipal UserPrincipal principal,
-            HttpServletRequest httpRequest) {
-        if (principal == null) {
-            throw new ResourceNotFoundException("User not found");
-        }
-
-        SecureUserResponse response = authService.completeOnboarding(
-            request, 
-            principal.getUser(), 
-            resolveClientIp(httpRequest)
-        );
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/complete-onboarding-with-image")
-    @RequiresPermission(value = RbacPermissions.AUTH_ME, resources = {"user_id=#principal.id"})
-    public ResponseEntity<CompleteOnboardingWithImageResponse> completeOnboardingWithImage(
-            @Valid @RequestBody CompleteOnboardingWithImageRequest request,
-            @AuthenticationPrincipal UserPrincipal principal,
-            HttpServletRequest httpRequest) {
-        if (principal == null) {
-            throw new ResourceNotFoundException("User not found");
-        }
-
-        CompleteOnboardingWithImageResponse response = authService.completeOnboardingWithImage(
-            request, 
-            principal.getUser(), 
-            resolveClientIp(httpRequest)
-        );
-        return ResponseEntity.ok(response);
     }
 
     private String resolveClientIp(HttpServletRequest request) {

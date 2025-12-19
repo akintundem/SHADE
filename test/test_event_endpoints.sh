@@ -639,18 +639,23 @@ authenticate_user() {
                 "marketingOptIn": false
             }'
             
-            local onboarding_response=$(curl -s -w '%{http_code}' -X POST \
-                -H "Authorization: Bearer $ACCESS_TOKEN" \
-                -H "X-Device-ID: $DEVICE_ID" \
-                -H "Content-Type: application/json" \
-                -d "$onboarding_data" \
-                "$BASE_URL/api/v1/auth/complete-onboarding")
-            
-            local onboarding_http_code="${onboarding_response: -3}"
-            if [ "$onboarding_http_code" = "200" ]; then
-                echo -e "${GREEN}✅ Profile onboarding completed${NC}"
-            else
-                echo -e "${YELLOW}⚠️  Onboarding completion failed (HTTP: $onboarding_http_code), but continuing with tests${NC}"
+            # Get user ID from /me endpoint
+            local me_response=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE_URL/api/v1/auth/me")
+            local user_id=$(echo "$me_response" | jq -r '.id // empty')
+            if [ -n "$user_id" ]; then
+                local onboarding_response=$(curl -s -w '%{http_code}' -X PUT \
+                    -H "Authorization: Bearer $ACCESS_TOKEN" \
+                    -H "X-Device-ID: $DEVICE_ID" \
+                    -H "Content-Type: application/json" \
+                    -d "$onboarding_data" \
+                    "$BASE_URL/api/v1/auth/users/$user_id")
+                
+                local onboarding_http_code="${onboarding_response: -3}"
+                if [ "$onboarding_http_code" = "200" ]; then
+                    echo -e "${GREEN}✅ Profile onboarding completed${NC}"
+                else
+                    echo -e "${YELLOW}⚠️  Onboarding completion failed (HTTP: $onboarding_http_code), but continuing with tests${NC}"
+                fi
             fi
         fi
         

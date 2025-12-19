@@ -2,14 +2,9 @@ package eventplanner.security.auth.service;
 
 import eventplanner.security.auth.dto.req.LoginRequest;
 import eventplanner.security.auth.dto.req.LogoutRequest;
-import eventplanner.security.auth.dto.req.OnboardingRequest;
 import eventplanner.security.auth.dto.req.RefreshTokenRequest;
 import eventplanner.security.auth.dto.req.RegisterRequest;
-import eventplanner.security.auth.dto.res.CompleteOnboardingWithImageResponse;
-import eventplanner.security.auth.dto.req.CompleteOnboardingWithImageRequest;
-import eventplanner.security.auth.dto.res.ProfileImageUploadResponse;
 import eventplanner.security.auth.dto.res.SecureAuthResponse;
-import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.entity.EmailVerificationToken;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.entity.UserSession;
@@ -35,7 +30,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -46,8 +40,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static eventplanner.security.util.AuthValidationUtil.normalizeEmail;
-import static eventplanner.security.util.AuthValidationUtil.normalizeUsername;
-import static eventplanner.security.util.AuthValidationUtil.safeTrim;
 import static eventplanner.security.util.SecureTokenUtil.generateSecureToken;
 
 @Service
@@ -64,7 +56,6 @@ public class AuthService {
     private final RegistrationValidator registrationValidator;
     private final EnvironmentUtil environmentUtil;
     private final RateLimitingService rateLimitingService;
-    private final ProfileImageService profileImageService;
     private final JwtValidationUtil jwtValidationUtil;
 
     @Value("${auth.session.max-concurrent}")
@@ -96,7 +87,6 @@ public class AuthService {
                        RegistrationValidator registrationValidator,
                        EnvironmentUtil environmentUtil,
                        RateLimitingService rateLimitingService,
-                       ProfileImageService profileImageService,
                        JwtValidationUtil jwtValidationUtil) {
         this.userAccountRepository = userAccountRepository;
         this.sessionRepository = sessionRepository;
@@ -107,7 +97,6 @@ public class AuthService {
         this.registrationValidator = registrationValidator;
         this.environmentUtil = environmentUtil;
         this.rateLimitingService = rateLimitingService;
-        this.profileImageService = profileImageService;
         this.jwtValidationUtil = jwtValidationUtil;
     }
 
@@ -409,162 +398,6 @@ public class AuthService {
             .build();
     }
     
-    /**
-     * Completes user profile onboarding.
-     * Validates that user is authenticated, email is verified, and profile is not already completed.
-     * Updates user profile with onboarding data and marks profile as completed.
-     * 
-     * @param request The onboarding request with profile data
-     * @param user The authenticated user account
-     * @param clientIp Client IP address for audit logging
-     * @return SecureUserResponse with updated user data
-     * @throws BadRequestException if validation fails or profile already completed
-     */
-    public SecureUserResponse completeOnboarding(OnboardingRequest request, UserAccount user, String clientIp) {
-        // Validate user is authenticated
-        if (user == null) {
-            throw new BadRequestException("AUTHENTICATION_REQUIRED", "User must be authenticated to complete onboarding");
-        }
-        
-        // Validate email is verified
-        if (!user.isEmailVerified()) {
-            throw new BadRequestException("EMAIL_NOT_VERIFIED", 
-                "Email must be verified before completing onboarding");
-        }
-        
-        // Validate profile is not already completed
-        if (isProfileComplete(user)) {
-            throw new BadRequestException("PROFILE_ALREADY_COMPLETED", 
-                "Profile has already been completed");
-        }
-        
-        // Validate required fields
-        if (request.getName() == null || request.getName().trim().isEmpty()) {
-            throw new BadRequestException("VALIDATION_ERROR", "Name is required");
-        }
-        
-        if (!Boolean.TRUE.equals(request.getAcceptTerms())) {
-            throw new BadRequestException("VALIDATION_ERROR", "Terms and conditions must be accepted");
-        }
-        
-        if (!Boolean.TRUE.equals(request.getAcceptPrivacy())) {
-            throw new BadRequestException("VALIDATION_ERROR", "Privacy policy must be accepted");
-        }
-        
-        // Update user profile with onboarding data
-        user.setName(request.getName().trim());
-        // Username (optional): normalize + ensure uniqueness. If not provided, try generating one.
-        String desiredUsername = normalizeUsername(request.getUsername());
-        if (desiredUsername == null) {
-            desiredUsername = generateCandidateUsernameFromNameOrEmail(user.getName(), user.getEmail());
-        }
-        if (desiredUsername != null && user.getUsername() == null) {
-            user.setUsername(allocateUniqueUsername(desiredUsername, user.getId()));
-        } else if (desiredUsername != null) {
-            // Allow setting/changing during onboarding.
-            user.setUsername(allocateUniqueUsername(desiredUsername, user.getId()));
-        }
-        user.setPhoneNumber(safeTrim(request.getPhoneNumber()));
-        user.setDateOfBirth(request.getDateOfBirth());
-        user.setAcceptTerms(true);
-        user.setAcceptPrivacy(true);
-        user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
-        String profilePictureUrl = safeTrim(request.getProfilePictureUrl());
-        if (StringUtils.hasText(profilePictureUrl)) {
-            user.setProfilePictureUrl(profileImageService.normalizeResourceUrl(profilePictureUrl));
-        }
-        user.setProfileCompleted(true);
-        userAccountRepository.save(user);
-        
-        log.info("User completed onboarding: {}", user.getEmail());
-        return AuthMapper.toSecureUserResponse(user);
-    }
-
-    /**
-     * Combined onboarding completion and profile image upload URL generation.
-     */
-    public CompleteOnboardingWithImageResponse completeOnboardingWithImage(
-            CompleteOnboardingWithImageRequest request, 
-            UserAccount user, 
-            String clientIp) {
-        
-        // 1. Complete basic onboarding
-        SecureUserResponse userResponse = completeOnboarding(request.getOnboarding(), user, clientIp);
-        
-        // 2. Generate upload URL if requested
-        ProfileImageUploadResponse imageUpload = null;
-        if (request.getImageUpload() != null) {
-            imageUpload = profileImageService.createProfileImageUpload(user, request.getImageUpload());
-        }
-        
-        return CompleteOnboardingWithImageResponse.builder()
-            .user(userResponse)
-            .imageUpload(imageUpload)
-            .build();
-    }
-
-    private String generateCandidateUsernameFromNameOrEmail(String name, String email) {
-        String base = null;
-        if (name != null && !name.trim().isEmpty()) {
-            base = name.trim()
-                    .toLowerCase(java.util.Locale.ROOT)
-                    .replaceAll("\\s+", "_")
-                    .replaceAll("[^a-z0-9._]", "");
-        }
-        if (base == null || base.length() < 3) {
-            if (email != null && email.contains("@")) {
-                base = email.substring(0, email.indexOf('@'))
-                        .toLowerCase(java.util.Locale.ROOT)
-                        .replaceAll("[^a-z0-9._]", "");
-            }
-        }
-        if (base == null) {
-            return null;
-        }
-        // Keep within reasonable bounds; allocation will append suffix if needed.
-        base = base.replaceAll("^[._]+", "").replaceAll("[._]+$", "");
-        if (base.length() < 3) {
-            base = "user";
-        }
-        if (base.length() > 30) {
-            base = base.substring(0, 30);
-        }
-        return base;
-    }
-
-    private String allocateUniqueUsername(String desired, UUID currentUserId) {
-        String normalized = normalizeUsername(desired);
-        if (normalized == null) {
-            throw new BadRequestException("VALIDATION_ERROR", "Username is required");
-        }
-        if (!normalized.matches("^[a-z0-9](?:[a-z0-9._]{1,28}[a-z0-9])?$")) {
-            throw new BadRequestException("VALIDATION_ERROR", "Username format is invalid");
-        }
-        // Try base then base_2, base_3, ... (bounded)
-        String base = normalized;
-        for (int i = 0; i < 200; i++) {
-            String candidate = i == 0 ? base : truncateForSuffix(base, "_" + (i + 1));
-            Optional<UserAccount> existing = userAccountRepository.findByUsernameIgnoreCase(candidate);
-            if (existing.isEmpty() || existing.get().getId().equals(currentUserId)) {
-                return candidate;
-            }
-        }
-        throw new BadRequestException("USERNAME_UNAVAILABLE", "Unable to allocate username, please try another");
-    }
-
-    private String truncateForSuffix(String base, String suffix) {
-        int max = 30;
-        String trimmedBase = base;
-        if (trimmedBase.length() + suffix.length() > max) {
-            int end = Math.max(1, max - suffix.length());
-            trimmedBase = trimmedBase.substring(0, end);
-            trimmedBase = trimmedBase.replaceAll("[._]+$", "");
-            if (trimmedBase.length() < 1) {
-                trimmedBase = "user";
-            }
-        }
-        return trimmedBase + suffix;
-    }
     
     /**
      * Checks if user profile is complete.

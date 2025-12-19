@@ -205,8 +205,13 @@ authenticate_user() {
         local onboarding_required=$(echo "$login_body" | jq -r '.onboardingRequired // false')
         if [ "$onboarding_required" = "true" ]; then
             echo -e "${YELLOW}📝 Completing onboarding...${NC}"
-            local onboard_data="{\"name\":\"$TEST_USER_NAME\",\"username\":\"admin_$(date +%s)\",\"phoneNumber\":\"+1234567890\",\"dateOfBirth\":\"1990-01-01\",\"acceptTerms\":true,\"acceptPrivacy\":true}"
-            curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" -H "X-Device-ID: $DEVICE_ID" -H "Content-Type: application/json" -d "$onboard_data" "$BASE_URL/api/v1/auth/complete-onboarding" > /dev/null
+            # Get user ID from /me endpoint
+            local me_response=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE_URL/api/v1/auth/me")
+            local user_id=$(echo "$me_response" | jq -r '.id // empty')
+            if [ -n "$user_id" ]; then
+                local onboard_data="{\"name\":\"$TEST_USER_NAME\",\"username\":\"admin_$(date +%s)\",\"phoneNumber\":\"+1234567890\",\"dateOfBirth\":\"1990-01-01\",\"acceptTerms\":true,\"acceptPrivacy\":true}"
+                curl -s -X PUT -H "Authorization: Bearer $ACCESS_TOKEN" -H "X-Device-ID: $DEVICE_ID" -H "Content-Type: application/json" -d "$onboard_data" "$BASE_URL/api/v1/auth/users/$user_id" > /dev/null
+            fi
         fi
         echo -e "${GREEN}✅ Authenticated${NC}"
         return 0

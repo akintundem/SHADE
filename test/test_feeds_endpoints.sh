@@ -459,16 +459,21 @@ authenticate_user() {
         
         if [ "$onboarding_required" = "true" ]; then
             echo -e "${YELLOW}⚠️  Onboarding required - completing profile...${NC}"
-            local onboarding_data='{
-                "name": "'$TEST_USER_NAME'",
-                "username": "testfeeds_'"$(date +%s | cut -c1-8)"'",
-                "phoneNumber": "'$TEST_USER_PHONE'",
-                "dateOfBirth": "1990-01-01",
-                "acceptTerms": true,
-                "acceptPrivacy": true,
-                "marketingOptIn": false
-            }'
-            run_test "Complete Onboarding" "POST" "/api/v1/auth/complete-onboarding" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$onboarding_data" "200" "Complete user onboarding"
+            # Get user ID from /me endpoint
+            local me_response=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE_URL/api/v1/auth/me")
+            local user_id=$(echo "$me_response" | jq -r '.id // empty')
+            if [ -n "$user_id" ]; then
+                local onboarding_data='{
+                    "name": "'$TEST_USER_NAME'",
+                    "username": "testfeeds_'"$(date +%s | cut -c1-8)"'",
+                    "phoneNumber": "'$TEST_USER_PHONE'",
+                    "dateOfBirth": "1990-01-01",
+                    "acceptTerms": true,
+                    "acceptPrivacy": true,
+                    "marketingOptIn": false
+                }'
+                run_test "Complete Onboarding" "PUT" "/api/v1/auth/users/$user_id" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$onboarding_data" "200" "Complete user onboarding"
+            fi
         fi
     fi
     

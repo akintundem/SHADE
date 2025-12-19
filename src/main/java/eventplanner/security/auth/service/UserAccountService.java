@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.UUID;
 
@@ -23,9 +24,12 @@ import static eventplanner.security.util.AuthValidationUtil.safeTrim;
 public class UserAccountService {
 
     private final UserAccountRepository userAccountRepository;
+    private final ProfileImageService profileImageService;
 
-    public UserAccountService(UserAccountRepository userAccountRepository) {
+    public UserAccountService(UserAccountRepository userAccountRepository,
+                             ProfileImageService profileImageService) {
         this.userAccountRepository = userAccountRepository;
+        this.profileImageService = profileImageService;
     }
 
     public SecureUserResponse getSecureUser(UUID userId) {
@@ -38,11 +42,14 @@ public class UserAccountService {
         UserAccount user = userAccountRepository.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
+        // Update name
         user.setName(request.getName().trim());
+        
+        // Update username with uniqueness check
         if (request.getUsername() != null) {
             String normalized = normalizeUsername(request.getUsername());
             if (normalized != null) {
-                // Ensure uniqueness (case-insensitive) - allow keeping current username.
+                // Ensure uniqueness (case-insensitive) - allow keeping current username
                 boolean taken = userAccountRepository.existsByUsernameIgnoreCase(normalized)
                         && (user.getUsername() == null || !user.getUsername().equalsIgnoreCase(normalized));
                 if (taken) {
@@ -51,13 +58,57 @@ public class UserAccountService {
                 user.setUsername(normalized);
             }
         }
+        
+        // Update phone number
         user.setPhoneNumber(safeTrim(request.getPhoneNumber()));
-        user.setProfilePictureUrl(safeTrim(request.getProfilePictureUrl()));
-        user.setUserType(request.getUserType());
+        
+        // Update date of birth
+        if (request.getDateOfBirth() != null) {
+            user.setDateOfBirth(request.getDateOfBirth());
+        }
+        
+        // Handle profile picture: use provided URL or default placeholder
+        String profilePictureUrl = safeTrim(request.getProfilePictureUrl());
+        if (StringUtils.hasText(profilePictureUrl)) {
+            user.setProfilePictureUrl(profileImageService.normalizeResourceUrl(profilePictureUrl));
+        } else if (user.getProfilePictureUrl() == null) {
+            // Set default placeholder if no image provided and user doesn't have one
+            user.setProfilePictureUrl(getDefaultProfilePictureUrl());
+        }
+        
+        // Update terms/privacy acceptance (only if provided and user hasn't accepted yet)
+        if (Boolean.TRUE.equals(request.getAcceptTerms()) && !user.isAcceptTerms()) {
+            user.setAcceptTerms(true);
+        }
+        if (Boolean.TRUE.equals(request.getAcceptPrivacy()) && !user.isAcceptPrivacy()) {
+            user.setAcceptPrivacy(true);
+        }
+        
+        // Update other fields
+        if (request.getUserType() != null) {
+            user.setUserType(request.getUserType());
+        }
         user.setPreferences(safeTrim(request.getPreferences()));
-        user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
+        if (request.getMarketingOptIn() != null) {
+            user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
+        }
+        
+        // Auto-complete profile if it was incomplete and required fields are now present
+        if (!Boolean.TRUE.equals(user.getProfileCompleted()) 
+            && StringUtils.hasText(user.getName())
+            && user.isAcceptTerms() 
+            && user.isAcceptPrivacy()) {
+            user.setProfileCompleted(true);
+        }
 
+        userAccountRepository.save(user);
         return AuthMapper.toSecureUserResponse(user);
+    }
+
+    private String getDefaultProfilePictureUrl() {
+        // Return a consistent Unsplash placeholder URL
+        // You could also make this configurable via application properties
+        return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&h=400&fit=crop&auto=format";
     }
 
     public Page<SecureUserResponse> searchSecureUsers(String term, Pageable pageable) {
