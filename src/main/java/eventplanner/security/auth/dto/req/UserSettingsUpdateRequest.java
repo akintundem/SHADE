@@ -1,10 +1,11 @@
 package eventplanner.security.auth.dto.req;
 
+import eventplanner.common.domain.enums.LanguagePreference;
 import eventplanner.common.domain.enums.ThemePreference;
 import eventplanner.common.domain.enums.VisibilityLevel;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import eventplanner.security.auth.dto.LocationDto;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 import lombok.Data;
 
 @Data
@@ -13,26 +14,18 @@ public class UserSettingsUpdateRequest {
     @Size(max = 500)
     private String bio;
 
-    @Size(max = 200)
-    private String location;
+    @Valid
+    private LocationDto location;
 
-    @Size(max = 60)
-    private String timeZone;
-
-    @Size(max = 12)
-    private String preferredLanguage;
+    private LanguagePreference preferredLanguage;
 
     private VisibilityLevel profileVisibility;
 
     private Boolean searchVisibility;
 
-    private VisibilityLevel eventParticipationVisibility;
-
     private ThemePreference themePreference;
 
     private Boolean emailNotificationsEnabled;
-
-    private Boolean smsNotificationsEnabled;
 
     private Boolean pushNotificationsEnabled;
 
@@ -41,10 +34,6 @@ public class UserSettingsUpdateRequest {
     private Boolean eventUpdatesEnabled;
 
     private Boolean eventRemindersEnabled;
-
-    @Min(5)
-    @Max(10080)
-    private Integer reminderTimingMinutes;
 
     private Boolean rsvpNotificationsEnabled;
 
@@ -58,7 +47,7 @@ public class UserSettingsUpdateRequest {
 
     private Boolean autoAcceptInvitations;
 
-    private Boolean showInEventDirectory;
-
     private Boolean exportEventDataEnabled;
+
+    private Boolean mfaEnabled;
 }

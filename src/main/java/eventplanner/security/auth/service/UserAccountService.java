@@ -4,8 +4,10 @@ import eventplanner.security.auth.dto.req.UpdateUserProfileRequest;
 import eventplanner.security.auth.dto.req.UserSettingsUpdateRequest;
 import eventplanner.security.auth.dto.res.PublicUserResponse;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
+import eventplanner.security.auth.entity.Location;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.entity.UserSettings;
+import eventplanner.security.auth.repository.LocationRepository;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.util.AuthMapper;
 import eventplanner.common.domain.enums.VisibilityLevel;
@@ -28,11 +30,14 @@ public class UserAccountService {
 
     private final UserAccountRepository userAccountRepository;
     private final ProfileImageService profileImageService;
+    private final LocationRepository locationRepository;
 
     public UserAccountService(UserAccountRepository userAccountRepository,
-                             ProfileImageService profileImageService) {
+                             ProfileImageService profileImageService,
+                             LocationRepository locationRepository) {
         this.userAccountRepository = userAccountRepository;
         this.profileImageService = profileImageService;
+        this.locationRepository = locationRepository;
     }
 
     public SecureUserResponse getSecureUser(UUID userId) {
@@ -139,17 +144,16 @@ public class UserAccountService {
             String bio = safeTrim(request.getBio());
             settings.setBio(StringUtils.hasText(bio) ? bio : null);
         }
-        if (request.getLocation() != null) {
-            String location = safeTrim(request.getLocation());
-            settings.setLocation(StringUtils.hasText(location) ? location : null);
-        }
-        if (request.getTimeZone() != null) {
-            String timeZone = safeTrim(request.getTimeZone());
-            settings.setTimeZone(StringUtils.hasText(timeZone) ? timeZone : null);
+        if (request.getLocation() != null && request.getLocation().getLocationId() != null) {
+            UUID locationId = request.getLocation().getLocationId();
+            Location location = locationRepository.findById(locationId)
+                    .orElseThrow(() -> new IllegalArgumentException("Location not found with ID: " + locationId));
+            settings.setLocation(location);
+        } else if (request.getLocation() != null) {
+            settings.setLocation(null);
         }
         if (request.getPreferredLanguage() != null) {
-            String preferredLanguage = safeTrim(request.getPreferredLanguage());
-            settings.setPreferredLanguage(StringUtils.hasText(preferredLanguage) ? preferredLanguage : null);
+            settings.setPreferredLanguage(request.getPreferredLanguage());
         }
         if (request.getProfileVisibility() != null) {
             settings.setProfileVisibility(request.getProfileVisibility());
@@ -157,17 +161,11 @@ public class UserAccountService {
         if (request.getSearchVisibility() != null) {
             settings.setSearchVisibility(request.getSearchVisibility());
         }
-        if (request.getEventParticipationVisibility() != null) {
-            settings.setEventParticipationVisibility(request.getEventParticipationVisibility());
-        }
         if (request.getThemePreference() != null) {
             settings.setThemePreference(request.getThemePreference());
         }
         if (request.getEmailNotificationsEnabled() != null) {
             settings.setEmailNotificationsEnabled(request.getEmailNotificationsEnabled());
-        }
-        if (request.getSmsNotificationsEnabled() != null) {
-            settings.setSmsNotificationsEnabled(request.getSmsNotificationsEnabled());
         }
         if (request.getPushNotificationsEnabled() != null) {
             settings.setPushNotificationsEnabled(request.getPushNotificationsEnabled());
@@ -180,9 +178,6 @@ public class UserAccountService {
         }
         if (request.getEventRemindersEnabled() != null) {
             settings.setEventRemindersEnabled(request.getEventRemindersEnabled());
-        }
-        if (request.getReminderTimingMinutes() != null) {
-            settings.setReminderTimingMinutes(request.getReminderTimingMinutes());
         }
         if (request.getRsvpNotificationsEnabled() != null) {
             settings.setRsvpNotificationsEnabled(request.getRsvpNotificationsEnabled());
@@ -202,11 +197,11 @@ public class UserAccountService {
         if (request.getAutoAcceptInvitations() != null) {
             settings.setAutoAcceptInvitations(request.getAutoAcceptInvitations());
         }
-        if (request.getShowInEventDirectory() != null) {
-            settings.setShowInEventDirectory(request.getShowInEventDirectory());
-        }
         if (request.getExportEventDataEnabled() != null) {
             settings.setExportEventDataEnabled(request.getExportEventDataEnabled());
+        }
+        if (request.getMfaEnabled() != null) {
+            settings.setMfaEnabled(request.getMfaEnabled());
         }
     }
 

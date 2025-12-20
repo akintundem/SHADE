@@ -2,7 +2,7 @@
 
 # User Management and Profile Image Test Script
 # Tests user profile management and profile image upload endpoints
-# Uses pre-registered admin user from create_test_users.sh
+# Uses credentials from create_test_users.sh (admin@test.com)
 #
 # Usage:
 #   ./test_user_management.sh                    # Interactive mode
@@ -27,8 +27,8 @@ show_help() {
     echo ""
     echo "Requirements:"
     echo "  - curl command available"
-    echo "  - Pre-registered admin user (admin@test.com)"
     echo "  - For local testing: Spring Boot app running on port 8080"
+    echo "  - Test user should exist (run create_test_users.sh first)"
     echo ""
     exit 0
 }
@@ -122,9 +122,9 @@ get_testing_environment() {
 # Get testing environment from user
 get_testing_environment "$@"
 
-# Configuration - Using admin user from create_test_users.sh
-ADMIN_EMAIL="admin@test.com"
-ADMIN_PASSWORD="Admin123!@#"
+# Configuration - Using credentials from create_test_users.sh
+TEST_USER_EMAIL="admin@test.com"
+TEST_USER_PASSWORD="Admin123!@#"
 REPORT_FILE="test/reports/user_management_test_report_$(date +%Y%m%d_%H%M%S).md"
 
 # Test counters
@@ -143,6 +143,7 @@ RESPONSE_BODY=""
 PROFILE_IMAGE_OBJECT_KEY=""
 PROFILE_IMAGE_RESOURCE_URL=""
 PROFILE_IMAGE_UPLOAD_URL=""
+LOCATION_ID=""
 
 # Create report file
 mkdir -p test/reports
@@ -151,7 +152,7 @@ cat > "$REPORT_FILE" << EOF
 
 **Test Started:** $(date)
 **Base URL:** $BASE_URL
-**Test User:** $ADMIN_EMAIL
+**Test User:** $TEST_USER_EMAIL
 **Report File:** $REPORT_FILE
 
 ## Test Summary
@@ -275,6 +276,11 @@ EOF
                  # Also extract Content-Type header if present
                  PROFILE_IMAGE_CONTENT_TYPE=$(echo "$RESPONSE_BODY" | grep -o '"Content-Type":"[^"]*"' | cut -d'"' -f4)
                  ;;
+             "Search Locations - New York"|"Search Locations for Test")
+                 if [ -z "$LOCATION_ID" ]; then
+                     LOCATION_ID=$(echo "$RESPONSE_BODY" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+                 fi
+                 ;;
          esac
      fi
     
@@ -339,11 +345,13 @@ main() {
     echo "2. Login user"
     echo "3. Get current user profile"
     echo "4. Test profile updates (name, username, phone, etc.)"
-    echo "5. Test profile image upload (upload-url)"
-    echo "6. Test profile image upload completion"
-    echo "7. Test user directory"
+    echo "5. Test location search"
+    echo "6. Test profile update with location"
+    echo "7. Test profile image upload (upload-url)"
+    echo "8. Test profile image upload completion"
+    echo "9. Test user directory"
     echo ""
-    echo -e "${CYAN}👤 Test User: ${ADMIN_EMAIL}${NC}"
+    echo -e "${CYAN}👤 Test User: ${TEST_USER_EMAIL}${NC}"
     echo ""
     
     # Step 1: Check service availability
@@ -359,8 +367,8 @@ main() {
     echo -e "${CYAN}🔑 Step 2: User Authentication${NC}"
     echo "============================="
     local login_data='{
-        "email": "'$ADMIN_EMAIL'",
-        "password": "'$ADMIN_PASSWORD'",
+        "email": "'$TEST_USER_EMAIL'",
+        "password": "'$TEST_USER_PASSWORD'",
         "rememberMe": false
     }'
     
@@ -368,7 +376,7 @@ main() {
     
     if [ -z "$ACCESS_TOKEN" ]; then
         echo -e "${RED}❌ Failed to get access token. Cannot proceed with tests.${NC}"
-        echo -e "${YELLOW}💡 Make sure the admin user exists. Run ./test/create_test_users.sh first${NC}"
+        echo -e "${YELLOW}💡 Make sure the test user exists. Run ./test/create_test_users.sh first${NC}"
         exit 1
     fi
     
@@ -402,7 +410,6 @@ main() {
             "settings": {
                 "themePreference": "SYSTEM",
                 "profileVisibility": "PUBLIC",
-                "eventParticipationVisibility": "PUBLIC",
                 "searchVisibility": true
             }
         }'
@@ -415,7 +422,6 @@ main() {
             "settings": {
                 "themePreference": "SYSTEM",
                 "profileVisibility": "PUBLIC",
-                "eventParticipationVisibility": "PUBLIC",
                 "searchVisibility": true
             }
         }'
@@ -449,8 +455,60 @@ main() {
     
     echo ""
     
-    # Step 4: Profile Image Upload Tests
-    echo -e "${CYAN}🖼️  Step 4: Profile Image Upload Tests${NC}"
+    # Step 4: Location Search Tests
+    echo -e "${CYAN}📍 Step 4: Location Search Tests${NC}"
+    echo "================================="
+    
+    run_test "Search Locations - New York" "GET" "/api/v1/auth/locations/search?query=New%20York&page=0&size=10" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search for locations matching 'New York'"
+    
+    # Extract location ID from response for use in profile update
+    if [ -n "$RESPONSE_BODY" ]; then
+        LOCATION_ID=$(echo "$RESPONSE_BODY" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+        if [ -n "$LOCATION_ID" ]; then
+            echo -e "${GREEN}✅ Found location ID: $LOCATION_ID${NC}"
+        fi
+    fi
+    
+    run_test "Search Locations - Toronto" "GET" "/api/v1/auth/locations/search?query=Toronto&page=0&size=5" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search for locations matching 'Toronto'"
+    
+    run_test "Search Locations - Empty Query" "GET" "/api/v1/auth/locations/search?query=" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search with empty query returns empty page"
+    
+    echo ""
+    
+    # Step 5: Update Profile with Location
+    echo -e "${CYAN}📍 Step 5: Update Profile with Location${NC}"
+    echo "=========================================="
+    
+    # Try to get a location ID if we don't have one yet
+    if [ -z "$LOCATION_ID" ]; then
+        echo -e "${YELLOW}📋 Searching for a location to use in test...${NC}"
+        run_test "Search Locations for Test" "GET" "/api/v1/auth/locations/search?query=New%20York&page=0&size=1" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get a location for testing"
+        if [ -n "$RESPONSE_BODY" ]; then
+            LOCATION_ID=$(echo "$RESPONSE_BODY" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+        fi
+    fi
+    
+    if [ -n "$LOCATION_ID" ]; then
+        local update_with_location_data='{
+            "name": "Updated Admin Name",
+            "settings": {
+                "themePreference": "SYSTEM",
+                "profileVisibility": "PUBLIC",
+                "searchVisibility": true,
+                "location": {
+                    "locationId": "'$LOCATION_ID'"
+                }
+            }
+        }'
+        run_test "Update Profile with Location" "PUT" "/api/v1/auth/users/$USER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_with_location_data" "200" "Update user profile with location UUID"
+    else
+        echo -e "${YELLOW}⚠️  Skipping location update test - no location ID found${NC}"
+    fi
+    
+    echo ""
+    
+    # Step 6: Profile Image Upload Tests
+    echo -e "${CYAN}🖼️  Step 6: Profile Image Upload Tests${NC}"
     echo "====================================="
     
     # Test creating upload URL
@@ -515,8 +573,8 @@ main() {
     
     echo ""
     
-    # Step 5: User Directory Tests
-    echo -e "${CYAN}📂 Step 5: User Directory Tests${NC}"
+    # Step 7: User Directory Tests
+    echo -e "${CYAN}📂 Step 7: User Directory Tests${NC}"
     echo "============================="
     
     run_test "User Directory - List All" "GET" "/api/v1/auth/users/directory" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all public users in directory"
