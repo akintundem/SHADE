@@ -14,7 +14,7 @@ import java.util.UUID;
 
 /**
  * Request DTO for event reminders
- * Supports bulk sending to collaborators, vendors, guests, or specific persons
+ * Supports bulk sending to collaborators, guests, or specific persons
  */
 @Schema(description = "Event reminder request")
 @Getter
@@ -41,7 +41,7 @@ public class EventReminderRequest {
             "Required when channel is 'email'", example = "ANNOUNCEMENT")
     private EmailTemplateType emailTemplateType;
 
-    @Schema(description = "Recipient types for bulk sending. Options: ALL_COLLABORATORS, ALL_VENDORS, ALL_GUESTS, SPECIFIC_PERSON. " +
+    @Schema(description = "Recipient types for bulk sending. Options: ALL_COLLABORATORS, ALL_GUESTS, SPECIFIC_PERSON. " +
             "If SPECIFIC_PERSON is used, recipientUserIds or recipientEmails must be provided.")
     private List<RecipientType> recipientTypes;
 

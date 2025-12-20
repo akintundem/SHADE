@@ -20,7 +20,6 @@ public enum RoleName {
     SPEAKER,
     MODERATOR,
     SPONSOR,
-    VENDOR,
     MEDIA,
     GUEST
 }

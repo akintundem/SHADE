@@ -11,7 +11,6 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.util.UUID;
 
 @Entity
 @Table(name = "budget_line_items", indexes = {
@@ -87,9 +86,6 @@ public class BudgetLineItem extends BaseEntity {
 
     @Column(name = "priority")
     private String priority;
-
-    @Column(name = "vendor_id")
-    private UUID vendorId;
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;

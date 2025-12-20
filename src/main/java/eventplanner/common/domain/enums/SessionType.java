@@ -6,7 +6,6 @@ package eventplanner.common.domain.enums;
 public enum SessionType {
     EVENT_PLANNING,
     BUDGET_PLANNING,
-    VENDOR_MANAGEMENT,
     ATTENDEE_MANAGEMENT,
     TIMELINE_PLANNING,
     RISK_ASSESSMENT,

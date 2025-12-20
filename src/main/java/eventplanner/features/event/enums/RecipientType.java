@@ -10,11 +10,6 @@ public enum RecipientType {
     ALL_COLLABORATORS,
     
     /**
-     * Send to all vendors (EventUser with type VENDOR)
-     */
-    ALL_VENDORS,
-    
-    /**
      * Send to all guests/attendees (Attendee entities)
      */
     ALL_GUESTS,

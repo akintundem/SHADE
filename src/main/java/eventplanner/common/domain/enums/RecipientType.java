@@ -8,6 +8,5 @@ public enum RecipientType {
     ORGANIZATION,
     ALL_ATTENDEES,
     EVENT_ORGANIZERS,
-    VENDORS,
     STAFF
 }

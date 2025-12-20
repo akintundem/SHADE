@@ -1,10 +1,10 @@
 package eventplanner.common.domain.enums;
 
 /**
- * Quote status enumeration for vendor quotes
+ * Quote status enumeration
  */
 public enum QuoteStatus {
-    REQUESTED,      // Quote requested from vendor
+    REQUESTED,      // Quote requested
     RECEIVED,       // Quote received
     REVIEWED,       // Quote under review
     ACCEPTED,       // Quote accepted

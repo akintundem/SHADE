@@ -8,7 +8,6 @@ public enum EventUserType {
     COORDINATOR,
     ATTENDEE,
     VOLUNTEER,
-    VENDOR,
     SPEAKER,
     SPONSOR,
     MEDIA,

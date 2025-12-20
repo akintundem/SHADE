@@ -6,7 +6,6 @@ package eventplanner.common.domain.enums;
 public enum ResourceType {
     EVENT,
     BUDGET,
-    VENDOR,
     ROLE,
     ORGANIZATION,
     USER,

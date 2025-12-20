@@ -47,7 +47,5 @@ public class BudgetLineItemAutoSaveRequest {
     private String priority;
     
     private String notes;
-
-    private UUID vendorId;
 }
 

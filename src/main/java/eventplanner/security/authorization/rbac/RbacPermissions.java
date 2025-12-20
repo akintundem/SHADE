@@ -101,7 +101,4 @@ public final class RbacPermissions {
     public static final String USER_SESSIONS_DELETE = "user.sessions.delete";
     public static final String USER_SESSIONS_READ = "user.sessions.read";
     public static final String USER_UPDATE = "user.update";
-    public static final String VENDOR_CREATE = "vendor.create";
-    public static final String VENDOR_READ = "vendor.read";
-    public static final String VENDOR_SEARCH = "vendor.search";
 }

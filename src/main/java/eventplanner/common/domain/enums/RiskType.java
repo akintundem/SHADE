@@ -6,7 +6,6 @@ package eventplanner.common.domain.enums;
 public enum RiskType {
     WEATHER,
     VENUE,
-    VENDOR,
     ATTENDANCE,
     TECHNICAL,
     SECURITY,

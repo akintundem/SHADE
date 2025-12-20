@@ -180,7 +180,6 @@ public class BudgetService {
         if (request.getIsEssential() != null) item.setIsEssential(request.getIsEssential());
         if (request.getPriority() != null) item.setPriority(request.getPriority());
         if (request.getNotes() != null) item.setNotes(request.getNotes());
-        if (request.getVendorId() != null) item.setVendorId(request.getVendorId());
     }
 
     private boolean isLineItemEmpty(BudgetLineItem item) {

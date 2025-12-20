@@ -66,7 +66,7 @@ public enum ActionType {
     EVENT_CANCELLED,
     EVENT_RESCHEDULED,
     
-    // Vendor-specific actions
+    // Contract and payment actions
     CONTRACT_SIGNED,
     PAYMENT_MADE
 }

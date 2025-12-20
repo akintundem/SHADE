@@ -7,7 +7,6 @@ public enum RoleType {
     EVENT_LEAD,         // Project manager/event lead
     LOGISTICS,          // Logistics coordinator
     MARKETING,          // Marketing coordinator
-    VENDOR_LIAISON,     // Vendor relations
     VOLUNTEER_COORD,    // Volunteer coordination
     TECH_COORD,         // Technical coordinator
     SPONSOR_RELATIONS,  // Sponsor relations

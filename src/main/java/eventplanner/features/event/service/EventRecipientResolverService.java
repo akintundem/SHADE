@@ -62,11 +62,6 @@ public class EventRecipientResolverService {
                     allUserIds.addAll(collaborators.getUserIds());
                     allEmails.addAll(collaborators.getEmails());
                     break;
-                case ALL_VENDORS:
-                    RecipientInfo vendors = resolveVendors(eventId);
-                    allUserIds.addAll(vendors.getUserIds());
-                    allEmails.addAll(vendors.getEmails());
-                    break;
                 case ALL_GUESTS:
                     RecipientInfo guests = resolveGuests(eventId);
                     allUserIds.addAll(guests.getUserIds());
@@ -109,26 +104,6 @@ public class EventRecipientResolverService {
             .collect(Collectors.toSet());
         
         Set<String> emails = collaborators.stream()
-            .map(eu -> eu.getUser() != null ? eu.getUser().getEmail() : null)
-            .filter(Objects::nonNull)
-            .filter(email -> !email.isBlank())
-            .collect(Collectors.toSet());
-        
-        return new RecipientInfo(userIds, emails);
-    }
-
-    /**
-     * Resolve all vendors for an event
-     */
-    private RecipientInfo resolveVendors(UUID eventId) {
-        List<EventUser> vendors = eventUserRepository.findByEventIdAndUserType(eventId, EventUserType.VENDOR);
-        
-        Set<UUID> userIds = vendors.stream()
-            .map(eu -> eu.getUser() != null ? eu.getUser().getId() : null)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toSet());
-        
-        Set<String> emails = vendors.stream()
             .map(eu -> eu.getUser() != null ? eu.getUser().getEmail() : null)
             .filter(Objects::nonNull)
             .filter(email -> !email.isBlank())
