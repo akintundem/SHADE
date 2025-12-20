@@ -74,15 +74,6 @@ public class JwtValidationUtil {
         }
     }
     
-    public String getOrganizationIdFromToken(String token) {
-        try {
-            Claims claims = getClaimsFromToken(token);
-            return claims.get("organizationId", String.class);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-    
     private boolean isTokenExpired(Claims claims) {
         return claims.getExpiration().before(new java.util.Date());
     }

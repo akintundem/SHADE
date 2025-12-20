@@ -134,22 +134,6 @@ public class RbacAuthorizationService {
                     return roles;
                 }
                 roles.addAll(resolveEventRoles(context, resources));
-                // Always check if user is event owner and add ORGANIZER role
-                // This ensures event owners have access even if context doesn't have the role yet
-                if (principal != null && eventId != null) {
-                    if (authorizationService.isEventOwner(principal, eventId)) {
-                        roles.add("ORGANIZER");
-                    }
-                }
-            }
-            case ORGANIZATION -> {
-                roles.addAll(resolveOrganizationRoles(context, resources));
-                if (roles.isEmpty() && principal != null) {
-                    UUID orgId = extractUuid(resources, "organization_id");
-                    if (orgId != null && authorizationService.isOrganizationOwner(principal, orgId)) {
-                        roles.add("OWNER");
-                    }
-                }
             }
             default -> {
             }
@@ -166,17 +150,6 @@ public class RbacAuthorizationService {
             return Set.of();
         }
         return context.getEventRoles(eventId);
-    }
-
-    private Collection<String> resolveOrganizationRoles(RbacRequestContext context, Map<String, Object> resources) {
-        if (context == null) {
-            return Set.of();
-        }
-        UUID organizationId = extractUuid(resources, "organization_id");
-        if (organizationId == null) {
-            return Set.of();
-        }
-        return context.getOrganizationRoles(organizationId);
     }
 
     private boolean ownsScope(UserPrincipal principal, RbacScope scope, Map<String, Object> resources) {
@@ -220,10 +193,6 @@ public class RbacAuthorizationService {
                     }
                 }
                 yield eventId != null && authorizationService.isEventOwner(principal, eventId);
-            }
-            case ORGANIZATION -> {
-                UUID orgId = extractUuid(resources, "organization_id");
-                yield orgId != null && authorizationService.isOrganizationOwner(principal, orgId);
             }
             case PUBLIC -> true;
         };
@@ -274,16 +243,6 @@ public class RbacAuthorizationService {
                     yield true;
                 }
                 yield authorizationService.hasEventMembership(principal, eventId);
-            }
-            case ORGANIZATION -> {
-                UUID orgId = extractUuid(resources, "organization_id");
-                if (orgId == null) {
-                    yield false;
-                }
-                if (!resolveOrganizationRoles(context, resources).isEmpty()) {
-                    yield true;
-                }
-                yield authorizationService.hasOrganizationMembership(principal, orgId);
             }
             case PUBLIC -> true;
         };

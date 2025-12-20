@@ -42,7 +42,7 @@ public class Permission extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
-    private ResourceType resource; // e.g., EVENT, BUDGET, USER, ORGANIZATION
+    private ResourceType resource; // e.g., EVENT, BUDGET, USER
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
@@ -51,10 +51,6 @@ public class Permission extends BaseEntity {
     @Column(name = "is_system_permission", nullable = false)
     @Builder.Default
     private Boolean isSystemPermission = false;
-
-    @Column(name = "is_organization_permission", nullable = false)
-    @Builder.Default
-    private Boolean isOrganizationPermission = false;
 
     @Column(name = "is_event_permission", nullable = false)
     @Builder.Default

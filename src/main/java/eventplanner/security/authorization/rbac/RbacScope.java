@@ -5,7 +5,6 @@ package eventplanner.security.authorization.rbac;
  */
 public enum RbacScope {
     SYSTEM,
-    ORGANIZATION,
     EVENT,
     PUBLIC;
 

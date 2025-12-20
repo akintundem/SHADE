@@ -76,10 +76,6 @@ public final class RbacPermissions {
     public static final String EVENT_STATUS_UPDATE = "event.update";
     public static final String EVENT_UPDATE = "event.update";
     public static final String MY_EVENTS_SEARCH = "my.events.search";
-    public static final String ORGANIZATION_CREATE = "organization.create";
-    public static final String ORGANIZATION_READ = "organization.read";
-    public static final String ORGANIZATION_SEARCH = "organization.search";
-    public static final String ORGANIZATION_UPDATE = "organization.update";
     public static final String PAYMENT_CREATE = "payment.create";
     public static final String PAYMENT_PROCESS = "payment.process";
     public static final String PAYMENT_READ = "payment.read";

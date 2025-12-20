@@ -26,9 +26,6 @@ public interface PermissionRepository extends JpaRepository<Permission, java.uti
     @Query("SELECT p FROM Permission p WHERE p.isSystemPermission = true")
     List<Permission> findSystemPermissions();
     
-    @Query("SELECT p FROM Permission p WHERE p.isOrganizationPermission = true")
-    List<Permission> findOrganizationPermissions();
-    
     @Query("SELECT p FROM Permission p WHERE p.isEventPermission = true")
     List<Permission> findEventPermissions();
     

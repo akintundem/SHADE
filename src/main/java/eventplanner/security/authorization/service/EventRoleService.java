@@ -1,7 +1,5 @@
 package eventplanner.security.authorization.service;
 
-import eventplanner.security.authorization.domain.entity.OrganizationRole;
-import eventplanner.security.authorization.domain.repository.OrganizationRoleRepository;
 import eventplanner.security.authorization.domain.entity.EventRole;
 import eventplanner.security.authorization.domain.repository.EventRoleRepository;
 import eventplanner.common.domain.enums.RoleName;
@@ -24,7 +22,6 @@ import java.util.UUID;
 public class EventRoleService {
     
     private final EventRoleRepository eventRoleRepository;
-    private final OrganizationRoleRepository organizationRoleRepository;
     
     /**
      * Assign role to user for a specific event
@@ -98,39 +95,5 @@ public class EventRoleService {
      */
     public List<EventRole> getEventRoleHierarchy(UUID eventId) {
         return eventRoleRepository.findByEventIdAndIsActive(eventId, true);
-    }
-    
-    /**
-     * Assign organization role to user
-     */
-    public OrganizationRole assignOrganizationRole(UUID userId, UUID organizationId, String role, UUID assignedBy) {
-        OrganizationRole organizationRole = new OrganizationRole();
-        organizationRole.setUserId(userId);
-        organizationRole.setOrganizationId(organizationId);
-        organizationRole.setRole(role);
-        organizationRole.setAssignedBy(assignedBy);
-        organizationRole.setAssignedAt(LocalDateTime.now());
-        organizationRole.setIsActive(true);
-            
-        OrganizationRole savedRole = organizationRoleRepository.save(organizationRole);
-        log.info("Assigned organization role {} to user {} for organization {} by {}", 
-                role, userId, organizationId, assignedBy);
-        
-        return savedRole;
-    }
-    
-    /**
-     * Get user's organization roles
-     */
-    public List<OrganizationRole> getUserOrganizationRoles(UUID userId) {
-        return organizationRoleRepository.findByUserIdAndActive(userId);
-    }
-    
-    /**
-     * Check if user has organization role
-     */
-    public boolean hasOrganizationRole(UUID userId, UUID organizationId, String role) {
-        return organizationRoleRepository.findByUserIdAndOrganizationIdAndActive(userId, organizationId).stream()
-            .anyMatch(orgRole -> role.equals(orgRole.getRole()) && orgRole.getIsActive());
     }
 }

@@ -37,7 +37,7 @@ public class RolePermission extends BaseEntity {
     private Permission permission;
 
     @Column(name = "context", nullable = false, length = 20)
-    private String context; // "system", "organization", "event"
+    private String context; // "system", "event"
 
     @Column(name = "is_granted", nullable = false)
     @Builder.Default

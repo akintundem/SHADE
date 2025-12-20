@@ -2,9 +2,7 @@ package eventplanner.security.filters;
 
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.domain.entity.EventRole;
-import eventplanner.security.authorization.domain.entity.OrganizationRole;
 import eventplanner.security.authorization.domain.repository.EventRoleRepository;
-import eventplanner.security.authorization.domain.repository.OrganizationRoleRepository;
 import eventplanner.security.authorization.rbac.RbacRequestContext;
 import eventplanner.security.authorization.rbac.RbacRequestContextHolder;
 import jakarta.servlet.FilterChain;
@@ -28,14 +26,13 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Enriches the SecurityContext with organization/event roles and prepares the RBAC request context.
+ * Enriches the SecurityContext with event roles and prepares the RBAC request context.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class RbacContextFilter extends OncePerRequestFilter {
 
-    private final OrganizationRoleRepository organizationRoleRepository;
     private final EventRoleRepository eventRoleRepository;
 
     @Override
@@ -61,15 +58,8 @@ public class RbacContextFilter extends OncePerRequestFilter {
             return RbacRequestContext.builder()
                     .systemRoles(Set.of())
                     .eventRoles(Map.of())
-                    .organizationRoles(Map.of())
                     .build();
         }
-
-        Map<UUID, Set<String>> orgRoles = organizationRoleRepository.findByUserIdAndActive(userId).stream()
-                .collect(Collectors.groupingBy(
-                        OrganizationRole::getOrganizationId,
-                        Collectors.mapping(role -> role.getRole().toUpperCase(), Collectors.toSet())
-                ));
 
         Map<UUID, Set<String>> eventRoles = eventRoleRepository.findByUserId(userId).stream()
                 .filter(role -> Boolean.TRUE.equals(role.getIsActive()))
@@ -83,29 +73,15 @@ public class RbacContextFilter extends OncePerRequestFilter {
         if (principal.isSystemAdmin()) {
             systemRoles.add("SUPER_ADMIN");
         }
-        boolean hasOrganizerSignal = orgRoles.values().stream()
-                .flatMap(Set::stream)
-                .anyMatch(role -> role.equalsIgnoreCase("OWNER") || role.equalsIgnoreCase("MANAGER"))
-                || eventRoles.values().stream()
-                .flatMap(Set::stream)
-                .anyMatch(role -> role.equalsIgnoreCase("ORGANIZER"));
-        if (hasOrganizerSignal) {
-            systemRoles.add("ORGANIZER");
-        }
 
         return RbacRequestContext.builder()
                 .userId(userId)
                 .systemRoles(systemRoles)
-                .organizationRoles(orgRoles)
                 .eventRoles(eventRoles)
                 .build();
     }
 
     private void refreshAuthentication(Authentication currentAuth, UserPrincipal originalPrincipal, RbacRequestContext context) {
-        List<String> organizationRoles = context.getOrganizationRoles().values().stream()
-                .flatMap(Set::stream)
-                .distinct()
-                .toList();
         List<String> eventRoles = context.getEventRoles().values().stream()
                 .flatMap(Set::stream)
                 .distinct()
@@ -113,7 +89,6 @@ public class RbacContextFilter extends OncePerRequestFilter {
 
         UserPrincipal enriched = new UserPrincipal(
                 originalPrincipal.getUser(),
-                organizationRoles,
                 eventRoles,
                 originalPrincipal.getDeviceId()
         );

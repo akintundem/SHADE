@@ -22,21 +22,19 @@ public class UserPrincipal implements UserDetails {
     
     private final UserAccount user;
     // Context-specific roles (loaded per request)
-    private final List<String> organizationRoles;
     private final List<String> eventRoles;
     private final String deviceId;
     
     public UserPrincipal(UserAccount user) {
-        this(user, List.of(), List.of(), null);
+        this(user, List.of(), null);
     }
     
-    public UserPrincipal(UserAccount user, List<String> organizationRoles, List<String> eventRoles) {
-        this(user, organizationRoles, eventRoles, null);
+    public UserPrincipal(UserAccount user, List<String> eventRoles) {
+        this(user, eventRoles, null);
     }
     
-    public UserPrincipal(UserAccount user, List<String> organizationRoles, List<String> eventRoles, String deviceId) {
+    public UserPrincipal(UserAccount user, List<String> eventRoles, String deviceId) {
         this.user = user;
-        this.organizationRoles = organizationRoles != null ? List.copyOf(organizationRoles) : List.of();
         this.eventRoles = eventRoles != null ? List.copyOf(eventRoles) : List.of();
         this.deviceId = deviceId;
     }
@@ -45,7 +43,7 @@ public class UserPrincipal implements UserDetails {
         if (Objects.equals(this.deviceId, deviceId)) {
             return this;
         }
-        return new UserPrincipal(this.user, this.organizationRoles, this.eventRoles, deviceId);
+        return new UserPrincipal(this.user, this.eventRoles, deviceId);
     }
     
     public SystemRole getSystemRole() {
@@ -61,10 +59,6 @@ public class UserPrincipal implements UserDetails {
         
         // System-level roles
         authorities.add(new SimpleGrantedAuthority("ROLE_" + getSystemRole().name()));
-        
-        // Organization roles
-        organizationRoles.forEach(role ->
-            authorities.add(new SimpleGrantedAuthority("ORG_" + role)));
         
         // Event-specific roles
         eventRoles.forEach(role ->
@@ -123,10 +117,6 @@ public class UserPrincipal implements UserDetails {
         return user.getLastLoginAt();
     }
 
-    public List<String> getOrganizationRoles() {
-        return Collections.unmodifiableList(organizationRoles);
-    }
-
     public List<String> getEventRoles() {
         return Collections.unmodifiableList(eventRoles);
     }
@@ -161,20 +151,6 @@ public class UserPrincipal implements UserDetails {
     public boolean isSystemAdmin() {
         SystemRole role = getSystemRole();
         return role == SystemRole.SUPER_ADMIN || role == SystemRole.ADMIN;
-    }
-    
-    /**
-     * Check if user has organization admin privileges
-     */
-    public boolean isOrganizationAdmin() {
-        return organizationRoles.contains("OWNER") || organizationRoles.contains("MANAGER");
-    }
-    
-    /**
-     * Check if user has event organizer privileges
-     */
-    public boolean isEventOrganizer() {
-        return eventRoles.contains("ORGANIZER");
     }
     
     /**
