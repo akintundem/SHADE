@@ -2,6 +2,7 @@ package eventplanner.security.auth.repository;
 
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.common.domain.enums.UserStatus;
+import eventplanner.common.domain.enums.VisibilityLevel;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -31,6 +32,21 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     
     @Query("SELECT DATE(u.createdAt) as date, COUNT(u) as count FROM UserAccount u WHERE u.createdAt BETWEEN :startDate AND :endDate GROUP BY DATE(u.createdAt) ORDER BY DATE(u.createdAt)")
     List<Map<String, Object>> getUserGrowthTrend(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    @Query("SELECT u FROM UserAccount u LEFT JOIN u.settings s " +
+            "WHERE (LOWER(u.username) LIKE LOWER(CONCAT('%', :term, '%')) " +
+            "OR LOWER(u.name) LIKE LOWER(CONCAT('%', :term, '%'))) " +
+            "AND (s.searchVisibility IS NULL OR s.searchVisibility = true) " +
+            "AND (s.profileVisibility IS NULL OR s.profileVisibility <> :privateVisibility)")
+    Page<UserAccount> searchDirectoryUsers(@Param("term") String term,
+                                           @Param("privateVisibility") VisibilityLevel privateVisibility,
+                                           Pageable pageable);
+
+    @Query("SELECT u FROM UserAccount u LEFT JOIN u.settings s " +
+            "WHERE (s.searchVisibility IS NULL OR s.searchVisibility = true) " +
+            "AND (s.profileVisibility IS NULL OR s.profileVisibility <> :privateVisibility)")
+    Page<UserAccount> listDirectoryUsers(@Param("privateVisibility") VisibilityLevel privateVisibility,
+                                         Pageable pageable);
     
     Long countByStatus(UserStatus status);
 }

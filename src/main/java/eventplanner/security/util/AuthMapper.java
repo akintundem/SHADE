@@ -2,8 +2,10 @@ package eventplanner.security.util;
 
 import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.dto.res.UserSessionResponse;
+import eventplanner.security.auth.dto.res.UserSettingsResponse;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.entity.UserSession;
+import eventplanner.security.auth.entity.UserSettings;
 
 /**
  * Utility mappers for converting authentication domain entities to DTOs.
@@ -31,8 +33,39 @@ public final class AuthMapper {
                 .marketingOptIn(user.isMarketingOptIn())
                 .profilePictureUrl(user.getProfilePictureUrl())
                 .preferences(user.getPreferences())
+                .settings(toUserSettingsResponse(user.getSettings()))
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
+                .build();
+    }
+
+    private static UserSettingsResponse toUserSettingsResponse(UserSettings settings) {
+        UserSettings effective = settings != null ? settings : UserSettings.createDefault(null);
+        return UserSettingsResponse.builder()
+                .bio(effective.getBio())
+                .location(effective.getLocation())
+                .timeZone(effective.getTimeZone())
+                .preferredLanguage(effective.getPreferredLanguage())
+                .profileVisibility(effective.getProfileVisibility())
+                .searchVisibility(Boolean.TRUE.equals(effective.getSearchVisibility()))
+                .eventParticipationVisibility(effective.getEventParticipationVisibility())
+                .themePreference(effective.getThemePreference())
+                .emailNotificationsEnabled(Boolean.TRUE.equals(effective.getEmailNotificationsEnabled()))
+                .smsNotificationsEnabled(Boolean.TRUE.equals(effective.getSmsNotificationsEnabled()))
+                .pushNotificationsEnabled(Boolean.TRUE.equals(effective.getPushNotificationsEnabled()))
+                .eventInvitationsEnabled(Boolean.TRUE.equals(effective.getEventInvitationsEnabled()))
+                .eventUpdatesEnabled(Boolean.TRUE.equals(effective.getEventUpdatesEnabled()))
+                .eventRemindersEnabled(Boolean.TRUE.equals(effective.getEventRemindersEnabled()))
+                .reminderTimingMinutes(effective.getReminderTimingMinutes())
+                .rsvpNotificationsEnabled(Boolean.TRUE.equals(effective.getRsvpNotificationsEnabled()))
+                .commentNotificationsEnabled(Boolean.TRUE.equals(effective.getCommentNotificationsEnabled()))
+                .collaborationRequestsEnabled(Boolean.TRUE.equals(effective.getCollaborationRequestsEnabled()))
+                .weeklyDigestEnabled(Boolean.TRUE.equals(effective.getWeeklyDigestEnabled()))
+                .activityFeedNotificationsEnabled(Boolean.TRUE.equals(effective.getActivityFeedNotificationsEnabled()))
+                .autoAcceptInvitations(Boolean.TRUE.equals(effective.getAutoAcceptInvitations()))
+                .showInEventDirectory(Boolean.TRUE.equals(effective.getShowInEventDirectory()))
+                .exportEventDataEnabled(Boolean.TRUE.equals(effective.getExportEventDataEnabled()))
+                .mfaEnabled(Boolean.TRUE.equals(effective.getMfaEnabled()))
                 .build();
     }
 

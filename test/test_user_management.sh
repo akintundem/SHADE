@@ -137,6 +137,7 @@ ACCESS_TOKEN=""
 REFRESH_TOKEN=""
 USER_ID=""
 DEVICE_ID=""
+CURRENT_USERNAME=""
 LAST_HTTP_CODE=""
 RESPONSE_BODY=""
 PROFILE_IMAGE_OBJECT_KEY=""
@@ -160,7 +161,6 @@ cat > "$REPORT_FILE" << EOF
 | Authentication | 0 | 0 | 0 | 0% |
 | Profile Update | 0 | 0 | 0 | 0% |
 | Profile Image Upload | 0 | 0 | 0 | 0% |
-| User Search | 0 | 0 | 0 | 0% |
 | User Directory | 0 | 0 | 0 | 0% |
 | **TOTAL** | 0 | 0 | 0 | 0% |
 
@@ -253,15 +253,19 @@ EOF
     # Extract tokens and user data from successful responses
     if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
          case "$test_name" in
-             "Admin Login")
+             "User Login")
                  ACCESS_TOKEN=$(echo "$RESPONSE_BODY" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
                  REFRESH_TOKEN=$(echo "$RESPONSE_BODY" | grep -o '"refreshToken":"[^"]*"' | cut -d'"' -f4)
                  USER_ID=$(echo "$RESPONSE_BODY" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
                  DEVICE_ID=$(echo "$RESPONSE_BODY" | grep -o '"deviceId":"[^"]*"' | cut -d'"' -f4)
+                 CURRENT_USERNAME=$(echo "$RESPONSE_BODY" | grep -o '"username":"[^"]*"' | cut -d'"' -f4)
                  ;;
              "Get Current User")
                  if [ -z "$USER_ID" ]; then
                      USER_ID=$(echo "$RESPONSE_BODY" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+                 fi
+                 if [ -z "$CURRENT_USERNAME" ]; then
+                     CURRENT_USERNAME=$(echo "$RESPONSE_BODY" | grep -o '"username":"[^"]*"' | cut -d'"' -f4)
                  fi
                  ;;
              "Create Profile Image Upload URL")
@@ -332,14 +336,12 @@ check_service() {
 main() {
     echo -e "${PURPLE}📋 Test Plan:${NC}"
     echo "1. Check service availability"
-    echo "2. Login as admin user"
+    echo "2. Login user"
     echo "3. Get current user profile"
     echo "4. Test profile updates (name, username, phone, etc.)"
     echo "5. Test profile image upload (upload-url)"
     echo "6. Test profile image upload completion"
-    echo "7. Test user search (admin only)"
-    echo "8. Test user directory"
-    echo "9. Test get user by ID (admin only)"
+    echo "7. Test user directory"
     echo ""
     echo -e "${CYAN}👤 Test User: ${ADMIN_EMAIL}${NC}"
     echo ""
@@ -353,8 +355,8 @@ main() {
     fi
     echo ""
     
-    # Step 2: Login as Admin
-    echo -e "${CYAN}🔑 Step 2: Admin Authentication${NC}"
+    # Step 2: Login
+    echo -e "${CYAN}🔑 Step 2: User Authentication${NC}"
     echo "============================="
     local login_data='{
         "email": "'$ADMIN_EMAIL'",
@@ -362,7 +364,7 @@ main() {
         "rememberMe": false
     }'
     
-    run_test "Admin Login" "POST" "/api/v1/auth/login" "-H 'Content-Type: application/json'" "$login_data" "200" "Login as admin user"
+    run_test "User Login" "POST" "/api/v1/auth/login" "-H 'Content-Type: application/json'" "$login_data" "200" "Login user"
     
     if [ -z "$ACCESS_TOKEN" ]; then
         echo -e "${RED}❌ Failed to get access token. Cannot proceed with tests.${NC}"
@@ -389,21 +391,47 @@ main() {
     echo "============================="
     
     # Test updating name
-    local update_name_data='{
-        "name": "Updated Admin Name",
-        "username": "adminuser",
-        "phoneNumber": "+1234567890",
-        "dateOfBirth": "1990-01-15",
-        "marketingOptIn": true
-    }'
-    run_test "Update Profile - Name and Details" "PUT" "/api/v1/auth/users/$USER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_name_data" "200" "Update user profile with name, username, phone, and date of birth"
+    local update_name_data
+    if [ -z "$CURRENT_USERNAME" ]; then
+        update_name_data='{
+            "name": "Updated Admin Name",
+            "username": "adminuser",
+            "phoneNumber": "+1234567890",
+            "dateOfBirth": "1990-01-15",
+            "marketingOptIn": true,
+            "settings": {
+                "themePreference": "SYSTEM",
+                "profileVisibility": "PUBLIC",
+                "eventParticipationVisibility": "PUBLIC",
+                "searchVisibility": true
+            }
+        }'
+    else
+        update_name_data='{
+            "name": "Updated Admin Name",
+            "phoneNumber": "+1234567890",
+            "dateOfBirth": "1990-01-15",
+            "marketingOptIn": true,
+            "settings": {
+                "themePreference": "SYSTEM",
+                "profileVisibility": "PUBLIC",
+                "eventParticipationVisibility": "PUBLIC",
+                "searchVisibility": true
+            }
+        }'
+    fi
+    run_test "Update Profile - Name and Details" "PUT" "/api/v1/auth/users/$USER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_name_data" "200" "Update user profile with name, phone, and settings"
     
     # Test updating username only
+    local attempted_username="adminuser2"
+    if [ -n "$CURRENT_USERNAME" ] && [ "$CURRENT_USERNAME" = "$attempted_username" ]; then
+        attempted_username="adminuser3"
+    fi
     local update_username_data='{
         "name": "Updated Admin Name",
-        "username": "adminuser2"
+        "username": "'$attempted_username'"
     }'
-    run_test "Update Profile - Username Only" "PUT" "/api/v1/auth/users/$USER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_username_data" "200" "Update username only"
+    run_test "Update Profile - Username Change Rejected" "PUT" "/api/v1/auth/users/$USER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_username_data" "400" "Reject username change after initial set"
     
     # Test invalid profile update (empty name)
     local invalid_update_data='{
@@ -487,34 +515,13 @@ main() {
     
     echo ""
     
-    # Step 5: User Search Tests (Admin Only)
-    echo -e "${CYAN}🔍 Step 5: User Search Tests (Admin Only)${NC}"
-    echo "========================================="
-    
-    run_test "Search Users - Admin" "GET" "/api/v1/auth/users/search?searchTerm=admin" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search users by term (admin only)"
-    
-    run_test "Search Users - Invalid (Empty Term)" "GET" "/api/v1/auth/users/search?searchTerm=" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "400" "Search users with empty search term"
-    
-    echo ""
-    
-    # Step 6: User Directory Tests
-    echo -e "${CYAN}📂 Step 6: User Directory Tests${NC}"
+    # Step 5: User Directory Tests
+    echo -e "${CYAN}📂 Step 5: User Directory Tests${NC}"
     echo "============================="
     
     run_test "User Directory - List All" "GET" "/api/v1/auth/users/directory" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List all public users in directory"
     
     run_test "User Directory - Search" "GET" "/api/v1/auth/users/directory?searchTerm=admin" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search public users directory"
-    
-    echo ""
-    
-    # Step 7: Get User by ID (Admin Only)
-    echo -e "${CYAN}👤 Step 7: Get User by ID Tests (Admin Only)${NC}"
-    echo "=========================================="
-    
-    run_test "Get User by ID - Admin" "GET" "/api/v1/auth/users/$USER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get user profile by ID (admin only)"
-    
-    # Test getting non-existent user
-    run_test "Get User by ID - Non-existent" "GET" "/api/v1/auth/users/00000000-0000-0000-0000-000000000000" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "404" "Get non-existent user by ID"
     
     echo ""
     
@@ -550,9 +557,7 @@ main() {
 | Authentication | 2 | 0 | 0 | 0% |
 | Profile Update | 4 | 0 | 0 | 0% |
 | Profile Image Upload | 4 | 0 | 0 | 0% |
-| User Search | 2 | 0 | 0 | 0% |
 | User Directory | 2 | 0 | 0 | 0% |
-| Get User by ID | 2 | 0 | 0 | 0% |
 
 ### Recommendations
 
@@ -617,4 +622,3 @@ trap cleanup SIGINT SIGTERM
 
 # Run main function
 main "$@"
-

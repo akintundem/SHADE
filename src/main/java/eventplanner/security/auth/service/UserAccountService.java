@@ -1,11 +1,14 @@
 package eventplanner.security.auth.service;
 
 import eventplanner.security.auth.dto.req.UpdateUserProfileRequest;
+import eventplanner.security.auth.dto.req.UserSettingsUpdateRequest;
 import eventplanner.security.auth.dto.res.PublicUserResponse;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.entity.UserSettings;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.util.AuthMapper;
+import eventplanner.common.domain.enums.VisibilityLevel;
 import eventplanner.common.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -42,27 +45,37 @@ public class UserAccountService {
         UserAccount user = userAccountRepository.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Update name
-        user.setName(request.getName().trim());
+        if (request.getName() != null) {
+            String trimmedName = request.getName().trim();
+            if (trimmedName.length() < 2) {
+                throw new IllegalArgumentException("Name must be between 2 and 100 characters");
+            }
+            user.setName(trimmedName);
+        }
         
-        // Update username with uniqueness check
         if (request.getUsername() != null) {
             String normalized = normalizeUsername(request.getUsername());
             if (normalized != null) {
-                // Ensure uniqueness (case-insensitive) - allow keeping current username
-                boolean taken = userAccountRepository.existsByUsernameIgnoreCase(normalized)
-                        && (user.getUsername() == null || !user.getUsername().equalsIgnoreCase(normalized));
-                if (taken) {
-                    throw new IllegalArgumentException("Username is already taken");
+                String existing = user.getUsername();
+                if (StringUtils.hasText(existing)) {
+                    if (!existing.equalsIgnoreCase(normalized)) {
+                        throw new IllegalArgumentException("Username cannot be changed once set");
+                    }
+                } else {
+                    boolean taken = userAccountRepository.existsByUsernameIgnoreCase(normalized);
+                    if (taken) {
+                        throw new IllegalArgumentException("Username is already taken");
+                    }
+                    user.setUsername(normalized);
                 }
-                user.setUsername(normalized);
             }
         }
         
-        // Update phone number
-        user.setPhoneNumber(safeTrim(request.getPhoneNumber()));
+        if (request.getPhoneNumber() != null) {
+            String trimmedPhone = safeTrim(request.getPhoneNumber());
+            user.setPhoneNumber(StringUtils.hasText(trimmedPhone) ? trimmedPhone : null);
+        }
         
-        // Update date of birth
         if (request.getDateOfBirth() != null) {
             user.setDateOfBirth(request.getDateOfBirth());
         }
@@ -88,9 +101,16 @@ public class UserAccountService {
         if (request.getUserType() != null) {
             user.setUserType(request.getUserType());
         }
-        user.setPreferences(safeTrim(request.getPreferences()));
+        if (request.getPreferences() != null) {
+            String trimmedPreferences = safeTrim(request.getPreferences());
+            user.setPreferences(StringUtils.hasText(trimmedPreferences) ? trimmedPreferences : null);
+        }
         if (request.getMarketingOptIn() != null) {
             user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
+        }
+        if (request.getSettings() != null) {
+            UserSettings settings = getOrCreateSettings(user);
+            applySettingsUpdate(settings, request.getSettings());
         }
         
         // Auto-complete profile if it was incomplete and required fields are now present
@@ -103,6 +123,91 @@ public class UserAccountService {
 
         userAccountRepository.save(user);
         return AuthMapper.toSecureUserResponse(user);
+    }
+
+    private UserSettings getOrCreateSettings(UserAccount user) {
+        UserSettings settings = user.getSettings();
+        if (settings == null) {
+            settings = UserSettings.createDefault(user);
+            user.setSettings(settings);
+        }
+        return settings;
+    }
+
+    private void applySettingsUpdate(UserSettings settings, UserSettingsUpdateRequest request) {
+        if (request.getBio() != null) {
+            String bio = safeTrim(request.getBio());
+            settings.setBio(StringUtils.hasText(bio) ? bio : null);
+        }
+        if (request.getLocation() != null) {
+            String location = safeTrim(request.getLocation());
+            settings.setLocation(StringUtils.hasText(location) ? location : null);
+        }
+        if (request.getTimeZone() != null) {
+            String timeZone = safeTrim(request.getTimeZone());
+            settings.setTimeZone(StringUtils.hasText(timeZone) ? timeZone : null);
+        }
+        if (request.getPreferredLanguage() != null) {
+            String preferredLanguage = safeTrim(request.getPreferredLanguage());
+            settings.setPreferredLanguage(StringUtils.hasText(preferredLanguage) ? preferredLanguage : null);
+        }
+        if (request.getProfileVisibility() != null) {
+            settings.setProfileVisibility(request.getProfileVisibility());
+        }
+        if (request.getSearchVisibility() != null) {
+            settings.setSearchVisibility(request.getSearchVisibility());
+        }
+        if (request.getEventParticipationVisibility() != null) {
+            settings.setEventParticipationVisibility(request.getEventParticipationVisibility());
+        }
+        if (request.getThemePreference() != null) {
+            settings.setThemePreference(request.getThemePreference());
+        }
+        if (request.getEmailNotificationsEnabled() != null) {
+            settings.setEmailNotificationsEnabled(request.getEmailNotificationsEnabled());
+        }
+        if (request.getSmsNotificationsEnabled() != null) {
+            settings.setSmsNotificationsEnabled(request.getSmsNotificationsEnabled());
+        }
+        if (request.getPushNotificationsEnabled() != null) {
+            settings.setPushNotificationsEnabled(request.getPushNotificationsEnabled());
+        }
+        if (request.getEventInvitationsEnabled() != null) {
+            settings.setEventInvitationsEnabled(request.getEventInvitationsEnabled());
+        }
+        if (request.getEventUpdatesEnabled() != null) {
+            settings.setEventUpdatesEnabled(request.getEventUpdatesEnabled());
+        }
+        if (request.getEventRemindersEnabled() != null) {
+            settings.setEventRemindersEnabled(request.getEventRemindersEnabled());
+        }
+        if (request.getReminderTimingMinutes() != null) {
+            settings.setReminderTimingMinutes(request.getReminderTimingMinutes());
+        }
+        if (request.getRsvpNotificationsEnabled() != null) {
+            settings.setRsvpNotificationsEnabled(request.getRsvpNotificationsEnabled());
+        }
+        if (request.getCommentNotificationsEnabled() != null) {
+            settings.setCommentNotificationsEnabled(request.getCommentNotificationsEnabled());
+        }
+        if (request.getCollaborationRequestsEnabled() != null) {
+            settings.setCollaborationRequestsEnabled(request.getCollaborationRequestsEnabled());
+        }
+        if (request.getWeeklyDigestEnabled() != null) {
+            settings.setWeeklyDigestEnabled(request.getWeeklyDigestEnabled());
+        }
+        if (request.getActivityFeedNotificationsEnabled() != null) {
+            settings.setActivityFeedNotificationsEnabled(request.getActivityFeedNotificationsEnabled());
+        }
+        if (request.getAutoAcceptInvitations() != null) {
+            settings.setAutoAcceptInvitations(request.getAutoAcceptInvitations());
+        }
+        if (request.getShowInEventDirectory() != null) {
+            settings.setShowInEventDirectory(request.getShowInEventDirectory());
+        }
+        if (request.getExportEventDataEnabled() != null) {
+            settings.setExportEventDataEnabled(request.getExportEventDataEnabled());
+        }
     }
 
     private String getDefaultProfilePictureUrl() {
@@ -145,7 +250,7 @@ public class UserAccountService {
         }
 
         return userAccountRepository
-            .findByUsernameContainingIgnoreCaseOrNameContainingIgnoreCase(sanitized, sanitized, pageable)
+            .searchDirectoryUsers(sanitized, VisibilityLevel.PRIVATE, pageable)
             .map(this::toPublicUserResponse);
     }
 
@@ -153,7 +258,8 @@ public class UserAccountService {
      * Public directory listing (paginated). Intended for "suggested users" UX.
      */
     public Page<PublicUserResponse> listPublicUsers(Pageable pageable) {
-        return userAccountRepository.findAll(pageable).map(this::toPublicUserResponse);
+        return userAccountRepository.listDirectoryUsers(VisibilityLevel.PRIVATE, pageable)
+            .map(this::toPublicUserResponse);
     }
 
     private PublicUserResponse toPublicUserResponse(UserAccount user) {

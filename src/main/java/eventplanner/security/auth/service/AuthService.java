@@ -8,6 +8,7 @@ import eventplanner.security.auth.dto.res.SecureAuthResponse;
 import eventplanner.security.auth.entity.EmailVerificationToken;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.entity.UserSession;
+import eventplanner.security.auth.entity.UserSettings;
 import eventplanner.security.auth.repository.EmailVerificationTokenRepository;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.repository.UserSessionRepository;
@@ -119,6 +120,9 @@ public class AuthService {
             user = existingUserOpt.get();
             log.info("Updating unverified user account and resending verification: {}", normalizedEmail);
             user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+            if (user.getSettings() == null) {
+                user.setSettings(UserSettings.createDefault(user));
+            }
             userAccountRepository.save(user);
         } else {
             // New user - create account with minimal info (email + password only)
@@ -135,6 +139,7 @@ public class AuthService {
                 .marketingOptIn(false)
                 .userType(UserType.INDIVIDUAL)
                 .build();
+            user.setSettings(UserSettings.createDefault(user));
             userAccountRepository.save(user);
             userAccountRepository.flush();
         }

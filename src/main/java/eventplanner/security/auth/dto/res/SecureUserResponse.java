@@ -27,6 +27,7 @@ public class SecureUserResponse {
     boolean marketingOptIn;
     String profilePictureUrl;
     String preferences;
+    UserSettingsResponse settings;
     LocalDateTime createdAt;
     LocalDateTime updatedAt;
 }

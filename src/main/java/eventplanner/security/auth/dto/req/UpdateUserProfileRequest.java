@@ -1,7 +1,7 @@
 package eventplanner.security.auth.dto.req;
 
 import eventplanner.common.domain.enums.UserType;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -12,7 +12,6 @@ import java.time.LocalDate;
 @Data
 public class UpdateUserProfileRequest {
 
-    @NotBlank(message = "Name is required")
     @Size(min = 2, max = 100, message = "Name must be between 2 and 100 characters")
     @Pattern(regexp = "^[^<>]*$", message = "Name contains invalid characters")
     private String name;
@@ -37,12 +36,15 @@ public class UpdateUserProfileRequest {
 
     private Boolean acceptPrivacy;
 
-    private UserType userType = UserType.INDIVIDUAL;
+    private UserType userType;
 
     @Size(max = 2000)
     private String preferences;
 
-    private Boolean marketingOptIn = Boolean.FALSE;
+    private Boolean marketingOptIn;
+
+    @Valid
+    private UserSettingsUpdateRequest settings;
 
     @Size(max = 120)
     private String deviceId;

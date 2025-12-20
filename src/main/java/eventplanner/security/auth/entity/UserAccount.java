@@ -3,11 +3,14 @@ package eventplanner.security.auth.entity;
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.UserType;
 import eventplanner.common.domain.enums.UserStatus;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -16,6 +19,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -97,6 +101,11 @@ public class UserAccount extends BaseEntity {
     @Column(name = "profile_completed", nullable = false)
     @Builder.Default
     private Boolean profileCompleted = false;
+
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private UserSettings settings;
 
     @PrePersist
     public void onCreate() {
