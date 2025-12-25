@@ -3,7 +3,6 @@ package eventplanner.features.budget.service;
 import eventplanner.features.budget.entity.Budget;
 import eventplanner.features.budget.entity.BudgetLineItem;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -18,7 +17,6 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class BudgetExportService {
     
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -30,7 +28,6 @@ public class BudgetExportService {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
              PrintWriter writer = new PrintWriter(baos, false, StandardCharsets.UTF_8)) {
             
-            // Header section
             writer.println("Budget Export");
             writer.println("Event ID," + (budget.getEvent() != null ? budget.getEvent().getId() : "N/A"));
             writer.println("Total Budget," + formatCurrency(budget.getTotalBudget(), budget.getCurrency()));
@@ -40,7 +37,6 @@ public class BudgetExportService {
             writer.println("Created," + budget.getCreatedAt().format(DATE_FORMATTER));
             writer.println();
             
-            // Line items section
             writer.println("Line Items");
             writer.println("Category,Description,Estimated Cost,Actual Cost,Quantity,Status,Priority,Notes");
             
@@ -67,7 +63,6 @@ public class BudgetExportService {
             return baos.toByteArray();
             
         } catch (Exception e) {
-            log.error("Failed to export budget to CSV", e);
             throw new RuntimeException("Failed to export budget to CSV", e);
         }
     }
@@ -108,7 +103,6 @@ public class BudgetExportService {
             return baos.toByteArray();
             
         } catch (Exception e) {
-            log.error("Failed to generate import template", e);
             throw new RuntimeException("Failed to generate import template", e);
         }
     }
@@ -148,4 +142,3 @@ public class BudgetExportService {
         return String.format("%s %s", currency != null ? currency : "USD", formatAmount(amount));
     }
 }
-

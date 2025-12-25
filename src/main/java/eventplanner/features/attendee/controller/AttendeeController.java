@@ -7,6 +7,9 @@ import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeInviteStatus;
 import eventplanner.features.attendee.service.AttendeeInviteService;
 import eventplanner.features.attendee.service.AttendeeService;
+import eventplanner.features.ticket.dto.response.TicketResponse;
+import eventplanner.features.ticket.enums.TicketStatus;
+import eventplanner.features.ticket.service.TicketService;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
@@ -24,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Controller for attendee management operations
@@ -37,6 +41,7 @@ public class AttendeeController {
 	private final AttendeeService attendeeService;
 	private final AttendeeInviteService inviteService;
 	private final AuthorizationService authorizationService;
+	private final TicketService ticketService;
 
 	// ==================== Individual Attendee CRUD Operations ====================
 
@@ -215,6 +220,53 @@ public class AttendeeController {
 				return ResponseEntity.noContent().build();
 			}
 			
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+		}
+	}
+
+	// ==================== Get Tickets for Attendee ====================
+
+	@GetMapping("/{id}/tickets")
+	@Operation(summary = "Get tickets for attendee", 
+		description = "Get all tickets issued to a specific attendee. Optionally filter by event and status.")
+	@RequiresPermission(value = RbacPermissions.TICKET_READ, resources = {"attendance_id=#id"})
+	public ResponseEntity<List<TicketResponse>> getTicketsByAttendee(
+			@PathVariable String id,
+			@RequestParam(required = false) UUID eventId,
+			@RequestParam(required = false) TicketStatus status,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			UUID attendeeId = UUID.fromString(id);
+			
+			// Verify attendee exists and user can access the event
+			Attendee attendee = attendeeService.getAttendeeById(attendeeId);
+			if (attendee.getEvent() == null) {
+				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for attendee");
+			}
+			UUID attendeeEventId = attendee.getEvent().getId();
+			if (!authorizationService.canAccessEvent(principal, attendeeEventId)) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+					"Access denied to event: " + attendeeEventId);
+			}
+			
+			List<TicketResponse> tickets = ticketService.getTicketsByAttendeeId(attendeeId);
+			
+			// Filter by eventId if provided
+			if (eventId != null) {
+				tickets = tickets.stream()
+					.filter(t -> eventId.equals(t.getEventId()))
+					.collect(Collectors.toList());
+			}
+			
+			// Filter by status if provided
+			if (status != null) {
+				tickets = tickets.stream()
+					.filter(t -> status.equals(t.getStatus()))
+					.collect(Collectors.toList());
+			}
+
+			return ResponseEntity.ok(tickets);
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
 		}

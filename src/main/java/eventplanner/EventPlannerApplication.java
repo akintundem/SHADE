@@ -17,6 +17,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableJpaRepositories(basePackages = {
     "eventplanner.features.event.repository",
     "eventplanner.features.attendee.repository",
+    "eventplanner.features.ticket.repository",
     "eventplanner.features.timeline.repository",
     "eventplanner.features.budget.repository",
     "eventplanner.features.collaboration.repository",
@@ -29,6 +30,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EntityScan(basePackages = {
     "eventplanner.features.event.entity",
     "eventplanner.features.attendee.entity",
+    "eventplanner.features.ticket.entity",
     "eventplanner.features.timeline.entity",
     "eventplanner.features.budget.entity",
     "eventplanner.features.collaboration.entity",

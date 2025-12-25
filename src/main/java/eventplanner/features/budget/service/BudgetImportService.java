@@ -3,7 +3,6 @@ package eventplanner.features.budget.service;
 import eventplanner.features.budget.dto.request.BudgetLineItemAutoSaveRequest;
 import eventplanner.features.budget.dto.request.BulkLineItemRequest;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,7 +19,6 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class BudgetImportService {
     
     /**
@@ -36,24 +34,19 @@ public class BudgetImportService {
             boolean inDataSection = false;
             
             while ((line = reader.readLine()) != null) {
-                // Skip comments and empty lines
                 if (line.trim().isEmpty() || line.trim().startsWith("#")) {
                     continue;
                 }
                 
-                // Parse metadata (currently unused but available for future use)
                 if (line.startsWith("Currency,")) {
-                    // String currency = line.split(",")[1].trim();
                     continue;
                 }
                 
-                // Skip header row
                 if (line.startsWith("Category,Description")) {
                     inDataSection = true;
                     continue;
                 }
                 
-                // Parse data rows
                 if (inDataSection) {
                     BudgetLineItemAutoSaveRequest item = parseLineItem(line);
                     if (item != null) {
@@ -70,12 +63,12 @@ public class BudgetImportService {
             request.setBudgetId(budgetId);
             request.setLineItems(lineItems);
             
-            log.info("Successfully imported {} line items from CSV", lineItems.size());
             return request;
             
+        } catch (IllegalArgumentException e) {
+            throw e;
         } catch (Exception e) {
-            log.error("Failed to import budget from CSV", e);
-            throw new RuntimeException("Failed to import budget from CSV: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to import budget from CSV. Please check the file format.", e);
         }
     }
     
@@ -83,14 +76,13 @@ public class BudgetImportService {
         try {
             String[] parts = parseCSVLine(line);
             if (parts.length < 3) {
-                return null; // Invalid row
+                return null;
             }
             
             BudgetLineItemAutoSaveRequest item = new BudgetLineItemAutoSaveRequest();
             item.setCategoryName(parts[0].trim());
             item.setDescription(parts.length > 1 ? parts[1].trim() : "");
             
-            // Parse estimated cost
             if (parts.length > 2 && !parts[2].trim().isEmpty()) {
                 try {
                     item.setEstimatedCost(new BigDecimal(parts[2].trim()));
@@ -99,7 +91,6 @@ public class BudgetImportService {
                 }
             }
             
-            // Parse actual cost
             if (parts.length > 3 && !parts[3].trim().isEmpty()) {
                 try {
                     item.setActualCost(new BigDecimal(parts[3].trim()));
@@ -108,7 +99,6 @@ public class BudgetImportService {
                 }
             }
             
-            // Parse quantity
             if (parts.length > 4 && !parts[4].trim().isEmpty()) {
                 try {
                     item.setQuantity(Integer.parseInt(parts[4].trim()));
@@ -120,7 +110,6 @@ public class BudgetImportService {
             return item;
             
         } catch (Exception e) {
-            log.warn("Failed to parse line: {}", line, e);
             return null;
         }
     }
@@ -150,4 +139,3 @@ public class BudgetImportService {
         return result.toArray(new String[0]);
     }
 }
-

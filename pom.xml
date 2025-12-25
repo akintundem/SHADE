@@ -148,6 +148,14 @@
             <version>24.16.0</version>
         </dependency>
 
+        <!-- JavaMoney (JSR 354) for currency and monetary operations -->
+        <dependency>
+            <groupId>org.javamoney</groupId>
+            <artifactId>moneta</artifactId>
+            <version>1.4.4</version>
+            <type>pom</type>
+        </dependency>
+
         <!-- Caching -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>

@@ -161,18 +161,19 @@ public class RateLimitingFilter implements Filter {
         return builder.length() == 0 ? "/" : builder.toString();
     }
 
+    /**
+     * Sends rate limit exceeded response without exposing sensitive identifiers.
+     */
     private void sendRateLimitExceededResponse(HttpServletResponse response, String rateLimitKey, String endpoint) 
             throws IOException {
         response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
         response.setContentType("application/json");
         response.setHeader("Retry-After", "60"); // Retry after 1 minute
         
-        String keyType = rateLimitKey.startsWith("user:") ? "user" : "IP";
-        String keyValue = rateLimitKey.substring(rateLimitKey.indexOf(":") + 1);
-        
+        // Do not expose user ID, IP address, or endpoint details to prevent information leakage
         response.getWriter().write(String.format(
-            "{\"error\":\"Rate limit exceeded\",\"message\":\"Too many requests from %s %s for endpoint %s\",\"status\":429,\"timestamp\":\"%s\",\"retryAfter\":60}",
-            keyType, keyValue, endpoint, java.time.Instant.now()
+            "{\"error\":\"Rate limit exceeded\",\"message\":\"Too many requests. Please try again later.\",\"status\":429,\"timestamp\":\"%s\",\"retryAfter\":60}",
+            java.time.Instant.now()
         ));
     }
 }

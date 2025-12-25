@@ -71,8 +71,29 @@ public class SecurityConfig {
             configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://localhost:8080"));
         }
         
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+        // OWASP: Explicitly whitelist allowed headers instead of using wildcard
+        configuration.setAllowedHeaders(Arrays.asList(
+            "Authorization", 
+            "Content-Type", 
+            "Accept", 
+            "Origin",
+            "X-Requested-With",
+            "X-Device-ID",
+            "X-API-Key",
+            "If-Match",
+            "If-None-Match",
+            "Idempotency-Key"
+        ));
+        // Expose rate limit and security headers to client
+        configuration.setExposedHeaders(Arrays.asList(
+            "X-RateLimit-Limit-Minute",
+            "X-RateLimit-Remaining-Minute",
+            "X-RateLimit-Limit-Hour",
+            "X-RateLimit-Remaining-Hour",
+            "ETag",
+            "X-Idempotency-Replay"
+        ));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
         

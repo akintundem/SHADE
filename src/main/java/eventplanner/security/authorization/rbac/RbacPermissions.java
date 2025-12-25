@@ -96,6 +96,14 @@ public final class RbacPermissions {
     public static final String TIMELINE_TASK_READ = "timeline.task.read";
     public static final String TIMELINE_TASK_UPDATE = "timeline.task.update";
     public static final String TIMELINE_WORKBACK_GENERATE = "timeline.workback.generate";
+    public static final String TICKET_CANCEL = "ticket.cancel";
+    public static final String TICKET_CREATE = "ticket.create";
+    public static final String TICKET_READ = "ticket.read";
+    public static final String TICKET_TYPE_CREATE = "ticket.type.create";
+    public static final String TICKET_TYPE_DELETE = "ticket.type.delete";
+    public static final String TICKET_TYPE_READ = "ticket.type.read";
+    public static final String TICKET_TYPE_UPDATE = "ticket.type.update";
+    public static final String TICKET_VALIDATE = "ticket.validate";
     public static final String USER_READ = "user.read";
     public static final String USER_SEARCH = "user.search";
     public static final String USER_SESSIONS_DELETE = "user.sessions.delete";

@@ -76,7 +76,7 @@ public class AccountRecoveryService {
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Password validation failed: " + e.getMessage());
         } catch (Exception e) {
-            throw new RuntimeException("Failed to change password: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to change password. Please try again.", e);
         }
     }
 
@@ -123,13 +123,28 @@ public class AccountRecoveryService {
         return true;
     }
 
+    /**
+     * Resends email verification. Returns a consistent message to prevent account enumeration.
+     * This method intentionally does not reveal whether an email exists or its verification status.
+     * OWASP: Prevents account enumeration attacks (A01:2021 - Broken Access Control)
+     */
     public String resendVerification(ResendEmailVerificationRequest request) {
         String normalizedEmail = normalizeEmail(request.getEmail());
-        UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizedEmail)
-                .orElseThrow(() -> new IllegalArgumentException("Email not found. Please check your email address."));
+        // Consistent response message to prevent account enumeration
+        String safeMessage = "If an account with this email exists and is not yet verified, a verification email will be sent.";
         
+        java.util.Optional<UserAccount> userOpt = userAccountRepository.findByEmailIgnoreCase(normalizedEmail);
+        
+        // If user doesn't exist, return early with safe message (no info leak)
+        if (userOpt.isEmpty()) {
+            return safeMessage;
+        }
+        
+        UserAccount user = userOpt.get();
+        
+        // If already verified, return early with safe message (no info leak about verification status)
         if (user.isEmailVerified()) {
-            throw new IllegalArgumentException("Email is already verified. You can log in directly.");
+            return safeMessage;
         }
         
         // Invalidate existing unused tokens for this user
@@ -169,7 +184,7 @@ public class AccountRecoveryService {
         
         notificationService.send(notificationRequest);
         
-        return "Verification email sent. Please check your inbox and verify your email before logging in.";
+        return safeMessage;
     }
 
     /**

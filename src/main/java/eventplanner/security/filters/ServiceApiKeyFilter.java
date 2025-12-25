@@ -13,6 +13,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.security.MessageDigest;
 import java.util.Map;
 
 @Component
@@ -51,13 +52,23 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
         }
 
         // If API key is present, it must be valid
-        if (!StringUtils.hasText(expectedApiKey) || !apiKey.equals(expectedApiKey)) {
+        if (!StringUtils.hasText(expectedApiKey) || !constantTimeEquals(apiKey, expectedApiKey)) {
             sendForbiddenResponse(response, "Invalid service API key", request.getRequestURI());
             return;
         }
 
         // API key is valid, continue
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Constant-time string comparison to prevent timing attacks.
+     */
+    private boolean constantTimeEquals(String a, String b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(a.getBytes(), b.getBytes());
     }
 
     private void sendForbiddenResponse(HttpServletResponse response, String message, String path) throws IOException {
