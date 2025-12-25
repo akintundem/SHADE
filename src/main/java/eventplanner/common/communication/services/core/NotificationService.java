@@ -10,7 +10,7 @@ import eventplanner.common.communication.services.core.dto.NotificationResponse;
 import eventplanner.common.communication.services.core.dto.PushResult;
 import eventplanner.common.domain.enums.CommunicationStatus;
 import eventplanner.common.domain.enums.CommunicationType;
-import eventplanner.common.domain.enums.RecipientType;
+import eventplanner.common.communication.model.CommunicationRecipientType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -79,7 +79,7 @@ public class NotificationService {
             communication.setEventId(eventId);
         }
         communication.setCommunicationType(type);
-        communication.setRecipientType(RecipientType.USER);
+        communication.setRecipientType(CommunicationRecipientType.USER);
         communication.setSubject(subject);
         communication.setStatus(CommunicationStatus.PENDING);
         

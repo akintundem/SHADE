@@ -233,23 +233,6 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(ex.getStatusCode()).body(errorResponse);
     }
 
-    @ExceptionHandler(eventplanner.common.qrcode.exception.QRCodeGenerationException.class)
-    public ResponseEntity<ErrorResponse> handleQRCodeGenerationException(
-            eventplanner.common.qrcode.exception.QRCodeGenerationException ex, WebRequest request) {
-        
-        log.error("QR code generation failed: {}", ex.getMessage(), ex);
-        
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
-                .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
-                .error("QR Code Generation Failed")
-                .message(isDevelopmentEnvironment() ? ex.getMessage() : "Failed to generate QR code image")
-                .path(request.getDescription(false).replace("uri=", ""))
-                .build();
-        
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-    }
-
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex, WebRequest request) {

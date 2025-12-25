@@ -5,8 +5,6 @@ import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.domain.enums.CommunicationType;
 import eventplanner.common.exception.ApiException;
 import eventplanner.common.exception.ResourceNotFoundException;
-import eventplanner.common.qrcode.model.QRCodeGenerationResult;
-import eventplanner.common.qrcode.service.BrandedQRCodeService;
 import eventplanner.features.ticket.dto.request.IssueTicketRequest;
 import eventplanner.features.ticket.dto.request.ValidateTicketRequest;
 import eventplanner.features.ticket.dto.response.TicketResponse;
@@ -54,7 +52,6 @@ public class TicketService {
     private final AttendeeRepository attendeeRepository;
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
-    private final BrandedQRCodeService qrCodeService;
     private final NotificationService notificationService;
 
     @Value("${app.ticket.qr-secret:default-secret-key-change-in-production}")
@@ -181,8 +178,9 @@ public class TicketService {
             if (ticketType.getPrice() == null) {
                 ticket.issue(issuedBy);
             }
-            // Generate QR code
-            generateQrCodeImage(ticket);
+            // Generate QR code data (wallet apps will render the actual QR code)
+            String qrData = generateQrCodeData(ticket);
+            ticket.setQrCodeData(qrData);
         }
         savedTickets = ticketRepository.saveAll(savedTickets);
 
@@ -345,26 +343,6 @@ public class TicketService {
     }
 
     /**
-     * Generate QR code image and store in ticket.
-     */
-    private void generateQrCodeImage(Ticket ticket) {
-        try {
-            String qrData = generateQrCodeData(ticket);
-            ticket.setQrCodeData(qrData);
-
-            // Generate QR code image
-            QRCodeGenerationResult qrResult = qrCodeService.generateForAttendee(qrData);
-            
-            // Store base64 image
-            ticket.setQrCodeImageBase64(qrResult.getBase64DataUri());
-            
-        } catch (Exception e) {
-            throw new ApiException("QR_CODE_GENERATION_FAILED", 
-                "Failed to generate QR code", 500);
-        }
-    }
-
-    /**
      * Create a new ticket entity.
      * Supports both attendee-based tickets and email-only tickets.
      */
@@ -472,8 +450,6 @@ public class TicketService {
             .attendeeEmail(ticket.getAttendee() != null ? ticket.getAttendee().getEmail() : ticket.getOwnerEmail())
             .status(ticket.getStatus())
             .qrCodeData(ticket.getQrCodeData())
-            .qrCodeImageBase64(ticket.getQrCodeImageBase64())
-            .qrCodeImageUrl(ticket.getQrCodeImageUrl())
             .pendingAt(ticket.getPendingAt())
             .pendingExpirationTime(ticket.getPendingExpirationTime())
             .issuedAt(ticket.getIssuedAt())

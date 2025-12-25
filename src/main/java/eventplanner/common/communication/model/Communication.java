@@ -3,7 +3,6 @@ package eventplanner.common.communication.model;
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.CommunicationStatus;
 import eventplanner.common.domain.enums.CommunicationType;
-import eventplanner.common.domain.enums.RecipientType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -33,7 +32,7 @@ public class Communication extends BaseEntity {
     
     @Enumerated(EnumType.STRING)
     @Column(name = "recipient_type")
-    private RecipientType recipientType;
+    private CommunicationRecipientType recipientType;
     
     @Column(name = "recipient_id")
     private UUID recipientId;
@@ -90,7 +89,7 @@ public class Communication extends BaseEntity {
     @Column(name = "channel")
     private String channel; // For logging: "email", "push", "sms"
     
-    public Communication(UUID eventId, CommunicationType communicationType, RecipientType recipientType, String subject, String content) {
+    public Communication(UUID eventId, CommunicationType communicationType, CommunicationRecipientType recipientType, String subject, String content) {
         this.eventId = eventId;
         this.communicationType = communicationType;
         this.recipientType = recipientType;

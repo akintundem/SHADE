@@ -32,8 +32,6 @@ public class TicketResponse {
     private String attendeeEmail;
     private TicketStatus status;
     private String qrCodeData;
-    private String qrCodeImageBase64;
-    private String qrCodeImageUrl;
     private LocalDateTime pendingAt;
     private LocalDateTime pendingExpirationTime;
     private LocalDateTime issuedAt;

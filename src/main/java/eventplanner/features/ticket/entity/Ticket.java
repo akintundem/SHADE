@@ -29,7 +29,6 @@ import java.util.UUID;
     @Index(name = "idx_tickets_attendee_id", columnList = "attendee_id"),
     @Index(name = "idx_tickets_ticket_type_id", columnList = "ticket_type_id"),
     @Index(name = "idx_tickets_status", columnList = "status"),
-    @Index(name = "idx_tickets_qr_code_data", columnList = "qr_code_data"),
     @Index(name = "idx_tickets_event_status", columnList = "event_id, status")
 })
 @Data
@@ -92,24 +91,11 @@ public class Ticket extends BaseEntity {
     /**
      * QR code data string for validation.
      * Format: ticket:{ticketId}:{ticketNumber}:{eventId}:{hash}
+     * Note: Wallet apps (Apple/Google) render the actual QR code from this data.
      */
     @NotBlank(message = "QR code data is required")
     @Column(name = "qr_code_data", nullable = false, columnDefinition = "TEXT")
     private String qrCodeData;
-
-    /**
-     * Base64 encoded QR code image for immediate display.
-     * Optional - can be generated on demand.
-     */
-    @Column(name = "qr_code_image_base64", columnDefinition = "TEXT")
-    private String qrCodeImageBase64;
-
-    /**
-     * URL to QR code image if stored externally.
-     */
-    @Size(max = 500, message = "QR code image URL must not exceed 500 characters")
-    @Column(name = "qr_code_image_url", length = 500)
-    private String qrCodeImageUrl;
 
     @Column(name = "pending_at")
     private LocalDateTime pendingAt;
