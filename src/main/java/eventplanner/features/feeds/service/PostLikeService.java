@@ -97,18 +97,4 @@ public class PostLikeService {
     public long getLikeCount(UUID postId) {
         return likeRepository.countByPostId(postId);
     }
-    
-    public boolean isLiked(EventFeedPost post, UserAccount user) {
-        if (post == null || user == null) {
-            return false;
-        }
-        return likeRepository.existsByPostAndUser(post, user);
-    }
-
-    public long getLikeCount(EventFeedPost post) {
-        if (post == null) {
-            return 0;
-        }
-        return likeRepository.countByPost(post);
-    }
 }

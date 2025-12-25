@@ -42,9 +42,6 @@ public class BudgetService {
         return budgetRepository.findByEventId(eventId);
     }
 
-    public Optional<Budget> getById(UUID budgetId) {
-        return budgetRepository.findById(budgetId);
-    }
 
     private static final List<String> STANDARD_CATEGORIES = List.of(
         "Venue & Facilities", "Catering & Food", "Marketing & Promotion",
@@ -223,11 +220,7 @@ public class BudgetService {
         return categoryRepository.findByBudgetIdOrderByDisplayOrderAsc(budgetId);
     }
     
-    public Optional<BudgetCategory> getCategory(UUID categoryId) {
-        return categoryRepository.findById(categoryId);
-    }
-    
-    public void recalculateCategoryTotals(UUID categoryId) {
+    private void recalculateCategoryTotals(UUID categoryId) {
         BudgetCategory category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new RuntimeException("Category not found"));
         

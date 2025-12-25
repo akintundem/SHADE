@@ -268,17 +268,6 @@ public class TicketService {
     }
 
     /**
-     * Get ticket by ID.
-     */
-    @Transactional(readOnly = true)
-    public TicketResponse getTicketById(UUID id) {
-        Ticket ticket = ticketRepository.findById(id)
-            .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + id));
-
-        return toResponse(ticket);
-    }
-
-    /**
      * Get wallet-ready data for a ticket.
      */
     @Transactional(readOnly = true)
