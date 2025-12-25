@@ -148,7 +148,7 @@ public class TicketService {
             ? userAccountRepository.findById(principal.getId()).orElse(null)
             : null;
 
-        // Create tickets
+        // Create tickets (QR code and ticket number are generated in createTicket)
         List<Ticket> tickets = new ArrayList<>();
         for (int i = 0; i < request.getQuantity(); i++) {
             Ticket ticket = createTicket(event, ticketType, attendee, request.getOwnerEmail(), request.getOwnerName(), issuedBy);
@@ -178,11 +178,12 @@ public class TicketService {
             if (ticketType.getPrice() == null) {
                 ticket.issue(issuedBy);
             }
-            // Generate QR code data (wallet apps will render the actual QR code)
-            String qrData = generateQrCodeData(ticket);
-            ticket.setQrCodeData(qrData);
         }
-        savedTickets = ticketRepository.saveAll(savedTickets);
+        
+        // Save any status changes
+        if (ticketType.getPrice() == null) {
+            savedTickets = ticketRepository.saveAll(savedTickets);
+        }
 
         // Send notifications if requested
         if (Boolean.TRUE.equals(request.getSendEmail()) || Boolean.TRUE.equals(request.getSendPushNotification())) {
@@ -359,20 +360,42 @@ public class TicketService {
             ticket.setOwnerName(ownerName);
         }
         
-        ticket.setStatus(ticketType.getPrice() == null ? TicketStatus.PENDING : TicketStatus.PENDING);
+        ticket.setStatus(TicketStatus.PENDING);
         
-        // Generate ticket number (will be set after save to get ID)
-        // We'll update it after first save
-        ticket.setTicketNumber(UUID.randomUUID().toString()); // Temporary
+        // Generate a unique ID for ticket number and QR code generation
+        UUID ticketId = UUID.randomUUID();
         
-        // Save to get ID
-        Ticket saved = ticketRepository.save(ticket);
+        // Generate ticket number using the pre-generated ID
+        String ticketNumber = generateTicketNumber(event.getId(), ticketId);
+        ticket.setTicketNumber(ticketNumber);
         
-        // Generate proper ticket number
-        String ticketNumber = generateTicketNumber(event.getId(), saved.getId());
-        saved.setTicketNumber(ticketNumber);
+        // Generate QR code data before save (required by @NotBlank constraint)
+        String qrData = generateQrCodeDataForNewTicket(ticketId, ticketNumber, event.getId());
+        ticket.setQrCodeData(qrData);
         
-        return saved;
+        return ticket;
+    }
+    
+    /**
+     * Generate QR code data for a new ticket (before it has been saved).
+     */
+    private String generateQrCodeDataForNewTicket(UUID ticketId, String ticketNumber, UUID eventId) {
+        try {
+            String data = String.format("ticket:%s:%s:%s",
+                ticketId.toString(),
+                ticketNumber,
+                eventId.toString());
+
+            // Generate hash
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String hashInput = ticketId.toString() + ticketNumber + eventId.toString() + qrSecretKey;
+            byte[] hashBytes = digest.digest(hashInput.getBytes(StandardCharsets.UTF_8));
+            String hash = bytesToHex(hashBytes).substring(0, 8);
+
+            return data + ":" + hash;
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("Failed to generate QR code hash", e);
+        }
     }
 
     /**

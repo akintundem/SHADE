@@ -1130,6 +1130,14 @@ policy:
         - attendee.qrcode.scan
         - attendee.read
         - attendee.validate
+        - ticket.cancel
+        - ticket.create
+        - ticket.read
+        - ticket.type.create
+        - ticket.type.delete
+        - ticket.type.read
+        - ticket.type.update
+        - ticket.validate
         - budget.analytics.read
         - budget.approve
         - budget.create
@@ -1192,6 +1200,14 @@ policy:
         - attendee.qrcode.scan
         - attendee.read
         - attendee.validate
+        - ticket.cancel
+        - ticket.create
+        - ticket.read
+        - ticket.type.create
+        - ticket.type.delete
+        - ticket.type.read
+        - ticket.type.update
+        - ticket.validate
         - budget.analytics.read
         - budget.approve
         - budget.create
