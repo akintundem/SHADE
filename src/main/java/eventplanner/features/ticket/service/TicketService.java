@@ -291,12 +291,22 @@ public class TicketService {
 
     /**
      * Get tickets for an event with pagination and filtering.
+     * Supports filtering by ticketId (for single ticket lookup), status, and ticketTypeId.
      */
     @Transactional(readOnly = true)
-    public Page<TicketResponse> getTicketsByEventId(UUID eventId, TicketStatus status, Pageable pageable) {
-        Page<Ticket> tickets = status != null
-            ? ticketRepository.findByEventIdAndStatus(eventId, status, pageable)
-            : ticketRepository.findByEventId(eventId, pageable);
+    public Page<TicketResponse> getTicketsByEventId(UUID eventId, UUID ticketId, TicketStatus status, 
+                                                     UUID ticketTypeId, Pageable pageable) {
+        // If ticketId is provided, return single ticket in a Page wrapper
+        if (ticketId != null) {
+            Ticket ticket = ticketRepository.findByIdAndEventId(ticketId, eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
+            return new org.springframework.data.domain.PageImpl<>(
+                List.of(toResponse(ticket)), pageable, 1);
+        }
+
+        // Otherwise, return filtered list
+        Page<Ticket> tickets = ticketRepository.findByEventIdWithFilters(
+            eventId, status, ticketTypeId, pageable);
 
         return tickets.map(this::toResponse);
     }
@@ -422,7 +432,6 @@ public class TicketService {
             Ticket firstTicket = entry.getValue().get(0);
             Attendee attendee = firstTicket.getAttendee();
             String email = attendee != null ? attendee.getEmail() : firstTicket.getOwnerEmail();
-            String name = attendee != null ? attendee.getName() : firstTicket.getOwnerName();
             
             try {
                 if (Boolean.TRUE.equals(sendEmail) && email != null) {
@@ -462,7 +471,6 @@ public class TicketService {
      * Convert Ticket entity to TicketResponse DTO.
      */
     public TicketResponse toResponse(Ticket ticket) {
-        TicketWalletResponse wallet = buildWalletResponse(ticket);
         return TicketResponse.builder()
             .id(ticket.getId())
             .ticketNumber(ticket.getTicketNumber())
@@ -477,7 +485,6 @@ public class TicketService {
             .qrCodeData(ticket.getQrCodeData())
             .qrCodeImageBase64(ticket.getQrCodeImageBase64())
             .qrCodeImageUrl(ticket.getQrCodeImageUrl())
-            .wallet(wallet)
             .pendingAt(ticket.getPendingAt())
             .pendingExpirationTime(ticket.getPendingExpirationTime())
             .issuedAt(ticket.getIssuedAt())

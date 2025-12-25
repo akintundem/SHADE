@@ -12,6 +12,7 @@ import java.util.UUID;
 
 /**
  * Response DTO for ticket information.
+ * For wallet pass data, use the dedicated GET /{id}/wallet-pass endpoint.
  */
 @Data
 @Builder
@@ -31,14 +32,13 @@ public class TicketResponse {
     private String attendeeEmail;
     private TicketStatus status;
     private String qrCodeData;
-    private String qrCodeImageBase64; // Base64 encoded QR code image
-    private String qrCodeImageUrl; // URL to QR code image if stored externally
-    private TicketWalletResponse wallet;
-    private LocalDateTime pendingAt; // When ticket entered PENDING status
-    private LocalDateTime pendingExpirationTime; // When pending ticket expires (15 minutes after pendingAt)
+    private String qrCodeImageBase64;
+    private String qrCodeImageUrl;
+    private LocalDateTime pendingAt;
+    private LocalDateTime pendingExpirationTime;
     private LocalDateTime issuedAt;
     private LocalDateTime validatedAt;
-    private Boolean canBeValidated; // Computed: true if ticket can be validated
+    private Boolean canBeValidated;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

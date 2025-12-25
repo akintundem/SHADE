@@ -43,11 +43,6 @@ public class TicketExpirationService {
                 return;
             }
 
-
-
-            int expiredCount = 0;
-            int errorCount = 0;
-
             for (Ticket ticket : expiredTickets) {
                 try {
                     // Cancel the expired ticket
@@ -58,14 +53,9 @@ public class TicketExpirationService {
                     if (ticket.getTicketType() != null && ticket.getTicketType().getPrice() != null) {
                         ticketTypeRepository.decrementQuantityReserved(
                             ticket.getTicketType().getId(), 1);
-
                     }
-
-                    expiredCount++;
-
-                } catch (Exception e) {
-                    errorCount++;
-
+                } catch (Exception ignored) {
+                    // Continue processing other tickets if one fails
                 }
             }
 

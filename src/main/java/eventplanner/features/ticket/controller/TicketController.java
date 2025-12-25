@@ -83,27 +83,15 @@ public class TicketController {
         }
     }
 
-    @GetMapping("/{id}")
-    @Operation(summary = "Get ticket details", 
-        description = "Get detailed information about a specific ticket including QR code.")
-    @RequiresPermission(value = RbacPermissions.TICKET_READ, resources = {"ticket_id=#id"})
-    public ResponseEntity<TicketResponse> getTicket(
-            @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            TicketResponse response = ticketService.getTicketById(id);
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-        }
-    }
-
     @GetMapping("/events/{eventId}")
-    @Operation(summary = "List tickets for event", 
-        description = "Get all tickets for an event with pagination and filtering.")
+    @Operation(summary = "Get tickets for event", 
+        description = "Get tickets for an event with pagination and filtering. " +
+                     "Use 'ticketId' filter to get a specific ticket by ID. " +
+                     "Supports filtering by status and ticketTypeId.")
     @RequiresPermission(value = RbacPermissions.TICKET_READ, resources = {"event_id=#eventId"})
     public ResponseEntity<Page<TicketResponse>> getTicketsByEvent(
             @PathVariable UUID eventId,
+            @RequestParam(required = false) UUID ticketId,
             @RequestParam(required = false) TicketStatus status,
             @RequestParam(required = false) UUID ticketTypeId,
             @RequestParam(required = false, defaultValue = "0") int page,
@@ -127,10 +115,8 @@ public class TicketController {
                 ? Sort.Direction.ASC : Sort.Direction.DESC;
             Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
 
-            Page<TicketResponse> tickets = ticketService.getTicketsByEventId(eventId, status, pageable);
-            
-            // Filter by ticketTypeId if provided (client-side filter for now)
-            // TODO: Add repository method for ticketTypeId filtering
+            Page<TicketResponse> tickets = ticketService.getTicketsByEventId(
+                eventId, ticketId, status, ticketTypeId, pageable);
 
             return ResponseEntity.ok(tickets);
         } catch (IllegalArgumentException e) {

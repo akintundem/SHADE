@@ -20,18 +20,6 @@ public interface AttendeeInviteRepository extends JpaRepository<AttendeeInvite, 
 
     List<AttendeeInvite> findByEventId(UUID eventId);
 
-    @Query("SELECT i FROM AttendeeInvite i WHERE i.invitee.id = :inviteeUserId AND i.status = :status ORDER BY i.createdAt DESC")
-    List<AttendeeInvite> findByInviteeUserIdAndStatusOrderByCreatedAtDesc(@Param("inviteeUserId") UUID inviteeUserId, @Param("status") AttendeeInviteStatus status);
-
-    @Query("SELECT i FROM AttendeeInvite i WHERE i.event.id = :eventId AND i.invitee.id = :inviteeUserId AND i.status = :status ORDER BY i.createdAt DESC")
-    Optional<AttendeeInvite> findFirstByEventIdAndInviteeUserIdAndStatusOrderByCreatedAtDesc(
-            @Param("eventId") UUID eventId, @Param("inviteeUserId") UUID inviteeUserId, @Param("status") AttendeeInviteStatus status
-    );
-
-    Optional<AttendeeInvite> findFirstByEventIdAndInviteeEmailIgnoreCaseAndStatusOrderByCreatedAtDesc(
-            UUID eventId, String inviteeEmail, AttendeeInviteStatus status
-    );
-
     Optional<AttendeeInvite> findByTokenHash(String tokenHash);
 
     @Query("""
