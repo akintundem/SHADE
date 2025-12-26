@@ -1,5 +1,6 @@
 package eventplanner.features.event.dto.response;
 
+import eventplanner.features.event.entity.EventReminder;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
@@ -56,4 +57,33 @@ public class EventReminderResponse {
 
     @Schema(description = "Actual send time")
     private LocalDateTime sentAt;
+
+    /**
+     * Create an EventReminderResponse from an EventReminder entity.
+     */
+    public static EventReminderResponse from(EventReminder r) {
+        EventReminderResponse resp = new EventReminderResponse();
+        resp.setReminderId(r.getId());
+        resp.setEventId(r.getEvent() != null ? r.getEvent().getId() : null);
+        resp.setTitle(r.getTitle());
+        resp.setDescription(r.getDescription());
+        resp.setReminderTime(r.getReminderTime());
+        resp.setChannel(r.getChannel());
+        resp.setReminderType(r.getReminderType());
+        resp.setIsActive(r.getIsActive());
+        resp.setCustomMessage(r.getCustomMessage());
+        resp.setRecipientCount(countRecipients(r));
+        resp.setCreatedAt(r.getCreatedAt());
+        resp.setUpdatedAt(r.getUpdatedAt());
+        resp.setWasSent(r.getWasSent());
+        return resp;
+    }
+
+    private static int countRecipients(EventReminder r) {
+        int users = r.getRecipientUserIdsCsv() == null || r.getRecipientUserIdsCsv().isBlank() 
+                ? 0 : r.getRecipientUserIdsCsv().split(",").length;
+        int emails = r.getRecipientEmailsCsv() == null || r.getRecipientEmailsCsv().isBlank() 
+                ? 0 : r.getRecipientEmailsCsv().split(",").length;
+        return users + emails;
+    }
 }

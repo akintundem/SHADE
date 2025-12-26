@@ -74,7 +74,7 @@ public class TicketController {
 
             List<Ticket> allTickets = ticketService.issueTickets(requests, principal);
             List<TicketResponse> responses = allTickets.stream()
-                .map(ticketService::toResponse)
+                .map(TicketResponse::from)
                 .collect(Collectors.toList());
 
             return ResponseEntity.status(HttpStatus.CREATED).body(responses);
@@ -142,7 +142,7 @@ public class TicketController {
             
             TicketValidationResponse response = TicketValidationResponse.builder()
                 .valid(true)
-                .ticket(ticketService.toResponse(ticket))
+                .ticket(TicketResponse.from(ticket))
                 .message("Ticket validated successfully")
                 .build();
 
@@ -168,7 +168,7 @@ public class TicketController {
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
             Ticket ticket = ticketService.cancelTicket(id, principal);
-            TicketResponse response = ticketService.toResponse(ticket);
+            TicketResponse response = TicketResponse.from(ticket);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());

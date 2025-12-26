@@ -207,7 +207,7 @@ public class TicketTypeService {
         if (id != null) {
             TicketType ticketType = repository.findByIdAndEventId(id, eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + id + " for event: " + eventId));
-            return List.of(toResponse(ticketType));
+            return List.of(TicketTypeResponse.from(ticketType));
         }
         
         // Build query based on filters
@@ -230,7 +230,7 @@ public class TicketTypeService {
         }
         
         return ticketTypes.stream()
-            .map(this::toResponse)
+            .map(TicketTypeResponse::from)
             .collect(Collectors.toList());
     }
 
@@ -305,33 +305,6 @@ public class TicketTypeService {
             throw new ApiException("TICKET_TYPE_NOT_AVAILABLE", 
                 "Failed to confirm sale - ticket type may have been modified", 409);
         }
-    }
-
-    /**
-     * Convert TicketType entity to TicketTypeResponse DTO.
-     */
-    public TicketTypeResponse toResponse(TicketType ticketType) {
-        return TicketTypeResponse.builder()
-            .id(ticketType.getId())
-            .eventId(ticketType.getEvent() != null ? ticketType.getEvent().getId() : null)
-            .name(ticketType.getName())
-            .category(ticketType.getCategory())
-            .description(ticketType.getDescription())
-            .price(ticketType.getPrice())
-            .currency(ticketType.getCurrency())
-            .quantityAvailable(ticketType.getQuantityAvailable())
-            .quantitySold(ticketType.getQuantitySold())
-            .quantityReserved(ticketType.getQuantityReserved())
-            .quantityRemaining(ticketType.getQuantityRemaining())
-            .isActive(ticketType.getIsActive())
-            .saleStartDate(ticketType.getSaleStartDate())
-            .saleEndDate(ticketType.getSaleEndDate())
-            .isOnSale(ticketType.isOnSale())
-            .maxTicketsPerPerson(ticketType.getMaxTicketsPerPerson())
-            .requiresApproval(ticketType.getRequiresApproval())
-            .createdAt(ticketType.getCreatedAt())
-            .updatedAt(ticketType.getUpdatedAt())
-            .build();
     }
 
     /**

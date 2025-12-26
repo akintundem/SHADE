@@ -1,6 +1,7 @@
 package eventplanner.features.event.dto.response;
 
 import eventplanner.common.domain.enums.EventUserType;
+import eventplanner.features.collaboration.entity.EventCollaboratorInvite;
 import eventplanner.features.collaboration.enums.CollaboratorInviteStatus;
 import lombok.Data;
 
@@ -21,5 +22,25 @@ public class CollaboratorInviteResponse {
     private String message;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /**
+     * Create a CollaboratorInviteResponse from an EventCollaboratorInvite entity.
+     */
+    public static CollaboratorInviteResponse from(EventCollaboratorInvite invite) {
+        CollaboratorInviteResponse res = new CollaboratorInviteResponse();
+        res.setInviteId(invite.getId());
+        res.setEventId(invite.getEvent() != null ? invite.getEvent().getId() : null);
+        res.setInviterUserId(invite.getInviter() != null ? invite.getInviter().getId() : null);
+        res.setInviteeUserId(invite.getInvitee() != null ? invite.getInvitee().getId() : null);
+        res.setInviteeEmail(invite.getInviteeEmail());
+        res.setRole(invite.getRole());
+        res.setStatus(invite.getStatus());
+        res.setExpiresAt(invite.getExpiresAt());
+        res.setRespondedAt(invite.getRespondedAt());
+        res.setMessage(invite.getMessage());
+        res.setCreatedAt(invite.getCreatedAt());
+        res.setUpdatedAt(invite.getUpdatedAt());
+        return res;
+    }
 }
 

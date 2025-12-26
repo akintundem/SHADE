@@ -111,13 +111,13 @@ public class EventCollaboratorInviteService {
             Optional<EventCollaboratorInvite> existingPending = inviteRepository
                     .findFirstByEventIdAndInviteeUserIdAndStatusOrderByCreatedAtDesc(eventId, inviteeUserId, CollaboratorInviteStatus.PENDING);
             if (existingPending.isPresent()) {
-                return toResponse(existingPending.get());
+                return CollaboratorInviteResponse.from(existingPending.get());
             }
         } else if (inviteeEmail != null) {
             Optional<EventCollaboratorInvite> existingPending = inviteRepository
                     .findFirstByEventIdAndInviteeEmailIgnoreCaseAndStatusOrderByCreatedAtDesc(eventId, inviteeEmail, CollaboratorInviteStatus.PENDING);
             if (existingPending.isPresent()) {
-                return toResponse(existingPending.get());
+                return CollaboratorInviteResponse.from(existingPending.get());
             }
         }
 
@@ -170,14 +170,14 @@ public class EventCollaboratorInviteService {
             sendEmailInvite(saved, rawToken, inviter.getUser());
         }
 
-        return toResponse(saved);
+        return CollaboratorInviteResponse.from(saved);
     }
 
     public Page<CollaboratorInviteResponse> listEventInvites(UUID eventId, int page, int size) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
         return inviteRepository.findByEventId(eventId, PageRequest.of(safePage, safeSize))
-                .map(this::toResponse);
+                .map(CollaboratorInviteResponse::from);
     }
 
     public List<CollaboratorInviteResponse> listMyPendingInvites(UserPrincipal principal) {
@@ -188,7 +188,7 @@ public class EventCollaboratorInviteService {
         String email = principal.getUser() != null ? principal.getUser().getEmail() : null;
         return inviteRepository.findIncomingInvites(userId, email, CollaboratorInviteStatus.PENDING)
                 .stream()
-                .map(this::toResponse)
+                .map(CollaboratorInviteResponse::from)
                 .toList();
     }
 
@@ -413,21 +413,5 @@ public class EventCollaboratorInviteService {
                 .build());
     }
 
-    private CollaboratorInviteResponse toResponse(EventCollaboratorInvite invite) {
-        CollaboratorInviteResponse res = new CollaboratorInviteResponse();
-        res.setInviteId(invite.getId());
-        res.setEventId(invite.getEvent() != null ? invite.getEvent().getId() : null);
-        res.setInviterUserId(invite.getInviter() != null ? invite.getInviter().getId() : null);
-        res.setInviteeUserId(invite.getInvitee() != null ? invite.getInvitee().getId() : null);
-        res.setInviteeEmail(invite.getInviteeEmail());
-        res.setRole(invite.getRole());
-        res.setStatus(invite.getStatus());
-        res.setExpiresAt(invite.getExpiresAt());
-        res.setRespondedAt(invite.getRespondedAt());
-        res.setMessage(invite.getMessage());
-        res.setCreatedAt(invite.getCreatedAt());
-        res.setUpdatedAt(invite.getUpdatedAt());
-        return res;
-    }
 }
 

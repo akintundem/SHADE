@@ -1,5 +1,6 @@
 package eventplanner.features.feeds.dto.response;
 
+import eventplanner.features.feeds.entity.PostComment;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
@@ -26,4 +27,24 @@ public class CommentResponse {
     
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /**
+     * Create a CommentResponse from a PostComment entity.
+     */
+    public static CommentResponse from(PostComment comment) {
+        CommentResponse resp = new CommentResponse();
+        resp.setId(comment.getId());
+        resp.setPostId(comment.getPost() != null ? comment.getPost().getId() : null);
+        resp.setContent(comment.getContent());
+        resp.setCreatedAt(comment.getCreatedAt());
+        resp.setUpdatedAt(comment.getUpdatedAt());
+
+        if (comment.getUser() != null) {
+            resp.setUserId(comment.getUser().getId());
+            resp.setAuthorName(comment.getUser().getName());
+            resp.setAuthorAvatarUrl(comment.getUser().getProfilePictureUrl());
+        }
+
+        return resp;
+    }
 }

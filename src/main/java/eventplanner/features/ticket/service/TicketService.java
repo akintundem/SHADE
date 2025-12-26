@@ -289,14 +289,14 @@ public class TicketService {
             Ticket ticket = ticketRepository.findByIdAndEventId(ticketId, eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
             return new org.springframework.data.domain.PageImpl<>(
-                List.of(toResponse(ticket)), pageable, 1);
+                List.of(TicketResponse.from(ticket)), pageable, 1);
         }
 
         // Otherwise, return filtered list
         Page<Ticket> tickets = ticketRepository.findByEventIdWithFilters(
             eventId, status, ticketTypeId, pageable);
 
-        return tickets.map(this::toResponse);
+        return tickets.map(TicketResponse::from);
     }
 
     /**
@@ -306,7 +306,7 @@ public class TicketService {
     public List<TicketResponse> getTicketsByAttendeeId(UUID attendeeId) {
         List<Ticket> tickets = ticketRepository.findByAttendeeId(attendeeId);
         return tickets.stream()
-            .map(this::toResponse)
+            .map(TicketResponse::from)
             .collect(Collectors.toList());
     }
 
@@ -455,32 +455,6 @@ public class TicketService {
             result.append(String.format("%02x", b));
         }
         return result.toString();
-    }
-
-    /**
-     * Convert Ticket entity to TicketResponse DTO.
-     */
-    public TicketResponse toResponse(Ticket ticket) {
-        return TicketResponse.builder()
-            .id(ticket.getId())
-            .ticketNumber(ticket.getTicketNumber())
-            .eventId(ticket.getEvent() != null ? ticket.getEvent().getId() : null)
-            .eventName(ticket.getEvent() != null ? ticket.getEvent().getName() : null)
-            .ticketTypeId(ticket.getTicketType() != null ? ticket.getTicketType().getId() : null)
-            .ticketTypeName(ticket.getTicketType() != null ? ticket.getTicketType().getName() : null)
-            .attendeeId(ticket.getAttendee() != null ? ticket.getAttendee().getId() : null)
-            .attendeeName(ticket.getAttendee() != null ? ticket.getAttendee().getName() : ticket.getOwnerName())
-            .attendeeEmail(ticket.getAttendee() != null ? ticket.getAttendee().getEmail() : ticket.getOwnerEmail())
-            .status(ticket.getStatus())
-            .qrCodeData(ticket.getQrCodeData())
-            .pendingAt(ticket.getPendingAt())
-            .pendingExpirationTime(ticket.getPendingExpirationTime())
-            .issuedAt(ticket.getIssuedAt())
-            .validatedAt(ticket.getValidatedAt())
-            .canBeValidated(ticket.canBeValidated())
-            .createdAt(ticket.getCreatedAt())
-            .updatedAt(ticket.getUpdatedAt())
-            .build();
     }
 
     private TicketWalletResponse buildWalletResponse(Ticket ticket) {

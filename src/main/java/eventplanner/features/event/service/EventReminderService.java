@@ -31,7 +31,7 @@ public class EventReminderService {
     public List<EventReminderResponse> list(UUID eventId, int page, int size) {
         var pageable = org.springframework.data.domain.PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
         return reminderRepository.findByEventId(eventId, pageable)
-                .stream().map(this::toResponse).collect(Collectors.toList());
+                .stream().map(EventReminderResponse::from).collect(Collectors.toList());
     }
 
     public EventReminderResponse create(UUID eventId, EventReminderRequest request) {
@@ -90,7 +90,7 @@ public class EventReminderService {
         }
         
         EventReminder saved = reminderRepository.save(reminder);
-        return toResponse(saved);
+        return EventReminderResponse.from(saved);
     }
 
     public EventReminderResponse update(UUID eventId, UUID reminderId, EventReminderRequest request) {
@@ -132,7 +132,7 @@ public class EventReminderService {
             }
         }
         
-        return toResponse(reminder);
+        return EventReminderResponse.from(reminder);
     }
 
     public void delete(UUID eventId, UUID reminderId) {
@@ -150,31 +150,7 @@ public class EventReminderService {
         if (reminder.getEvent() == null || !reminder.getEvent().getId().equals(eventId)) {
             throw new IllegalArgumentException("Reminder does not belong to event");
         }
-        return toResponse(reminder);
-    }
-
-    private EventReminderResponse toResponse(EventReminder r) {
-        EventReminderResponse resp = new EventReminderResponse();
-        resp.setReminderId(r.getId());
-        resp.setEventId(r.getEvent() != null ? r.getEvent().getId() : null);
-        resp.setTitle(r.getTitle());
-        resp.setDescription(r.getDescription());
-        resp.setReminderTime(r.getReminderTime());
-        resp.setChannel(r.getChannel());
-        resp.setReminderType(r.getReminderType());
-        resp.setIsActive(r.getIsActive());
-        resp.setCustomMessage(r.getCustomMessage());
-        resp.setRecipientCount(countRecipients(r));
-        resp.setCreatedAt(r.getCreatedAt());
-        resp.setUpdatedAt(r.getUpdatedAt());
-        resp.setWasSent(r.getWasSent());
-        return resp;
-    }
-
-    private int countRecipients(EventReminder r) {
-        int users = r.getRecipientUserIdsCsv() == null || r.getRecipientUserIdsCsv().isBlank() ? 0 : r.getRecipientUserIdsCsv().split(",").length;
-        int emails = r.getRecipientEmailsCsv() == null || r.getRecipientEmailsCsv().isBlank() ? 0 : r.getRecipientEmailsCsv().split(",").length;
-        return users + emails;
+        return EventReminderResponse.from(reminder);
     }
 
     private String joinCsv(List<?> list) {

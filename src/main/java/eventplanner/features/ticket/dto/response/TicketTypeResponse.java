@@ -1,6 +1,7 @@
 package eventplanner.features.ticket.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import eventplanner.features.ticket.entity.TicketType;
 import eventplanner.features.ticket.enums.TicketTypeCategory;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -40,5 +41,32 @@ public class TicketTypeResponse {
     private Boolean requiresApproval;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /**
+     * Create a TicketTypeResponse from a TicketType entity.
+     */
+    public static TicketTypeResponse from(TicketType ticketType) {
+        return TicketTypeResponse.builder()
+                .id(ticketType.getId())
+                .eventId(ticketType.getEvent() != null ? ticketType.getEvent().getId() : null)
+                .name(ticketType.getName())
+                .category(ticketType.getCategory())
+                .description(ticketType.getDescription())
+                .price(ticketType.getPrice())
+                .currency(ticketType.getCurrency())
+                .quantityAvailable(ticketType.getQuantityAvailable())
+                .quantitySold(ticketType.getQuantitySold())
+                .quantityReserved(ticketType.getQuantityReserved())
+                .quantityRemaining(ticketType.getQuantityRemaining())
+                .isActive(ticketType.getIsActive())
+                .saleStartDate(ticketType.getSaleStartDate())
+                .saleEndDate(ticketType.getSaleEndDate())
+                .isOnSale(ticketType.isOnSale())
+                .maxTicketsPerPerson(ticketType.getMaxTicketsPerPerson())
+                .requiresApproval(ticketType.getRequiresApproval())
+                .createdAt(ticketType.getCreatedAt())
+                .updatedAt(ticketType.getUpdatedAt())
+                .build();
+    }
 }
 

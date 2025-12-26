@@ -76,7 +76,7 @@ public class TicketTypeController {
             }
 
             TicketType newTicketType = ticketTypeService.createTicketType(eventId, request, principal);
-            return new ResponseEntity<>(ticketTypeService.toResponse(newTicketType), HttpStatus.CREATED);
+            return new ResponseEntity<>(TicketTypeResponse.from(newTicketType), HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (AccessDeniedException e) {
@@ -153,7 +153,7 @@ public class TicketTypeController {
             TicketType updatedTicketType = ticketTypeService.updateTicketType(ticketTypeId, eventId, request, ifMatch, principal);
             return ResponseEntity.ok()
                 .eTag(String.valueOf(updatedTicketType.getVersion())) // Return ETag with current version
-                .body(ticketTypeService.toResponse(updatedTicketType));
+                .body(TicketTypeResponse.from(updatedTicketType));
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (org.springframework.dao.OptimisticLockingFailureException e) {

@@ -4,7 +4,6 @@ import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.domain.enums.CommunicationType;
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
-import eventplanner.features.attendee.dto.response.AttendeeResponse;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeStatus;
 import eventplanner.features.attendee.repository.AttendeeRepository;
@@ -237,35 +236,6 @@ public class AttendeeService {
         
         // No filters - return all attendees for the event
         return repository.findByEventId(eventId, pageable);
-    }
-
-    // ==================== DTO Conversion ====================
-
-    /**
-     * Convert Attendee entity to AttendeeResponse DTO.
-     * Handles both user-linked attendees (with userId) and email-only guests (userId is null).
-     */
-    public AttendeeResponse toResponse(Attendee attendee) {
-        return AttendeeResponse.builder()
-                .id(attendee.getId())
-                .eventId(attendee.getEvent() != null ? attendee.getEvent().getId() : null)
-                .userId(attendee.getUser() != null ? attendee.getUser().getId() : null)
-                .name(attendee.getName())
-                .email(attendee.getEmail())
-                .rsvpStatus(attendee.getRsvpStatus())
-                .checkedInAt(attendee.getCheckedInAt())
-                .createdAt(attendee.getCreatedAt())
-                .updatedAt(attendee.getUpdatedAt())
-                .build();
-    }
-
-    /**
-     * Convert list of attendees to list of responses
-     */
-    public List<AttendeeResponse> toResponseList(List<Attendee> attendees) {
-        return attendees.stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
     }
 
     // ==================== Private Helper Methods ====================

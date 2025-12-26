@@ -74,7 +74,7 @@ public class PostCommentService {
         
         log.debug("User {} created comment {} on post {}", principal.getId(), saved.getId(), postId);
         
-        return toResponse(saved);
+        return CommentResponse.from(saved);
     }
 
     public CommentResponse updateComment(UUID eventId, UUID postId, UUID commentId, UserPrincipal principal, CommentUpdateRequest request) {
@@ -116,7 +116,7 @@ public class PostCommentService {
         
         log.debug("User {} updated comment {}", principal.getId(), commentId);
         
-        return toResponse(updated);
+        return CommentResponse.from(updated);
     }
 
     public void deleteComment(UUID eventId, UUID postId, UUID commentId, UserPrincipal principal) {
@@ -161,29 +161,11 @@ public class PostCommentService {
         }
 
         Page<PostComment> comments = commentRepository.findByPostIdOrderByCreatedAtAsc(postId, pageable);
-        return comments.map(this::toResponse);
+        return comments.map(CommentResponse::from);
     }
 
     public long getCommentCount(UUID postId) {
         return commentRepository.countByPostId(postId);
-    }
-
-    private CommentResponse toResponse(PostComment comment) {
-        CommentResponse resp = new CommentResponse();
-        resp.setId(comment.getId());
-        resp.setPostId(comment.getPost() != null ? comment.getPost().getId() : null);
-        resp.setContent(comment.getContent());
-        resp.setCreatedAt(comment.getCreatedAt());
-        resp.setUpdatedAt(comment.getUpdatedAt());
-
-        // Set user information from relationship
-        if (comment.getUser() != null) {
-            resp.setUserId(comment.getUser().getId());
-            resp.setAuthorName(comment.getUser().getName());
-            resp.setAuthorAvatarUrl(comment.getUser().getProfilePictureUrl());
-        }
-
-        return resp;
     }
 
     private String safeTrimToNull(String s) {

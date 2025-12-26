@@ -11,9 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.format.DateTimeFormatter;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -22,14 +20,12 @@ import java.util.UUID;
 @Transactional
 public class EventNotificationSettingsService {
 
-    private static final List<EventNotificationChannel> SUPPORTED_CHANNELS = List.of(EventNotificationChannel.EMAIL, EventNotificationChannel.SMS, EventNotificationChannel.PUSH);
-
     private final EventNotificationSettingsRepository settingsRepository;
     private final EventRepository eventRepository;
 
     public EventNotificationSettingsResponse getSettings(UUID eventId) {
         EventNotificationSettings settings = ensureSettings(eventId);
-        return toResponse(settings);
+        return EventNotificationSettingsResponse.from(settings);
     }
 
     public EventNotificationSettingsResponse updateSettings(UUID eventId, EventNotificationSettingsRequest request) {
@@ -38,7 +34,7 @@ public class EventNotificationSettingsService {
         settings.setReminderEnabled(request.getReminderEnabled());
         settings.setDefaultReminderMinutes(request.getDefaultReminderMinutes());
         settingsRepository.save(settings);
-        return toResponse(settings);
+        return EventNotificationSettingsResponse.from(settings);
     }
 
     public EventNotificationSettings getSettingsEntity(UUID eventId) {
@@ -52,23 +48,6 @@ public class EventNotificationSettingsService {
             .orElseGet(() -> settingsRepository.save(EventNotificationSettings.createDefault(event)));
     }
 
-    private EventNotificationSettingsResponse toResponse(EventNotificationSettings settings) {
-        EventNotificationSettingsResponse response = new EventNotificationSettingsResponse();
-        response.setEventId(settings.getEvent() != null ? settings.getEvent().getId() : null);
-        response.setEmailNotifications(settings.getEmailEnabled());
-        response.setSmsNotifications(settings.getSmsEnabled());
-        response.setPushNotifications(settings.getPushEnabled());
-        response.setReminderEnabled(settings.getReminderEnabled());
-        response.setDefaultReminderMinutes(settings.getDefaultReminderMinutes());
-        response.setAvailableChannels(SUPPORTED_CHANNELS);
-        response.setEnabledChannels(buildEnabledChannels(settings));
-        if (settings.getUpdatedAt() != null) {
-            response.setUpdatedAt(settings.getUpdatedAt().format(DateTimeFormatter.ISO_DATE_TIME));
-        }
-        response.setAvailableTemplates(List.of("event_reminder", "event_update", "event_cancelled"));
-        return response;
-    }
-
     private void applyChannelSettings(EventNotificationSettings settings, Set<EventNotificationChannel> enabledChannels) {
         if (enabledChannels == null) {
             throw new IllegalArgumentException("Enabled channels must be provided");
@@ -77,15 +56,5 @@ public class EventNotificationSettingsService {
         settings.setEmailEnabled(channels.contains(EventNotificationChannel.EMAIL));
         settings.setSmsEnabled(channels.contains(EventNotificationChannel.SMS));
         settings.setPushEnabled(channels.contains(EventNotificationChannel.PUSH));
-    }
-
-    private List<EventNotificationChannel> buildEnabledChannels(EventNotificationSettings settings) {
-        return SUPPORTED_CHANNELS.stream()
-            .filter(channel -> switch (channel) {
-                case EMAIL -> Boolean.TRUE.equals(settings.getEmailEnabled());
-                case SMS -> Boolean.TRUE.equals(settings.getSmsEnabled());
-                case PUSH -> Boolean.TRUE.equals(settings.getPushEnabled());
-            })
-            .toList();
     }
 }

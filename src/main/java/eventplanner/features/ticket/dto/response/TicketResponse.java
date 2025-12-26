@@ -1,6 +1,7 @@
 package eventplanner.features.ticket.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import eventplanner.features.ticket.entity.Ticket;
 import eventplanner.features.ticket.enums.TicketStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -39,4 +40,30 @@ public class TicketResponse {
     private Boolean canBeValidated;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /**
+     * Create a TicketResponse from a Ticket entity.
+     */
+    public static TicketResponse from(Ticket ticket) {
+        return TicketResponse.builder()
+                .id(ticket.getId())
+                .ticketNumber(ticket.getTicketNumber())
+                .eventId(ticket.getEvent() != null ? ticket.getEvent().getId() : null)
+                .eventName(ticket.getEvent() != null ? ticket.getEvent().getName() : null)
+                .ticketTypeId(ticket.getTicketType() != null ? ticket.getTicketType().getId() : null)
+                .ticketTypeName(ticket.getTicketType() != null ? ticket.getTicketType().getName() : null)
+                .attendeeId(ticket.getAttendee() != null ? ticket.getAttendee().getId() : null)
+                .attendeeName(ticket.getAttendee() != null ? ticket.getAttendee().getName() : ticket.getOwnerName())
+                .attendeeEmail(ticket.getAttendee() != null ? ticket.getAttendee().getEmail() : ticket.getOwnerEmail())
+                .status(ticket.getStatus())
+                .qrCodeData(ticket.getQrCodeData())
+                .pendingAt(ticket.getPendingAt())
+                .pendingExpirationTime(ticket.getPendingExpirationTime())
+                .issuedAt(ticket.getIssuedAt())
+                .validatedAt(ticket.getValidatedAt())
+                .canBeValidated(ticket.canBeValidated())
+                .createdAt(ticket.getCreatedAt())
+                .updatedAt(ticket.getUpdatedAt())
+                .build();
+    }
 }

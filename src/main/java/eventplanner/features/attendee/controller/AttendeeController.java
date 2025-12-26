@@ -98,7 +98,9 @@ public class AttendeeController {
 			List<Attendee> saved = attendeeService.createFromBulkRequest(request);
 			
 			// Convert to DTOs
-			List<AttendeeResponse> responses = attendeeService.toResponseList(saved);
+			List<AttendeeResponse> responses = saved.stream()
+					.map(AttendeeResponse::from)
+					.collect(java.util.stream.Collectors.toList());
 			return ResponseEntity.ok(responses);
 			
 		} catch (IllegalArgumentException e) {
@@ -128,7 +130,7 @@ public class AttendeeController {
 					"Access denied to event: " + eventId);
 			}
 			
-			AttendeeResponse response = attendeeService.toResponse(attendee);
+			AttendeeResponse response = AttendeeResponse.from(attendee);
 			return ResponseEntity.ok(response);
 			
 		} catch (IllegalArgumentException e) {
@@ -170,7 +172,7 @@ public class AttendeeController {
 				request.getSortDirection() != null ? request.getSortDirection() : "ASC");
 			
 			// Convert to DTOs with pagination
-			Page<AttendeeResponse> responsePage = attendees.map(attendeeService::toResponse);
+			Page<AttendeeResponse> responsePage = attendees.map(AttendeeResponse::from);
 			return ResponseEntity.ok(responsePage);
 			
 		} catch (IllegalArgumentException e) {
@@ -213,7 +215,7 @@ public class AttendeeController {
 			
 			if (inviteStatus == AttendeeInviteStatus.ACCEPTED) {
 				// Return attendee response
-				AttendeeResponse response = attendeeService.toResponse(attendee);
+				AttendeeResponse response = AttendeeResponse.from(attendee);
 				return ResponseEntity.ok(response);
 			} else {
 				// Other statuses - return no content
