@@ -1,6 +1,7 @@
 package eventplanner.features.event.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
+import eventplanner.common.domain.enums.EventAccessType;
 import eventplanner.common.domain.enums.EventStatus;
 import eventplanner.common.domain.enums.EventType;
 import eventplanner.security.auth.entity.UserAccount;
@@ -132,6 +133,27 @@ public class Event extends BaseEntity {
     
     @Column(name = "payment_date")
     private LocalDateTime paymentDate;
+
+    // Event Access Control Settings
+    /**
+     * Defines how users can access this event's content and participate.
+     * - OPEN: Anyone can view and RSVP (default for public events)
+     * - RSVP_REQUIRED: Users must RSVP to access content
+     * - INVITE_ONLY: Only invited users can see/access the event
+     * - TICKETED: Users must purchase a ticket to access content
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "access_type", nullable = false)
+    private EventAccessType accessType = EventAccessType.OPEN;
+
+    /**
+     * Whether feeds should be made public after the event ends (status = COMPLETED).
+     * Applicable for RSVP_REQUIRED, INVITE_ONLY, and TICKETED events.
+     * If true, feeds become publicly viewable after the event completes.
+     * If false, feeds remain restricted to authorized users even after the event.
+     */
+    @Column(name = "feeds_public_after_event", nullable = false)
+    private Boolean feedsPublicAfterEvent = false;
 
     // Timeline publication state
     @Column(name = "timeline_published", nullable = false)

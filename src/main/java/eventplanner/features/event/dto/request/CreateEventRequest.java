@@ -1,5 +1,6 @@
 package eventplanner.features.event.dto.request;
 
+import eventplanner.common.domain.enums.EventAccessType;
 import eventplanner.common.domain.enums.EventStatus;
 import eventplanner.common.domain.enums.EventType;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -105,4 +106,19 @@ public class CreateEventRequest {
     
     @Schema(description = "Venue information with location details")
     private eventplanner.features.event.dto.VenueDTO venue;
+
+    // ============ ACCESS CONTROL SETTINGS ============
+
+    @Schema(description = "How users can access this event's content. " +
+            "OPEN: Anyone can view and RSVP. " +
+            "RSVP_REQUIRED: Users must RSVP to access content. " +
+            "INVITE_ONLY: Only invited users can see/access the event. " +
+            "TICKETED: Users must purchase a ticket to access content.", 
+            example = "OPEN")
+    private EventAccessType accessType;
+
+    @Schema(description = "Whether feeds should be made public after the event ends. " +
+            "Applicable for RSVP_REQUIRED, INVITE_ONLY, and TICKETED events.", 
+            example = "true")
+    private Boolean feedsPublicAfterEvent;
 }

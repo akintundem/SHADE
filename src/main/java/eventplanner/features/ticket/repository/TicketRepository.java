@@ -68,4 +68,40 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
      */
     @Query("SELECT t FROM Ticket t WHERE t.id = :ticketId AND t.event.id = :eventId")
     Optional<Ticket> findByIdAndEventId(@Param("ticketId") UUID ticketId, @Param("eventId") UUID eventId);
+
+    /**
+     * Check if a user has a valid ticket (ISSUED or VALIDATED) for an event via attendee relationship.
+     * @param eventId The event ID
+     * @param userId The user ID (matches attendee.user.id)
+     * @return true if user has at least one valid ticket
+     */
+    @Query("SELECT CASE WHEN COUNT(t) > 0 THEN true ELSE false END FROM Ticket t " +
+           "WHERE t.event.id = :eventId " +
+           "AND t.attendee.user.id = :userId " +
+           "AND t.status IN ('ISSUED', 'VALIDATED')")
+    boolean hasValidTicketByUserId(@Param("eventId") UUID eventId, @Param("userId") UUID userId);
+
+    /**
+     * Check if a user has a valid ticket (ISSUED or VALIDATED) for an event via owner email.
+     * @param eventId The event ID
+     * @param email The owner email
+     * @return true if user has at least one valid ticket
+     */
+    @Query("SELECT CASE WHEN COUNT(t) > 0 THEN true ELSE false END FROM Ticket t " +
+           "WHERE t.event.id = :eventId " +
+           "AND LOWER(t.ownerEmail) = LOWER(:email) " +
+           "AND t.status IN ('ISSUED', 'VALIDATED')")
+    boolean hasValidTicketByEmail(@Param("eventId") UUID eventId, @Param("email") String email);
+
+    /**
+     * Find valid tickets for a user and event (via attendee relationship).
+     * @param eventId The event ID
+     * @param userId The user ID
+     * @return List of valid tickets
+     */
+    @Query("SELECT t FROM Ticket t " +
+           "WHERE t.event.id = :eventId " +
+           "AND t.attendee.user.id = :userId " +
+           "AND t.status IN ('ISSUED', 'VALIDATED')")
+    List<Ticket> findValidTicketsByUserId(@Param("eventId") UUID eventId, @Param("userId") UUID userId);
 }

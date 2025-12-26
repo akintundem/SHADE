@@ -4,9 +4,14 @@ import eventplanner.features.event.dto.VenueDTO;
 import eventplanner.features.event.dto.request.CreateEventRequest;
 import eventplanner.features.event.dto.request.UpdateEventRequest;
 import eventplanner.features.event.dto.response.EventResponse;
+import eventplanner.features.event.dto.response.TicketTypeSummary;
+import eventplanner.features.event.dto.response.UserEventContext;
 import eventplanner.features.event.entity.Event;
+import eventplanner.features.ticket.entity.TicketType;
+import eventplanner.features.ticket.repository.TicketTypeRepository;
 import eventplanner.features.event.entity.Venue;
 import eventplanner.features.event.repository.EventRepository;
+import eventplanner.common.domain.enums.EventAccessType;
 import eventplanner.common.domain.enums.EventStatus;
 import eventplanner.common.domain.enums.EventScope;
 import eventplanner.security.authorization.domain.entity.EventRole;
@@ -73,6 +78,11 @@ public class EventService {
     @Autowired
     private BudgetService budgetService;
     
+    @Autowired(required = false)
+    private UserEventContextService userEventContextService;
+
+    @Autowired(required = false)
+    private TicketTypeRepository ticketTypeRepository;
 
     /**
      * Get event by ID
@@ -216,6 +226,14 @@ public class EventService {
             event.setVenue(toVenueEntity(request.getVenue()));
         }
         
+        // Update access control settings
+        if (request.getAccessType() != null) {
+            event.setAccessType(request.getAccessType());
+        }
+        if (request.getFeedsPublicAfterEvent() != null) {
+            event.setFeedsPublicAfterEvent(request.getFeedsPublicAfterEvent());
+        }
+        
         return eventRepository.save(event);
     }
 
@@ -266,6 +284,10 @@ public class EventService {
         if (request.getVenue() != null) {
             event.setVenue(toVenueEntity(request.getVenue()));
         }
+        
+        // Set access control settings
+        event.setAccessType(request.getAccessType() != null ? request.getAccessType() : EventAccessType.OPEN);
+        event.setFeedsPublicAfterEvent(request.getFeedsPublicAfterEvent() != null ? request.getFeedsPublicAfterEvent() : Boolean.FALSE);
         
         Event savedEvent = eventRepository.save(event);
         assignOwnerOrganizerRole(savedEvent.getId(), ownerId);
@@ -496,9 +518,13 @@ public class EventService {
     }
 
     /**
-     * Convert Event entity to EventResponse
+     * Convert Event entity to EventResponse with user-specific context.
+     * 
+     * @param event The event entity
+     * @param user The authenticated user (null for anonymous - userContext will be null)
+     * @return EventResponse with user context populated if user is provided
      */
-    public EventResponse toResponse(Event event) {
+    public EventResponse toResponse(Event event, UserPrincipal user) {
         EventResponse response = new EventResponse();
         response.setId(event.getId());
         response.setName(event.getName());
@@ -533,7 +559,125 @@ public class EventService {
         response.setCreatedAt(event.getCreatedAt());
         response.setUpdatedAt(event.getUpdatedAt());
         response.setScope(EventScope.FULL); // Full details response
+        
+        // Access control settings
+        response.setAccessType(event.getAccessType() != null ? event.getAccessType() : EventAccessType.OPEN);
+        response.setFeedsPublicAfterEvent(event.getFeedsPublicAfterEvent());
+        
+        // Compute and set user-specific context
+        if (userEventContextService != null) {
+            UserEventContext userContext = userEventContextService.buildContext(event, user);
+            response.setUserContext(userContext);
+        }
+        
+        // Populate ticket types information for ticketed events
+        populateTicketInfo(event, response);
+        
         return response;
+    }
+
+    /**
+     * Populate ticket information for an event response.
+     * Only populates for TICKETED events.
+     */
+    private void populateTicketInfo(Event event, EventResponse response) {
+        if (event.getAccessType() != EventAccessType.TICKETED) {
+            return;
+        }
+        
+        if (ticketTypeRepository == null) {
+            return;
+        }
+        
+        List<TicketType> ticketTypes = ticketTypeRepository.findByEventIdAndIsActiveTrue(event.getId());
+        if (ticketTypes == null || ticketTypes.isEmpty()) {
+            response.setTicketTypes(List.of());
+            return;
+        }
+        
+        LocalDateTime now = LocalDateTime.now();
+        List<TicketTypeSummary> summaries = ticketTypes.stream()
+                .map(tt -> toTicketTypeSummary(tt, now))
+                .collect(Collectors.toList());
+        
+        response.setTicketTypes(summaries);
+    }
+
+    /**
+     * Convert TicketType entity to TicketTypeSummary DTO.
+     */
+    private TicketTypeSummary toTicketTypeSummary(TicketType tt, LocalDateTime now) {
+        int remaining = tt.getQuantityAvailable() - tt.getQuantitySold() - tt.getQuantityReserved();
+        remaining = Math.max(0, remaining);
+        
+        boolean isFree = tt.getPrice() == null || tt.getPrice().compareTo(java.math.BigDecimal.ZERO) == 0;
+        
+        // Determine if currently on sale
+        boolean isOnSale = true;
+        if (tt.getSaleStartDate() != null && now.isBefore(tt.getSaleStartDate())) {
+            isOnSale = false;
+        }
+        if (tt.getSaleEndDate() != null && now.isAfter(tt.getSaleEndDate())) {
+            isOnSale = false;
+        }
+        
+        boolean isActive = Boolean.TRUE.equals(tt.getIsActive());
+        boolean isAvailable = isActive && isOnSale && remaining > 0;
+        
+        // Generate status message
+        String statusMessage = generateTicketStatusMessage(tt, remaining, isOnSale, now);
+        
+        return TicketTypeSummary.builder()
+                .id(tt.getId())
+                .name(tt.getName())
+                .category(tt.getCategory())
+                .description(tt.getDescription())
+                .price(tt.getPrice())
+                .currency(tt.getCurrency())
+                .isFree(isFree)
+                .quantityTotal(tt.getQuantityAvailable())
+                .quantityRemaining(remaining)
+                .quantitySold(tt.getQuantitySold())
+                .isAvailable(isAvailable)
+                .isActive(isActive)
+                .saleStartDate(tt.getSaleStartDate())
+                .saleEndDate(tt.getSaleEndDate())
+                .isOnSale(isOnSale)
+                .maxPerPerson(tt.getMaxTicketsPerPerson())
+                .requiresApproval(tt.getRequiresApproval())
+                .statusMessage(statusMessage)
+                .build();
+    }
+
+    /**
+     * Generate a user-friendly status message for a ticket type.
+     */
+    private String generateTicketStatusMessage(TicketType tt, int remaining, boolean isOnSale, LocalDateTime now) {
+        if (!Boolean.TRUE.equals(tt.getIsActive())) {
+            return "Not available";
+        }
+        
+        if (tt.getSaleStartDate() != null && now.isBefore(tt.getSaleStartDate())) {
+            return "Sales start soon";
+        }
+        
+        if (tt.getSaleEndDate() != null && now.isAfter(tt.getSaleEndDate())) {
+            return "Sales ended";
+        }
+        
+        if (remaining <= 0) {
+            return "Sold out";
+        }
+        
+        if (remaining <= 5) {
+            return "Only " + remaining + " left!";
+        }
+        
+        if (remaining <= 10) {
+            return "Limited availability";
+        }
+        
+        return "Available";
     }
 
 
@@ -744,6 +888,16 @@ public class EventService {
         feed.setHasNext(page < totalPages - 1);
         feed.setHasPrevious(page > 0);
         feed.setScope(EventScope.FEED); // Feed view response
+        
+        // Access control settings
+        feed.setAccessType(event.getAccessType() != null ? event.getAccessType() : EventAccessType.OPEN);
+        feed.setFeedsPublicAfterEvent(event.getFeedsPublicAfterEvent());
+        
+        // Compute and set user-specific context
+        if (userEventContextService != null) {
+            UserEventContext userContext = userEventContextService.buildContext(event, user);
+            feed.setUserContext(userContext);
+        }
         
         return feed;
     }

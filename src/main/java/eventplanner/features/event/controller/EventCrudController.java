@@ -80,7 +80,7 @@ public class EventCrudController {
             @AuthenticationPrincipal UserPrincipal user) {
         try {
             Page<Event> events = eventService.listEvents(request, user);
-            Page<EventResponse> responses = events.map(eventService::toResponse);
+            Page<EventResponse> responses = events.map(event -> eventService.toResponse(event, user));
             return ResponseEntity.ok(responses);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
@@ -99,7 +99,7 @@ public class EventCrudController {
             }
             request.setMine(true);
             Page<Event> events = eventService.listEvents(request, user);
-            Page<EventResponse> responses = events.map(eventService::toResponse);
+            Page<EventResponse> responses = events.map(event -> eventService.toResponse(event, user));
             return ResponseEntity.ok(responses);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
@@ -171,7 +171,7 @@ public class EventCrudController {
         // Default behavior (or explicit full/feed)
         if (scope == EventScope.FULL && !"feed".equals(normalizedView)) {
             // Return full event details for owners/high-responsibility users
-            EventResponse response = eventService.toResponse(event);
+            EventResponse response = eventService.toResponse(event, user);
             ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
             if (event.getVersion() != null) {
                 builder.eTag(String.valueOf(event.getVersion()));
@@ -247,7 +247,7 @@ public class EventCrudController {
             
             try {
                 Event created = eventService.create(request.getEvent(), principal.getId());
-                EventResponse eventResponse = eventService.toResponse(created);
+                EventResponse eventResponse = eventService.toResponse(created, principal);
                 var coverUpload = eventMediaService.createCoverImageUpload(created.getId(), principal, request.getCoverUpload());
 
                 CreateEventWithCoverUploadResponse response = CreateEventWithCoverUploadResponse.builder()
@@ -334,7 +334,7 @@ public class EventCrudController {
                     : null;
 
             UpdateEventWithCoverUploadResponse response = UpdateEventWithCoverUploadResponse.builder()
-                    .event(eventService.toResponse(updated))
+                    .event(eventService.toResponse(updated, principal))
                     .coverUpload(coverUpload)
                     .build();
 
@@ -392,7 +392,7 @@ public class EventCrudController {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid action. Use open or close.");
             }
 
-            return ResponseEntity.ok(eventService.toResponse(updatedEvent));
+            return ResponseEntity.ok(eventService.toResponse(updatedEvent, principal));
         } catch (AccessDeniedException ex) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
         } catch (IllegalArgumentException ex) {
@@ -431,7 +431,7 @@ public class EventCrudController {
             }
             
             Event archived = eventService.archiveEvent(id, principal.getId(), reason);
-            EventResponse response = eventService.toResponse(archived);
+            EventResponse response = eventService.toResponse(archived, principal);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
@@ -470,7 +470,7 @@ public class EventCrudController {
             }
             
             Event restored = eventService.restoreEvent(id, principal.getId());
-            EventResponse response = eventService.toResponse(restored);
+            EventResponse response = eventService.toResponse(restored, principal);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);

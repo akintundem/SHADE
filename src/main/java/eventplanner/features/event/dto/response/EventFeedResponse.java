@@ -1,5 +1,6 @@
 package eventplanner.features.event.dto.response;
 
+import eventplanner.common.domain.enums.EventAccessType;
 import eventplanner.common.domain.enums.EventScope;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
@@ -62,5 +63,18 @@ public class EventFeedResponse {
 
     @Schema(description = "Event scope: FULL (full details) or FEED (feed view)", example = "FEED")
     private EventScope scope = EventScope.FEED;
+
+    // ============ ACCESS CONTROL ============
+
+    @Schema(description = "How users can access this event's content", example = "OPEN")
+    private EventAccessType accessType;
+
+    @Schema(description = "Whether feeds are public after the event ends")
+    private Boolean feedsPublicAfterEvent;
+
+    // ============ USER CONTEXT ============
+
+    @Schema(description = "User's relationship and access context for this event")
+    private UserEventContext userContext;
 }
 
