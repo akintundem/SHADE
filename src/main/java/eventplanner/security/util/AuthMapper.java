@@ -57,6 +57,7 @@ public final class AuthMapper {
                 .location(locationDto)
                 .preferredLanguage(effective.getPreferredLanguage())
                 .profileVisibility(effective.getProfileVisibility())
+                .eventParticipationVisibility(effective.getEventParticipationVisibility())
                 .searchVisibility(Boolean.TRUE.equals(effective.getSearchVisibility()))
                 .themePreference(effective.getThemePreference())
                 .emailNotificationsEnabled(Boolean.TRUE.equals(effective.getEmailNotificationsEnabled()))
@@ -72,6 +73,9 @@ public final class AuthMapper {
                 .autoAcceptInvitations(Boolean.TRUE.equals(effective.getAutoAcceptInvitations()))
                 .exportEventDataEnabled(Boolean.TRUE.equals(effective.getExportEventDataEnabled()))
                 .mfaEnabled(Boolean.TRUE.equals(effective.getMfaEnabled()))
+                .reminderTimingMinutes(effective.getReminderTimingMinutes())
+                .showInEventDirectory(Boolean.TRUE.equals(effective.getShowInEventDirectory()))
+                .smsNotificationsEnabled(Boolean.TRUE.equals(effective.getSmsNotificationsEnabled()))
                 .build();
     }
 

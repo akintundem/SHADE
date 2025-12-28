@@ -14,6 +14,7 @@ public class UserSettingsResponse {
     LocationDto location;
     LanguagePreference preferredLanguage;
     VisibilityLevel profileVisibility;
+    VisibilityLevel eventParticipationVisibility;
     boolean searchVisibility;
     ThemePreference themePreference;
     boolean emailNotificationsEnabled;
@@ -29,4 +30,7 @@ public class UserSettingsResponse {
     boolean autoAcceptInvitations;
     boolean exportEventDataEnabled;
     boolean mfaEnabled;
+    Integer reminderTimingMinutes;
+    boolean showInEventDirectory;
+    boolean smsNotificationsEnabled;
 }

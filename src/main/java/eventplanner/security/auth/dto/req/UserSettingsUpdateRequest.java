@@ -21,6 +21,8 @@ public class UserSettingsUpdateRequest {
 
     private VisibilityLevel profileVisibility;
 
+    private VisibilityLevel eventParticipationVisibility;
+
     private Boolean searchVisibility;
 
     private ThemePreference themePreference;
@@ -50,4 +52,10 @@ public class UserSettingsUpdateRequest {
     private Boolean exportEventDataEnabled;
 
     private Boolean mfaEnabled;
+
+    private Integer reminderTimingMinutes;
+
+    private Boolean showInEventDirectory;
+
+    private Boolean smsNotificationsEnabled;
 }

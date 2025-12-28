@@ -158,6 +158,9 @@ public class UserAccountService {
         if (request.getProfileVisibility() != null) {
             settings.setProfileVisibility(request.getProfileVisibility());
         }
+        if (request.getEventParticipationVisibility() != null) {
+            settings.setEventParticipationVisibility(request.getEventParticipationVisibility());
+        }
         if (request.getSearchVisibility() != null) {
             settings.setSearchVisibility(request.getSearchVisibility());
         }
@@ -202,6 +205,15 @@ public class UserAccountService {
         }
         if (request.getMfaEnabled() != null) {
             settings.setMfaEnabled(request.getMfaEnabled());
+        }
+        if (request.getReminderTimingMinutes() != null) {
+            settings.setReminderTimingMinutes(request.getReminderTimingMinutes());
+        }
+        if (request.getShowInEventDirectory() != null) {
+            settings.setShowInEventDirectory(request.getShowInEventDirectory());
+        }
+        if (request.getSmsNotificationsEnabled() != null) {
+            settings.setSmsNotificationsEnabled(request.getSmsNotificationsEnabled());
         }
     }
 

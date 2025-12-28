@@ -41,6 +41,10 @@ public class UserSettings extends BaseEntity {
     @Column(name = "profile_visibility", nullable = false, length = 30)
     private VisibilityLevel profileVisibility = VisibilityLevel.PUBLIC;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "event_participation_visibility", nullable = false, length = 30)
+    private VisibilityLevel eventParticipationVisibility = VisibilityLevel.PUBLIC;
+
     @Column(name = "search_visibility", nullable = false)
     private Boolean searchVisibility = Boolean.TRUE;
 
@@ -90,6 +94,15 @@ public class UserSettings extends BaseEntity {
 
     @Column(name = "mfa_enabled", nullable = false)
     private Boolean mfaEnabled = Boolean.FALSE;
+
+    @Column(name = "reminder_timing_minutes", nullable = false)
+    private Integer reminderTimingMinutes = 30;
+
+    @Column(name = "show_in_event_directory", nullable = false)
+    private Boolean showInEventDirectory = Boolean.TRUE;
+
+    @Column(name = "sms_notifications_enabled", nullable = false)
+    private Boolean smsNotificationsEnabled = Boolean.FALSE;
 
     public static UserSettings createDefault(UserAccount user) {
         UserSettings settings = new UserSettings();

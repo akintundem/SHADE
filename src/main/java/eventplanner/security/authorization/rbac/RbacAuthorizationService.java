@@ -2,6 +2,7 @@ package eventplanner.security.authorization.rbac;
 
 import eventplanner.features.attendee.repository.AttendeeInviteRepository;
 import eventplanner.features.attendee.repository.AttendeeRepository;
+import eventplanner.features.ticket.repository.TicketRepository;
 import eventplanner.features.timeline.repository.TaskRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
@@ -34,6 +35,7 @@ public class RbacAuthorizationService {
     private final TaskRepository taskRepository;
     private final AttendeeRepository attendeeRepository;
     private final AttendeeInviteRepository attendeeInviteRepository;
+    private final TicketRepository ticketRepository;
 
     public void assertAuthorized(UserPrincipal principal, String permissionName, Map<String, Object> resources) {
         if (!isAuthorized(principal, permissionName, resources)) {
@@ -192,6 +194,15 @@ public class RbacAuthorizationService {
                         }
                     }
                 }
+                if (eventId == null) {
+                    UUID ticketId = extractUuid(resources, "ticket_id");
+                    if (ticketId != null) {
+                        eventId = resolveEventIdFromTicketId(ticketId);
+                        if (eventId != null) {
+                            resources.put("event_id", eventId);
+                        }
+                    }
+                }
                 yield eventId != null && authorizationService.isEventOwner(principal, eventId);
             }
             case PUBLIC -> true;
@@ -224,6 +235,12 @@ public class RbacAuthorizationService {
                     UUID inviteId = extractUuid(resources, "invite_id");
                     if (inviteId != null) {
                         eventId = resolveEventIdFromInviteId(inviteId);
+                    }
+                }
+                if (eventId == null) {
+                    UUID ticketId = extractUuid(resources, "ticket_id");
+                    if (ticketId != null) {
+                        eventId = resolveEventIdFromTicketId(ticketId);
                     }
                 }
                 // If we can't resolve event_id, allow request to proceed to validation
@@ -316,6 +333,23 @@ public class RbacAuthorizationService {
                     .orElse(null);
         } catch (Exception e) {
             log.debug("Failed to resolve event_id from invite_id {}: {}", inviteId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Resolve event_id from ticket_id by looking up the ticket
+     */
+    private UUID resolveEventIdFromTicketId(UUID ticketId) {
+        if (ticketId == null) {
+            return null;
+        }
+        try {
+            return ticketRepository.findById(ticketId)
+                    .map(ticket -> ticket.getEvent() != null ? ticket.getEvent().getId() : null)
+                    .orElse(null);
+        } catch (Exception e) {
+            log.debug("Failed to resolve event_id from ticket_id {}: {}", ticketId, e.getMessage());
             return null;
         }
     }

@@ -60,6 +60,14 @@ public class TicketService {
     private static final int DEFAULT_MAX_TICKETS_PER_PERSON = 5;
 
     /**
+     * Check if a ticket type is free (price is null or zero).
+     */
+    private boolean isFreeTicket(TicketType ticketType) {
+        return ticketType.getPrice() == null || 
+               ticketType.getPrice().compareTo(java.math.BigDecimal.ZERO) == 0;
+    }
+
+    /**
      * Issue tickets to one or more attendees.
      * Accepts a list of ticket requests - each request can issue multiple tickets (quantity) to a single attendee/email.
      */
@@ -159,8 +167,8 @@ public class TicketService {
         List<Ticket> savedTickets = ticketRepository.saveAll(tickets);
 
         // Update ticket type quantities
-        if (ticketType.getPrice() == null) {
-            // Free ticket - immediately mark as sold
+        if (isFreeTicket(ticketType)) {
+            // Free ticket (price is null or zero) - immediately mark as sold
             ticketTypeRepository.incrementQuantitySold(request.getTicketTypeId(), request.getQuantity());
         } else {
             // Paid ticket - reserve for now (will be moved to sold when payment completes)
@@ -168,20 +176,20 @@ public class TicketService {
         }
 
         // For free tickets, update attendee RSVP status (only if attendee exists)
-        if (ticketType.getPrice() == null && attendee != null) {
+        if (isFreeTicket(ticketType) && attendee != null) {
             attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
             attendeeRepository.save(attendee);
         }
 
         // Issue tickets (set status to ISSUED for free tickets, PENDING for paid)
         for (Ticket ticket : savedTickets) {
-            if (ticketType.getPrice() == null) {
+            if (isFreeTicket(ticketType)) {
                 ticket.issue(issuedBy);
             }
         }
         
         // Save any status changes
-        if (ticketType.getPrice() == null) {
+        if (isFreeTicket(ticketType)) {
             savedTickets = ticketRepository.saveAll(savedTickets);
         }
 
@@ -318,29 +326,6 @@ public class TicketService {
         String eventShort = eventId.toString().substring(0, 8).toUpperCase();
         String ticketShort = ticketId.toString().substring(0, 8).toUpperCase();
         return "EVT-" + eventShort + "-" + ticketShort;
-    }
-
-    /**
-     * Generate QR code data string with hash for validation.
-     */
-    private String generateQrCodeData(Ticket ticket) {
-        try {
-            String data = String.format("ticket:%s:%s:%s",
-                ticket.getId().toString(),
-                ticket.getTicketNumber(),
-                ticket.getEvent().getId().toString());
-
-            // Generate hash
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            String hashInput = ticket.getId().toString() + ticket.getTicketNumber() + 
-                ticket.getEvent().getId().toString() + qrSecretKey;
-            byte[] hashBytes = digest.digest(hashInput.getBytes(StandardCharsets.UTF_8));
-            String hash = bytesToHex(hashBytes).substring(0, 8);
-
-            return data + ":" + hash;
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("Failed to generate QR code hash", e);
-        }
     }
 
     /**
