@@ -3,6 +3,7 @@ package eventplanner.features.attendee.service;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.domain.enums.CommunicationType;
+import eventplanner.common.domain.enums.VisibilityLevel;
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeStatus;
@@ -129,6 +130,18 @@ public class AttendeeService {
                 
                 attendee.setEmail(attendeeInfo.getEmail());
             }
+            
+            // Set participation visibility: use provided value, or default to user's global setting, or PUBLIC
+            VisibilityLevel visibility = attendeeInfo.getParticipationVisibility();
+            if (visibility == null && attendee.getUser() != null && attendee.getUser().getSettings() != null) {
+                // Use user's global default if not specified
+                visibility = attendee.getUser().getSettings().getEventParticipationVisibility();
+            }
+            if (visibility == null) {
+                // Final fallback to PUBLIC
+                visibility = VisibilityLevel.PUBLIC;
+            }
+            attendee.setParticipationVisibility(visibility);
             
             // Validate attendee before saving
             validateAttendee(attendee);

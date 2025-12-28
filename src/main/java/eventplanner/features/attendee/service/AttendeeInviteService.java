@@ -1,5 +1,6 @@
 package eventplanner.features.attendee.service;
 
+import eventplanner.common.domain.enums.VisibilityLevel;
 import eventplanner.features.attendee.entity.AttendeeInvite;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeInviteStatus;
@@ -135,6 +136,13 @@ public class AttendeeInviteService {
             throw new IllegalArgumentException("User name is required");
         }
         attendee.setEmail(user.getEmail());
+
+        // Set participation visibility from user's default setting
+        VisibilityLevel visibility = VisibilityLevel.PUBLIC; // Default fallback
+        if (user.getSettings() != null && user.getSettings().getEventParticipationVisibility() != null) {
+            visibility = user.getSettings().getEventParticipationVisibility();
+        }
+        attendee.setParticipationVisibility(visibility);
 
         Attendee savedAttendee = attendeeRepository.save(attendee);
         finalizeInvite(invite, AttendeeInviteStatus.ACCEPTED);

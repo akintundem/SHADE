@@ -1,6 +1,7 @@
 package eventplanner.features.attendee.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import eventplanner.common.domain.enums.VisibilityLevel;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeStatus;
 import lombok.AllArgsConstructor;
@@ -35,6 +36,9 @@ public class AttendeeResponse {
     private AttendeeStatus rsvpStatus;
     private LocalDateTime checkedInAt;
     
+    // Visibility setting
+    private VisibilityLevel participationVisibility;
+    
     // Metadata
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -60,6 +64,7 @@ public class AttendeeResponse {
                 .email(attendee.getEmail())
                 .rsvpStatus(attendee.getRsvpStatus())
                 .checkedInAt(attendee.getCheckedInAt())
+                .participationVisibility(attendee.getParticipationVisibility())
                 .createdAt(attendee.getCreatedAt())
                 .updatedAt(attendee.getUpdatedAt())
                 .build();

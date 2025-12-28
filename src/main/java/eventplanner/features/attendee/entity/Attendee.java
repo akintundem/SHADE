@@ -1,5 +1,6 @@
 package eventplanner.features.attendee.entity;
 
+import eventplanner.common.domain.enums.VisibilityLevel;
 import eventplanner.features.attendee.enums.AttendeeStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.security.auth.entity.UserAccount;
@@ -61,6 +62,13 @@ public class Attendee {
 
     @Column(name = "checked_in_at")
     private LocalDateTime checkedInAt;
+
+    /**
+     * Visibility setting for this specific event participation.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "participation_visibility", nullable = false, length = 30)
+    private VisibilityLevel participationVisibility = VisibilityLevel.PUBLIC;
     
     // Audit timestamps
     @CreationTimestamp
@@ -75,6 +83,9 @@ public class Attendee {
     public void prePersist() {
         if (rsvpStatus == null) {
             rsvpStatus = AttendeeStatus.PENDING;
+        }
+        if (participationVisibility == null) {
+            participationVisibility = VisibilityLevel.PUBLIC;
         }
     }
     

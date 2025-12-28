@@ -1,5 +1,6 @@
 package eventplanner.features.attendee.repository;
 
+import eventplanner.common.domain.enums.VisibilityLevel;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeStatus;
 import org.springframework.data.domain.Page;
@@ -49,4 +50,28 @@ public interface AttendeeRepository extends JpaRepository<Attendee, UUID> {
 
     @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.user.id = :userId")
     Optional<Attendee> findByEventIdAndUserId(@Param("eventId") UUID eventId, @Param("userId") UUID userId);
+
+    /**
+     * Find all attendees for an event with PUBLIC participation visibility.
+     * Used for public-facing attendee lists where users want to hide their participation.
+     */
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.participationVisibility = :visibility")
+    Page<Attendee> findByEventIdAndParticipationVisibility(@Param("eventId") UUID eventId,
+                                                           @Param("visibility") VisibilityLevel visibility,
+                                                           Pageable pageable);
+
+    /**
+     * Find all attendees for a specific user across all events.
+     * Used for showing a user's event history/participation.
+     */
+    @Query("SELECT a FROM Attendee a WHERE a.user.id = :userId")
+    List<Attendee> findByUserId(@Param("userId") UUID userId);
+
+    /**
+     * Find all PUBLIC attendees for a specific user across all events.
+     * Used for showing a user's public event history.
+     */
+    @Query("SELECT a FROM Attendee a WHERE a.user.id = :userId AND a.participationVisibility = :visibility")
+    List<Attendee> findByUserIdAndParticipationVisibility(@Param("userId") UUID userId,
+                                                          @Param("visibility") VisibilityLevel visibility);
 }
