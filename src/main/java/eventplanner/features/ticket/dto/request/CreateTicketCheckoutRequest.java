@@ -19,4 +19,9 @@ public class CreateTicketCheckoutRequest {
     @Valid
     @NotEmpty(message = "At least one ticket item is required")
     private List<TicketCheckoutItemRequest> items;
+
+    /**
+     * Promotion/discount code to apply.
+     */
+    private String promotionCode;
 }

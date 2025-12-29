@@ -133,6 +133,15 @@ policy:
         owns_scope: false
         is_member: true
     -
+      name: ticket.checkout
+      scope: EVENT
+      resources: event_id
+      description: Start and manage ticket checkout sessions
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
       name: ticket.create
       scope: EVENT
       resources: event_id

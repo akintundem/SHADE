@@ -97,6 +97,7 @@ public final class RbacPermissions {
     public static final String TIMELINE_TASK_UPDATE = "timeline.task.update";
     public static final String TIMELINE_WORKBACK_GENERATE = "timeline.workback.generate";
     public static final String TICKET_CANCEL = "ticket.cancel";
+    public static final String TICKET_CHECKOUT = "ticket.checkout";
     public static final String TICKET_CREATE = "ticket.create";
     public static final String TICKET_READ = "ticket.read";
     public static final String TICKET_TYPE_CREATE = "ticket.type.create";
