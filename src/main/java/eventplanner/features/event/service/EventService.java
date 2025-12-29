@@ -632,7 +632,7 @@ public class EventService {
         int remaining = available - sold - reserved;
         remaining = Math.max(0, remaining);
         
-        boolean isFree = tt.getPrice() == null || tt.getPrice().compareTo(java.math.BigDecimal.ZERO) == 0;
+        boolean isFree = tt.getPriceMinor() == null || tt.getPriceMinor() == 0;
         
         // Determine if currently on sale
         boolean isOnSale = true;
@@ -654,7 +654,7 @@ public class EventService {
                 .name(tt.getName())
                 .category(tt.getCategory())
                 .description(tt.getDescription())
-                .price(tt.getPrice())
+                .priceMinor(tt.getPriceMinor())
                 .currency(tt.getCurrency())
                 .isFree(isFree)
                 .quantityTotal(available)

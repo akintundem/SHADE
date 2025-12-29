@@ -7,7 +7,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -34,8 +33,8 @@ public class TicketTypeSummary {
     @Schema(description = "Description of what the ticket includes", example = "Front row seating with meet & greet")
     private String description;
 
-    @Schema(description = "Price per ticket (null for free tickets)", example = "150.00")
-    private BigDecimal price;
+    @Schema(description = "Price per ticket in smallest unit (null for free tickets)", example = "15000")
+    private Long priceMinor;
 
     @Schema(description = "Currency code (ISO 4217)", example = "USD")
     private String currency;
@@ -76,4 +75,3 @@ public class TicketTypeSummary {
     @Schema(description = "Status message for display", example = "Only 5 left!")
     private String statusMessage;
 }
-

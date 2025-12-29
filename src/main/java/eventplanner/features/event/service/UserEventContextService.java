@@ -19,7 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
@@ -353,8 +352,8 @@ public class UserEventContextService {
                 builder.primaryTicketTypeName(primaryTicket.getTicketType().getName());
                 
                 // Payment info
-                BigDecimal price = primaryTicket.getTicketType().getPrice();
-                builder.requiresPayment(price != null && price.compareTo(BigDecimal.ZERO) > 0)
+                Long priceMinor = primaryTicket.getTicketType().getPriceMinor();
+                builder.requiresPayment(priceMinor != null && priceMinor > 0)
                         .hasPaid(primaryTicket.getStatus() == TicketStatus.ISSUED || 
                                 primaryTicket.getStatus() == TicketStatus.VALIDATED)
                         .paymentCurrency(primaryTicket.getTicketType().getCurrency());
