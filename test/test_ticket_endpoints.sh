@@ -116,6 +116,8 @@ TICKET_ID=""
 TICKET_IDS=()
 ATTENDEE_ID=""
 QR_CODE_DATA=""
+CHECKOUT_ID=""
+PAYMENT_SESSION_ID=""
 LAST_BODY=""
 LAST_HTTP_CODE=""
 
@@ -151,6 +153,7 @@ cat > "$REPORT_FILE" << EOF
 | Health Check | 0 | 0 | 0 | 0% |
 | Ticket Type CRUD | 0 | 0 | 0 | 0% |
 | Ticket Issuance | 0 | 0 | 0 | 0% |
+| Ticket Checkout | 0 | 0 | 0 | 0% |
 | Ticket Query | 0 | 0 | 0 | 0% |
 | Ticket Validation | 0 | 0 | 0 | 0% |
 | Ticket Lifecycle | 0 | 0 | 0 | 0% |
@@ -551,11 +554,12 @@ main() {
     echo "3. Create test event"
     echo "4. Test ticket type CRUD operations"
     echo "5. Test ticket issuance"
-    echo "6. Test ticket querying"
-    echo "7. Test ticket validation"
-    echo "8. Test ticket lifecycle (cancel)"
-    echo "9. Test wallet integration"
-    echo "10. Clean up test data"
+    echo "6. Test ticket checkout flow"
+    echo "7. Test ticket querying"
+    echo "8. Test ticket validation"
+    echo "9. Test ticket lifecycle (cancel)"
+    echo "10. Test wallet integration"
+    echo "11. Clean up test data"
     echo ""
     
     # Step 1: Check service availability
@@ -859,8 +863,121 @@ EOF
     run_test "Issue Tickets (Missing Fields)" "POST" "/api/v1/tickets" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invalid_ticket_data" "400" "Attempt to issue ticket without ticket type"
     echo ""
     
-    # Step 6: Ticket Query
-    echo -e "${CYAN}🔍 Step 6: Ticket Query${NC}"
+    # Step 6: Ticket Checkout Flow
+    echo -e "${CYAN}🛒 Step 6: Ticket Checkout Flow${NC}"
+    echo "==============================="
+    
+    # Create checkout session for paid tickets
+    if [ -n "$TICKET_TYPE_ID" ]; then
+        local checkout_request
+        checkout_request=$(cat <<EOF
+{
+  "items": [
+    {
+      "ticketTypeId": "$TICKET_TYPE_ID",
+      "quantity": 2
+    }
+  ],
+  "customerEmail": "checkout_$(date +%s)@example.com",
+  "customerName": "Checkout Test Customer"
+}
+EOF
+)
+        run_test "Create Ticket Checkout Session" "POST" "/api/v1/events/$EVENT_ID/tickets/checkout" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$checkout_request" "201" "Create a checkout session for ticket purchase"
+        
+        # Extract checkout ID from response
+        if [ "$LAST_HTTP_CODE" = "201" ] && [ -n "$LAST_BODY" ]; then
+            if command -v jq >/dev/null 2>&1; then
+                CHECKOUT_ID=$(echo "$LAST_BODY" | jq -r '.checkoutId // .id // empty' 2>/dev/null)
+            else
+                CHECKOUT_ID=$(echo "$LAST_BODY" | grep -o '"checkoutId":"[^"]*"' | cut -d'"' -f4 | head -1)
+                if [ -z "$CHECKOUT_ID" ]; then
+                    CHECKOUT_ID=$(echo "$LAST_BODY" | grep -o '"id":"[^"]*"' | cut -d'"' -f4 | head -1)
+                fi
+            fi
+            if [ -n "$CHECKOUT_ID" ] && [ "$CHECKOUT_ID" != "null" ]; then
+                echo -e "${GREEN}   Checkout ID: $CHECKOUT_ID${NC}"
+            fi
+        fi
+        
+        # Get checkout session details
+        if [ -n "$CHECKOUT_ID" ]; then
+            run_test "Get Checkout Session" "GET" "/api/v1/events/$EVENT_ID/tickets/checkout/$CHECKOUT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get checkout session details and cost breakdown"
+            
+            # Start payment session
+            run_test "Start Payment Session" "POST" "/api/v1/events/$EVENT_ID/tickets/checkout/$CHECKOUT_ID/start-payment" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Initiate payment for checkout session"
+            
+            # Extract payment session ID if available
+            if [ "$LAST_HTTP_CODE" = "200" ] && [ -n "$LAST_BODY" ]; then
+                if command -v jq >/dev/null 2>&1; then
+                    PAYMENT_SESSION_ID=$(echo "$LAST_BODY" | jq -r '.paymentSessionId // .sessionId // .id // empty' 2>/dev/null)
+                fi
+            fi
+        fi
+        
+        # Create checkout with multiple ticket types
+        if [ -n "$TICKET_TYPE_ID_VIP" ]; then
+            local multi_checkout_request
+            multi_checkout_request=$(cat <<EOF
+{
+  "items": [
+    {
+      "ticketTypeId": "$TICKET_TYPE_ID",
+      "quantity": 1
+    },
+    {
+      "ticketTypeId": "$TICKET_TYPE_ID_VIP",
+      "quantity": 1
+    }
+  ],
+  "customerEmail": "multicheckout_$(date +%s)@example.com",
+  "customerName": "Multi Type Checkout Customer"
+}
+EOF
+)
+            run_test "Create Multi-Type Checkout" "POST" "/api/v1/events/$EVENT_ID/tickets/checkout" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$multi_checkout_request" "201" "Create checkout with multiple ticket types"
+        fi
+        
+        # Test invalid checkout (missing items)
+        local invalid_checkout='{"customerEmail": "test@example.com"}'
+        run_test "Create Checkout (Missing Items)" "POST" "/api/v1/events/$EVENT_ID/tickets/checkout" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invalid_checkout" "400" "Attempt to create checkout without items"
+        
+        # Test invalid checkout (invalid ticket type)
+        local invalid_type_checkout
+        invalid_type_checkout=$(cat <<EOF
+{
+  "items": [
+    {
+      "ticketTypeId": "00000000-0000-0000-0000-000000000000",
+      "quantity": 1
+    }
+  ],
+  "customerEmail": "test@example.com"
+}
+EOF
+)
+        run_test "Create Checkout (Invalid Ticket Type)" "POST" "/api/v1/events/$EVENT_ID/tickets/checkout" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$invalid_type_checkout" "400" "Attempt to create checkout with non-existent ticket type"
+        
+        # Cancel checkout session
+        if [ -n "$CHECKOUT_ID" ]; then
+            run_test "Cancel Checkout Session" "POST" "/api/v1/events/$EVENT_ID/tickets/checkout/$CHECKOUT_ID/cancel" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Cancel checkout session and release reserved inventory"
+            
+            # Try to get cancelled checkout (should still work but show cancelled status)
+            run_test "Get Cancelled Checkout" "GET" "/api/v1/events/$EVENT_ID/tickets/checkout/$CHECKOUT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get cancelled checkout session details"
+        fi
+        
+        # Test get non-existent checkout
+        run_test "Get Checkout (Non-existent)" "GET" "/api/v1/events/$EVENT_ID/tickets/checkout/00000000-0000-0000-0000-000000000000" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "404" "Attempt to get non-existent checkout session"
+        
+        # Test cancel non-existent checkout
+        run_test "Cancel Checkout (Non-existent)" "POST" "/api/v1/events/$EVENT_ID/tickets/checkout/00000000-0000-0000-0000-000000000000/cancel" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "404" "Attempt to cancel non-existent checkout session"
+    else
+        echo -e "${YELLOW}⚠️  No ticket type available for checkout tests${NC}"
+    fi
+    echo ""
+    
+    # Step 7: Ticket Query
+    echo -e "${CYAN}🔍 Step 7: Ticket Query${NC}"
     echo "========================"
     
     # Get all tickets for event
@@ -888,8 +1005,8 @@ EOF
     run_test "Get Tickets (Sorted by Date ASC)" "GET" "/api/v1/tickets/events/$EVENT_ID?sortBy=createdAt&sortDirection=ASC" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get tickets sorted by creation date ascending"
     echo ""
     
-    # Step 7: Wallet Integration
-    echo -e "${CYAN}💳 Step 7: Wallet Integration${NC}"
+    # Step 8: Wallet Integration
+    echo -e "${CYAN}💳 Step 8: Wallet Integration${NC}"
     echo "==============================="
     
     if [ -n "$TICKET_ID" ]; then
@@ -901,8 +1018,8 @@ EOF
     run_test "Get Wallet Pass (Non-existent)" "GET" "/api/v1/tickets/00000000-0000-0000-0000-000000000000/wallet-pass" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "403" "Attempt to get wallet pass for non-existent ticket (RBAC fails first)"
     echo ""
     
-    # Step 8: Ticket Validation
-    echo -e "${CYAN}✅ Step 8: Ticket Validation${NC}"
+    # Step 9: Ticket Validation
+    echo -e "${CYAN}✅ Step 9: Ticket Validation${NC}"
     echo "=============================="
     
     # Validate ticket via QR code
@@ -943,8 +1060,8 @@ EOF
     run_test "Validate Ticket (Missing Event ID)" "POST" "/api/v1/tickets/validate" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$missing_event_qr" "400" "Attempt to validate without event ID"
     echo ""
     
-    # Step 9: Ticket Lifecycle (Cancel)
-    echo -e "${CYAN}🚫 Step 9: Ticket Lifecycle${NC}"
+    # Step 10: Ticket Lifecycle (Cancel)
+    echo -e "${CYAN}🚫 Step 10: Ticket Lifecycle${NC}"
     echo "============================="
     
     # Get a non-validated ticket to cancel
@@ -1007,8 +1124,8 @@ EOF
     run_test "Get Validated Tickets" "GET" "/api/v1/tickets/events/$EVENT_ID?status=VALIDATED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get validated tickets for the event"
     echo ""
     
-    # Step 10: Ticket Type Deletion
-    echo -e "${CYAN}🗑️  Step 10: Ticket Type Cleanup${NC}"
+    # Step 11: Ticket Type Deletion
+    echo -e "${CYAN}🗑️  Step 11: Ticket Type Cleanup${NC}"
     echo "=================================="
     
     # Delete a ticket type (we'll delete the free one which might have fewer tickets)
@@ -1023,8 +1140,8 @@ EOF
     run_test "Delete Ticket Type (Non-existent)" "DELETE" "/api/v1/events/$EVENT_ID/ticket-types/00000000-0000-0000-0000-000000000000" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "404" "Attempt to delete non-existent ticket type"
     echo ""
     
-    # Step 11: Security & Authorization Tests
-    echo -e "${CYAN}🔒 Step 11: Security & Authorization Tests${NC}"
+    # Step 12: Security & Authorization Tests
+    echo -e "${CYAN}🔒 Step 12: Security & Authorization Tests${NC}"
     echo "============================================"
     
     # Test unauthenticated access
@@ -1033,6 +1150,14 @@ EOF
     run_test "Create Ticket Type (No Auth)" "POST" "/api/v1/events/$EVENT_ID/ticket-types" "-H 'Content-Type: application/json'" "$ga_ticket_type_data" "401" "Attempt to create ticket type without authentication"
     
     run_test "Issue Tickets (No Auth)" "POST" "/api/v1/tickets" "-H 'Content-Type: application/json'" '[]' "401" "Attempt to issue tickets without authentication"
+    
+    # Checkout security tests
+    if [ -n "$TICKET_TYPE_ID" ]; then
+        local checkout_security_test='{"items":[{"ticketTypeId":"'$TICKET_TYPE_ID'","quantity":1}],"customerEmail":"test@example.com"}'
+        run_test "Create Checkout (No Auth)" "POST" "/api/v1/events/$EVENT_ID/tickets/checkout" "-H 'Content-Type: application/json'" "$checkout_security_test" "401" "Attempt to create checkout without authentication"
+        
+        run_test "Get Checkout (No Auth)" "GET" "/api/v1/events/$EVENT_ID/tickets/checkout/00000000-0000-0000-0000-000000000000" "" "" "401" "Attempt to get checkout without authentication"
+    fi
     
     run_test "Validate Ticket (No Auth)" "POST" "/api/v1/tickets/validate" "-H 'Content-Type: application/json'" '{"qrCodeData":"test","eventId":"'$EVENT_ID'"}' "401" "Attempt to validate ticket without authentication"
     echo ""
@@ -1086,6 +1211,7 @@ EOF
         echo "|----------|-------------|"
         echo "| Ticket Type CRUD | Create, Read, Update, Delete ticket types |"
         echo "| Ticket Issuance | Issue tickets to attendees and guests |"
+        echo "| Ticket Checkout | Create checkout sessions, start payment, cancel checkout |"
         echo "| Ticket Query | Query tickets with filters and pagination |"
         echo "| Ticket Validation | Validate tickets via QR code |"
         echo "| Ticket Lifecycle | Cancel tickets and manage status |"

@@ -134,6 +134,7 @@ OTHER_ACCESS_TOKEN=""
 OTHER_DEVICE_ID=""
 LAST_BODY=""
 LAST_HTTP_CODE=""
+REMINDER_ID=""
 
 
 verify_email_in_database() {
@@ -372,6 +373,7 @@ cat > "$REPORT_FILE" << EOF
 | CRUD Operations | 0 | 0 | 0 | 0% |
 | Event Management | 0 | 0 | 0 | 0% |
 | Media Management | 0 | 0 | 0 | 0% |
+| Notifications & Reminders | 0 | 0 | 0 | 0% |
 | **TOTAL** | 0 | 0 | 0 | 0% |
 
 ---
@@ -503,6 +505,13 @@ run_test() {
                 ;;
             "Add Event Collaborator")
                 COLLABORATOR_ID=$(echo "$response_body" | grep -o '"collaboratorId":"[^"]*"' | cut -d'"' -f4)
+                ;;
+            "Create Event Reminder")
+                if command -v jq >/dev/null 2>&1; then
+                    REMINDER_ID=$(echo "$response_body" | jq -r '.id // empty')
+                else
+                    REMINDER_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4 | head -1)
+                fi
                 ;;
         esac
     fi
@@ -827,7 +836,8 @@ main() {
     echo "4. Test CRUD operations"
     echo "5. Test event management endpoints"
     echo "6. Test media management endpoints"
-    echo "7. Clean up test data"
+    echo "7. Test notifications & reminders endpoints"
+    echo "8. Clean up test data"
     echo ""
     
     # Step 1: Check service availability
@@ -1324,8 +1334,85 @@ EOF
     run_test "Remove Cover Image" "DELETE" "/api/v1/events/$EVENT_ID/cover-image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Remove cover image"
     echo ""
     
-    # Step 7: Clean up test data
-    echo -e "${CYAN}🧹 Step 7: Clean Up Test Data${NC}"
+    # Step 7: Notifications & Reminders Tests
+    echo -e "${CYAN}🔔 Step 7: Notifications & Reminders Tests${NC}"
+    echo "=========================================="
+    
+    # Notification Settings Tests
+    run_test "Get Event Notification Settings" "GET" "/api/v1/events/$EVENT_ID/notifications" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get notification settings for an event"
+    
+    # Send Notification Test
+    local notification_request='{
+        "message": "Test notification message",
+        "priority": "NORMAL",
+        "channels": ["EMAIL", "PUSH"],
+        "recipientType": "ALL_ATTENDEES"
+    }'
+    run_test "Send Event Notification" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_request" "200" "Send a notification for an event"
+    
+    # Reminders Tests
+    run_test "Get Event Reminders" "GET" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all reminders for an event"
+    
+    run_test "Get Event Reminders (Paginated)" "GET" "/api/v1/events/$EVENT_ID/reminders?page=0&size=10" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get reminders with pagination"
+    
+    # Create Reminder
+    local reminder_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
+    local create_reminder_request='{
+        "title": "Test Reminder",
+        "message": "This is a test reminder",
+        "reminderDateTime": "'$reminder_date'",
+        "channels": ["EMAIL", "PUSH"]
+    }'
+    run_test "Create Event Reminder" "POST" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$create_reminder_request" "200" "Create a new reminder for an event"
+    
+    # Extract reminder ID from response if created successfully
+    # The run_test function stores response in LAST_BODY and LAST_HTTP_CODE
+    if [ "$LAST_HTTP_CODE" = "200" ] && [ -n "$LAST_BODY" ]; then
+        if command -v jq >/dev/null 2>&1; then
+            REMINDER_ID=$(echo "$LAST_BODY" | jq -r '.id // empty' 2>/dev/null)
+        else
+            REMINDER_ID=$(echo "$LAST_BODY" | grep -o '"id":"[^"]*"' | cut -d'"' -f4 | head -1)
+        fi
+        if [ -n "$REMINDER_ID" ] && [ "$REMINDER_ID" != "null" ]; then
+            echo -e "${GREEN}✅ Extracted reminder ID: $REMINDER_ID${NC}"
+        fi
+    fi
+    
+    # Get Specific Reminder
+    if [ -n "$REMINDER_ID" ]; then
+        run_test "Get Specific Reminder" "GET" "/api/v1/events/$EVENT_ID/reminders/$REMINDER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get details of a specific reminder"
+        
+        # Update Reminder
+        local update_reminder_date=$(date -u -v+2d '+%Y-%m-%dT%H:%M:%S')
+        local update_reminder_request='{
+            "title": "Updated Test Reminder",
+            "message": "This is an updated test reminder",
+            "reminderDateTime": "'$update_reminder_date'",
+            "channels": ["EMAIL"]
+        }'
+        run_test "Update Event Reminder" "PUT" "/api/v1/events/$EVENT_ID/reminders/$REMINDER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_reminder_request" "200" "Update an existing reminder"
+        
+        # Delete Reminder (will be done at the end to test deletion)
+    else
+        echo -e "${YELLOW}⚠️  Could not extract reminder ID, skipping reminder-specific tests${NC}"
+        # Use a mock ID for testing error cases
+        REMINDER_ID="00000000-0000-0000-0000-000000000000"
+    fi
+    
+    # Test unauthorized access (other user should not be able to access)
+    if authenticate_other_user; then
+        run_test "Get Reminders (Other User - Should Fail)" "GET" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $OTHER_ACCESS_TOKEN'" "" "403" "Ensure non-members cannot access event reminders"
+        run_test "Send Notification (Other User - Should Fail)" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $OTHER_ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_request" "403" "Ensure non-owners cannot send notifications"
+    fi
+    
+    # Delete reminder if we have a valid ID
+    if [ -n "$REMINDER_ID" ] && [ "$REMINDER_ID" != "00000000-0000-0000-0000-000000000000" ]; then
+        run_test "Delete Event Reminder" "DELETE" "/api/v1/events/$EVENT_ID/reminders/$REMINDER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete a reminder"
+    fi
+    echo ""
+    
+    # Step 8: Clean up test data
+    echo -e "${CYAN}🧹 Step 8: Clean Up Test Data${NC}"
     echo "==============================="
     
     if [ -n "$EVENT_ID" ]; then

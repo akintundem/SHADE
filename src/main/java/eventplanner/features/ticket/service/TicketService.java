@@ -175,6 +175,11 @@ public class TicketService {
             }
         }
 
+        // Reserve inventory with a pessimistic lock to avoid overselling
+        if (!(freeTicket && finalizeFreeTickets)) {
+            reserveTicketsOrThrow(ticketType.getId(), request.getQuantity());
+        }
+
         UserAccount issuedBy = principal != null && principal.getId() != null
             ? userAccountRepository.findById(principal.getId()).orElse(null)
             : null;
@@ -193,9 +198,6 @@ public class TicketService {
         if (freeTicket && finalizeFreeTickets) {
             // Free ticket (price is null or zero) - immediately mark as sold
             ticketTypeRepository.incrementQuantitySold(request.getTicketTypeId(), request.getQuantity());
-        } else {
-            // Paid ticket or checkout reservation - reserve for now (will be moved to sold when payment completes)
-            ticketTypeRepository.incrementQuantityReserved(request.getTicketTypeId(), request.getQuantity());
         }
 
         // For free tickets, update attendee RSVP status (only if attendee exists)
@@ -286,11 +288,12 @@ public class TicketService {
                 "Cannot cancel a validated ticket", 409);
         }
 
+        TicketStatus previousStatus = ticket.getStatus();
         ticket.cancel(null);
         Ticket saved = ticketRepository.save(ticket);
 
         // Release reserved quantity if it was reserved
-        if (ticket.getTicketType().getPriceMinor() != null && ticket.getStatus() == TicketStatus.PENDING) {
+        if (previousStatus == TicketStatus.PENDING && ticket.getTicketType() != null) {
             ticketTypeRepository.decrementQuantityReserved(ticket.getTicketType().getId(), 1);
         }
 
@@ -463,6 +466,18 @@ public class TicketService {
             result.append(String.format("%02x", b));
         }
         return result.toString();
+    }
+
+    private void reserveTicketsOrThrow(UUID ticketTypeId, int quantity) {
+        TicketType lockedType = ticketTypeRepository.findByIdForUpdate(ticketTypeId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + ticketTypeId));
+
+        if (!lockedType.canPurchase(quantity)) {
+            throw new ApiException("TICKET_TYPE_SOLD_OUT",
+                "Not enough tickets available. Remaining: " + lockedType.getQuantityRemaining(), 409);
+        }
+
+        ticketTypeRepository.incrementQuantityReserved(ticketTypeId, quantity);
     }
 
     private TicketWalletResponse buildWalletResponse(Ticket ticket) {
