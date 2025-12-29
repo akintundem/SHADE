@@ -3,12 +3,13 @@
 **/target/
 *.jar
 
-# IntelliJ / IDEA / Eclipse / VS Code
+# IntelliJ / IDEA / Eclipse / VS Code / Cursor
 .idea/
 .project
 .classpath
 .settings/
 .vscode/
+.cursor/
 
 # Logs and runtime files
 *.log
