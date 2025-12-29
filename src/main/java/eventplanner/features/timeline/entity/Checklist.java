@@ -11,7 +11,6 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Entity
 @Table(name = "checklists")
@@ -52,9 +51,7 @@ public class Checklist extends BaseEntity {
 
     @PrePersist
     public void prePersist() {
-        if (getId() == null) setId(UUID.randomUUID());
         if (status == null) status = TimelineStatus.PENDING;
         if (isDraft == null) isDraft = true;
     }
 }
-

@@ -42,6 +42,9 @@ public class TimelineTaskService {
      * Validate event access
      */
     private void validateEventAccess(UserPrincipal user, UUID eventId) {
+        if (authorizationService == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access control not available");
+        }
         if (!authorizationService.canAccessEvent(user, eventId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
                 "Access denied: You do not have permission to access this event");

@@ -14,7 +14,6 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @Entity
 @Table(name = "tasks")
@@ -81,7 +80,6 @@ public class Task extends BaseEntity {
 
     @PrePersist
     public void prePersist() {
-        if (getId() == null) setId(UUID.randomUUID());
         if (status == null) status = TimelineStatus.PENDING;
         if (progressPercentage == null) progressPercentage = 0;
         if (isDraft == null) isDraft = true;
@@ -90,4 +88,3 @@ public class Task extends BaseEntity {
         if (totalSubtasksCount == null) totalSubtasksCount = 0;
     }
 }
-

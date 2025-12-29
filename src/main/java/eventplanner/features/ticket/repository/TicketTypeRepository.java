@@ -54,4 +54,7 @@ public interface TicketTypeRepository extends JpaRepository<TicketType, UUID> {
 
     @Query("SELECT t FROM TicketType t WHERE t.event.id = :eventId AND t.category = :category AND t.isActive = true")
     List<TicketType> findByEventIdAndCategoryAndIsActive(@Param("eventId") UUID eventId, @Param("category") TicketTypeCategory category);
+
+    @Query("SELECT COUNT(tk) FROM Ticket tk WHERE tk.ticketType.id = :ticketTypeId")
+    long countTicketsByTicketTypeId(@Param("ticketTypeId") UUID ticketTypeId);
 }

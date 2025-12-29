@@ -107,6 +107,9 @@ public class TicketService {
 
         TicketType ticketType = ticketTypeRepository.findById(request.getTicketTypeId())
             .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + request.getTicketTypeId()));
+        if (ticketType.getEvent() == null || !ticketType.getEvent().getId().equals(request.getEventId())) {
+            throw new IllegalArgumentException("Ticket type does not belong to event");
+        }
 
         // Validate that either attendeeId or email/name is provided
         if (request.getAttendeeId() == null && (request.getOwnerEmail() == null || request.getOwnerName() == null)) {
@@ -125,10 +128,12 @@ public class TicketService {
                 "Not enough tickets available. Remaining: " + ticketType.getQuantityRemaining(), 409);
         }
 
-        // Check max tickets per person (default limit is 5)
-        int maxTicketsPerPerson = ticketType.getMaxTicketsPerPerson() != null 
-            ? ticketType.getMaxTicketsPerPerson() 
-            : DEFAULT_MAX_TICKETS_PER_PERSON;
+        // Check max tickets per person (null means unlimited, otherwise enforce configured; fall back to default only if explicitly set to 0)
+        Integer configuredMax = ticketType.getMaxTicketsPerPerson();
+        int maxTicketsPerPerson = configuredMax == null ? Integer.MAX_VALUE : configuredMax;
+        if (configuredMax != null && configuredMax <= 0) {
+            maxTicketsPerPerson = DEFAULT_MAX_TICKETS_PER_PERSON;
+        }
         
         // Check limit for attendee-based tickets
         if (attendee != null) {
@@ -140,7 +145,7 @@ public class TicketService {
                     "You already have " + existingTickets + " ticket(s) for this event.", 400);
             }
         }
-        
+
         // Check limit for email-based tickets
         if (attendee == null && request.getOwnerEmail() != null) {
             long existingTickets = ticketRepository.findByOwnerEmailAndEventId(
