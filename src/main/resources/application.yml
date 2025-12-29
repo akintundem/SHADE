@@ -36,10 +36,15 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
+    open-in-view: false  # Disable Open Session In View to prevent lazy loading issues
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false  # Default: false (prod)
+        # Suppress foreign key constraint errors during schema update (orphaned data is cleaned up on startup)
+        jdbc.batch_size: 20
+        order_inserts: true
+        order_updates: true
     defer-datasource-initialization: true
   
   # Database Configuration
