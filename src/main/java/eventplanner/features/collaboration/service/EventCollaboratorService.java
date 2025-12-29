@@ -7,6 +7,8 @@ import eventplanner.common.domain.enums.RegistrationStatus;
 import eventplanner.features.collaboration.dto.request.EventCollaboratorRequest;
 import eventplanner.features.collaboration.dto.response.EventCollaboratorResponse;
 import eventplanner.features.collaboration.entity.EventUser;
+import eventplanner.features.collaboration.entity.EventUserPermission;
+import eventplanner.features.collaboration.enums.EventPermission;
 import eventplanner.features.collaboration.repository.EventUserRepository;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
@@ -46,7 +48,7 @@ public class EventCollaboratorService {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
         return eventUserRepository.findByEventId(eventId, PageRequest.of(safePage, safeSize)).getContent().stream()
-                .map(eventUser -> toResponse(eventUser, Collections.emptyList(), false, null))
+                .map(eventUser -> toResponse(eventUser, false, null))
                 .toList();
     }
 
@@ -75,13 +77,14 @@ public class EventCollaboratorService {
         collaborator.setUserType(request.getRole());
         collaborator.setRegistrationStatus(RegistrationStatus.CONFIRMED);
         collaborator.setRegistrationDate(LocalDateTime.now());
+        updatePermissions(collaborator, request.getPermissions());
 
         EventUser saved = eventUserRepository.save(collaborator);
         
         // Send notification to the newly added collaborator
         sendCollaboratorWelcomeCommunication(event, saved);
         
-        return toResponse(saved, request.getPermissions(), false, null);
+        return toResponse(saved, false, null);
     }
     
     /**
@@ -155,9 +158,12 @@ public class EventCollaboratorService {
         if (request != null && request.getRole() != null) {
             collaborator.setUserType(request.getRole());
         }
+        if (request != null && request.getPermissions() != null) {
+            updatePermissions(collaborator, request.getPermissions());
+        }
 
         EventUser saved = eventUserRepository.save(collaborator);
-        return toResponse(saved, request != null ? request.getPermissions() : null, false, null);
+        return toResponse(saved, false, null);
     }
 
     public void removeCollaborator(UUID eventId, UUID collaboratorId) {
@@ -170,7 +176,6 @@ public class EventCollaboratorService {
     }
 
     private EventCollaboratorResponse toResponse(EventUser eventUser,
-                                                 List<String> permissions,
                                                  boolean invitationSent,
                                                  LocalDateTime invitationSentAt) {
         EventCollaboratorResponse response = new EventCollaboratorResponse();
@@ -180,7 +185,12 @@ public class EventCollaboratorService {
         response.setEmail(eventUser.getUser() != null ? eventUser.getUser().getEmail() : null);
         response.setUserName(eventUser.getUser() != null ? eventUser.getUser().getName() : null);
         response.setRole(eventUser.getUserType());
-        response.setPermissions(permissions != null ? permissions : Collections.emptyList());
+        response.setPermissions(eventUser.getPermissions() != null
+                ? eventUser.getPermissions().stream()
+                    .map(EventUserPermission::getPermission)
+                    .filter(perm -> perm != null)
+                    .toList()
+                : Collections.emptyList());
         response.setRegistrationStatus(eventUser.getRegistrationStatus() != null ? eventUser.getRegistrationStatus().name() : null);
         response.setInvitationSent(invitationSent);
         response.setInvitationSentAt(invitationSentAt);
@@ -188,9 +198,19 @@ public class EventCollaboratorService {
         response.setUpdatedAt(eventUser.getUpdatedAt());
         return response;
     }
+
+    private void updatePermissions(EventUser collaborator, List<EventPermission> permissions) {
+        if (collaborator.getPermissions() == null) {
+            collaborator.setPermissions(new java.util.ArrayList<>());
+        } else {
+            collaborator.getPermissions().clear();
+        }
+        if (permissions == null) {
+            return;
+        }
+        permissions.stream()
+                .filter(p -> p != null)
+                .forEach(p -> collaborator.getPermissions().add(new EventUserPermission(collaborator, p)));
+    }
 }
-
-
-
-
 

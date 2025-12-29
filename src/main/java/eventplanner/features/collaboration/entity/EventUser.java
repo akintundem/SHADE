@@ -6,6 +6,9 @@ import eventplanner.common.domain.enums.RegistrationStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.security.auth.entity.UserAccount;
 import jakarta.persistence.*;
+
+import java.util.ArrayList;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -18,10 +21,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 public class EventUser extends BaseEntity {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private java.util.UUID id;
 
     /**
      * Many-to-one relationship with the event.
@@ -53,4 +52,10 @@ public class EventUser extends BaseEntity {
 
     @Column(name = "volunteer_hours")
     private Integer volunteerHours;
+
+    /**
+     * Optional granular permissions for the collaborator.
+     */
+    @OneToMany(mappedBy = "eventUser", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<EventUserPermission> permissions = new ArrayList<>();
 }

@@ -1,6 +1,7 @@
 package eventplanner.features.collaboration.dto.response;
 
 import eventplanner.common.domain.enums.EventUserType;
+import eventplanner.features.collaboration.enums.EventPermission;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
@@ -36,7 +37,7 @@ public class EventCollaboratorResponse {
     private EventUserType role;
 
     @Schema(description = "Custom permissions")
-    private List<String> permissions;
+    private List<EventPermission> permissions;
 
     @Schema(description = "Registration status")
     private String registrationStatus;
@@ -53,7 +54,6 @@ public class EventCollaboratorResponse {
     @Schema(description = "Last updated date")
     private LocalDateTime updatedAt;
 }
-
 
 
 

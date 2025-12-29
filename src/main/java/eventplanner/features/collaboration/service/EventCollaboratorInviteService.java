@@ -83,6 +83,9 @@ public class EventCollaboratorInviteService {
         if ((inviteeUserId == null) && (inviteeEmail == null || inviteeEmail.isBlank())) {
             throw new IllegalArgumentException("Either inviteeUserId or inviteeEmail must be provided");
         }
+        if (inviteeUserId == null && inviteeEmail != null && Boolean.FALSE.equals(request.getSendEmail())) {
+            throw new IllegalArgumentException("Email delivery is required when inviting by email");
+        }
 
         // Normalize email
         if (inviteeEmail != null && !inviteeEmail.isBlank()) {
@@ -106,21 +109,6 @@ public class EventCollaboratorInviteService {
             }
         }
 
-        // Prevent duplicate pending invites
-        if (inviteeUserId != null) {
-            Optional<EventCollaboratorInvite> existingPending = inviteRepository
-                    .findFirstByEventIdAndInviteeUserIdAndStatusOrderByCreatedAtDesc(eventId, inviteeUserId, CollaboratorInviteStatus.PENDING);
-            if (existingPending.isPresent()) {
-                return CollaboratorInviteResponse.from(existingPending.get());
-            }
-        } else if (inviteeEmail != null) {
-            Optional<EventCollaboratorInvite> existingPending = inviteRepository
-                    .findFirstByEventIdAndInviteeEmailIgnoreCaseAndStatusOrderByCreatedAtDesc(eventId, inviteeEmail, CollaboratorInviteStatus.PENDING);
-            if (existingPending.isPresent()) {
-                return CollaboratorInviteResponse.from(existingPending.get());
-            }
-        }
-
         // Fetch Event entity
         Event event = eventRepository.findById(eventId)
             .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
@@ -139,9 +127,26 @@ public class EventCollaboratorInviteService {
                 .orElse(null); // Invitee account may be absent when inviting by email only
         }
         
-        EventCollaboratorInvite invite = new EventCollaboratorInvite();
-        invite.setEvent(event);
+        // Reuse existing pending invite if present, otherwise create new
+        EventCollaboratorInvite invite = null;
+        String rawToken = null;
+        if (inviteeUserId != null) {
+            invite = inviteRepository
+                    .findFirstByEventIdAndInviteeUserIdAndStatusOrderByCreatedAtDesc(eventId, inviteeUserId, CollaboratorInviteStatus.PENDING)
+                    .orElse(null);
+        } else if (inviteeEmail != null) {
+            invite = inviteRepository
+                    .findFirstByEventIdAndInviteeEmailIgnoreCaseAndStatusOrderByCreatedAtDesc(eventId, inviteeEmail, CollaboratorInviteStatus.PENDING)
+                    .orElse(null);
+        }
+
+        if (invite == null) {
+            invite = new EventCollaboratorInvite();
+            invite.setEvent(event);
+        }
+
         invite.setInviter(inviterUser);
+        invite.setEvent(event);
         if (inviteeUser != null) {
             invite.setInvitee(inviteeUser);
         }
@@ -151,11 +156,16 @@ public class EventCollaboratorInviteService {
         invite.setExpiresAt(LocalDateTime.now(ZoneOffset.UTC).plusDays(DEFAULT_INVITE_TTL_DAYS));
         invite.setMessage(safeTrim(request.getMessage()));
 
+        // Reset status/response for refreshed invites
+        invite.setStatus(CollaboratorInviteStatus.PENDING);
+        invite.setRespondedAt(null);
+
         // If we have an email, create a token-based acceptance flow.
-        String rawToken = null;
         if (inviteeEmail != null) {
             rawToken = SecureTokenUtil.generateSecureToken();
             invite.setTokenHash(TokenHashUtil.sha256(rawToken));
+        } else {
+            invite.setTokenHash(null);
         }
 
         EventCollaboratorInvite saved = inviteRepository.save(invite);
@@ -166,7 +176,7 @@ public class EventCollaboratorInviteService {
         }
 
         // Notify invitee via email if requested and email is present
-        if (Boolean.TRUE.equals(request.getSendEmail()) && saved.getInviteeEmail() != null) {
+        if (Boolean.TRUE.equals(request.getSendEmail()) && saved.getInviteeEmail() != null && rawToken != null) {
             sendEmailInvite(saved, rawToken, inviter.getUser());
         }
 
@@ -319,18 +329,11 @@ public class EventCollaboratorInviteService {
         if (principal == null) {
             throw new IllegalArgumentException("Authentication required");
         }
-        if (principal.getUser() == null) {
-            throw new IllegalArgumentException("User account information is required");
-        }
-
         UUID principalId = principal.getId();
-        String principalEmail = principal.getUser().getEmail();
+        String principalEmail = principal.getUser() != null ? principal.getUser().getEmail() : null;
 
         if (principalId == null) {
             throw new IllegalArgumentException("User ID is required");
-        }
-        if (principalEmail == null || principalEmail.trim().isEmpty()) {
-            throw new IllegalArgumentException("User email is required");
         }
 
         UUID inviteeUserId = invite.getInvitee() != null ? invite.getInvitee().getId() : null;

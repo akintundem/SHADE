@@ -1,6 +1,7 @@
 package eventplanner.features.collaboration.dto.request;
 
 import eventplanner.common.domain.enums.EventUserType;
+import eventplanner.features.collaboration.enums.EventPermission;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -27,12 +28,11 @@ public class EventCollaboratorRequest {
     private EventUserType role;
 
     @Schema(description = "Custom permissions for the collaborator")
-    private List<String> permissions;
+    private List<EventPermission> permissions;
 
     @Schema(description = "Whether to send invitation email (optional, currently not used)")
     private Boolean sendInvitation = false;
 }
-
 
 
 
