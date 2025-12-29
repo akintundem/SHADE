@@ -9,9 +9,7 @@ import lombok.NoArgsConstructor;
 import java.util.UUID;
 
 /**
- * DTO for individual attendee information (without eventId).
- * Used in bulk operations where eventId is specified once at the top level.
- * Supports adding attendees by userId (from directory) or email.
+ * Attendee payload used inside bulk requests (eventId supplied separately).
  */
 @Data
 @NoArgsConstructor
@@ -19,25 +17,23 @@ import java.util.UUID;
 public class AttendeeInfo {
 
     /**
-     * User ID from the directory (optional - if provided, name/email will be auto-filled from user account)
+     * Directory user ID; optional. When provided, name/email are pulled from the account.
      */
     private UUID userId;
 
     /**
-     * Email address (required if userId is not provided)
+     * Email, required when userId is absent.
      */
     @Email(message = "Valid email is required if userId is not provided")
     private String email;
 
     /**
-     * Name (required if userId is not provided, otherwise auto-filled from user account)
+     * Name when no userId is supplied; ignored otherwise.
      */
     private String name;
 
     /**
-     * Participation visibility for this specific event (optional).
-     * If not provided, defaults to the user's global eventParticipationVisibility setting.
-     * Allows users to override their default on a per-event basis.
+     * Optional per-event visibility; defaults to the user's global preference.
      */
     private VisibilityLevel participationVisibility;
 }

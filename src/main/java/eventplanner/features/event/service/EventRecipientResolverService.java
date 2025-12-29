@@ -118,7 +118,7 @@ public class EventRecipientResolverService {
     private RecipientInfo resolveGuests(UUID eventId) {
         List<Attendee> attendees = attendeeRepository.findByEventId(eventId);
         
-        Set<UUID> userIds = new HashSet<>(); // Attendees don't have userIds typically
+        Set<UUID> userIds = new HashSet<>(); // Many attendees are email-only and lack linked user accounts
         
         Set<String> emails = attendees.stream()
             .map(Attendee::getEmail)

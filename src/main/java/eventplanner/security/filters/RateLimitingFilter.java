@@ -84,12 +84,12 @@ public class RateLimitingFilter implements Filter {
     }
 
     /**
-     * Determine the rate limit key based on authentication status
-     * - For authenticated users: use user ID from SecurityContext (SECURE)
-     * - For unauthenticated requests: use IP address
+     * Determine the rate limit key based on authentication status.
+     * - Authenticated requests: user ID from the server-side SecurityContext
+     * - Unauthenticated requests: client IP address
      */
     private String determineRateLimitKey(HttpServletRequest request) {
-        // Extract user ID from Spring Security context (SECURE - cannot be manipulated)
+        // Extract user ID from Spring Security context rather than trusting request input
         UUID userId = getCurrentUserId();
         if (userId != null) {
             return "user:" + userId.toString();
@@ -101,46 +101,16 @@ public class RateLimitingFilter implements Filter {
     }
     
     /**
-     * Extract user ID from Spring Security context (SECURE - cannot be manipulated)
-     * This is the most secure approach as it relies on the authenticated user context
+     * Resolve canonical endpoint key by normalizing dynamic segments (UUIDs/ids) to "{id}".
      */
-    private UUID getCurrentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        
-        if (authentication == null || !authentication.isAuthenticated()) {
-            return null;
-        }
-        
-        Object principal = authentication.getPrincipal();
-        if (principal instanceof UserPrincipal) {
-            UserPrincipal userPrincipal = (UserPrincipal) principal;
-            return userPrincipal.getUser().getId();
-        }
-        
-        return null;
-    }
-    
-    private boolean isExcludedPath(String path) {
-        return EXCLUDED_PATHS.stream().anyMatch(path::startsWith);
-    }
-
-    private String getClientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwarded)) {
-            return forwarded.split(",")[0].trim();
-        }
-        String realIp = request.getHeader("X-Real-IP");
-        if (StringUtils.hasText(realIp)) {
-            return realIp.trim();
-        }
-        return request.getRemoteAddr();
-    }
-
     private String determineEndpointKey(HttpServletRequest request) {
         String canonicalPath = canonicalizePath(request.getRequestURI());
         return request.getMethod().toUpperCase(Locale.US) + ":" + canonicalPath;
     }
-
+    
+    /**
+     * Collapse path parameters into a stable token so rate limits group similar routes.
+     */
     private String canonicalizePath(String path) {
         if (!StringUtils.hasText(path)) {
             return "/";
@@ -159,6 +129,41 @@ public class RateLimitingFilter implements Filter {
             }
         }
         return builder.length() == 0 ? "/" : builder.toString();
+    }
+    
+    // Extract user ID from server-maintained authentication context (not user-supplied data)
+    private UUID getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof UserPrincipal) {
+            UserPrincipal userPrincipal = (UserPrincipal) principal;
+            return userPrincipal.getUser().getId();
+        }
+        
+        return null;
+    }
+    
+    // Exclude health/docs/error endpoints from rate limiting to avoid polluting metrics
+    private boolean isExcludedPath(String path) {
+        return EXCLUDED_PATHS.stream().anyMatch(path::startsWith);
+    }
+
+    // Extract client IP from standard headers, falling back to remote address
+    private String getClientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (StringUtils.hasText(forwarded)) {
+            return forwarded.split(",")[0].trim();
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (StringUtils.hasText(realIp)) {
+            return realIp.trim();
+        }
+        return request.getRemoteAddr();
     }
 
     /**

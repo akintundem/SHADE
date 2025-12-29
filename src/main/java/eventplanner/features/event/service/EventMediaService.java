@@ -17,8 +17,8 @@ import eventplanner.features.event.repository.EventStoredObjectRepository;
 import eventplanner.common.util.UserAccountUtil;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
-import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.net.URL;
 import java.time.Duration;
@@ -29,6 +29,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Handles media uploads, metadata, and retrieval for events (generic media, assets, and cover images).
+ * Provides presigned URL issuance plus CRUD over stored media records with access checks.
+ */
 @Service
 public class EventMediaService {
 
@@ -58,6 +62,9 @@ public class EventMediaService {
         this.userAccountRepository = userAccountRepository;
     }
 
+    /**
+     * List event media with optional filtering by category or MIME type prefix.
+     */
     public List<EventMediaResponse> getEventMedia(UUID eventId, UserPrincipal principal, String category, String type) {
         accessControlService.requireMediaView(principal, eventId);
         List<EventStoredObject> items = storedObjectRepository.findByEventIdAndPurposeOrderByCreatedAtDesc(eventId, PURPOSE_EVENT_MEDIA);
@@ -74,23 +81,35 @@ public class EventMediaService {
         return out;
     }
 
+    /**
+     * Issue a presigned PUT URL for a new media upload.
+     */
     public EventPresignedUploadResponse createMediaUpload(UUID eventId, UserPrincipal principal, EventMediaUploadRequest request) {
         accessControlService.requireMediaUpload(principal, eventId);
         return buildPresignedResponse(eventId, request, PURPOSE_EVENT_MEDIA);
     }
 
+    /**
+     * Mark a media upload as complete and persist metadata.
+     */
     public EventMediaResponse completeMediaUpload(UUID eventId, UUID mediaId, UserPrincipal principal, EventMediaUploadCompleteRequest request) {
         accessControlService.requireMediaUpload(principal, eventId);
         EventStoredObject saved = completeStoredObject(eventId, mediaId, principal, request, PURPOSE_EVENT_MEDIA, eventId, null);
         return toMediaResponse(eventId, saved);
     }
 
+    /**
+     * Fetch a single media item by id.
+     */
     public EventMediaResponse getMedia(UUID eventId, UUID mediaId, UserPrincipal principal) {
         accessControlService.requireMediaView(principal, eventId);
         EventStoredObject item = requireStoredObject(eventId, mediaId, PURPOSE_EVENT_MEDIA);
         return toMediaResponse(eventId, item);
     }
 
+    /**
+     * Update media metadata (name, description, tags, visibility).
+     */
     public EventMediaResponse updateMedia(UUID eventId, UUID mediaId, UserPrincipal principal, EventMediaRequest request) {
         accessControlService.requireMediaManage(principal, eventId);
         EventStoredObject item = requireStoredObject(eventId, mediaId, PURPOSE_EVENT_MEDIA);
@@ -116,6 +135,9 @@ public class EventMediaService {
         return toMediaResponse(eventId, saved);
     }
 
+    /**
+     * Delete media object and its backing storage object.
+     */
     public ApiMessageResponse deleteMedia(UUID eventId, UUID mediaId, UserPrincipal principal) {
         accessControlService.requireMediaManage(principal, eventId);
         EventStoredObject item = requireStoredObject(eventId, mediaId, PURPOSE_EVENT_MEDIA);
@@ -124,6 +146,9 @@ public class EventMediaService {
         return ApiMessageResponse.success("Media deleted successfully");
     }
 
+    /**
+     * List supporting assets (non-feed media) for an event.
+     */
     public List<EventMediaResponse> getEventAssets(UUID eventId, UserPrincipal principal) {
         accessControlService.requireAssetView(principal, eventId);
         List<EventStoredObject> items = storedObjectRepository.findByEventIdAndPurposeOrderByCreatedAtDesc(eventId, PURPOSE_EVENT_ASSET);
@@ -134,17 +159,26 @@ public class EventMediaService {
         return out;
     }
 
+    /**
+     * Issue a presigned PUT URL for an asset upload.
+     */
     public EventPresignedUploadResponse createAssetUpload(UUID eventId, UserPrincipal principal, EventMediaUploadRequest request) {
         accessControlService.requireAssetView(principal, eventId);
         return buildPresignedResponse(eventId, request, PURPOSE_EVENT_ASSET);
     }
 
+    /**
+     * Complete an asset upload.
+     */
     public EventMediaResponse completeAssetUpload(UUID eventId, UUID assetId, UserPrincipal principal, EventMediaUploadCompleteRequest request) {
         accessControlService.requireAssetView(principal, eventId);
         EventStoredObject saved = completeStoredObject(eventId, assetId, principal, request, PURPOSE_EVENT_ASSET, eventId, null);
         return toMediaResponse(eventId, saved);
     }
 
+    /**
+     * Issue a presigned PUT URL for a cover image upload (image/* only).
+     */
     public EventPresignedUploadResponse createCoverImageUpload(UUID eventId, UserPrincipal principal, EventMediaUploadRequest request) {
         accessControlService.requireCoverManage(principal, eventId);
         // Extra guard: cover image must be an image/*
@@ -154,6 +188,9 @@ public class EventMediaService {
         return buildPresignedResponse(eventId, request, PURPOSE_EVENT_COVER);
     }
 
+    /**
+     * Complete cover image upload and update the event with the new URL.
+     */
     public EventCoverImageResponse completeCoverImageUpload(UUID eventId, UUID coverId, UserPrincipal principal, EventMediaUploadCompleteRequest request) {
         accessControlService.requireCoverManage(principal, eventId);
         EventStoredObject saved = completeStoredObject(eventId, coverId, principal, request, PURPOSE_EVENT_COVER, eventId, "cover");
@@ -169,6 +206,9 @@ public class EventMediaService {
             .build();
     }
 
+    /**
+     * Remove cover image metadata (does not delete the stored object).
+     */
     public EventCoverImageResponse removeCoverImage(UUID eventId, UserPrincipal principal) {
         accessControlService.requireCoverManage(principal, eventId);
         return EventCoverImageResponse.builder()
@@ -204,7 +244,7 @@ public class EventMediaService {
             .uploadMethod("PUT")
             .uploadUrl(presignedPut.toString())
             .headers(Map.of("Content-Type", request.getContentType()))
-            // Resource URL is the non-presigned object URL (may be inaccessible if bucket/object is private)
+            // Non-presigned object URL; private buckets may block direct access.
             .resourceUrl(storageService.stripQuery(presignedPut))
             .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plus(UPLOAD_URL_TTL))
             .build();

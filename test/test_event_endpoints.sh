@@ -702,6 +702,8 @@ create_test_event() {
     "capacity": 100,
     "isPublic": true,
     "requiresApproval": false,
+    "accessType": "OPEN",
+    "feedsPublicAfterEvent": false,
     "eventWebsiteUrl": "https://example.com/event",
     "hashtag": "#TestEvent",
     "venue": {
@@ -881,6 +883,8 @@ main() {
     "capacity": 100,
     "isPublic": true,
     "requiresApproval": false,
+    "accessType": "RSVP_REQUIRED",
+    "feedsPublicAfterEvent": true,
     "eventWebsiteUrl": "https://example.com/event",
     "hashtag": "#ReportTestEvent",
     "venue": {
@@ -1013,6 +1017,8 @@ EOF
     "capacity": 150,
     "isPublic": false,
     "requiresApproval": true,
+    "accessType": "INVITE_ONLY",
+    "feedsPublicAfterEvent": true,
     "venue": {
       "address": "456 Market Street",
       "city": "San Francisco",
@@ -1032,6 +1038,18 @@ EOF
     
     # Test get non-existent event
     run_test "Get Non-existent Event" "GET" "/api/v1/events/00000000-0000-0000-0000-000000000000" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "404" "Get non-existent event"
+    
+    # Test accessType update to TICKETED
+    local ticketed_update_data='{
+        "event": {
+            "accessType": "TICKETED",
+            "feedsPublicAfterEvent": false
+        }
+    }'
+    run_test "Update Event Access Type to TICKETED" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$ticketed_update_data" "200" "Update event access type to TICKETED"
+    
+    # Verify userContext and accessType in response
+    run_test "Get Event with UserContext" "GET" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event with userContext (should include accessStatus, hasValidTicket, etc.)"
     echo ""
     
     # Step 5: Event Management Tests

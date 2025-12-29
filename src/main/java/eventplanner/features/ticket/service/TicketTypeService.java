@@ -174,13 +174,7 @@ public class TicketTypeService {
         TicketType ticketType = repository.findByIdAndEventId(id, eventId)
             .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + id + " for event: " + eventId));
 
-        // Check if tickets exist for this type
-        // TODO: Add check once TicketRepository is available
-        // long ticketCount = ticketRepository.countByTicketTypeId(id);
-        // if (ticketCount > 0) {
-        //     throw new ApiException("TICKET_TYPE_HAS_TICKETS", 
-        //         "Cannot delete ticket type with existing tickets", 409);
-        // }
+        // Deletion currently assumes no issued tickets; add a ticket-count guard once the repository is wired in.
 
         ticketType.softDelete();
         repository.save(ticketType);

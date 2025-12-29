@@ -9,10 +9,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Budget persistence operations with deterministic newest-first retrieval.
+ */
 public interface BudgetRepository extends JpaRepository<Budget, UUID> {
-    // UUID-based query that handles multiple results by returning the most recent one
-    // This is a workaround for cases where duplicate budgets exist (shouldn't happen but can occur)
-    // The @SQLRestriction should filter deleted records, but we explicitly check deletedAt for safety
+    // Order newest-first so accidental duplicate budgets resolve deterministically, and guard against soft-deleted rows.
     @Query("SELECT b FROM Budget b WHERE b.event.id = :eventId AND b.deletedAt IS NULL ORDER BY b.createdAt DESC, b.id DESC")
     List<Budget> findAllByEventIdOrderByCreatedAtDesc(@Param("eventId") UUID eventId);
     
@@ -22,5 +23,3 @@ public interface BudgetRepository extends JpaRepository<Budget, UUID> {
         return budgets.isEmpty() ? Optional.empty() : Optional.of(budgets.get(0));
     }
 }
-
-

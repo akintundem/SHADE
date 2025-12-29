@@ -92,7 +92,7 @@ public class BudgetLineItem extends BaseEntity {
 
     /**
      * Indicates if this line item is a draft (auto-saved) or finalized.
-     * Drafts are saved without full validation and don't trigger budget recalculation.
+     * Drafts are saved with relaxed validation and skip budget recalculation.
      */
     @Column(name = "is_draft", nullable = false)
     private Boolean isDraft = false;
@@ -106,5 +106,4 @@ public class BudgetLineItem extends BaseEntity {
         if (isDraft == null) isDraft = false;
     }
 }
-
 

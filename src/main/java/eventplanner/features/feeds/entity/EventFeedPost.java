@@ -90,11 +90,9 @@ public class EventFeedPost extends BaseEntity {
     @PreUpdate
     private void ensureMediaUploadStatus() {
         if (mediaUploadStatus == null) {
-            // For existing posts, default to COMPLETED (they were created before status tracking)
-            // For new posts, this should already be set by the service
+            // Backfill to COMPLETED for legacy rows; new posts set this in the service.
             mediaUploadStatus = MediaUploadStatus.COMPLETED;
         }
     }
 }
-
 

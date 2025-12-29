@@ -243,10 +243,12 @@ public class RbacAuthorizationService {
                         eventId = resolveEventIdFromTicketId(ticketId);
                     }
                 }
-                // If we can't resolve event_id, allow request to proceed to validation
+                // If we can't resolve event_id, we cannot verify membership
+                // The role check will also fail (returns empty roles), so authorization will be denied
                 // This allows validation to catch missing parameters and return 400 instead of 403
+                // However, we must deny membership check to maintain security
                 if (eventId == null) {
-                    yield true;
+                    yield false;  // Deny by default - security first
                 }
                 // Update resources with resolved event_id for subsequent checks
                 if (eventId != null && !resources.containsKey("event_id")) {

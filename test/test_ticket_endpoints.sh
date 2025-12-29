@@ -451,6 +451,8 @@ create_test_event() {
     "capacity": 500,
     "isPublic": true,
     "requiresApproval": false,
+    "accessType": "TICKETED",
+    "feedsPublicAfterEvent": true,
     "eventWebsiteUrl": "https://example.com/ticket-test-event",
     "hashtag": "#TicketTest",
     "venue": {

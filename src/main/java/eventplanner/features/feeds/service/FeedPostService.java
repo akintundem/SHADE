@@ -199,7 +199,7 @@ public class FeedPostService {
             throw new IllegalArgumentException("Media does not belong to post");
         }
 
-        // Only creator (or event owner/manager via access control checks) should be able to complete.
+        // Creator completes the upload; privileged roles can also finish after access control checks.
         if (principal == null || principal.getId() == null) {
             throw new IllegalArgumentException("Authentication required");
         }

@@ -123,6 +123,7 @@ INVITED_USER_EMAIL="invited@test.com"
 INVITED_USER_PASSWORD="Invited123!@#"
 INVITED_USER_TOKEN=""
 INVITED_USER_ID=""
+INVITED_USER_DEVICE_ID=""
 
 # Requirements check
 if ! command -v jq >/dev/null 2>&1; then
@@ -270,6 +271,7 @@ run_test() {
             "Invited User Login")
                 INVITED_USER_TOKEN=$(echo "$response_body" | jq -r '.accessToken // empty')
                 INVITED_USER_ID=$(echo "$response_body" | jq -r '.user.id // empty')
+                INVITED_USER_DEVICE_ID=$(echo "$response_body" | jq -r '.deviceId // empty')
                 ;;
         esac
     fi
@@ -412,12 +414,12 @@ authenticate_invited_user() {
         onboarding_required=$(echo "$LAST_BODY" | jq -r '.onboardingRequired // false')
         if [ "$onboarding_required" = "true" ]; then
             # Get user ID from /me endpoint
-            local me_response=$(curl -s -X GET -H "Authorization: Bearer $INVITED_USER_TOKEN" "$BASE_URL/api/v1/auth/me")
+            local me_response=$(curl -s -X GET -H "Authorization: Bearer $INVITED_USER_TOKEN" -H "X-Device-ID: $INVITED_USER_DEVICE_ID" "$BASE_URL/api/v1/auth/me")
             local user_id=$(echo "$me_response" | jq -r '.id // empty')
             if [ -n "$user_id" ]; then
                 local uname="invited_$(date +%s | cut -c1-8)"
                 local onboarding='{"name":"Invited Test User","username":"'"$uname"'","phoneNumber":"+1234567891","dateOfBirth":"1990-01-01","acceptTerms":true,"acceptPrivacy":true,"marketingOptIn":false}'
-                run_test "Complete Invited User Onboarding" "PUT" "/api/v1/auth/users/$user_id" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "$onboarding" "200" "Complete onboarding for invited user"
+                run_test "Complete Invited User Onboarding" "PUT" "/api/v1/auth/users/$user_id" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'X-Device-ID: $INVITED_USER_DEVICE_ID' -H 'Content-Type: application/json'" "$onboarding" "200" "Complete onboarding for invited user"
             fi
         fi
     fi
@@ -553,7 +555,7 @@ EOF
         fi
 
         # List incoming invites for the invited user
-        run_test "List My Incoming Invites" "GET" "/api/v1/collaborator-invites/incoming" "-H 'Authorization: Bearer $INVITED_USER_TOKEN'" "" "200" "List pending invites for authenticated user"
+        run_test "List My Incoming Invites" "GET" "/api/v1/collaborator-invites/incoming" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'X-Device-ID: $INVITED_USER_DEVICE_ID'" "" "200" "List pending invites for authenticated user"
 
         # Get invite ID from incoming invites if we don't have one
         if [ -z "$invite_id" ] && [ "$LAST_HTTP_CODE" = "200" ]; then
@@ -562,7 +564,7 @@ EOF
 
         # Accept invite as the invited user (should succeed)
         if [ -n "$invite_id" ]; then
-            run_test "Accept Collaborator Invite" "POST" "/api/v1/collaborator-invites/$invite_id/accept" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "{}" "200" "Accept a collaborator invite as the invited user"
+            run_test "Accept Collaborator Invite" "POST" "/api/v1/collaborator-invites/$invite_id/accept" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'X-Device-ID: $INVITED_USER_DEVICE_ID' -H 'Content-Type: application/json'" "{}" "200" "Accept a collaborator invite as the invited user"
         fi
 
         # Create invite by email for the invited user (to test token-based acceptance)
@@ -591,7 +593,7 @@ EOF
         # (it's stored as a hash in the database). However, we can test that accepting by ID works for email invites,
         # which verifies that the logged-in user's email matches the inviteeEmail.
         if [ -n "$email_invite_id" ]; then
-            run_test "Accept Email Invite By ID" "POST" "/api/v1/collaborator-invites/$email_invite_id/accept" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "{}" "200" "Accept email-based invite by ID (verifies email matches logged-in user)"
+            run_test "Accept Email Invite By ID" "POST" "/api/v1/collaborator-invites/$email_invite_id/accept" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'X-Device-ID: $INVITED_USER_DEVICE_ID' -H 'Content-Type: application/json'" "{}" "200" "Accept email-based invite by ID (verifies email matches logged-in user)"
             
             # Note: Token-based acceptance would work like this (if we had the token):
             # POST /api/v1/collaborator-invites/accept?token=<token_from_email>
@@ -624,7 +626,7 @@ EOF
         fi
 
         if [ -n "$decline_invite_id" ]; then
-            run_test "Decline Collaborator Invite" "POST" "/api/v1/collaborator-invites/$decline_invite_id/decline" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "{}" "204" "Decline a collaborator invite"
+            run_test "Decline Collaborator Invite" "POST" "/api/v1/collaborator-invites/$decline_invite_id/decline" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'X-Device-ID: $INVITED_USER_DEVICE_ID' -H 'Content-Type: application/json'" "{}" "204" "Decline a collaborator invite"
         fi
 
         # Test that invited user cannot accept someone else's invite
@@ -653,7 +655,7 @@ EOF
 
         # Try to accept someone else's invite (should fail)
         if [ -n "$other_invite_id" ]; then
-            run_test "Cannot Accept Others Invite" "POST" "/api/v1/collaborator-invites/$other_invite_id/accept" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'Content-Type: application/json'" "{}" "400" "Verify invited user cannot accept invite meant for another user"
+            run_test "Cannot Accept Others Invite" "POST" "/api/v1/collaborator-invites/$other_invite_id/accept" "-H 'Authorization: Bearer $INVITED_USER_TOKEN' -H 'X-Device-ID: $INVITED_USER_DEVICE_ID' -H 'Content-Type: application/json'" "{}" "400" "Verify invited user cannot accept invite meant for another user"
         fi
     fi
 

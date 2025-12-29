@@ -222,7 +222,7 @@ public class EventNotificationService {
             response.setSentAt(communication.getSentAt());
             response.setCreatedAt(communication.getCreatedAt());
         } else {
-            // No communication record found - notification may have failed or not been persisted
+            // No communication record persisted; infer status from recipient results.
             response.setNotificationId(null);
             response.setStatus(successfulRecipients.isEmpty() ? "failed" : "partial");
             response.setSentAt(null);

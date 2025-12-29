@@ -247,7 +247,7 @@ public class UserEventContextService {
     }
 
     private UserEventContext buildInviteOnlyContext(UserEventContext.UserEventContextBuilder builder, Event event, UUID userId) {
-        // Check for attendee invite (simplified - you might have a separate invite table)
+        // Derive invite status from attendee records; swap to dedicated invite lookup if one exists.
         Optional<Attendee> attendee = attendeeRepository.findByEventIdAndUserId(event.getId(), userId);
         boolean hasInvite = attendee.isPresent();
         boolean isAccepted = hasInvite && attendee.get().getRsvpStatus() == AttendeeStatus.CONFIRMED;
@@ -441,4 +441,3 @@ public class UserEventContextService {
         return false;
     }
 }
-

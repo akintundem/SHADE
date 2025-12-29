@@ -263,7 +263,7 @@ public class AttendeeService {
         if (attendee.getName() == null || attendee.getName().trim().isEmpty()) {
             throw new IllegalArgumentException("Attendee name is required");
         }
-        // Email is optional but should be valid if provided
+        // Validate email when provided
         if (attendee.getEmail() != null && !attendee.getEmail().isEmpty()) {
             if (!isValidEmail(attendee.getEmail())) {
                 throw new IllegalArgumentException("Invalid email format");

@@ -136,7 +136,7 @@ public class EventCollaboratorInviteService {
         UserAccount inviteeUser = null;
         if (inviteeUserId != null) {
             inviteeUser = userAccountRepository.findById(inviteeUserId)
-                .orElse(null); // Optional - may not exist yet if invite is by email
+                .orElse(null); // Invitee account may be absent when inviting by email only
         }
         
         EventCollaboratorInvite invite = new EventCollaboratorInvite();
@@ -414,4 +414,3 @@ public class EventCollaboratorInviteService {
     }
 
 }
-
