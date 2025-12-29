@@ -104,4 +104,10 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
            "AND t.attendee.user.id = :userId " +
            "AND t.status IN ('ISSUED', 'VALIDATED')")
     List<Ticket> findValidTicketsByUserId(@Param("eventId") UUID eventId, @Param("userId") UUID userId);
+
+    /**
+     * Find tickets created from a checkout session.
+     */
+    @Query("SELECT t FROM Ticket t WHERE t.checkout.id = :checkoutId")
+    List<Ticket> findByCheckoutId(@Param("checkoutId") UUID checkoutId);
 }

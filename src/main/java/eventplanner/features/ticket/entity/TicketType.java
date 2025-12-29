@@ -4,7 +4,6 @@ import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.features.ticket.enums.TicketTypeCategory;
 import eventplanner.features.event.entity.Event;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -14,7 +13,6 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import javax.money.Monetary;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -60,11 +58,10 @@ public class TicketType extends BaseEntity {
 
     /**
      * Price per ticket. NULL indicates a free ticket.
-     * Must be >= 0 if not null.
      */
-    @DecimalMin(value = "0.00", message = "Price must be greater than or equal to 0")
-    @Column(name = "price", precision = 10, scale = 2)
-    private BigDecimal price;
+    @Min(value = 0, message = "Price must be greater than or equal to 0")
+    @Column(name = "price_minor")
+    private Long priceMinor;
 
     /**
      * ISO 4217 currency code (e.g., "USD", "EUR", "GBP").
@@ -144,7 +141,7 @@ public class TicketType extends BaseEntity {
         }
         
         // Validate price
-        if (price != null && price.compareTo(BigDecimal.ZERO) < 0) {
+        if (priceMinor != null && priceMinor < 0) {
             throw new IllegalArgumentException("Price must be greater than or equal to 0");
         }
         
@@ -225,4 +222,3 @@ public class TicketType extends BaseEntity {
         return Math.max(0, quantityAvailable - quantitySold - quantityReserved);
     }
 }
-
