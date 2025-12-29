@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -17,5 +18,8 @@ public interface LocationRepository extends JpaRepository<Location, UUID> {
            "(l.state IS NOT NULL AND LOWER(l.state) LIKE LOWER(CONCAT('%', :query, '%'))) OR " +
            "LOWER(l.country) LIKE LOWER(CONCAT('%', :query, '%'))")
     List<Location> searchByQuery(@Param("query") String query);
-}
 
+    Optional<Location> findFirstByCityIgnoreCaseAndStateIgnoreCaseAndCountryIgnoreCase(String city, String state, String country);
+
+    Optional<Location> findFirstByCityIgnoreCaseAndCountryIgnoreCase(String city, String country);
+}
