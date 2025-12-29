@@ -4,26 +4,26 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.common.exception.ApiException;
 import eventplanner.common.exception.ResourceNotFoundException;
-import eventplanner.features.ticket.dto.request.CreateTicketTypeRequest;
-import eventplanner.features.ticket.dto.request.UpdateTicketTypeRequest;
-import eventplanner.features.ticket.dto.response.TicketTypeResponse;
-import eventplanner.features.ticket.entity.TicketType;
-import eventplanner.features.ticket.enums.TicketTypeCategory;
-import eventplanner.features.ticket.repository.TicketTypeRepository;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
+import eventplanner.features.ticket.dto.request.CreateTicketTypeRequest;
+import eventplanner.features.ticket.dto.request.PromotionDetails;
+import eventplanner.features.ticket.dto.request.UpdateTicketTypeRequest;
+import eventplanner.features.ticket.dto.response.TicketTypeResponse;
+import eventplanner.features.ticket.entity.TicketPromotion;
+import eventplanner.features.ticket.entity.TicketType;
+import eventplanner.features.ticket.enums.TicketTypeCategory;
+import eventplanner.features.ticket.repository.TicketPromotionRepository;
+import eventplanner.features.ticket.repository.TicketTypeRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import lombok.RequiredArgsConstructor;
-
-import org.javamoney.moneta.Money;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.money.CurrencyUnit;
 import javax.money.Monetary;
-import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -39,6 +39,7 @@ public class TicketTypeService {
     private final TicketTypeRepository repository;
     private final EventRepository eventRepository;
     private final ObjectMapper objectMapper;
+    private final TicketPromotionRepository ticketPromotionRepository;
 
     /**
      * Create a new ticket type for an event.
@@ -59,7 +60,7 @@ public class TicketTypeService {
         ticketType.setName(request.getName());
         ticketType.setCategory(request.getCategory());
         ticketType.setDescription(request.getDescription());
-        ticketType.setPrice(request.getPrice());
+        ticketType.setPriceMinor(request.getPriceMinor());
         
         // Validate and set currency (normalized to uppercase)
         String currencyCode = request.getCurrency() != null ? request.getCurrency() : "USD";
@@ -87,6 +88,7 @@ public class TicketTypeService {
 
         TicketType saved = repository.save(ticketType);
 
+        handlePromotionCreate(request, saved, principal);
         
         return saved;
     }
@@ -119,8 +121,8 @@ public class TicketTypeService {
         if (request.getDescription() != null) {
             ticketType.setDescription(request.getDescription());
         }
-        if (request.getPrice() != null) {
-            ticketType.setPrice(request.getPrice());
+        if (request.getPriceMinor() != null) {
+            ticketType.setPriceMinor(request.getPriceMinor());
         }
         if (request.getCurrency() != null) {
             String normalizedCurrency = validateCurrencyCode(request.getCurrency());
@@ -162,6 +164,7 @@ public class TicketTypeService {
 
         TicketType saved = repository.save(ticketType);
 
+        handlePromotionUpdate(request, saved, principal);
         
         return saved;
     }
@@ -328,38 +331,54 @@ public class TicketTypeService {
         }
     }
 
-    /**
-     * Get CurrencyUnit from currency code string.
-     * Useful for monetary operations and payment gateway integration.
-     * 
-     * @param currencyCode The ISO 4217 currency code
-     * @return CurrencyUnit instance
-     * @throws IllegalArgumentException if currency code is invalid
-     */
-    public CurrencyUnit getCurrencyUnit(String currencyCode) {
-        if (currencyCode == null || currencyCode.trim().isEmpty()) {
-            return Monetary.getCurrency("USD"); // Default
+    private void handlePromotionCreate(CreateTicketTypeRequest request, TicketType ticketType, UserPrincipal principal) {
+        upsertPromotions(request.getPromotions(), ticketType);
+    }
+
+    private void handlePromotionUpdate(UpdateTicketTypeRequest request, TicketType ticketType, UserPrincipal principal) {
+        upsertPromotions(request.getPromotions(), ticketType);
+    }
+
+    private void upsertPromotions(List<PromotionDetails> promotions, TicketType ticketType) {
+        if (promotions == null || promotions.isEmpty() || ticketType == null) {
+            return;
         }
-        try {
-            return Monetary.getCurrency(currencyCode.trim().toUpperCase());
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid currency code: " + currencyCode, e);
+        UUID eventId = ticketType.getEvent() != null ? ticketType.getEvent().getId() : null;
+        for (PromotionDetails promo : promotions) {
+            if (promo == null || promo.getCode() == null) {
+                continue;
+            }
+            String normalized = promo.getCode().trim().toUpperCase(Locale.ROOT);
+            TicketPromotion target = ticketPromotionRepository
+                .findByEventIdAndTicketTypeIdAndCodeIgnoreCase(eventId, ticketType.getId(), normalized)
+                .orElse(null);
+            if (target == null) {
+                target = new TicketPromotion();
+                target.setEvent(ticketType.getEvent());
+                target.setTicketType(ticketType);
+                target.setCode(normalized);
+            }
+            if (promo.getPercentOffBasisPoints() != null) {
+                target.setPercentOffBasisPoints(promo.getPercentOffBasisPoints());
+            }
+            if (promo.getAmountOffMinor() != null) {
+                target.setAmountOffMinor(promo.getAmountOffMinor());
+            }
+            if (promo.getStartsAt() != null) {
+                target.setStartsAt(promo.getStartsAt());
+            }
+            if (promo.getEndsAt() != null) {
+                target.setEndsAt(promo.getEndsAt());
+            }
+            if (promo.getActive() != null) {
+                target.setIsActive(promo.getActive());
+            }
+            if ((target.getPercentOffBasisPoints() == null || target.getPercentOffBasisPoints() == 0) &&
+                (target.getAmountOffMinor() == null || target.getAmountOffMinor() == 0)) {
+                continue;
+            }
+            ticketPromotionRepository.save(target);
         }
     }
 
-    /**
-     * Create a Money instance from price and currency.
-     * Useful for monetary calculations and payment gateway integration.
-     * 
-     * @param amount The monetary amount
-     * @param currencyCode The ISO 4217 currency code
-     * @return Money instance
-     */
-    public Money createMoney(BigDecimal amount, String currencyCode) {
-        if (amount == null) {
-            return null;
-        }
-        CurrencyUnit currencyUnit = getCurrencyUnit(currencyCode != null ? currencyCode : "USD");
-        return Money.of(amount, currencyUnit);
-    }
 }

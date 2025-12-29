@@ -50,7 +50,7 @@ public class TicketExpirationService {
                     ticketRepository.save(ticket);
 
                     // Release reserved quantity back to available
-                    if (ticket.getTicketType() != null && ticket.getTicketType().getPrice() != null) {
+                    if (ticket.getTicketType() != null && ticket.getTicketType().getPriceMinor() != null) {
                         ticketTypeRepository.decrementQuantityReserved(
                             ticket.getTicketType().getId(), 1);
                     }
@@ -84,7 +84,7 @@ public class TicketExpirationService {
         ticketRepository.save(ticket);
 
         // Release reserved quantity
-        if (ticket.getTicketType() != null && ticket.getTicketType().getPrice() != null) {
+        if (ticket.getTicketType() != null && ticket.getTicketType().getPriceMinor() != null) {
             ticketTypeRepository.decrementQuantityReserved(ticket.getTicketType().getId(), 1);
         }
 

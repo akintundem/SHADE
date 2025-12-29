@@ -63,8 +63,7 @@ public class TicketService {
      * Check if a ticket type is free (price is null or zero).
      */
     private boolean isFreeTicket(TicketType ticketType) {
-        return ticketType.getPrice() == null || 
-               ticketType.getPrice().compareTo(java.math.BigDecimal.ZERO) == 0;
+        return ticketType.getPriceMinor() == null || ticketType.getPriceMinor() == 0;
     }
 
     /**
@@ -72,6 +71,14 @@ public class TicketService {
      * Accepts a list of ticket requests - each request can issue multiple tickets (quantity) to a single attendee/email.
      */
     public List<Ticket> issueTickets(List<IssueTicketRequest> requests, UserPrincipal principal) {
+        return issueTickets(requests, principal, true);
+    }
+
+    /**
+     * Issue tickets with optional control over free-ticket finalization.
+     * When finalizeFreeTickets is false, free tickets are reserved and left in PENDING status (used for checkout flows).
+     */
+    public List<Ticket> issueTickets(List<IssueTicketRequest> requests, UserPrincipal principal, boolean finalizeFreeTickets) {
         if (requests == null || requests.isEmpty()) {
             throw new IllegalArgumentException("At least one ticket request is required");
         }
@@ -86,7 +93,7 @@ public class TicketService {
                 throw new IllegalArgumentException("All ticket requests must be for the same event");
             }
 
-            List<Ticket> tickets = issueSingleTicketRequest(request, principal);
+            List<Ticket> tickets = issueSingleTicketRequest(request, principal, finalizeFreeTickets);
             allTickets.addAll(tickets);
         }
 
@@ -96,7 +103,7 @@ public class TicketService {
     /**
      * Issue one or more tickets to an attendee (internal method).
      */
-    private List<Ticket> issueSingleTicketRequest(IssueTicketRequest request, UserPrincipal principal) {
+    private List<Ticket> issueSingleTicketRequest(IssueTicketRequest request, UserPrincipal principal, boolean finalizeFreeTickets) {
         if (request == null) {
             throw new IllegalArgumentException("Request cannot be null");
         }
@@ -111,6 +118,15 @@ public class TicketService {
             throw new IllegalArgumentException("Ticket type does not belong to event");
         }
 
+        if (request.getAttendeeId() == null && (request.getOwnerEmail() == null || request.getOwnerEmail().isBlank())) {
+            if (principal != null && principal.getUser() != null) {
+                String email = principal.getUser().getEmail();
+                String name = principal.getUser().getName();
+                request.setOwnerEmail(email);
+                request.setOwnerName(name != null && !name.isBlank() ? name : email);
+            }
+        }
+
         // Validate that either attendeeId or email/name is provided
         if (request.getAttendeeId() == null && (request.getOwnerEmail() == null || request.getOwnerName() == null)) {
             throw new IllegalArgumentException("Either attendeeId or both ownerEmail and ownerName must be provided");
@@ -121,6 +137,8 @@ public class TicketService {
             attendee = attendeeRepository.findById(request.getAttendeeId())
                 .orElseThrow(() -> new ResourceNotFoundException("Attendee not found: " + request.getAttendeeId()));
         }
+
+        boolean freeTicket = isFreeTicket(ticketType);
 
         // Validate ticket type availability
         if (!ticketType.canPurchase(request.getQuantity())) {
@@ -172,29 +190,29 @@ public class TicketService {
         List<Ticket> savedTickets = ticketRepository.saveAll(tickets);
 
         // Update ticket type quantities
-        if (isFreeTicket(ticketType)) {
+        if (freeTicket && finalizeFreeTickets) {
             // Free ticket (price is null or zero) - immediately mark as sold
             ticketTypeRepository.incrementQuantitySold(request.getTicketTypeId(), request.getQuantity());
         } else {
-            // Paid ticket - reserve for now (will be moved to sold when payment completes)
+            // Paid ticket or checkout reservation - reserve for now (will be moved to sold when payment completes)
             ticketTypeRepository.incrementQuantityReserved(request.getTicketTypeId(), request.getQuantity());
         }
 
         // For free tickets, update attendee RSVP status (only if attendee exists)
-        if (isFreeTicket(ticketType) && attendee != null) {
+        if (freeTicket && finalizeFreeTickets && attendee != null) {
             attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
             attendeeRepository.save(attendee);
         }
 
         // Issue tickets (set status to ISSUED for free tickets, PENDING for paid)
         for (Ticket ticket : savedTickets) {
-            if (isFreeTicket(ticketType)) {
+            if (freeTicket && finalizeFreeTickets) {
                 ticket.issue(issuedBy);
             }
         }
         
         // Save any status changes
-        if (isFreeTicket(ticketType)) {
+        if (freeTicket && finalizeFreeTickets) {
             savedTickets = ticketRepository.saveAll(savedTickets);
         }
 
@@ -272,7 +290,7 @@ public class TicketService {
         Ticket saved = ticketRepository.save(ticket);
 
         // Release reserved quantity if it was reserved
-        if (ticket.getTicketType().getPrice() != null && ticket.getStatus() == TicketStatus.PENDING) {
+        if (ticket.getTicketType().getPriceMinor() != null && ticket.getStatus() == TicketStatus.PENDING) {
             ticketTypeRepository.decrementQuantityReserved(ticket.getTicketType().getId(), 1);
         }
 

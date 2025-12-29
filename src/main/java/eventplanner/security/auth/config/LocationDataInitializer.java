@@ -48,6 +48,12 @@ public class LocationDataInitializer {
                     String country = line[3].trim();
                     BigDecimal latitude = new BigDecimal(line[4].trim());
                     BigDecimal longitude = new BigDecimal(line[5].trim());
+                    Integer gstBps = line.length > 6 && !line[6].isBlank() ? Integer.parseInt(line[6].trim()) : 0;
+                    Integer pstBps = line.length > 7 && !line[7].isBlank() ? Integer.parseInt(line[7].trim()) : 0;
+                    Integer hstBps = line.length > 8 && !line[8].isBlank() ? Integer.parseInt(line[8].trim()) : 0;
+                    Integer taxYear = line.length > 9 && !line[9].isBlank() ? Integer.parseInt(line[9].trim()) : null;
+                    Integer salesTaxBps = line.length > 10 && !line[10].isBlank() ? Integer.parseInt(line[10].trim()) : 0;
+                    Integer vatBps = line.length > 11 && !line[11].isBlank() ? Integer.parseInt(line[11].trim()) : 0;
 
                     Location location = locationRepository.findById(uuid).orElse(new Location());
                     location.setId(uuid);
@@ -56,6 +62,12 @@ public class LocationDataInitializer {
                     location.setCountry(country);
                     location.setLatitude(latitude);
                     location.setLongitude(longitude);
+                    location.setGstRateBps(gstBps);
+                    location.setPstRateBps(pstBps);
+                    location.setHstRateBps(hstBps);
+                    location.setTaxEffectiveYear(taxYear);
+                    location.setSalesTaxRateBps(salesTaxBps);
+                    location.setVatRateBps(vatBps);
                     locationRepository.save(location);
                 }
             }
@@ -64,4 +76,3 @@ public class LocationDataInitializer {
         }
     }
 }
-

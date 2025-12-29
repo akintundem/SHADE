@@ -44,8 +44,25 @@ public class Location extends BaseEntity {
     @Column(name = "longitude", precision = 10, scale = 7, nullable = false)
     private BigDecimal longitude;
 
+    @Column(name = "gst_rate_bps")
+    private Integer gstRateBps = 0;
+
+    @Column(name = "pst_rate_bps")
+    private Integer pstRateBps = 0;
+
+    @Column(name = "hst_rate_bps")
+    private Integer hstRateBps = 0;
+
+    @Column(name = "sales_tax_rate_bps")
+    private Integer salesTaxRateBps = 0;
+
+    @Column(name = "vat_rate_bps")
+    private Integer vatRateBps = 0;
+
+    @Column(name = "tax_effective_year")
+    private Integer taxEffectiveYear;
+
     public String getDisplayName() {
         return String.format("%s, %s, %s", city, state, country);
     }
 }
-
