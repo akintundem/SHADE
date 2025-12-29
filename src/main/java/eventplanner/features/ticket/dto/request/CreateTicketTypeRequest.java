@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import eventplanner.features.ticket.dto.request.PromotionDetails;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -67,4 +68,9 @@ public class CreateTicketTypeRequest {
      * Metadata as a map (will be serialized to JSON string).
      */
     private Map<String, Object> metadata;
+
+    /**
+     * Optional promotion to create alongside the ticket type.
+     */
+    private PromotionDetails promotion;
 }

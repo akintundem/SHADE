@@ -4,6 +4,7 @@ import eventplanner.features.ticket.enums.TicketTypeCategory;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
+import eventplanner.features.ticket.dto.request.PromotionDetails;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -66,4 +67,9 @@ public class UpdateTicketTypeRequest {
      * Metadata as a map (will be serialized to JSON string).
      */
     private Map<String, Object> metadata;
+
+    /**
+     * Optional promotion adjustments for this ticket type.
+     */
+    private PromotionDetails promotion;
 }
