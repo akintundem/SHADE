@@ -5,6 +5,7 @@ import eventplanner.features.feeds.entity.EventFeedPost;
 import eventplanner.features.feeds.entity.PostLike;
 import eventplanner.features.feeds.repository.FeedPostRepository;
 import eventplanner.features.feeds.repository.PostLikeRepository;
+import eventplanner.common.storage.upload.MediaUploadStatus;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -43,6 +44,10 @@ public class PostLikeService {
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
+        MediaUploadStatus status = post.getMediaUploadStatus();
+        if (status != null && status != MediaUploadStatus.COMPLETED) {
+            throw new IllegalArgumentException("Post not available");
+        }
 
         if (principal == null || principal.getId() == null) {
             throw new IllegalArgumentException("Authentication required");
@@ -73,6 +78,10 @@ public class PostLikeService {
         
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
+        }
+        MediaUploadStatus status = post.getMediaUploadStatus();
+        if (status != null && status != MediaUploadStatus.COMPLETED) {
+            throw new IllegalArgumentException("Post not available");
         }
 
         if (principal == null || principal.getId() == null) {

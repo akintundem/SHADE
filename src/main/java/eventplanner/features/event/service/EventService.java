@@ -118,6 +118,12 @@ public class EventService {
             if (!Boolean.TRUE.equals(event.getIsPublic())) {
                 return Optional.empty();
             }
+        } else {
+            // Authorization service unavailable; allow owner, otherwise require public
+            boolean isOwner = event.getOwner() != null && event.getOwner().getId().equals(user.getId());
+            if (!isOwner && !Boolean.TRUE.equals(event.getIsPublic())) {
+                return Optional.empty();
+            }
         }
         
         return Optional.of(event);
@@ -357,6 +363,8 @@ public class EventService {
         final Boolean publicFilter = isPublic;
         final LocalDateTime startFrom = startDateFrom;
         final LocalDateTime startTo = startDateTo;
+        final UUID currentUserId = user != null ? user.getId() : null;
+        final boolean authAvailable = authorizationService != null;
 
         // Build dynamic criteria instead of "(:param is null or ...)" JPQL.
         // Postgres can fail to infer parameter types for nulls in those patterns ("could not determine data type of parameter $N").
@@ -380,6 +388,16 @@ public class EventService {
             }
             if (isArchived != null) {
                 predicates.add(cb.equal(root.get("isArchived"), isArchived));
+            }
+            // If no authorization service, restrict to public or owned by current user to avoid leaking private events.
+            if (!authAvailable) {
+                jakarta.persistence.criteria.Predicate isPublicPredicate = cb.equal(root.get("isPublic"), true);
+                if (currentUserId != null) {
+                    jakarta.persistence.criteria.Predicate isOwnerPredicate = cb.equal(root.get("owner").get("id"), currentUserId);
+                    predicates.add(cb.or(isPublicPredicate, isOwnerPredicate));
+                } else {
+                    predicates.add(isPublicPredicate);
+                }
             }
 
             if (search != null && !search.isBlank()) {
@@ -607,7 +625,11 @@ public class EventService {
      * Convert TicketType entity to TicketTypeSummary DTO.
      */
     private TicketTypeSummary toTicketTypeSummary(TicketType tt, LocalDateTime now) {
-        int remaining = tt.getQuantityAvailable() - tt.getQuantitySold() - tt.getQuantityReserved();
+        int available = tt.getQuantityAvailable() != null ? tt.getQuantityAvailable() : 0;
+        int sold = tt.getQuantitySold() != null ? tt.getQuantitySold() : 0;
+        int reserved = tt.getQuantityReserved() != null ? tt.getQuantityReserved() : 0;
+
+        int remaining = available - sold - reserved;
         remaining = Math.max(0, remaining);
         
         boolean isFree = tt.getPrice() == null || tt.getPrice().compareTo(java.math.BigDecimal.ZERO) == 0;
@@ -635,9 +657,9 @@ public class EventService {
                 .price(tt.getPrice())
                 .currency(tt.getCurrency())
                 .isFree(isFree)
-                .quantityTotal(tt.getQuantityAvailable())
+                .quantityTotal(available)
                 .quantityRemaining(remaining)
-                .quantitySold(tt.getQuantitySold())
+                .quantitySold(sold)
                 .isAvailable(isAvailable)
                 .isActive(isActive)
                 .saleStartDate(tt.getSaleStartDate())

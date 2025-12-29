@@ -198,6 +198,10 @@ public class FeedPostService {
         if (post.getMediaObjectId() == null || !post.getMediaObjectId().equals(mediaId)) {
             throw new IllegalArgumentException("Media does not belong to post");
         }
+        if (post.getMediaUploadStatus() == MediaUploadStatus.COMPLETED) {
+            // Idempotent: already completed, just return current view
+            return enrichPostsWithEngagement(List.of(post), eventId, principal).get(0);
+        }
 
         // Creator completes the upload; privileged roles can also finish after access control checks.
         if (principal == null || principal.getId() == null) {
@@ -209,6 +213,9 @@ public class FeedPostService {
         }
 
         String expectedKey = buildObjectKey(eventId, mediaId);
+        if (request.getObjectKey() != null && !expectedKey.equals(request.getObjectKey())) {
+            throw new IllegalArgumentException("Invalid object key for post media");
+        }
         
         // Use generic presigned upload service
         PresignedUploadCompleteRequest completeRequest = new PresignedUploadCompleteRequest();
