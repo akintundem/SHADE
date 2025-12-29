@@ -1,0 +1,119 @@
+package eventplanner.features.ticket.controller;
+
+import eventplanner.features.ticket.dto.request.CreateTicketCheckoutRequest;
+import eventplanner.features.ticket.dto.response.TicketCheckoutResponse;
+import eventplanner.features.ticket.dto.response.TicketPaymentInitResponse;
+import eventplanner.features.ticket.service.TicketCheckoutService;
+import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
+import eventplanner.security.authorization.service.AuthorizationService;
+import eventplanner.security.auth.service.UserPrincipal;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.UUID;
+
+/**
+ * Checkout endpoints for ticket purchases (pre-payment).
+ */
+@RestController
+@RequestMapping("/api/v1/events/{eventId}/tickets/checkout")
+@Tag(name = "Ticket Checkout")
+@RequiredArgsConstructor
+public class TicketCheckoutController {
+
+    private final TicketCheckoutService checkoutService;
+    private final AuthorizationService authorizationService;
+
+    @PostMapping
+    @Operation(summary = "Start ticket checkout", description = "Create a checkout session, reserve tickets, and return a cost breakdown.")
+    @RequiresPermission(value = RbacPermissions.TICKET_CHECKOUT, resources = {"event_id=#eventId"})
+    public ResponseEntity<TicketCheckoutResponse> createCheckout(
+            @PathVariable UUID eventId,
+            @Valid @RequestBody CreateTicketCheckoutRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (!authorizationService.canAccessEvent(principal, eventId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+            }
+            TicketCheckoutResponse response = checkoutService.createCheckout(eventId, request, principal);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (eventplanner.common.exception.ApiException e) {
+            throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    @PostMapping("/{checkoutId}/start-payment")
+    @Operation(summary = "Start payment session", description = "Initiate payment for a checkout (placeholder until PSP is wired).")
+    @RequiresPermission(value = RbacPermissions.TICKET_CHECKOUT, resources = {"event_id=#eventId"})
+    public ResponseEntity<TicketPaymentInitResponse> startPayment(
+            @PathVariable UUID eventId,
+            @PathVariable UUID checkoutId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (!authorizationService.canAccessEvent(principal, eventId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+            }
+            TicketPaymentInitResponse response = checkoutService.startPayment(checkoutId, eventId, principal);
+            return ResponseEntity.ok(response);
+        } catch (eventplanner.common.exception.ApiException e) {
+            throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    @GetMapping("/{checkoutId}")
+    @Operation(summary = "Get checkout session", description = "Retrieve checkout details and cost breakdown. Automatically expires if the hold window passed.")
+    @RequiresPermission(value = RbacPermissions.TICKET_CHECKOUT, resources = {"event_id=#eventId"})
+    public ResponseEntity<TicketCheckoutResponse> getCheckout(
+            @PathVariable UUID eventId,
+            @PathVariable UUID checkoutId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (!authorizationService.canAccessEvent(principal, eventId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+            }
+            TicketCheckoutResponse response = checkoutService.getCheckout(checkoutId, eventId);
+            return ResponseEntity.ok(response);
+        } catch (eventplanner.common.exception.ApiException e) {
+            throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    @PostMapping("/{checkoutId}/cancel")
+    @Operation(summary = "Cancel checkout", description = "Cancel a checkout session and release reserved inventory.")
+    @RequiresPermission(value = RbacPermissions.TICKET_CHECKOUT, resources = {"event_id=#eventId"})
+    public ResponseEntity<TicketCheckoutResponse> cancelCheckout(
+            @PathVariable UUID eventId,
+            @PathVariable UUID checkoutId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (!authorizationService.canAccessEvent(principal, eventId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+            }
+            TicketCheckoutResponse response = checkoutService.cancelCheckout(checkoutId, eventId);
+            return ResponseEntity.ok(response);
+        } catch (eventplanner.common.exception.ApiException e) {
+            throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+}

@@ -68,13 +68,6 @@ public class TicketTypeController {
             }
 
             // Ensure eventId in request matches path variable
-            if (request.getEventId() == null) {
-                request.setEventId(eventId);
-            } else if (!request.getEventId().equals(eventId)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-                    "Event ID in request body must match path variable");
-            }
-
             TicketType newTicketType = ticketTypeService.createTicketType(eventId, request, principal);
             return new ResponseEntity<>(TicketTypeResponse.from(newTicketType), HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {
@@ -195,4 +188,3 @@ public class TicketTypeController {
         }
     }
 }
-
