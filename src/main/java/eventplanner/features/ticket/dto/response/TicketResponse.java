@@ -26,6 +26,7 @@ public class TicketResponse {
     private String ticketNumber;
     private UUID eventId;
     private String eventName;
+    private UUID checkoutId;
     private UUID ticketTypeId;
     private String ticketTypeName;
     private UUID attendeeId;
@@ -50,6 +51,7 @@ public class TicketResponse {
                 .ticketNumber(ticket.getTicketNumber())
                 .eventId(ticket.getEvent() != null ? ticket.getEvent().getId() : null)
                 .eventName(ticket.getEvent() != null ? ticket.getEvent().getName() : null)
+                .checkoutId(ticket.getCheckout() != null ? ticket.getCheckout().getId() : null)
                 .ticketTypeId(ticket.getTicketType() != null ? ticket.getTicketType().getId() : null)
                 .ticketTypeName(ticket.getTicketType() != null ? ticket.getTicketType().getName() : null)
                 .attendeeId(ticket.getAttendee() != null ? ticket.getAttendee().getId() : null)

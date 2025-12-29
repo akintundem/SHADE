@@ -8,7 +8,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -27,7 +26,7 @@ public class TicketTypeResponse {
     private String name;
     private TicketTypeCategory category;
     private String description;
-    private BigDecimal price; // NULL for free tickets
+    private Long priceMinor; // NULL for free tickets
     private String currency; // ISO 4217 currency code (e.g., "USD", "EUR", "GBP") - validated using JavaMoney (JSR 354)
     private Integer quantityAvailable;
     private Integer quantitySold;
@@ -52,7 +51,7 @@ public class TicketTypeResponse {
                 .name(ticketType.getName())
                 .category(ticketType.getCategory())
                 .description(ticketType.getDescription())
-                .price(ticketType.getPrice())
+                .priceMinor(ticketType.getPriceMinor())
                 .currency(ticketType.getCurrency())
                 .quantityAvailable(ticketType.getQuantityAvailable())
                 .quantitySold(ticketType.getQuantitySold())
@@ -69,4 +68,3 @@ public class TicketTypeResponse {
                 .build();
     }
 }
-

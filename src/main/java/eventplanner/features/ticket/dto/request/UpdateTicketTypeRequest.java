@@ -4,8 +4,8 @@ import eventplanner.features.ticket.enums.TicketTypeCategory;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
-import eventplanner.features.ticket.dto.request.PromotionDetails;
 import lombok.AllArgsConstructor;
+import java.util.List;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -71,5 +71,5 @@ public class UpdateTicketTypeRequest {
     /**
      * Optional promotion adjustments for this ticket type.
      */
-    private PromotionDetails promotion;
+    private List<PromotionDetails> promotions;
 }
