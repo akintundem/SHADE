@@ -1,7 +1,6 @@
 package eventplanner.features.ticket.dto.request;
 
 import eventplanner.features.ticket.enums.TicketTypeCategory;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -11,10 +10,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * DTO for creating a new ticket type for an event.
@@ -23,9 +20,6 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateTicketTypeRequest {
-
-    @NotNull(message = "Event ID is required")
-    private UUID eventId;
 
     @NotBlank(message = "Ticket type name is required")
     @Size(min = 1, max = 100, message = "Ticket type name must be between 1 and 100 characters")
@@ -40,10 +34,11 @@ public class CreateTicketTypeRequest {
     private String description;
 
     /**
-     * Price per ticket. NULL indicates a free ticket.
+     * Price per ticket in the smallest currency unit (e.g., cents).
+     * NULL indicates a free ticket.
      */
-    @DecimalMin(value = "0.00", message = "Price must be greater than or equal to 0")
-    private BigDecimal price;
+    @Min(value = 0, message = "Price must be greater than or equal to 0")
+    private Long priceMinor;
 
     /**
      * ISO 4217 currency code (e.g., "USD", "EUR", "GBP").
@@ -73,4 +68,3 @@ public class CreateTicketTypeRequest {
      */
     private Map<String, Object> metadata;
 }
-

@@ -1,7 +1,6 @@
 package eventplanner.features.ticket.dto.request;
 
 import eventplanner.features.ticket.enums.TicketTypeCategory;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
@@ -9,7 +8,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -34,10 +32,11 @@ public class UpdateTicketTypeRequest {
     private String description;
 
     /**
-     * Price per ticket. NULL indicates a free ticket.
+     * Price per ticket in the smallest currency unit (e.g., cents).
+     * NULL indicates a free ticket.
      */
-    @DecimalMin(value = "0.00", message = "Price must be greater than or equal to 0")
-    private BigDecimal price;
+    @Min(value = 0, message = "Price must be greater than or equal to 0")
+    private Long priceMinor;
 
     /**
      * ISO 4217 currency code (e.g., "USD", "EUR", "GBP").
@@ -68,4 +67,3 @@ public class UpdateTicketTypeRequest {
      */
     private Map<String, Object> metadata;
 }
-
