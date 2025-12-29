@@ -4,6 +4,8 @@ import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.domain.enums.CommunicationType;
 import eventplanner.common.exception.ApiException;
+import eventplanner.common.exception.BadRequestException;
+import eventplanner.common.exception.ConflictException;
 import eventplanner.common.exception.ResourceNotFoundException;
 import eventplanner.features.ticket.dto.request.IssueTicketRequest;
 import eventplanner.features.ticket.dto.request.ValidateTicketRequest;
@@ -237,32 +239,32 @@ public class TicketService {
 
         // Find ticket by QR code data
         Ticket ticket = ticketRepository.findByQrCodeData(request.getQrCodeData())
-            .orElseThrow(() -> new ApiException("INVALID_QR_CODE", "Invalid QR code", 400));
+            .orElseThrow(() -> new BadRequestException("Invalid QR code"));
 
         // Verify event matches
         if (!ticket.getEvent().getId().equals(request.getEventId())) {
-            throw new ApiException("INVALID_QR_CODE", "Ticket does not belong to this event", 400);
+            throw new BadRequestException("Ticket does not belong to this event");
         }
 
         // Check if already validated
         if (ticket.getStatus() == TicketStatus.VALIDATED) {
-            throw new ApiException("TICKET_ALREADY_VALIDATED", "Ticket has already been validated", 409);
+            throw new ConflictException("Ticket has already been validated");
         }
 
         // Check if cancelled
         if (ticket.getStatus() == TicketStatus.CANCELLED) {
-            throw new ApiException("TICKET_CANCELLED", "Ticket has been cancelled", 400);
+            throw new BadRequestException("Ticket has been cancelled");
         }
 
         // Check if pending ticket has expired (15 minute window)
         if (ticket.getStatus() == TicketStatus.PENDING && ticket.isPendingExpired()) {
-            throw new ApiException("TICKET_EXPIRED", 
-                "Pending reservation has expired (15 minute window exceeded)", 400);
+            throw new BadRequestException(
+                "Pending reservation has expired (15 minute window exceeded)");
         }
 
         // Check if expired (past event date)
         if (ticket.isExpired()) {
-            throw new ApiException("TICKET_EXPIRED", "Ticket has expired", 400);
+            throw new BadRequestException("Ticket has expired");
         }
 
         // Validate ticket

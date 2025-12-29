@@ -14,7 +14,14 @@ import java.util.UUID;
  */
 public interface BudgetRepository extends JpaRepository<Budget, UUID> {
     // Order newest-first so accidental duplicate budgets resolve deterministically, and guard against soft-deleted rows.
-    @Query("SELECT b FROM Budget b WHERE b.event.id = :eventId AND b.deletedAt IS NULL ORDER BY b.createdAt DESC, b.id DESC")
+    // Use LEFT JOIN FETCH to eagerly load event and categories to avoid LazyInitializationException
+    // Note: Cannot fetch lineItems here due to MultipleBagFetchException (Hibernate limitation with multiple List collections)
+    // Line items will be loaded separately when needed via BudgetService.listLineItems()
+    @Query("SELECT DISTINCT b FROM Budget b " +
+           "LEFT JOIN FETCH b.event " +
+           "LEFT JOIN FETCH b.categories " +
+           "WHERE b.event.id = :eventId AND b.deletedAt IS NULL " +
+           "ORDER BY b.createdAt DESC, b.id DESC")
     List<Budget> findAllByEventIdOrderByCreatedAtDesc(@Param("eventId") UUID eventId);
     
     // Legacy method - returns the first (most recent) budget, handling multiple results gracefully

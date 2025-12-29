@@ -225,7 +225,7 @@ public class EventMediaService {
 
     private EventPresignedUploadResponse buildPresignedResponse(UUID eventId, EventMediaUploadRequest request, String purpose) {
         if (!storageService.isConfigured()) {
-            throw new BadRequestException("S3_NOT_CONFIGURED", "S3 is not configured for uploads");
+            throw new BadRequestException("S3 is not configured for uploads");
         }
         if (!StringUtils.hasText(request.getFileName())) {
             throw new IllegalArgumentException("fileName is required");

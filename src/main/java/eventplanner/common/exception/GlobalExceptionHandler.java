@@ -174,15 +174,35 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleApiException(
             ApiException ex, WebRequest request) {
 
+        // Use standard HTTP status text instead of custom error codes
+        String errorText = getStandardHttpStatusText(ex.getStatus());
+        
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(ex.getStatus())
-                .error(ex.getCode() != null ? ex.getCode() : "Bad Request")
+                .error(errorText)
                 .message(ex.getMessage())
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
         return ResponseEntity.status(ex.getStatus()).body(errorResponse);
+    }
+    
+    /**
+     * Returns standard HTTP status text for the given status code.
+     * Follows RFC 7231 and RFC 6585 standards.
+     */
+    private String getStandardHttpStatusText(int status) {
+        return switch (status) {
+            case 400 -> "Bad Request";
+            case 401 -> "Unauthorized";
+            case 403 -> "Forbidden";
+            case 404 -> "Not Found";
+            case 409 -> "Conflict";
+            case 429 -> "Too Many Requests";
+            case 500 -> "Internal Server Error";
+            default -> HttpStatus.valueOf(status).getReasonPhrase();
+        };
     }
 
     @ExceptionHandler(NoHandlerFoundException.class)

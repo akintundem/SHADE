@@ -29,6 +29,10 @@ public class BudgetCategoryResponse {
     private LocalDateTime updatedAt;
 
     public static BudgetCategoryResponse fromEntity(eventplanner.features.budget.entity.BudgetCategory entity) {
+        return fromEntity(entity, false);
+    }
+    
+    public static BudgetCategoryResponse fromEntity(eventplanner.features.budget.entity.BudgetCategory entity, boolean includeLineItems) {
         if (entity == null) return null;
         BudgetCategoryResponse response = new BudgetCategoryResponse();
         response.setId(entity.getId());
@@ -40,12 +44,26 @@ public class BudgetCategoryResponse {
         response.setTotalActual(entity.getTotalActual());
         response.setRemaining(entity.getRemaining());
         response.setDisplayOrder(entity.getDisplayOrder());
-        response.setLineItemCount(entity.getLineItems() != null ? entity.getLineItems().size() : 0);
         
-        if (entity.getLineItems() != null && !entity.getLineItems().isEmpty()) {
-            response.setLineItems(entity.getLineItems().stream()
-                    .map(BudgetLineItemResponse::fromEntity)
-                    .toList());
+        // Safely access lineItems - handle lazy loading exception
+        try {
+            if (entity.getLineItems() != null) {
+                response.setLineItemCount(entity.getLineItems().size());
+                if (includeLineItems && !entity.getLineItems().isEmpty()) {
+                    response.setLineItems(entity.getLineItems().stream()
+                            .map(BudgetLineItemResponse::fromEntity)
+                            .toList());
+                } else {
+                    response.setLineItems(null);
+                }
+            } else {
+                response.setLineItemCount(0);
+                response.setLineItems(null);
+            }
+        } catch (org.hibernate.LazyInitializationException e) {
+            // Line items not loaded - set count to 0 and items to null
+            response.setLineItemCount(0);
+            response.setLineItems(null);
         }
         
         response.setCreatedAt(entity.getCreatedAt());

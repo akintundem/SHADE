@@ -49,8 +49,10 @@ public class BudgetDetailResponse {
         response.setUpdatedAt(entity.getUpdatedAt());
         
         if (entity.getCategories() != null) {
+            // Don't include lineItems in categories to avoid lazy loading issues
+            // Line items are available via separate endpoint /api/v1/events/{eventId}/budget/line-items
             response.setCategories(entity.getCategories().stream()
-                    .map(BudgetCategoryResponse::fromEntity)
+                    .map(cat -> BudgetCategoryResponse.fromEntity(cat, false))
                     .toList());
         }
         

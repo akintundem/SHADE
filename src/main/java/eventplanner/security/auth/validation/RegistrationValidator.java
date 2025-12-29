@@ -34,11 +34,10 @@ public class RegistrationValidator {
         // Validate password match and strength
         validatePasswordMatch(request.getPassword(), request.getConfirmPassword());
 
-        // Check email uniqueness (only for verified users - unverified users can re-register)
+        // Check email uniqueness - reject ANY existing email (verified or unverified)
+        // Database-level UNIQUE constraint on email field ensures data integrity
         String normalizedEmail = normalizeEmail(request.getEmail());
-        if (userAccountRepository.findByEmailIgnoreCase(normalizedEmail)
-                .map(user -> user.isEmailVerified())
-                .orElse(false)) {
+        if (userAccountRepository.existsByEmailIgnoreCase(normalizedEmail)) {
             throw new IllegalArgumentException("Registration failed: email is already registered");
         }
     }

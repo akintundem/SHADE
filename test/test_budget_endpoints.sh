@@ -390,10 +390,49 @@ create_test_event() {
     
     if [ "$http_code" = "201" ] || [ "$http_code" = "200" ]; then
         EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+        if [ -z "$EVENT_ID" ]; then
+            echo -e "${RED}❌ Failed to extract event ID from response${NC}"
+            echo -e "${YELLOW}   Response: $response_body${NC}"
+            return 1
+        fi
         echo -e "${GREEN}✅ Test event created: $EVENT_ID${NC}"
+        
+        # Verify event was created by fetching it
+        echo -e "${YELLOW}🔍 Verifying event creation...${NC}"
+        local verify_response=$(curl -s -w '%{http_code}' -X GET \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "X-Device-ID: $DEVICE_ID" \
+            "$BASE_URL/api/v1/events/$EVENT_ID")
+        
+        local verify_code="${verify_response: -3}"
+        if [ "$verify_code" = "200" ]; then
+            echo -e "${GREEN}✅ Event verified successfully${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Event verification returned HTTP $verify_code, but continuing...${NC}"
+        fi
+        
+        # Wait a moment for budget to be created and committed to database
+        echo -e "${YELLOW}⏳ Waiting for budget to be created...${NC}"
+        sleep 2
+        
+        # Verify budget exists before proceeding
+        local budget_check_response=$(curl -s -w '%{http_code}' -X GET \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "X-Device-ID: $DEVICE_ID" \
+            "$BASE_URL/api/v1/events/$EVENT_ID/budget")
+        
+        local budget_check_code="${budget_check_response: -3}"
+        if [ "$budget_check_code" = "200" ]; then
+            echo -e "${GREEN}✅ Budget confirmed to exist${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Budget check returned HTTP $budget_check_code, but continuing with tests...${NC}"
+            echo -e "${YELLOW}   This might indicate the budget wasn't auto-created${NC}"
+        fi
+        
         return 0
     else
         echo -e "${RED}❌ Failed to create test event - HTTP: $http_code${NC}"
+        echo -e "${YELLOW}   Response: $response_body${NC}"
         return 1
     fi
 }

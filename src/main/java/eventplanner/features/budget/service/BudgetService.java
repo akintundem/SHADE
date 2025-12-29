@@ -103,7 +103,11 @@ public class BudgetService {
         }
         
         recalculateContingency(budget);
-        return budgetRepository.save(budget);
+        budgetRepository.save(budget);
+        
+        // Refetch with categories to avoid lazy loading issues when converting to response
+        return budgetRepository.findByEventId(budget.getEvent().getId())
+                .orElse(budget);
     }
 
     /**
@@ -127,8 +131,10 @@ public class BudgetService {
             item.setBudgetCategory(category);
             item.setIsDraft(true);
         } else {
-            item = lineItemRepository.findById(request.getId())
-                    .orElseThrow(() -> new RuntimeException("Line item not found"));
+            // Fetch line item with category to avoid lazy loading issues
+            item = lineItemRepository.findByIdWithCategory(request.getId())
+                    .orElseGet(() -> lineItemRepository.findById(request.getId())
+                            .orElseThrow(() -> new RuntimeException("Line item not found")));
             if (!item.getBudget().getId().equals(budget.getId())) {
                 throw new IllegalArgumentException("Line item does not belong to this budget");
             }
@@ -160,8 +166,9 @@ public class BudgetService {
      * Finalize a draft line item with auto-cleanup.
      */
     public Optional<BudgetLineItem> finalizeLineItem(Budget budget, UUID itemId, BudgetLineItemAutoSaveRequest request) {
-        BudgetLineItem item = lineItemRepository.findById(itemId)
-                .orElseThrow(() -> new RuntimeException("Line item not found"));
+        BudgetLineItem item = lineItemRepository.findByIdWithCategory(itemId)
+                .orElseGet(() -> lineItemRepository.findById(itemId)
+                        .orElseThrow(() -> new RuntimeException("Line item not found")));
         if (!item.getBudget().getId().equals(budget.getId())) {
             throw new IllegalArgumentException("Line item does not belong to this budget");
         }
@@ -228,7 +235,8 @@ public class BudgetService {
     }
 
     public void deleteLineItem(Budget budget, UUID itemId) {
-        BudgetLineItem item = lineItemRepository.findById(itemId).orElse(null);
+        BudgetLineItem item = lineItemRepository.findByIdWithCategory(itemId)
+                .orElseGet(() -> lineItemRepository.findById(itemId).orElse(null));
         if (item == null) return;
 
         UUID budgetId = item.getBudget().getId();

@@ -17,6 +17,8 @@ import eventplanner.common.domain.enums.UserType;
 import eventplanner.security.util.AuthMapper;
 import eventplanner.common.exception.UnauthorizedException;
 import eventplanner.common.exception.BadRequestException;
+import eventplanner.common.exception.ConflictException;
+import eventplanner.common.exception.TooManyRequestsException;
 import eventplanner.security.util.TokenHashUtil;
 import eventplanner.security.util.JwtValidationUtil;
 import eventplanner.security.auth.dto.res.TokenValidationResponse;
@@ -27,6 +29,7 @@ import eventplanner.common.communication.services.channel.email.EmailService;
 import eventplanner.common.domain.enums.CommunicationType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -103,49 +106,48 @@ public class AuthService {
         // Email-based + IP-based rate limiting for registration endpoint
         String endpoint = "/api/v1/auth/register";
         if (!rateLimitingService.isIpAndEmailWithinRateLimit(clientIp, normalizedEmail, endpoint)) {
-            throw new BadRequestException("RATE_LIMIT_EXCEEDED", 
+            throw new TooManyRequestsException(
                 "Too many registration attempts. Please try again later.");
         }
         
         // Validate registration request (password match, email uniqueness)
+        // This will throw IllegalArgumentException if email already exists (verified or unverified)
         registrationValidator.validate(request);
         
-        Optional<UserAccount> existingUserOpt = userAccountRepository.findByEmailIgnoreCase(normalizedEmail);
-        UserAccount user;
-        boolean isReRegistration = existingUserOpt.isPresent();
+        // Double-check for race condition - if user exists despite validation, reject registration
+        // Database-level UNIQUE constraint on email field provides final protection
+        if (userAccountRepository.existsByEmailIgnoreCase(normalizedEmail)) {
+            throw new ConflictException(
+                "Email is already registered. Please use a different email address.");
+        }
         
-        if (isReRegistration) {
-            // User exists but is unverified - update password and resend verification
-            // Profile fields will be collected during onboarding after email verification
-            user = existingUserOpt.get();
-            log.info("Updating unverified user account and resending verification: {}", normalizedEmail);
-            user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-            if (user.getSettings() == null) {
-                user.setSettings(UserSettings.createDefault(user));
-            }
-            userAccountRepository.save(user);
-        } else {
-            // New user - create account with minimal info (email + password only)
-            // Profile completion happens during onboarding after email verification
-            // Name is required (non-nullable), so we set a placeholder that will be replaced during onboarding
-            user = UserAccount.builder()
-                .email(normalizedEmail)
-                .name("") // Placeholder - will be set during onboarding
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .emailVerified(false)
-                .profileCompleted(false)
-                .acceptTerms(false) // Will be collected during onboarding
-                .acceptPrivacy(false) // Will be collected during onboarding
-                .marketingOptIn(false)
-                .userType(UserType.INDIVIDUAL)
-                .build();
-            user.setSettings(UserSettings.createDefault(user));
+        // Create new user account with minimal info (email + password only)
+        // Profile completion happens during onboarding after email verification
+        // Name is required (non-nullable), so we set a placeholder that will be replaced during onboarding
+        UserAccount user = UserAccount.builder()
+            .email(normalizedEmail)
+            .name("") // Placeholder - will be set during onboarding
+            .passwordHash(passwordEncoder.encode(request.getPassword()))
+            .emailVerified(false)
+            .profileCompleted(false)
+            .acceptTerms(false) // Will be collected during onboarding
+            .acceptPrivacy(false) // Will be collected during onboarding
+            .marketingOptIn(false)
+            .userType(UserType.INDIVIDUAL)
+            .build();
+        user.setSettings(UserSettings.createDefault(user));
+        
+        try {
             userAccountRepository.save(user);
             userAccountRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            // Handle database-level UNIQUE constraint violation (race condition protection)
+            log.warn("Database constraint violation during registration for email: {}", normalizedEmail, e);
+            throw new ConflictException(
+                "Email is already registered. Please use a different email address.");
         }
 
         // Generate email verification token (single-active: revoke existing tokens first)
-        // This handles both new users and unverified users re-registering after token expiration
         revokeExistingVerificationTokens(user);
         
         String rawToken = generateSecureToken();
@@ -185,7 +187,7 @@ public class AuthService {
         // Email-based + IP-based rate limiting for login endpoint
         String endpoint = "/api/v1/auth/login";
         if (!rateLimitingService.isIpAndEmailWithinRateLimit(clientIp, normalizedEmail, endpoint)) {
-            throw new BadRequestException("RATE_LIMIT_EXCEEDED", 
+            throw new TooManyRequestsException( 
                 "Too many login attempts. Please try again later.");
         }
         
@@ -205,7 +207,7 @@ public class AuthService {
                 handleFailedLoginAttempt(userOpt.get());
             }
             // Always return the same error message and status code to prevent account enumeration
-            throw new BadRequestException("INVALID_CREDENTIALS", "Invalid credentials");
+            throw new BadRequestException("Invalid credentials");
         }
         
         UserAccount user = userOpt.get();
@@ -216,7 +218,7 @@ public class AuthService {
                 LocalDateTime.now(ZoneOffset.UTC), 
                 user.getLockedUntil()
             ).toMinutes();
-            throw new BadRequestException("ACCOUNT_LOCKED", 
+            throw new BadRequestException(
                 String.format("Account is temporarily locked due to multiple failed login attempts. Please try again in %d minute(s).", 
                     minutesRemaining));
         }
@@ -224,7 +226,7 @@ public class AuthService {
         // Check email verification
         // Return same error as invalid credentials to prevent account enumeration so that attacker cannot determine if an account exists and has correct password but unverified email
         if (!user.isEmailVerified()) {
-            throw new BadRequestException("INVALID_CREDENTIALS", "Invalid credentials");
+            throw new BadRequestException("Invalid credentials");
         }
         
         // Successful login - reset failed attempts and unlock account
@@ -257,7 +259,7 @@ public class AuthService {
 
         String deviceId = principal.getDeviceId();
         if (deviceId == null || deviceId.trim().isEmpty()) {
-            throw new BadRequestException("DEVICE_ID_REQUIRED", "Device identifier is required");
+            throw new BadRequestException("Device identifier is required");
         }
 
         UserSession session = sessionRepository.findByRefreshTokenAndRevokedFalse(request.getRefreshToken())
@@ -319,7 +321,7 @@ public class AuthService {
     public void logout(LogoutRequest request, UserAccount user, String deviceId) {
         // Validate confirmation to prevent accidental sign-outs
         if (request.getConfirm() == null || !request.getConfirm()) {
-            throw new BadRequestException("CONFIRMATION_REQUIRED", 
+            throw new BadRequestException(
                 "Confirmation required. Set 'confirm' to true to logout from this device.");
         }
         

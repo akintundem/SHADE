@@ -41,10 +41,10 @@ public class S3ImageUploadService {
                                                    String contentType,
                                                    Duration expiresIn) {
         if (!storageService.isConfigured()) {
-            throw new BadRequestException("S3_NOT_CONFIGURED", "Image uploads are not configured");
+            throw new BadRequestException("Image uploads are not configured");
         }
         if (!StringUtils.hasText(contentType) || !contentType.toLowerCase(Locale.US).startsWith("image/")) {
-            throw new BadRequestException("INVALID_CONTENT_TYPE", "Only image uploads are allowed");
+            throw new BadRequestException("Only image uploads are allowed");
         }
 
         String sanitizedFileName = sanitizeFileName(fileName);
@@ -60,7 +60,7 @@ public class S3ImageUploadService {
                 contentType
             );
         } catch (IllegalStateException ex) {
-            throw new BadRequestException("S3_NOT_CONFIGURED", ex.getMessage());
+            throw new BadRequestException(ex.getMessage());
         }
 
         String resourceUrl = storageService.stripQuery(uploadUrl);
@@ -83,7 +83,7 @@ public class S3ImageUploadService {
             URL url = new URL(resourceUrl.trim());
             return storageService.stripQuery(url);
         } catch (Exception ex) {
-            throw new BadRequestException("INVALID_PROFILE_IMAGE_URL", "Invalid profile image URL");
+            throw new BadRequestException("Invalid profile image URL");
         }
     }
 

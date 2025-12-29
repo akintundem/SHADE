@@ -29,7 +29,7 @@ public class ProfileImageService {
 
     public ProfileImageUploadResponse createProfileImageUpload(UserAccount user, ProfileImageUploadRequest request) {
         if (user == null) {
-            throw new BadRequestException("USER_REQUIRED", "Valid user is required for profile uploads");
+            throw new BadRequestException("Valid user is required for profile uploads");
         }
 
         String keyPrefix = PROFILE_KEY_PREFIX_TEMPLATE.formatted(user.getId());
@@ -61,21 +61,21 @@ public class ProfileImageService {
      */
     public ProfileImageCompleteResponse completeProfileImageUpload(UserAccount user, ProfileImageCompleteRequest request) {
         if (user == null) {
-            throw new BadRequestException("USER_REQUIRED", "Valid user is required");
+            throw new BadRequestException("Valid user is required");
         }
         if (request == null) {
-            throw new BadRequestException("REQUEST_REQUIRED", "Request is required");
+            throw new BadRequestException("Request is required");
         }
 
         String expectedPrefix = (PROFILE_KEY_PREFIX_TEMPLATE.formatted(user.getId())) + "/";
         String objectKey = request.getObjectKey() != null ? request.getObjectKey().trim() : "";
         if (!StringUtils.hasText(objectKey) || !objectKey.startsWith(expectedPrefix)) {
-            throw new BadRequestException("INVALID_OBJECT_KEY", "Invalid object key for this user");
+            throw new BadRequestException("Invalid object key for this user");
         }
 
         String normalized = imageUploadService.normalizeResourceUrl(request.getResourceUrl());
         if (!StringUtils.hasText(normalized)) {
-            throw new BadRequestException("INVALID_RESOURCE_URL", "Invalid resourceUrl");
+            throw new BadRequestException("Invalid resourceUrl");
         }
 
         user.setProfilePictureUrl(normalized);

@@ -64,7 +64,7 @@ public class PresignedUploadService {
             Duration uploadTtl) {
         
         if (!storageService.isConfigured()) {
-            throw new BadRequestException("S3_NOT_CONFIGURED", "S3 is not configured for uploads");
+            throw new BadRequestException("S3 is not configured for uploads");
         }
         
         if (!StringUtils.hasText(request.getFileName())) {
