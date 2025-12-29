@@ -4,6 +4,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
+/**
+ * Utility to hash tokens with SHA-256 for safe storage/lookup.
+ */
 public final class TokenHashUtil {
     private TokenHashUtil() {}
 
@@ -21,5 +24,4 @@ public final class TokenHashUtil {
         }
     }
 }
-
 

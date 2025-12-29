@@ -10,6 +10,9 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * Helpers for validating and parsing JWTs using the configured signing key.
+ */
 @Component
 public class JwtValidationUtil {
     
@@ -28,6 +31,9 @@ public class JwtValidationUtil {
         return Keys.hmacShaKeyFor(keyBytes);
     }
     
+    /**
+     * Verify token signature and expiration.
+     */
     public boolean validateToken(String token) {
         try {
             Claims claims = getClaimsFromToken(token);
@@ -38,6 +44,9 @@ public class JwtValidationUtil {
         }
     }
     
+    /**
+     * Parse claims from a signed JWT.
+     */
     public Claims getClaimsFromToken(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -46,6 +55,9 @@ public class JwtValidationUtil {
                 .getPayload();
     }
     
+    /**
+     * Extract subject (user id) from token; returns null on failure.
+     */
     public String getUserIdFromToken(String token) {
         try {
             Claims claims = getClaimsFromToken(token);
@@ -55,6 +67,9 @@ public class JwtValidationUtil {
         }
     }
     
+    /**
+     * Extract email claim if present; returns null on failure.
+     */
     public String getEmailFromToken(String token) {
         try {
             Claims claims = getClaimsFromToken(token);

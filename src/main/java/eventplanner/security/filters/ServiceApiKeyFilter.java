@@ -16,6 +16,10 @@ import java.io.IOException;
 import java.security.MessageDigest;
 import java.util.Map;
 
+/**
+ * Allows trusted service-to-service traffic using an `X-API-Key` header while letting user traffic pass through.
+ * Invalid keys short-circuit with a 403 JSON response.
+ */
 @Component
 @Slf4j
 public class ServiceApiKeyFilter extends OncePerRequestFilter {

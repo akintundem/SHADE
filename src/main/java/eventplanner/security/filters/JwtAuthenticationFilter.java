@@ -25,6 +25,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Extracts Bearer tokens, validates them, and populates the SecurityContext with a UserPrincipal.
+ * Non-Bearer requests are left to downstream security rules.
+ */
 @Component
 @Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
