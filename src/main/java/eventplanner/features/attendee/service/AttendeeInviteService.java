@@ -123,6 +123,34 @@ public class AttendeeInviteService {
         // Fetch UserAccount for attendee
         UserAccount user = userAccountRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+
+        // Check for an email-only attendee and upgrade it instead of creating duplicates
+        if (user.getEmail() != null) {
+            Optional<Attendee> existingByEmail = attendeeRepository.findByEventIdAndEmailIgnoreCase(eventId, user.getEmail());
+            if (existingByEmail.isPresent()) {
+                Attendee existing = existingByEmail.get();
+
+                if (existing.getUser() != null && !existing.getUser().getId().equals(userId)) {
+                    throw new IllegalArgumentException("An attendee with this email already exists for this event");
+                }
+
+                existing.setUser(user);
+                if (existing.getName() == null || existing.getName().trim().isEmpty()) {
+                    existing.setName(user.getName());
+                }
+                existing.setEmail(user.getEmail());
+                existing.setRsvpStatus(AttendeeStatus.CONFIRMED);
+
+                if (existing.getParticipationVisibility() == null && user.getSettings() != null
+                        && user.getSettings().getEventParticipationVisibility() != null) {
+                    existing.setParticipationVisibility(user.getSettings().getEventParticipationVisibility());
+                }
+
+                Attendee savedExisting = attendeeRepository.save(existing);
+                finalizeInvite(invite, AttendeeInviteStatus.ACCEPTED);
+                return savedExisting;
+            }
+        }
         
         Attendee attendee = new Attendee();
         attendee.setEvent(event);

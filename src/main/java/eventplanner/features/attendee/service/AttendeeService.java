@@ -4,6 +4,7 @@ import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.domain.enums.CommunicationType;
 import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.features.attendee.dto.request.AttendeeInfo;
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeStatus;
@@ -24,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Service for attendee management operations.
@@ -40,6 +40,10 @@ public class AttendeeService {
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
+
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+        "name", "email", "rsvpStatus", "checkedInAt", "createdAt"
+    );
 
     // ==================== Core CRUD Operations ====================
 
@@ -83,54 +87,81 @@ public class AttendeeService {
         Event event = eventRepository.findById(request.getEventId())
             .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.getEventId()));
         
-        // Map attendee info to Attendee entities, resolving userId or email
-        List<Attendee> toSave = request.getAttendees().stream().map(attendeeInfo -> {
+        // Track duplicates within the same request to fail fast
+        Set<UUID> seenUserIds = new HashSet<>();
+        Set<String> seenEmails = new HashSet<>();
+
+        List<Attendee> toSave = new ArrayList<>();
+
+        for (AttendeeInfo attendeeInfo : request.getAttendees()) {
             Attendee attendee = new Attendee();
             attendee.setEvent(event);
-            
+
+            String trimmedEmail = attendeeInfo.getEmail() != null ? attendeeInfo.getEmail().trim() : null;
+            UserAccount resolvedUser = null;
+
             // If userId is provided, fetch user account and auto-fill info
             if (attendeeInfo.getUserId() != null) {
-                UserAccount user = userAccountRepository.findById(attendeeInfo.getUserId())
+                resolvedUser = userAccountRepository.findById(attendeeInfo.getUserId())
                     .orElseThrow(() -> new IllegalArgumentException(
                         "User not found with userId: " + attendeeInfo.getUserId()));
-                
-                // Set user relationship
-                attendee.setUser(user);
-                
-                // Auto-fill from user account (can be overridden)
-                attendee.setName(attendeeInfo.getName() != null && !attendeeInfo.getName().trim().isEmpty() 
-                    ? attendeeInfo.getName() : user.getName());
-                attendee.setEmail(attendeeInfo.getEmail() != null && !attendeeInfo.getEmail().trim().isEmpty()
-                    ? attendeeInfo.getEmail() : user.getEmail());
+                attendee.setUser(resolvedUser);
+
+                attendee.setName(StringUtils.hasText(attendeeInfo.getName())
+                    ? attendeeInfo.getName().trim()
+                    : resolvedUser.getName());
+                attendee.setEmail(StringUtils.hasText(trimmedEmail)
+                    ? trimmedEmail
+                    : resolvedUser.getEmail());
             } else {
                 // Use email - validate that either userId or email is provided
-                if (attendeeInfo.getEmail() == null || attendeeInfo.getEmail().trim().isEmpty()) {
+                if (!StringUtils.hasText(trimmedEmail)) {
                     throw new IllegalArgumentException(
                         "Either userId or email must be provided for each attendee");
                 }
-                
+
                 // Try to resolve userId from email (optional - if user exists, link them)
-                Optional<UserAccount> userByEmail = userAccountRepository.findByEmailIgnoreCase(attendeeInfo.getEmail());
+                Optional<UserAccount> userByEmail = userAccountRepository.findByEmailIgnoreCase(trimmedEmail);
                 if (userByEmail.isPresent()) {
-                    UserAccount user = userByEmail.get();
-                    // Link user account
-                    attendee.setUser(user);
-                    // Auto-fill name if not provided
-                    attendee.setName(attendeeInfo.getName() != null && !attendeeInfo.getName().trim().isEmpty()
-                        ? attendeeInfo.getName() : user.getName());
+                    resolvedUser = userByEmail.get();
+                    attendee.setUser(resolvedUser);
+                    attendee.setName(StringUtils.hasText(attendeeInfo.getName())
+                        ? attendeeInfo.getName().trim()
+                        : resolvedUser.getName());
+                    attendee.setEmail(trimmedEmail);
                 } else {
                     // User doesn't exist - use provided info, no user link
                     attendee.setUser(null);
-                    if (attendeeInfo.getName() == null || attendeeInfo.getName().trim().isEmpty()) {
+                    if (!StringUtils.hasText(attendeeInfo.getName())) {
                         throw new IllegalArgumentException(
                             "Name is required when email is provided and user doesn't exist in directory");
                     }
-                    attendee.setName(attendeeInfo.getName());
+                    attendee.setName(attendeeInfo.getName().trim());
+                    attendee.setEmail(trimmedEmail);
                 }
-                
-                attendee.setEmail(attendeeInfo.getEmail());
             }
-            
+
+            UUID resolvedUserId = resolvedUser != null ? resolvedUser.getId() : null;
+            String normalizedEmail = normalizeEmail(attendee.getEmail());
+
+            // Prevent duplicates within the same request (user or email)
+            if (resolvedUserId != null && !seenUserIds.add(resolvedUserId)) {
+                throw new IllegalArgumentException("Duplicate attendee for userId " + resolvedUserId + " in the same request");
+            }
+            if (normalizedEmail != null && !seenEmails.add(normalizedEmail)) {
+                throw new IllegalArgumentException("Duplicate attendee email in the same request: " + attendee.getEmail());
+            }
+
+            // Prevent duplicates against existing attendees in the event
+            if (resolvedUserId != null && repository.findByEventIdAndUserId(event.getId(), resolvedUserId).isPresent()) {
+                log.warn("Duplicate attendee detected for user {} in event {}", resolvedUserId, event.getId());
+                throw new IllegalArgumentException("An attendee with this user already exists for this event");
+            }
+            if (normalizedEmail != null && repository.findByEventIdAndEmailIgnoreCase(event.getId(), normalizedEmail).isPresent()) {
+                log.warn("Duplicate attendee detected for email {} in event {}", attendee.getEmail(), event.getId());
+                throw new IllegalArgumentException("An attendee with this email already exists for this event");
+            }
+
             // Set participation visibility: use provided value, or default to user's global setting, or PUBLIC
             VisibilityLevel visibility = attendeeInfo.getParticipationVisibility();
             if (visibility == null && attendee.getUser() != null && attendee.getUser().getSettings() != null) {
@@ -142,21 +173,12 @@ public class AttendeeService {
                 visibility = VisibilityLevel.PUBLIC;
             }
             attendee.setParticipationVisibility(visibility);
-            
+
             // Validate attendee before saving
             validateAttendee(attendee);
-            
-            // Check for duplicate email in the same event
-            if (attendee.getEmail() != null && !attendee.getEmail().isEmpty()) {
-                Optional<Attendee> existing = repository.findByEventIdAndEmail(event.getId(), attendee.getEmail());
-                if (existing.isPresent()) {
-                    log.warn("Duplicate attendee detected for email {} in event {}", attendee.getEmail(), event.getId());
-                    throw new IllegalArgumentException("An attendee with this email already exists for this event");
-                }
-            }
-            
-            return attendee;
-        }).collect(Collectors.toList());
+
+            toSave.add(attendee);
+        }
         
         // Save all attendees
         List<Attendee> saved = repository.saveAll(toSave);
@@ -194,10 +216,26 @@ public class AttendeeService {
         if (page < 0) page = 0;
         if (size < 1) size = 20;
         if (size > 100) size = 100; // Max page size
-        
-        // Create sort
-        Sort.Direction direction = "DESC".equalsIgnoreCase(sortDirection) ? Sort.Direction.DESC : Sort.Direction.ASC;
-        Sort sort = Sort.by(direction, sortBy);
+
+        // Validate sort
+        if (!StringUtils.hasText(sortBy)) {
+            sortBy = "name";
+        }
+        String normalizedSortBy = sortBy.trim();
+        if (!ALLOWED_SORT_FIELDS.contains(normalizedSortBy)) {
+            throw new IllegalArgumentException("Invalid sort field. Allowed values: " + String.join(",", ALLOWED_SORT_FIELDS));
+        }
+
+        Sort.Direction direction;
+        if (!StringUtils.hasText(sortDirection) || "ASC".equalsIgnoreCase(sortDirection)) {
+            direction = Sort.Direction.ASC;
+        } else if ("DESC".equalsIgnoreCase(sortDirection)) {
+            direction = Sort.Direction.DESC;
+        } else {
+            throw new IllegalArgumentException("Invalid sort direction. Allowed values: ASC or DESC");
+        }
+
+        Sort sort = Sort.by(direction, normalizedSortBy);
         Pageable pageable = PageRequest.of(page, size, sort);
         
         // Apply filters in priority order
@@ -276,6 +314,13 @@ public class AttendeeService {
      */
     private boolean isValidEmail(String email) {
         return email != null && email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    }
+
+    /**
+     * Normalize email for duplicate detection.
+     */
+    private String normalizeEmail(String email) {
+        return StringUtils.hasText(email) ? email.trim().toLowerCase() : null;
     }
 
     /**

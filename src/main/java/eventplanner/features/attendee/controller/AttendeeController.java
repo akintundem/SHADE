@@ -180,22 +180,25 @@ public class AttendeeController {
 		}
 	}
 
-	// ==================== Update Invite RSVP Status ====================
+    // ==================== Update Invite RSVP Status ====================
 
-	@PostMapping("/invites")
-	@Operation(summary = "Update attendee invite RSVP status", 
-		description = "Update attendee invite RSVP status. Can update by inviteId or token (query parameters). Status can be any valid AttendeeInviteStatus (ACCEPTED, DECLINED, REVOKED, EXPIRED). Works for both user-linked attendees and email-only guests.")
-	@RequiresPermission(value = RbacPermissions.ATTENDEE_CREATE, resources = {"invite_id=#inviteId"})
-	public ResponseEntity<AttendeeResponse> updateInviteStatus(
-			@RequestParam(required = false) UUID inviteId,
-			@RequestParam(required = false) String token,
-			@RequestParam String status,
-			@AuthenticationPrincipal UserPrincipal principal) {
-		try {
-			if (inviteId == null && (token == null || token.trim().isEmpty())) {
-				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-					"Either inviteId or token must be provided");
-			}
+    @PostMapping("/invites")
+    @Operation(summary = "Update attendee invite RSVP status", 
+        description = "Update attendee invite RSVP status. Can update by inviteId or token (query parameters). Status can be any valid AttendeeInviteStatus (ACCEPTED, DECLINED, REVOKED, EXPIRED). Works for both user-linked attendees and email-only guests.")
+    public ResponseEntity<AttendeeResponse> updateInviteStatus(
+            @RequestParam(required = false) UUID inviteId,
+            @RequestParam(required = false) String token,
+            @RequestParam String status,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+
+            if (inviteId == null && (token == null || token.trim().isEmpty())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                    "Either inviteId or token must be provided");
+            }
 			
 			if (status == null || status.trim().isEmpty()) {
 				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 

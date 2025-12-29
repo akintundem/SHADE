@@ -48,6 +48,12 @@ public interface AttendeeRepository extends JpaRepository<Attendee, UUID> {
     @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.email = :email")
     Optional<Attendee> findByEventIdAndEmail(@Param("eventId") UUID eventId, @Param("email") String email);
 
+    /**
+     * Case-insensitive lookup by email to prevent duplicate attendees with different casing.
+     */
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND LOWER(a.email) = LOWER(:email)")
+    Optional<Attendee> findByEventIdAndEmailIgnoreCase(@Param("eventId") UUID eventId, @Param("email") String email);
+
     @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.user.id = :userId")
     Optional<Attendee> findByEventIdAndUserId(@Param("eventId") UUID eventId, @Param("userId") UUID userId);
 
