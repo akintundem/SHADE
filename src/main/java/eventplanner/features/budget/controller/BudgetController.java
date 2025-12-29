@@ -64,8 +64,8 @@ public class BudgetController {
 		
 		try {
 			UUID uuid = UUID.fromString(eventId);
-			// Use getOrCreateByEventId to ensure budget exists
-			Budget budget = budgetService.getOrCreateByEventId(uuid);
+			Budget budget = budgetService.getByEventId(uuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
 			return BudgetHttpUtil.wrapResponse(budget, BudgetDetailResponse.fromEntity(budget));
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid event ID format", e);
@@ -116,7 +116,8 @@ public class BudgetController {
 			@PathVariable String eventId) {
 		try {
 			UUID eventUuid = UUID.fromString(eventId);
-			Budget budget = budgetService.getOrCreateByEventId(eventUuid);
+			Budget budget = budgetService.getByEventId(eventUuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
 			List<BudgetCategory> categories = budgetService.listCategories(budget.getId());
 			return ResponseEntity.ok(categories.stream().map(BudgetCategoryResponse::fromEntity).toList());
 		} catch (IllegalArgumentException e) {
@@ -134,8 +135,9 @@ public class BudgetController {
 			@Valid @RequestBody BudgetLineItemAutoSaveRequest request) {
 		try {
 			UUID eventUuid = UUID.fromString(eventId);
-			Budget budget = budgetService.getOrCreateByEventId(eventUuid);
-			BudgetLineItem saved = budgetService.autoSaveLineItemDraft(budget.getId(), request);
+			Budget budget = budgetService.getByEventId(eventUuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
+			BudgetLineItem saved = budgetService.autoSaveLineItemDraft(budget, request);
 			return ResponseEntity.ok(BudgetLineItemResponse.fromEntity(saved));
 		} catch (Exception e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
@@ -149,7 +151,8 @@ public class BudgetController {
 			@PathVariable String eventId) {
 		try {
 			UUID eventUuid = UUID.fromString(eventId);
-			Budget budget = budgetService.getOrCreateByEventId(eventUuid);
+			Budget budget = budgetService.getByEventId(eventUuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
 			List<BudgetLineItem> items = budgetService.listLineItems(budget.getId());
 			return ResponseEntity.ok(items.stream().map(BudgetLineItemResponse::fromEntity).toList());
 		} catch (Exception e) {
@@ -165,7 +168,10 @@ public class BudgetController {
 			@PathVariable String itemId) {
 		try {
 			UUID itemUuid = UUID.fromString(itemId);
-			budgetService.deleteLineItem(itemUuid);
+			UUID eventUuid = UUID.fromString(eventId);
+			Budget budget = budgetService.getByEventId(eventUuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
+			budgetService.deleteLineItem(budget, itemUuid);
 			return ResponseEntity.noContent().build();
 		} catch (Exception e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
@@ -181,7 +187,10 @@ public class BudgetController {
 			@Valid @RequestBody BudgetLineItemAutoSaveRequest request) {
 		try {
 			UUID itemUuid = UUID.fromString(itemId);
-			return budgetService.finalizeLineItem(itemUuid, request)
+			UUID eventUuid = UUID.fromString(eventId);
+			Budget budget = budgetService.getByEventId(eventUuid)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
+			return budgetService.finalizeLineItem(budget, itemUuid, request)
 					.map(finalized -> ResponseEntity.ok(BudgetLineItemResponse.fromEntity(finalized)))
 					.orElseGet(() -> ResponseEntity.noContent().build());
 		} catch (Exception e) {

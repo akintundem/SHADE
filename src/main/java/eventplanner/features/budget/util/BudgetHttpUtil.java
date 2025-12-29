@@ -5,7 +5,9 @@ import eventplanner.features.budget.entity.Budget;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -22,7 +24,10 @@ public class BudgetHttpUtil {
      */
     public static String generateETag(Budget budget) {
         if (budget == null) return "";
-        return String.valueOf(budget.getVersion()) + "-" + budget.getUpdatedAt().hashCode();
+        long version = budget.getVersion() != null ? budget.getVersion() : 0L;
+        LocalDateTime timestamp = budget.getUpdatedAt() != null ? budget.getUpdatedAt() : budget.getCreatedAt();
+        long millis = timestamp != null ? timestamp.atOffset(ZoneOffset.UTC).toInstant().toEpochMilli() : 0L;
+        return "\"" + version + "-" + millis + "\"";
     }
 
     /**
@@ -40,4 +45,3 @@ public class BudgetHttpUtil {
                 .body(response);
     }
 }
-
