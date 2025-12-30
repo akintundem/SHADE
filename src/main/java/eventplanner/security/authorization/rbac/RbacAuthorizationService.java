@@ -128,6 +128,15 @@ public class RbacAuthorizationService {
                         }
                     }
                 }
+                if (eventId == null) {
+                    UUID ticketId = extractUuid(resources, "ticket_id");
+                    if (ticketId != null) {
+                        eventId = resolveEventIdFromTicketId(ticketId);
+                        if (eventId != null) {
+                            resources.put("event_id", eventId);
+                        }
+                    }
+                }
                 // If we still can't resolve event_id, we can't determine roles
                 // Allow the request to proceed to validation which will catch the missing parameters
                 if (eventId == null) {
@@ -189,6 +198,15 @@ public class RbacAuthorizationService {
                     UUID inviteId = extractUuid(resources, "invite_id");
                     if (inviteId != null) {
                         eventId = resolveEventIdFromInviteId(inviteId);
+                        if (eventId != null) {
+                            resources.put("event_id", eventId);
+                        }
+                    }
+                }
+                if (eventId == null) {
+                    UUID ticketId = extractUuid(resources, "ticket_id");
+                    if (ticketId != null) {
+                        eventId = resolveEventIdFromTicketId(ticketId);
                         if (eventId != null) {
                             resources.put("event_id", eventId);
                         }

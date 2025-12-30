@@ -1140,6 +1140,7 @@ policy:
         - attendee.read
         - attendee.validate
         - ticket.cancel
+        - ticket.checkout
         - ticket.create
         - ticket.read
         - ticket.type.create
@@ -1210,6 +1211,7 @@ policy:
         - attendee.read
         - attendee.validate
         - ticket.cancel
+        - ticket.checkout
         - ticket.create
         - ticket.read
         - ticket.type.create
@@ -1280,6 +1282,7 @@ policy:
         - attendee.read
         - attendee.validate
         - ticket.cancel
+        - ticket.checkout
         - ticket.create
         - ticket.read
         - ticket.type.create

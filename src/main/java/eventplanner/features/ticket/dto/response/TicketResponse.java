@@ -44,28 +44,82 @@ public class TicketResponse {
 
     /**
      * Create a TicketResponse from a Ticket entity.
+     * Handles lazy loading exceptions gracefully.
      */
     public static TicketResponse from(Ticket ticket) {
-        return TicketResponse.builder()
+        TicketResponse.TicketResponseBuilder builder = TicketResponse.builder()
                 .id(ticket.getId())
                 .ticketNumber(ticket.getTicketNumber())
-                .eventId(ticket.getEvent() != null ? ticket.getEvent().getId() : null)
-                .eventName(ticket.getEvent() != null ? ticket.getEvent().getName() : null)
-                .checkoutId(ticket.getCheckout() != null ? ticket.getCheckout().getId() : null)
-                .ticketTypeId(ticket.getTicketType() != null ? ticket.getTicketType().getId() : null)
-                .ticketTypeName(ticket.getTicketType() != null ? ticket.getTicketType().getName() : null)
-                .attendeeId(ticket.getAttendee() != null ? ticket.getAttendee().getId() : null)
-                .attendeeName(ticket.getAttendee() != null ? ticket.getAttendee().getName() : ticket.getOwnerName())
-                .attendeeEmail(ticket.getAttendee() != null ? ticket.getAttendee().getEmail() : ticket.getOwnerEmail())
                 .status(ticket.getStatus())
                 .qrCodeData(ticket.getQrCodeData())
                 .pendingAt(ticket.getPendingAt())
                 .pendingExpirationTime(ticket.getPendingExpirationTime())
                 .issuedAt(ticket.getIssuedAt())
                 .validatedAt(ticket.getValidatedAt())
-                .canBeValidated(ticket.canBeValidated())
                 .createdAt(ticket.getCreatedAt())
-                .updatedAt(ticket.getUpdatedAt())
-                .build();
+                .updatedAt(ticket.getUpdatedAt());
+        
+        // Safely extract event information
+        try {
+            if (ticket.getEvent() != null) {
+                builder.eventId(ticket.getEvent().getId());
+                builder.eventName(ticket.getEvent().getName());
+            }
+        } catch (Exception e) {
+            // Lazy loading exception - event not loaded
+        }
+        
+        // Safely extract ticket type information
+        try {
+            if (ticket.getTicketType() != null) {
+                builder.ticketTypeId(ticket.getTicketType().getId());
+                builder.ticketTypeName(ticket.getTicketType().getName());
+            }
+        } catch (Exception e) {
+            // Lazy loading exception - ticket type not loaded
+        }
+        
+        // Safely extract checkout information
+        try {
+            if (ticket.getCheckout() != null) {
+                builder.checkoutId(ticket.getCheckout().getId());
+            }
+        } catch (Exception e) {
+            // Lazy loading exception - checkout not loaded
+        }
+        
+        // Safely extract attendee information
+        try {
+            if (ticket.getAttendee() != null) {
+                builder.attendeeId(ticket.getAttendee().getId());
+                builder.attendeeName(ticket.getAttendee().getName());
+                builder.attendeeEmail(ticket.getAttendee().getEmail());
+            } else {
+                builder.attendeeName(ticket.getOwnerName());
+                builder.attendeeEmail(ticket.getOwnerEmail());
+            }
+        } catch (Exception e) {
+            // Lazy loading exception - use owner info as fallback
+            builder.attendeeName(ticket.getOwnerName());
+            builder.attendeeEmail(ticket.getOwnerEmail());
+        }
+        
+        // Safely check if ticket can be validated
+        builder.canBeValidated(safelyCheckCanBeValidated(ticket));
+        
+        return builder.build();
+    }
+
+    /**
+     * Safely check if ticket can be validated, handling potential lazy loading issues.
+     */
+    private static Boolean safelyCheckCanBeValidated(Ticket ticket) {
+        try {
+            return ticket.canBeValidated();
+        } catch (Exception e) {
+            // If there's a lazy loading issue or other exception, return null
+            // This prevents 500 errors when event relationship is not loaded
+            return null;
+        }
     }
 }

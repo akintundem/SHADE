@@ -241,7 +241,10 @@ public class TicketService {
         Ticket ticket = ticketRepository.findByQrCodeData(request.getQrCodeData())
             .orElseThrow(() -> new BadRequestException("Invalid QR code"));
 
-        // Verify event matches
+        // Verify event exists and matches
+        if (ticket.getEvent() == null || ticket.getEvent().getId() == null) {
+            throw new BadRequestException("Ticket is not associated with an event");
+        }
         if (!ticket.getEvent().getId().equals(request.getEventId())) {
             throw new BadRequestException("Ticket does not belong to this event");
         }
@@ -267,12 +270,20 @@ public class TicketService {
             throw new BadRequestException("Ticket has expired");
         }
 
+        if (ticket.getStatus() != TicketStatus.ISSUED) {
+            throw new ConflictException("Ticket is not in a valid state for validation");
+        }
+
         // Validate ticket
         UserAccount validatedBy = principal != null && principal.getId() != null
             ? userAccountRepository.findById(principal.getId()).orElse(null)
             : null;
 
-        ticket.validate(validatedBy);
+        try {
+            ticket.validate(validatedBy);
+        } catch (IllegalStateException e) {
+            throw new ConflictException(e.getMessage());
+        }
         ticketRepository.save(ticket);
 
         return ticket;
@@ -282,21 +293,51 @@ public class TicketService {
      * Cancel a ticket.
      */
     public Ticket cancelTicket(UUID ticketId, UserPrincipal principal) {
+        // Load ticket with relationships to avoid lazy loading issues
         Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
+        
+        // Ensure relationships are loaded by accessing them (triggers lazy load if needed)
+        // This prevents LazyInitializationException when converting to response
+        if (ticket.getEvent() != null) {
+            ticket.getEvent().getId(); // Trigger lazy load
+        }
+        if (ticket.getTicketType() != null) {
+            ticket.getTicketType().getId(); // Trigger lazy load
+        }
 
         if (ticket.getStatus() == TicketStatus.VALIDATED) {
-            throw new ApiException("TICKET_ALREADY_VALIDATED", 
-                "Cannot cancel a validated ticket", 409);
+            throw new ConflictException("Cannot cancel a validated ticket");
+        }
+        if (ticket.getStatus() == TicketStatus.REFUNDED) {
+            throw new ConflictException("Cannot cancel a refunded ticket");
+        }
+        if (ticket.getStatus() == TicketStatus.CANCELLED) {
+            throw new ConflictException("Ticket is already cancelled");
         }
 
         TicketStatus previousStatus = ticket.getStatus();
-        ticket.cancel(null);
-        Ticket saved = ticketRepository.save(ticket);
+        try {
+            ticket.cancel(null);
+        } catch (IllegalStateException e) {
+            throw new ConflictException(e.getMessage());
+        }
+        
+        Ticket saved;
+        try {
+            saved = ticketRepository.save(ticket);
+        } catch (Exception e) {
+            throw new ApiException("TICKET_CANCEL_SAVE_FAILED", 
+                "Failed to save ticket cancellation: " + e.getMessage(), 500);
+        }
 
         // Release reserved quantity if it was reserved
-        if (previousStatus == TicketStatus.PENDING && ticket.getTicketType() != null) {
-            ticketTypeRepository.decrementQuantityReserved(ticket.getTicketType().getId(), 1);
+        if (previousStatus == TicketStatus.PENDING && ticket.getTicketType() != null && ticket.getTicketType().getId() != null) {
+            try {
+                ticketTypeRepository.decrementQuantityReserved(ticket.getTicketType().getId(), 1);
+            } catch (Exception e) {
+                // Don't fail the cancellation if quantity update fails
+            }
         }
 
         return saved;

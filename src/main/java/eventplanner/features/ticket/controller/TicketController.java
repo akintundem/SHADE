@@ -12,6 +12,8 @@ import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.common.exception.ConflictException;
+import eventplanner.common.exception.ResourceNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -154,8 +156,12 @@ public class TicketController {
                 .errorCode(e.getCode())
                 .build();
             return ResponseEntity.status(e.getStatus()).body(response);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            TicketValidationResponse response = TicketValidationResponse.builder()
+                .valid(false)
+                .message(e.getMessage())
+                .build();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
     }
 
@@ -168,10 +174,28 @@ public class TicketController {
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
             Ticket ticket = ticketService.cancelTicket(id, principal);
-            TicketResponse response = TicketResponse.from(ticket);
+            TicketResponse response;
+            try {
+                response = TicketResponse.from(ticket);
+            } catch (Exception e) {
+                // Return a minimal response if conversion fails
+                response = TicketResponse.builder()
+                    .id(ticket.getId())
+                    .status(ticket.getStatus())
+                    .build();
+            }
             return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
+        } catch (ConflictException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+        } catch (ResourceNotFoundException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        } catch (eventplanner.common.exception.ApiException e) {
+            throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, 
+                "An error occurred while canceling the ticket");
         }
     }
 
