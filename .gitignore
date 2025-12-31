@@ -69,3 +69,10 @@ test/reports/
 # Test generated QR codes (exclude generated files)
 test/qr-codes/*.png
 test/qr-codes/*.txt
+
+# Email preview tooling (Node)
+/src/main/resources/emails/node_modules/
+/src/main/resources/emails/package-lock.json
+/src/main/resources/emails/pnpm-lock.yaml
+/src/main/resources/emails/yarn.lock
+/src/main/resources/emails/preview.html
