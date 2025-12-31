@@ -13,8 +13,10 @@ import eventplanner.common.domain.enums.CommunicationType;
 import eventplanner.common.communication.model.CommunicationRecipientType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -35,6 +37,8 @@ public class NotificationService {
     private final EmailService emailService;
     private final PushNotificationService pushNotificationService;
     private final CommunicationRepository communicationRepository;
+    @Value("${external.email.from:Shade <noreply@shade.com>}")
+    private String defaultFrom;
 
     /**
      * Send communication based on type
@@ -118,8 +122,8 @@ public class NotificationService {
             
             switch (type) {
                 case EMAIL:
-                    String from = request.getFrom();
-                    if (from == null || from.isBlank()) {
+                    String from = StringUtils.hasText(request.getFrom()) ? request.getFrom() : defaultFrom;
+                    if (!StringUtils.hasText(from)) {
                         throw new IllegalArgumentException("From address is required for email notifications");
                     }
                     EmailResult emailResult = sendEmail(to, subject, templateId, templateVariables, from);

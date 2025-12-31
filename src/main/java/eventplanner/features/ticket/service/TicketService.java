@@ -55,6 +55,8 @@ public class TicketService {
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
+    @Value("${external.email.from.events:events@noreply.mayokun.dev}")
+    private String eventsFrom;
 
     @Value("${app.ticket.qr-secret:default-secret-key-change-in-production}")
     private String qrSecretKey;
@@ -479,11 +481,17 @@ public class TicketService {
             
             try {
                 if (Boolean.TRUE.equals(sendEmail) && email != null) {
-                    Map<String, Object> templateVars = Map.of(
-                        "eventName", event.getName(),
-                        "eventId", event.getId().toString(),
-                        "ticketCount", entry.getValue().size()
-                    );
+                    Map<String, Object> templateVars = new java.util.HashMap<>();
+                    templateVars.put("eventName", event.getName());
+                    templateVars.put("eventId", event.getId().toString());
+                    templateVars.put("ticketCount", entry.getValue().size());
+                    String attendeeName = attendee != null && attendee.getName() != null && !attendee.getName().isBlank()
+                            ? attendee.getName()
+                            : "there";
+                    templateVars.put("attendeeName", attendeeName);
+                    if (event.getEventWebsiteUrl() != null) {
+                        templateVars.put("ticketsUrl", event.getEventWebsiteUrl());
+                    }
                     
                     notificationService.send(NotificationRequest.builder()
                         .type(CommunicationType.EMAIL)
@@ -492,6 +500,7 @@ public class TicketService {
                         .templateId("ticket-confirmation")
                         .templateVariables(templateVars)
                         .eventId(event.getId())
+                        .from(eventsFrom)
                         .build());
                 }
             } catch (Exception e) {

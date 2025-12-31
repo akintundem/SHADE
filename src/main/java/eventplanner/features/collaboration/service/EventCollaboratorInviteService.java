@@ -48,6 +48,8 @@ public class EventCollaboratorInviteService {
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
+    @Value("${external.email.from.events:events@noreply.mayokun.dev}")
+    private String eventsFrom;
 
     private final String appBaseUrl;
 
@@ -396,10 +398,14 @@ public class EventCollaboratorInviteService {
         
         Map<String, Object> variables = new HashMap<>();
         variables.put("inviterName", inviterUser != null ? inviterUser.getName() : "Someone");
+        variables.put("inviteeName", invite.getInvitee() != null && invite.getInvitee().getName() != null
+                ? invite.getInvitee().getName()
+                : invite.getInviteeEmail());
+        variables.put("eventName", event.getName());
         variables.put("eventId", event.getId().toString());
         variables.put("role", invite.getRole() != null ? invite.getRole().name() : null);
         if (invite.getMessage() != null) {
-            variables.put("customMessage", invite.getMessage());
+            variables.put("message", invite.getMessage());
         }
 
         String acceptUrl = appBaseUrl + "/api/v1/collaborator-invites/accept?token=" + rawToken;
@@ -413,6 +419,7 @@ public class EventCollaboratorInviteService {
                 .templateId("event-invitation")
                 .templateVariables(variables)
                 .eventId(event.getId())
+                .from(eventsFrom)
                 .build());
     }
 

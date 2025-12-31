@@ -46,6 +46,8 @@ public class AccountRecoveryService {
 
     @Value("${app.base-url}")
     private String baseUrl;
+    @Value("${external.email.from.security:security@noreply.mayokun.dev}")
+    private String securityFrom;
 
     public AccountRecoveryService(UserAccountRepository userAccountRepository,
                                   UserSessionRepository sessionRepository,
@@ -168,16 +170,17 @@ public class AccountRecoveryService {
         // Send verification email
         String confirmLink = baseUrl + "/api/v1/auth/verify-email?token=" + rawToken;
         Map<String, Object> templateVariables = new HashMap<>();
-        templateVariables.put("user_name", user.getName() != null && !user.getName().trim().isEmpty() 
+        templateVariables.put("userName", user.getName() != null && !user.getName().trim().isEmpty()
             ? user.getName() : "there");
-        templateVariables.put("confirm_link", confirmLink);
-        templateVariables.put("baseUrl", baseUrl);
+        templateVariables.put("confirmLink", confirmLink);
+        templateVariables.put("appName", "SHDE");
         
         NotificationRequest notificationRequest = NotificationRequest.builder()
                 .type(CommunicationType.EMAIL)
                 .to(user.getEmail())
                 .subject("Verify Your Email - SHDE")
                 .templateId(EmailService.TEMPLATE_EMAIL_VERIFICATION)
+                .from(securityFrom)
                 .templateVariables(templateVariables)
                 .eventId(null)
                 .build();

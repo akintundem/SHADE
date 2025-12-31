@@ -59,6 +59,8 @@ public class AuthService {
     private final RegistrationValidator registrationValidator;
     private final RateLimitingService rateLimitingService;
     private final JwtValidationUtil jwtValidationUtil;
+    @Value("${external.email.from.security:security@noreply.mayokun.dev}")
+    private String securityFrom;
 
     @Value("${auth.session.max-concurrent}")
     private int maxConcurrentSessions;
@@ -163,15 +165,16 @@ public class AuthService {
         // Send confirmation email - registration fails if email cannot be sent
         String confirmLink = baseUrl + "/api/v1/auth/verify-email?token=" + rawToken;
         Map<String, Object> templateVariables = new HashMap<>();
-        templateVariables.put("user_name", ""); // Name not collected yet during minimal registration
-        templateVariables.put("confirm_link", confirmLink);
-        templateVariables.put("baseUrl", baseUrl);
-        
+        templateVariables.put("userName", user.getName() != null ? user.getName() : "there");
+        templateVariables.put("confirmLink", confirmLink);
+        templateVariables.put("appName", "SHDE");
+
         NotificationRequest notificationRequest = NotificationRequest.builder()
                 .type(CommunicationType.EMAIL)
                 .to(user.getEmail())
                 .subject("Welcome to SHDE - Confirm Your Email")
                 .templateId(EmailService.TEMPLATE_EMAIL_VERIFICATION)
+                .from(securityFrom)
                 .templateVariables(templateVariables)
                 .eventId(null) // No eventId for auth emails
                 .build();

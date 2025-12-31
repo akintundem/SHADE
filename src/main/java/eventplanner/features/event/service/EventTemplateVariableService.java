@@ -142,17 +142,20 @@ public class EventTemplateVariableService {
         
         switch (templateType) {
             case ANNOUNCEMENT:
-                templateVariables.put("announcementMessage", content);
+                templateVariables.put("eventName", event.getName());
+                templateVariables.put("subjectLine", templateVariables.getOrDefault("subject", content));
+                templateVariables.put("eventDate", templateVariables.getOrDefault("startDateTime", templateVariables.get("startDate")));
+                Object venue = templateVariables.get("venue");
+                if (venue instanceof Map<?, ?> venueMap && venueMap.get("fullAddress") != null) {
+                    templateVariables.put("venue", venueMap.get("fullAddress"));
+                }
+                templateVariables.put("highlight", content);
+                templateVariables.put("actionUrl", event.getEventWebsiteUrl());
                 break;
             case CANCEL_EVENT:
-                templateVariables.put("cancellationMessage", content);
-                templateVariables.put("cancellationReason", content);
-                if (event.getStartDateTime() != null) {
-                    templateVariables.put("originalStartDate", event.getStartDateTime().format(DATE_TIME_FORMATTER));
-                }
-                if (event.getEndDateTime() != null) {
-                    templateVariables.put("originalEndDate", event.getEndDateTime().format(DATE_TIME_FORMATTER));
-                }
+                templateVariables.put("eventName", event.getName());
+                templateVariables.put("reason", content);
+                templateVariables.put("actionUrl", event.getEventWebsiteUrl());
                 break;
             default:
                 // No additional variables for other types

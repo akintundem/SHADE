@@ -14,6 +14,7 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,8 @@ public class EventCollaboratorService {
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
+    @Value("${external.email.from.events:events@noreply.mayokun.dev}")
+    private String eventsFrom;
 
     public EventCollaboratorService(EventUserRepository eventUserRepository, 
                                    EventRepository eventRepository,
@@ -101,11 +104,12 @@ public class EventCollaboratorService {
             templateVariables.put("eventId", event.getId().toString());
             templateVariables.put("role", collaborator.getUserType() != null ? collaborator.getUserType().name() : "COLLABORATOR");
             if (event.getStartDateTime() != null) {
-                templateVariables.put("eventStartDate", event.getStartDateTime().toString());
+                templateVariables.put("eventDate", event.getStartDateTime().format(java.time.format.DateTimeFormatter.ofPattern("MMM d, h:mm a")));
             }
-            if (event.getVenueRequirements() != null) {
-                templateVariables.put("eventVenue", event.getVenueRequirements());
+            if (event.getEventWebsiteUrl() != null) {
+                templateVariables.put("actionUrl", event.getEventWebsiteUrl());
             }
+            templateVariables.put("collaboratorName", collaborator.getUser() != null ? collaborator.getUser().getName() : "there");
             
             UserAccount user = collaborator.getUser();
             
@@ -118,6 +122,7 @@ public class EventCollaboratorService {
                         .templateId("collaborator-welcome")
                         .templateVariables(templateVariables)
                         .eventId(event.getId())
+                        .from(eventsFrom)
                         .build());
             }
             
@@ -213,4 +218,3 @@ public class EventCollaboratorService {
                 .forEach(p -> collaborator.getPermissions().add(new EventUserPermission(collaborator, p)));
     }
 }
-

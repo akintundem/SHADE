@@ -13,6 +13,7 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
+import org.springframework.beans.factory.annotation.Value;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -40,6 +41,8 @@ public class AttendeeService {
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
+    @Value("${external.email.from.events:events@noreply.mayokun.dev}")
+    private String eventsFrom;
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
         "name", "email", "rsvpStatus", "checkedInAt", "createdAt"
@@ -360,10 +363,13 @@ public class AttendeeService {
         templateVariables.put("eventName", event.getName());
         templateVariables.put("eventId", event.getId().toString());
         if (event.getStartDateTime() != null) {
-            templateVariables.put("eventStartDate", event.getStartDateTime().toString());
+            templateVariables.put("eventDate", event.getStartDateTime().format(java.time.format.DateTimeFormatter.ofPattern("MMM d, h:mm a")));
         }
         if (event.getVenueRequirements() != null) {
-            templateVariables.put("eventVenue", event.getVenueRequirements());
+            templateVariables.put("venue", event.getVenueRequirements());
+        }
+        if (event.getEventWebsiteUrl() != null) {
+            templateVariables.put("actionUrl", event.getEventWebsiteUrl());
         }
         
         boolean sendEmail = Boolean.TRUE.equals(request.getSendEmail());
@@ -373,13 +379,19 @@ public class AttendeeService {
             try {
                 // Send email if requested and email is available
                 if (sendEmail && attendee.getEmail() != null && !attendee.getEmail().trim().isEmpty()) {
+                    Map<String, Object> emailVars = new HashMap<>(templateVariables);
+                    String attendeeName = attendee.getName() != null && !attendee.getName().isBlank()
+                            ? attendee.getName()
+                            : "there";
+                    emailVars.put("attendeeName", attendeeName);
                     notificationService.send(NotificationRequest.builder()
                             .type(CommunicationType.EMAIL)
                             .to(attendee.getEmail())
                             .subject("You've been added to: " + event.getName())
                             .templateId("attendee-welcome")
-                            .templateVariables(templateVariables)
+                            .templateVariables(emailVars)
                             .eventId(event.getId())
+                            .from(eventsFrom)
                             .build());
                 }
                 

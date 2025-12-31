@@ -10,6 +10,7 @@ import eventplanner.features.event.enums.EmailTemplateType;
 import eventplanner.features.event.repository.EventReminderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,8 @@ public class EventReminderSchedulerService {
     private final NotificationService notificationService;
     private final EventEmailTemplateService emailTemplateService;
     private final EventTemplateVariableService templateVariableService;
+    @Value("${external.email.from.events:events@noreply.mayokun.dev}")
+    private String eventsFrom;
 
     /**
      * Scheduled task that runs every minute to check and send pending reminders
@@ -116,9 +119,13 @@ public class EventReminderSchedulerService {
         
         // Resolve template ID if email template type is specified
         String templateId = null;
-        if (communicationType == CommunicationType.EMAIL && templateType != null) {
-            templateId = emailTemplateService.getTemplateId(templateType);
-            log.info("Using email template: {} for reminder {}", templateId, reminder.getId());
+        if (communicationType == CommunicationType.EMAIL) {
+            if (templateType != null) {
+                templateId = emailTemplateService.getTemplateId(templateType);
+                log.info("Using email template: {} for reminder {}", templateId, reminder.getId());
+            } else {
+                templateId = "event-reminder";
+            }
         }
 
         // Send to email recipients
@@ -134,8 +141,9 @@ public class EventReminderSchedulerService {
                             .to(email)
                             .subject(subject)
                             .templateId(templateId)
-                            .templateVariables(templateVariables)
+                            .templateVariables(overrideReminderVariables(templateVariables, event, content))
                             .eventId(event.getId())
+                            .from(eventsFrom)
                             .build();
 
                     NotificationResponse response = notificationService.send(notificationRequest);
@@ -166,8 +174,11 @@ public class EventReminderSchedulerService {
                             .type(communicationType)
                             .to(userIdStr)
                             .subject(subject)
-                            .templateVariables(pushData)
+                            .templateVariables(communicationType == CommunicationType.PUSH_NOTIFICATION
+                                    ? pushData
+                                    : overrideReminderVariables(templateVariables, event, content))
                             .eventId(event.getId())
+                            .from(eventsFrom)
                             .build();
 
                     NotificationResponse response = notificationService.send(notificationRequest);
@@ -200,5 +211,21 @@ public class EventReminderSchedulerService {
             case "push", "push_notification" -> CommunicationType.PUSH_NOTIFICATION;
             default -> CommunicationType.EMAIL; // Default to email
         };
+    }
+
+    /**
+     * Normalize variables for the React Email reminder template.
+     */
+    private Map<String, Object> overrideReminderVariables(Map<String, Object> base, Event event, String message) {
+        Map<String, Object> vars = new HashMap<>(base != null ? base : Map.of());
+        vars.put("eventName", event.getName());
+        if (event.getStartDateTime() != null) {
+            vars.put("eventDate", event.getStartDateTime().format(java.time.format.DateTimeFormatter.ofPattern("MMM d, h:mm a")));
+        }
+        vars.put("message", message);
+        if (event.getEventWebsiteUrl() != null && !event.getEventWebsiteUrl().isBlank()) {
+            vars.put("actionUrl", event.getEventWebsiteUrl());
+        }
+        return vars;
     }
 }
