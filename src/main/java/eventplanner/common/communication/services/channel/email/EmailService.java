@@ -33,7 +33,7 @@ public class EmailService {
     private final ObjectMapper objectMapper;
 
     public EmailService(
-            @Value("${external.email-service.url:http://localhost:3000}") String emailServiceUrl,
+            @Value("${external.email-service.url:http://shade-email-service:3000}") String emailServiceUrl,
             @Value("${external.email-service.secret:}") String sharedSecret) {
         this.emailServiceUrl = emailServiceUrl.endsWith("/") ? emailServiceUrl.substring(0, emailServiceUrl.length() - 1) : emailServiceUrl;
         this.sharedSecret = sharedSecret;

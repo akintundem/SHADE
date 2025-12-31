@@ -44,7 +44,6 @@ export function TicketConfirmation({
         <Button href={ticketsUrl} style={styles.primaryButton(colors)}>
           View tickets
         </Button>
-        <Text style={styles.linkHint(colors)}>{ticketsUrl}</Text>
       </Section>
 
       <Text style={styles.muted(colors)}>
@@ -101,13 +100,6 @@ const styles = {
       display: 'inline-block',
       borderRadius: '8px',
       border: `1px solid ${c.buttonBg}`,
-    }) as React.CSSProperties,
-  linkHint: (c: ReturnType<typeof palette>) =>
-    ({
-      marginTop: '12px',
-      fontSize: '12px',
-      color: c.muted,
-      wordBreak: 'break-all',
     }) as React.CSSProperties,
   muted: (c: ReturnType<typeof palette>) =>
     ({

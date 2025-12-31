@@ -4,6 +4,7 @@ import eventplanner.security.auth.dto.req.ResendEmailVerificationRequest;
 import eventplanner.security.auth.service.AccountRecoveryService;
 import eventplanner.common.dto.ApiMessageResponse;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class EmailVerificationController {
 
     private final AccountRecoveryService accountRecoveryService;
+
+    @Value("${app.asset.bucket:user-shade-auth}")
+    private String assetBucket;
+
+    @Value("${logo.url:shade_app_icon.png}")
+    private String logoKey;
 
     public EmailVerificationController(AccountRecoveryService accountRecoveryService) {
         this.accountRecoveryService = accountRecoveryService;
@@ -47,174 +54,25 @@ public class EmailVerificationController {
         }
         
         boolean verified = accountRecoveryService.verifyEmailToken(token.trim());
+        String logoUrl = resolveLogoUrl();
         
         if (verified) {
-            String htmlResponse = """
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Email Verified - SHDE</title>
-                    <style>
-                        * {
-                            margin: 0;
-                            padding: 0;
-                            box-sizing: border-box;
-                        }
-                        body {
-                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-                            display: flex;
-                            justify-content: center;
-                            align-items: center;
-                            min-height: 100vh;
-                            margin: 0;
-                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                            padding: 20px;
-                        }
-                        .container {
-                            text-align: center;
-                            padding: 48px 32px;
-                            background: white;
-                            border-radius: 12px;
-                            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-                            max-width: 500px;
-                            width: 100%;
-                        }
-                        .icon {
-                            width: 80px;
-                            height: 80px;
-                            margin: 0 auto 24px;
-                            background: #10b981;
-                            border-radius: 50%;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            font-size: 40px;
-                            color: white;
-                        }
-                        h1 {
-                            color: #1f2937;
-                            margin-bottom: 16px;
-                            font-size: 28px;
-                            font-weight: 600;
-                        }
-                        p {
-                            color: #6b7280;
-                            font-size: 16px;
-                            line-height: 1.6;
-                            margin-bottom: 32px;
-                        }
-                        .button {
-                            display: inline-block;
-                            padding: 12px 32px;
-                            background: #667eea;
-                            color: white;
-                            text-decoration: none;
-                            border-radius: 8px;
-                            font-weight: 500;
-                            transition: background 0.2s;
-                        }
-                        .button:hover {
-                            background: #5568d3;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <div class="icon">✓</div>
-                        <h1>Email Confirmed</h1>
-                        <p>Your email has been successfully verified. You can now log in to your account and complete your profile.</p>
-                        <a href="#" class="button" onclick="window.close(); return false;">Close</a>
-                    </div>
-                </body>
-                </html>
-                """;
+            String htmlResponse = buildHtmlResponse(
+                    "Email confirmed",
+                    "✓",
+                    "Email confirmed",
+                    "Your email is verified. You can now log in and continue.",
+                    logoUrl);
             return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .body(htmlResponse);
         } else {
-            String htmlResponse = """
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Verification Failed - SHDE</title>
-                    <style>
-                        * {
-                            margin: 0;
-                            padding: 0;
-                            box-sizing: border-box;
-                        }
-                        body {
-                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-                            display: flex;
-                            justify-content: center;
-                            align-items: center;
-                            min-height: 100vh;
-                            margin: 0;
-                            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                            padding: 20px;
-                        }
-                        .container {
-                            text-align: center;
-                            padding: 48px 32px;
-                            background: white;
-                            border-radius: 12px;
-                            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-                            max-width: 500px;
-                            width: 100%;
-                        }
-                        .icon {
-                            width: 80px;
-                            height: 80px;
-                            margin: 0 auto 24px;
-                            background: #ef4444;
-                            border-radius: 50%;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            font-size: 40px;
-                            color: white;
-                        }
-                        h1 {
-                            color: #1f2937;
-                            margin-bottom: 16px;
-                            font-size: 28px;
-                            font-weight: 600;
-                        }
-                        p {
-                            color: #6b7280;
-                            font-size: 16px;
-                            line-height: 1.6;
-                            margin-bottom: 32px;
-                        }
-                        .button {
-                            display: inline-block;
-                            padding: 12px 32px;
-                            background: #667eea;
-                            color: white;
-                            text-decoration: none;
-                            border-radius: 8px;
-                            font-weight: 500;
-                            transition: background 0.2s;
-                        }
-                        .button:hover {
-                            background: #5568d3;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <div class="icon">✗</div>
-                        <h1>Verification Failed</h1>
-                        <p>Invalid or expired verification token. Please request a new verification email from the login page.</p>
-                        <a href="#" class="button" onclick="window.close(); return false;">Close</a>
-                    </div>
-                </body>
-                </html>
-                """;
+            String htmlResponse = buildHtmlResponse(
+                    "Verification failed",
+                    "!",
+                    "Verification failed",
+                    "Invalid or expired verification link. Please request a new verification email from the login page.",
+                    logoUrl);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .contentType(MediaType.TEXT_HTML)
                 .body(htmlResponse);
@@ -222,13 +80,25 @@ public class EmailVerificationController {
     }
     
     private ResponseEntity<String> getErrorResponse(String errorMessage) {
-        String htmlResponse = """
+        String htmlResponse = buildHtmlResponse(
+            "Verification failed",
+            "!",
+            "Verification failed",
+            errorMessage,
+            resolveLogoUrl());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .contentType(MediaType.TEXT_HTML)
+            .body(htmlResponse);
+    }
+
+    private String buildHtmlResponse(String title, String icon, String headingText, String messageText, String logoUrl) {
+        return """
             <!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Verification Failed - SHDE</title>
+                <title>%s</title>
                 <style>
                     * {
                         margin: 0;
@@ -237,74 +107,86 @@ public class EmailVerificationController {
                     }
                     body {
                         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                        background: #ffffff;
+                        color: #0c0c0c;
                         display: flex;
                         justify-content: center;
                         align-items: center;
                         min-height: 100vh;
-                        margin: 0;
-                        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                        padding: 20px;
+                        padding: 32px;
                     }
-                    .container {
-                        text-align: center;
-                        padding: 48px 32px;
-                        background: white;
+                    .card {
+                        max-width: 520px;
+                        width: 100%%;
+                        border: 1px solid #e5e5e5;
                         border-radius: 12px;
-                        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-                        max-width: 500px;
-                        width: 100%;
+                        padding: 32px;
+                    }
+                    .logo {
+                        margin-bottom: 16px;
+                    }
+                    .logo img {
+                        display: block;
+                        width: 40px;
+                        height: 40px;
                     }
                     .icon {
-                        width: 80px;
-                        height: 80px;
-                        margin: 0 auto 24px;
-                        background: #ef4444;
-                        border-radius: 50%;
+                        width: 56px;
+                        height: 56px;
+                        border: 1px solid #0c0c0c;
+                        border-radius: 50%%;
                         display: flex;
                         align-items: center;
                         justify-content: center;
-                        font-size: 40px;
-                        color: white;
+                        font-size: 28px;
+                        margin-bottom: 20px;
                     }
                     h1 {
-                        color: #1f2937;
-                        margin-bottom: 16px;
                         font-size: 28px;
-                        font-weight: 600;
+                        font-weight: 800;
+                        letter-spacing: -0.3px;
+                        margin-bottom: 12px;
                     }
                     p {
-                        color: #6b7280;
-                        font-size: 16px;
+                        font-size: 15px;
                         line-height: 1.6;
-                        margin-bottom: 32px;
+                        color: #222222;
+                        margin-bottom: 28px;
                     }
                     .button {
                         display: inline-block;
-                        padding: 12px 32px;
-                        background: #667eea;
-                        color: white;
+                        padding: 12px 22px;
+                        background: #0c0c0c;
+                        color: #ffffff;
                         text-decoration: none;
                         border-radius: 8px;
-                        font-weight: 500;
-                        transition: background 0.2s;
-                    }
-                    .button:hover {
-                        background: #5568d3;
+                        font-weight: 700;
                     }
                 </style>
             </head>
             <body>
-                <div class="container">
-                    <div class="icon">✗</div>
-                    <h1>Verification Failed</h1>
-                    <p>%s</p>
-                    <a href="#" class="button" onclick="window.close(); return false;">Close</a>
-                </div>
+              <div class="card">
+                <div class="logo"><img src="%s" alt="Shade"></div>
+                <div class="icon">%s</div>
+                <h1>%s</h1>
+                <p>%s</p>
+                <a href="#" class="button" onclick="window.close(); return false;">Close</a>
+              </div>
             </body>
             </html>
-            """.formatted(errorMessage);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .contentType(MediaType.TEXT_HTML)
-            .body(htmlResponse);
+            """.formatted(title, logoUrl, icon, headingText, messageText);
+    }
+
+    private String resolveLogoUrl() {
+        if (logoKey == null || logoKey.isBlank()) {
+            return "";
+        }
+        if (logoKey.startsWith("http://") || logoKey.startsWith("https://")) {
+            return logoKey;
+        }
+        if (assetBucket != null && !assetBucket.isBlank()) {
+            return "https://" + assetBucket + ".s3.us-east-2.amazonaws.com/" + logoKey;
+        }
+        return logoKey;
     }
 }

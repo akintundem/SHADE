@@ -68,9 +68,12 @@ services:
       FIREBASE_SERVICE_ACCOUNT_KEY_PATH: ${FIREBASE_SERVICE_ACCOUNT_KEY_PATH:-}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
       # Email service integration
-      external.email-service.url: http://shade-email-service:3000
-      external.email-service.secret: ${RESEND_SHARED_SECRET:-}
+      EXTERNAL_EMAIL_SERVICE_URL: http://shade-email-service:3000
+      EXTERNAL_EMAIL_SERVICE_SECRET: ${RESEND_SHARED_SECRET:-}
       RESEND_SHARED_SECRET: ${RESEND_SHARED_SECRET:-}
+      EXTERNAL_EMAIL_FROM: ${RESEND_FROM_EMAIL:-Shade <noreply@shade.com>}
+      EXTERNAL_EMAIL_FROM_SECURITY: ${RESEND_FROM_SECURITY:-security@noreply.mayokun.dev}
+      EXTERNAL_EMAIL_FROM_EVENTS: ${RESEND_FROM_EVENTS:-events@noreply.mayokun.dev}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000}
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
