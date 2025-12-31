@@ -30,6 +30,12 @@ public class NotificationRequest {
     @NotBlank(message = "Subject is required")
     private String subject;
 
+    /**
+     * From address for email sends (e.g., "Shade <noreply@shade.com>").
+     * Required when type = EMAIL.
+     */
+    private String from;
+
     private String templateId; // Required for EMAIL, null for PUSH_NOTIFICATION
 
     @Builder.Default
@@ -37,4 +43,3 @@ public class NotificationRequest {
 
     private UUID eventId; // Optional event ID for event-related communications
 }
-

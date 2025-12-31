@@ -1,4 +1,16 @@
 services:
+  email-service:
+    build:
+      context: ./email
+    container_name: shade-email-service
+    env_file:
+      - ${EMAIL_ENV_FILE:-./email/.env}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    networks:
+      - event-planner-network
+
   # Java Spring Boot Application
   java-app:
     build: .
@@ -55,8 +67,10 @@ services:
 
       FIREBASE_SERVICE_ACCOUNT_KEY_PATH: ${FIREBASE_SERVICE_ACCOUNT_KEY_PATH:-}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      # Email service integration
+      external.email-service.url: http://shade-email-service:3000
+      external.email-service.secret: ${RESEND_SHARED_SECRET:-}
+      RESEND_SHARED_SECRET: ${RESEND_SHARED_SECRET:-}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000}
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}

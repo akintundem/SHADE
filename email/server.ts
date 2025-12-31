@@ -10,8 +10,8 @@ const app = express()
 app.use(express.json())
 
 const PORT = process.env.PORT || 3000
-const FROM = process.env.RESEND_FROM || 'Shade <noreply@shade.com>'
-const SECRET = process.env.EMAIL_SHARED_SECRET || ''
+const DEFAULT_FROM = process.env.RESEND_FROM || ''
+const SECRET = process.env.RESEND_SHARED_SECRET || process.env.EMAIL_SHARED_SECRET || ''
 const ALLOWED = new Set(
   (process.env.ALLOWED_TEMPLATES || '')
     .split(',')
@@ -47,11 +47,13 @@ app.post('/send-email', async (req, res) => {
       return res.status(401).json({ error: 'unauthorized' })
     }
 
-    const { templateId, to, cc, bcc, replyTo, subject, variables = {} } = req.body || {}
+    const { templateId, to, cc, bcc, replyTo, subject, from, variables = {} } = req.body || {}
     if (!templateId) return res.status(400).json({ error: 'templateId is required' })
 
     const toList = normalizeList(to)
     if (!toList.length) return res.status(400).json({ error: 'to is required' })
+    const fromAddress = from || DEFAULT_FROM
+    if (!fromAddress) return res.status(400).json({ error: 'from is required' })
 
     const template = templateLookup.get(templateId)
     if (!template) return res.status(400).json({ error: 'unknown templateId' })
@@ -75,7 +77,7 @@ app.post('/send-email', async (req, res) => {
     const html = await render(reactElement)
 
     const sendResult = await resend.emails.send({
-      from: FROM,
+      from: fromAddress,
       to: toList,
       cc: ccList.length ? ccList : undefined,
       bcc: bccList.length ? bccList : undefined,

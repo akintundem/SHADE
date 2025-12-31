@@ -118,7 +118,11 @@ public class NotificationService {
             
             switch (type) {
                 case EMAIL:
-                    EmailResult emailResult = sendEmail(to, subject, templateId, templateVariables);
+                    String from = request.getFrom();
+                    if (from == null || from.isBlank()) {
+                        throw new IllegalArgumentException("From address is required for email notifications");
+                    }
+                    EmailResult emailResult = sendEmail(to, subject, templateId, templateVariables, from);
                     success = emailResult.isSuccess();
                     externalId = emailResult.getMessageId();
                     errorMessage = emailResult.getErrorMessage();
@@ -182,8 +186,8 @@ public class NotificationService {
      * Send email via EmailService
      */
     private EmailResult sendEmail(String to, String subject, String templateId,
-                                  Map<String, Object> templateVariables) {
-        return emailService.sendEmail(to, subject, templateId, templateVariables);
+                                  Map<String, Object> templateVariables, String from) {
+        return emailService.sendEmail(to, subject, from, templateId, templateVariables);
     }
 
     /**
