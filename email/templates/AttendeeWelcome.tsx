@@ -5,47 +5,59 @@ import {
   Text,
 } from '@react-email/components'
 import * as React from 'react'
-import { BaseLayout } from '../layouts/BaseLayout'
+import { BaseLayout } from './BaseLayout'
 
-type EventReminderProps = {
+type AttendeeWelcomeProps = {
+  attendeeName?: string
   eventName: string
   eventDate?: string
-  message?: string
+  venue?: string
   actionUrl: string
   mode?: 'light' | 'dark'
 }
 
-export function EventReminder({
+export function AttendeeWelcome({
+  attendeeName = 'there',
   eventName,
   eventDate,
-  message = 'Quick reminder before the event starts.',
+  venue,
   actionUrl,
   mode = 'light',
-}: EventReminderProps) {
+}: AttendeeWelcomeProps) {
   const colors = palette(mode)
 
   return (
     <BaseLayout
-      heading="Event reminder"
-      previewText={`${eventName}${eventDate ? ` · ${eventDate}` : ''}`}
+      heading="You’re on the list"
+      previewText={`You’ve been added to ${eventName}`}
       mode={mode}
     >
-      <Heading style={styles.title(colors)}>See you at {eventName}</Heading>
+      <Heading style={styles.title(colors)}>Welcome, {attendeeName}</Heading>
+      <Text style={styles.paragraph(colors)}>
+        You’ve been added as an attendee for <strong>{eventName}</strong>.
+        We’ll keep you posted on updates.
+      </Text>
+
       {eventDate ? (
-        <Text style={styles.meta(colors)}>Starts: {eventDate}</Text>
+        <Text style={styles.detail(colors)}>
+          <strong>When:</strong> {eventDate}
+        </Text>
       ) : null}
-      <Text style={styles.paragraph(colors)}>{message}</Text>
+      {venue ? (
+        <Text style={styles.detail(colors)}>
+          <strong>Where:</strong> {venue}
+        </Text>
+      ) : null}
 
       <Section style={styles.actionRow}>
         <Button href={actionUrl} style={styles.primaryButton(colors)}>
-          View details
+          View event
         </Button>
         <Text style={styles.linkHint(colors)}>{actionUrl}</Text>
       </Section>
 
       <Text style={styles.muted(colors)}>
-        Add this to your calendar to stay on time. We’re excited to have you
-        join.
+        Bring a valid ID to check in quickly. Let us know if you can’t make it.
       </Text>
     </BaseLayout>
   )
@@ -70,19 +82,19 @@ const styles = {
       color: c.text,
       letterSpacing: '-0.2px',
     }) as React.CSSProperties,
-  meta: (c: ReturnType<typeof palette>) =>
-    ({
-      fontSize: '14px',
-      color: c.text,
-      fontWeight: 700,
-      margin: '0 0 10px',
-    }) as React.CSSProperties,
   paragraph: (c: ReturnType<typeof palette>) =>
     ({
       color: c.text,
       lineHeight: '24px',
       fontSize: '15px',
       margin: '0 0 18px',
+    }) as React.CSSProperties,
+  detail: (c: ReturnType<typeof palette>) =>
+    ({
+      margin: '0 0 8px',
+      fontSize: '14px',
+      color: c.text,
+      lineHeight: '20px',
     }) as React.CSSProperties,
   actionRow: {
     margin: '14px 0 10px',

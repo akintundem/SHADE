@@ -5,58 +5,51 @@ import {
   Text,
 } from '@react-email/components'
 import * as React from 'react'
-import { BaseLayout } from '../layouts/BaseLayout'
+import { BaseLayout } from './BaseLayout'
 
-type CollaboratorWelcomeProps = {
-  collaboratorName?: string
+type TicketConfirmationProps = {
+  attendeeName?: string
   eventName: string
-  role?: string
-  eventDate?: string
-  actionUrl: string
+  ticketCount?: number
+  ticketsUrl: string
   mode?: 'light' | 'dark'
 }
 
-export function CollaboratorWelcome({
-  collaboratorName = 'there',
+export function TicketConfirmation({
+  attendeeName = 'there',
   eventName,
-  role = 'Collaborator',
-  eventDate,
-  actionUrl,
+  ticketCount = 1,
+  ticketsUrl,
   mode = 'light',
-}: CollaboratorWelcomeProps) {
+}: TicketConfirmationProps) {
   const colors = palette(mode)
 
   return (
     <BaseLayout
-      heading="You’re part of the crew"
-      previewText={`Added as ${role.toLowerCase()} on ${eventName}`}
+      heading="Your tickets are ready"
+      previewText={`${ticketCount} ticket${ticketCount === 1 ? '' : 's'} for ${eventName}`}
       mode={mode}
     >
-      <Heading style={styles.title(colors)}>
-        Welcome aboard, {collaboratorName}
-      </Heading>
+      <Heading style={styles.title(colors)}>You’re all set</Heading>
       <Text style={styles.paragraph(colors)}>
-        You’ve been added to <strong>{eventName}</strong> as a{' '}
-        {role.toLowerCase()}. We rely on you to keep this event running smoothly.
+        Hi {attendeeName}, your ticket{ticketCount === 1 ? '' : 's'} for{' '}
+        <strong>{eventName}</strong> are confirmed.
       </Text>
 
-      {eventDate ? (
-        <Section>
-          <Text style={styles.detail(colors)}>
-            <strong>Kickoff:</strong> {eventDate}
-          </Text>
-        </Section>
-      ) : null}
+      <Text style={styles.detail(colors)}>
+        <strong>Ticket count:</strong> {ticketCount}
+      </Text>
 
       <Section style={styles.actionRow}>
-        <Button href={actionUrl} style={styles.primaryButton(colors)}>
-          Open event workspace
+        <Button href={ticketsUrl} style={styles.primaryButton(colors)}>
+          View tickets
         </Button>
-        <Text style={styles.linkHint(colors)}>{actionUrl}</Text>
+        <Text style={styles.linkHint(colors)}>{ticketsUrl}</Text>
       </Section>
 
       <Text style={styles.muted(colors)}>
-        Update your notification preferences anytime in the workspace.
+        Save the QR codes to your wallet and bring a valid ID to check in
+        smoothly.
       </Text>
     </BaseLayout>
   )

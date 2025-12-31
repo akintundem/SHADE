@@ -5,45 +5,58 @@ import {
   Text,
 } from '@react-email/components'
 import * as React from 'react'
-import { BaseLayout } from '../layouts/BaseLayout'
+import { BaseLayout } from './BaseLayout'
 
-type EventCancelledProps = {
+type CollaboratorInviteProps = {
+  inviteeName?: string
+  inviterName?: string
   eventName: string
-  reason?: string
-  actionUrl: string
+  role?: string
+  message?: string
+  acceptUrl: string
   mode?: 'light' | 'dark'
 }
 
-export function EventCancelled({
+export function CollaboratorInvite({
+  inviteeName = 'there',
+  inviterName = 'Someone',
   eventName,
-  reason = 'The organizing team had to cancel this event.',
-  actionUrl,
+  role = 'Collaborator',
+  message,
+  acceptUrl,
   mode = 'light',
-}: EventCancelledProps) {
+}: CollaboratorInviteProps) {
   const colors = palette(mode)
 
   return (
     <BaseLayout
-      heading="Event cancelled"
-      previewText={`${eventName} has been cancelled`}
+      heading="Collaboration invite"
+      previewText={`${inviterName} invited you to ${eventName}`}
       mode={mode}
     >
-      <Heading style={styles.title(colors)}>Event cancelled</Heading>
+      <Heading style={styles.title(colors)}>Join {eventName}</Heading>
       <Text style={styles.paragraph(colors)}>
-        The event <strong>{eventName}</strong> will no longer take place.
+        Hi {inviteeName}, {inviterName} invited you to collaborate on{' '}
+        <strong>{eventName}</strong> as a {role.toLowerCase()}.
       </Text>
-      <Text style={styles.paragraph(colors)}>{reason}</Text>
+
+      {message ? (
+        <Section>
+          <Text style={styles.meta(colors)}>Note from {inviterName}</Text>
+          <Text style={styles.calloutCopy(colors)}>{message}</Text>
+        </Section>
+      ) : null}
 
       <Section style={styles.actionRow}>
-        <Button href={actionUrl} style={styles.primaryButton(colors)}>
-          View details
+        <Button href={acceptUrl} style={styles.primaryButton(colors)}>
+          Accept invite
         </Button>
-        <Text style={styles.linkHint(colors)}>{actionUrl}</Text>
+        <Text style={styles.linkHint(colors)}>{acceptUrl}</Text>
       </Section>
 
       <Text style={styles.muted(colors)}>
-        We’re sorry for the change of plans. Contact the organizer if you have
-        questions.
+        You’ll get access to schedules, attendees, and notifications once you
+        accept.
       </Text>
     </BaseLayout>
   )
@@ -64,7 +77,7 @@ const styles = {
     ({
       fontSize: '22px',
       fontWeight: 800,
-      margin: '0 0 12px',
+      margin: '0 0 10px',
       color: c.text,
       letterSpacing: '-0.2px',
     }) as React.CSSProperties,
@@ -73,10 +86,25 @@ const styles = {
       color: c.text,
       lineHeight: '24px',
       fontSize: '15px',
+      margin: '0 0 18px',
+    }) as React.CSSProperties,
+  meta: (c: ReturnType<typeof palette>) =>
+    ({
+      fontSize: '12px',
+      textTransform: 'uppercase',
+      letterSpacing: '0.3px',
+      color: c.muted,
+      margin: '0 0 6px',
+    }) as React.CSSProperties,
+  calloutCopy: (c: ReturnType<typeof palette>) =>
+    ({
       margin: '0 0 12px',
+      lineHeight: '22px',
+      fontSize: '14px',
+      color: c.text,
     }) as React.CSSProperties,
   actionRow: {
-    margin: '18px 0 10px',
+    margin: '14px 0 10px',
   } as React.CSSProperties,
   primaryButton: (c: ReturnType<typeof palette>) =>
     ({

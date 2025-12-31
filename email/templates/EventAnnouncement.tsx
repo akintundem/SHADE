@@ -1,52 +1,64 @@
 import {
   Button,
+  Column,
   Heading,
+  Row,
   Section,
   Text,
 } from '@react-email/components'
 import * as React from 'react'
-import { BaseLayout } from '../layouts/BaseLayout'
+import { BaseLayout } from './BaseLayout'
 
-type AttendeeWelcomeProps = {
-  attendeeName?: string
+type EventAnnouncementProps = {
   eventName: string
+  subjectLine?: string
   eventDate?: string
   venue?: string
+  highlight?: string
   actionUrl: string
   mode?: 'light' | 'dark'
 }
 
-export function AttendeeWelcome({
-  attendeeName = 'there',
+export function EventAnnouncement({
   eventName,
+  subjectLine = 'You are invited',
   eventDate,
   venue,
+  highlight,
   actionUrl,
   mode = 'light',
-}: AttendeeWelcomeProps) {
+}: EventAnnouncementProps) {
   const colors = palette(mode)
 
   return (
     <BaseLayout
-      heading="You’re on the list"
-      previewText={`You’ve been added to ${eventName}`}
+      heading="Event announcement"
+      previewText={`${eventName}${eventDate ? ` · ${eventDate}` : ''}`}
       mode={mode}
     >
-      <Heading style={styles.title(colors)}>Welcome, {attendeeName}</Heading>
-      <Text style={styles.paragraph(colors)}>
-        You’ve been added as an attendee for <strong>{eventName}</strong>.
-        We’ll keep you posted on updates.
-      </Text>
+      <Heading style={styles.title(colors)}>{eventName}</Heading>
+      <Text style={styles.lead(colors)}>{subjectLine}</Text>
 
-      {eventDate ? (
-        <Text style={styles.detail(colors)}>
-          <strong>When:</strong> {eventDate}
-        </Text>
-      ) : null}
-      {venue ? (
-        <Text style={styles.detail(colors)}>
-          <strong>Where:</strong> {venue}
-        </Text>
+      <Row style={styles.metaRow}>
+        {eventDate ? (
+          <Column>
+            <Text style={styles.metaLabel(colors)}>Date & time</Text>
+            <Text style={styles.metaValue(colors)}>{eventDate}</Text>
+          </Column>
+        ) : null}
+        {venue ? (
+          <Column>
+            <Text style={styles.metaLabel(colors)}>Location</Text>
+            <Text style={styles.metaValue(colors)}>{venue}</Text>
+          </Column>
+        ) : null}
+      </Row>
+
+      {highlight ? (
+        <Section>
+          <Text style={styles.metaLabel(colors)}>Why attend</Text>
+          <Text style={styles.calloutCopy(colors)}>{highlight}</Text>
+        </Section>
       ) : null}
 
       <Section style={styles.actionRow}>
@@ -57,7 +69,7 @@ export function AttendeeWelcome({
       </Section>
 
       <Text style={styles.muted(colors)}>
-        Bring a valid ID to check in quickly. Let us know if you can’t make it.
+        Share this invite with teammates who should join.
       </Text>
     </BaseLayout>
   )
@@ -68,6 +80,7 @@ function palette(mode?: 'light' | 'dark') {
   return {
     text: isDark ? '#f5f5f5' : '#0c0c0c',
     muted: isDark ? '#c2c2c2' : '#444444',
+    line: isDark ? '#2a2a2a' : '#e5e5e5',
     buttonBg: isDark ? '#f5f5f5' : '#0c0c0c',
     buttonText: isDark ? '#0c0c0c' : '#f5f5f5',
   }
@@ -76,28 +89,48 @@ function palette(mode?: 'light' | 'dark') {
 const styles = {
   title: (c: ReturnType<typeof palette>) =>
     ({
-      fontSize: '22px',
+      fontSize: '24px',
       fontWeight: 800,
-      margin: '0 0 10px',
+      margin: '0 0 8px',
       color: c.text,
       letterSpacing: '-0.2px',
     }) as React.CSSProperties,
-  paragraph: (c: ReturnType<typeof palette>) =>
+  lead: (c: ReturnType<typeof palette>) =>
     ({
-      color: c.text,
-      lineHeight: '24px',
       fontSize: '15px',
-      margin: '0 0 18px',
+      color: c.text,
+      margin: '0 0 16px',
+      lineHeight: '22px',
     }) as React.CSSProperties,
-  detail: (c: ReturnType<typeof palette>) =>
+  metaRow: {
+    display: 'flex',
+    gap: '24px',
+    margin: '0 0 16px',
+  } as React.CSSProperties,
+  metaLabel: (c: ReturnType<typeof palette>) =>
     ({
-      margin: '0 0 8px',
+      fontSize: '12px',
+      textTransform: 'uppercase',
+      letterSpacing: '0.3px',
+      color: c.muted,
+      margin: '0 0 4px',
+    }) as React.CSSProperties,
+  metaValue: (c: ReturnType<typeof palette>) =>
+    ({
       fontSize: '14px',
       color: c.text,
-      lineHeight: '20px',
+      margin: '0 0 8px',
+      fontWeight: 700,
+    }) as React.CSSProperties,
+  calloutCopy: (c: ReturnType<typeof palette>) =>
+    ({
+      margin: '0 0 12px',
+      lineHeight: '22px',
+      fontSize: '14px',
+      color: c.text,
     }) as React.CSSProperties,
   actionRow: {
-    margin: '14px 0 10px',
+    margin: '18px 0 10px',
   } as React.CSSProperties,
   primaryButton: (c: ReturnType<typeof palette>) =>
     ({

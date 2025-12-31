@@ -1,18 +1,52 @@
 import {
   Button,
   Heading,
-  Hr,
   Section,
   Text,
 } from '@react-email/components'
 import * as React from 'react'
-import { BaseLayout } from '../layouts/BaseLayout'
+import { BaseLayout } from './BaseLayout'
 
-type EmailVerificationProps = {
-  userName?: string
-  confirmLink: string
-  appName?: string
+type EventCancelledProps = {
+  eventName: string
+  reason?: string
+  actionUrl: string
   mode?: 'light' | 'dark'
+}
+
+export function EventCancelled({
+  eventName,
+  reason = 'The organizing team had to cancel this event.',
+  actionUrl,
+  mode = 'light',
+}: EventCancelledProps) {
+  const colors = palette(mode)
+
+  return (
+    <BaseLayout
+      heading="Event cancelled"
+      previewText={`${eventName} has been cancelled`}
+      mode={mode}
+    >
+      <Heading style={styles.title(colors)}>Event cancelled</Heading>
+      <Text style={styles.paragraph(colors)}>
+        The event <strong>{eventName}</strong> will no longer take place.
+      </Text>
+      <Text style={styles.paragraph(colors)}>{reason}</Text>
+
+      <Section style={styles.actionRow}>
+        <Button href={actionUrl} style={styles.primaryButton(colors)}>
+          View details
+        </Button>
+        <Text style={styles.linkHint(colors)}>{actionUrl}</Text>
+      </Section>
+
+      <Text style={styles.muted(colors)}>
+        We’re sorry for the change of plans. Contact the organizer if you have
+        questions.
+      </Text>
+    </BaseLayout>
+  )
 }
 
 function palette(mode?: 'light' | 'dark') {
@@ -20,46 +54,9 @@ function palette(mode?: 'light' | 'dark') {
   return {
     text: isDark ? '#f5f5f5' : '#0c0c0c',
     muted: isDark ? '#c2c2c2' : '#444444',
-    line: isDark ? '#2a2a2a' : '#e5e5e5',
     buttonBg: isDark ? '#f5f5f5' : '#0c0c0c',
     buttonText: isDark ? '#0c0c0c' : '#f5f5f5',
   }
-}
-
-export function EmailVerification({
-  userName = 'there',
-  confirmLink,
-  appName = 'SHDE',
-  mode = 'light',
-}: EmailVerificationProps) {
-  const colors = palette(mode)
-
-  return (
-    <BaseLayout
-      heading="Verify your email"
-      previewText={`Confirm your ${appName} account in one tap`}
-      mode={mode}
-    >
-      <Heading style={styles.title(colors)}>Welcome to {appName}</Heading>
-      <Text style={styles.paragraph(colors)}>
-        Hi {userName},
-        <br />
-        Confirm your email to secure your account and start planning events.
-      </Text>
-
-      <Section style={styles.actionRow}>
-        <Button href={confirmLink} style={styles.primaryButton(colors)}>
-          Confirm email
-        </Button>
-        <Text style={styles.linkHint(colors)}>{confirmLink}</Text>
-      </Section>
-
-      <Hr style={styles.hr(colors)} />
-      <Text style={styles.muted(colors)}>
-        Didn’t create an account? You can ignore this email.
-      </Text>
-    </BaseLayout>
-  )
 }
 
 const styles = {
@@ -76,10 +73,10 @@ const styles = {
       color: c.text,
       lineHeight: '24px',
       fontSize: '15px',
-      margin: '0 0 18px',
+      margin: '0 0 12px',
     }) as React.CSSProperties,
   actionRow: {
-    margin: '14px 0 10px',
+    margin: '18px 0 10px',
   } as React.CSSProperties,
   primaryButton: (c: ReturnType<typeof palette>) =>
     ({
@@ -98,12 +95,6 @@ const styles = {
       fontSize: '12px',
       color: c.muted,
       wordBreak: 'break-all',
-    }) as React.CSSProperties,
-  hr: (c: ReturnType<typeof palette>) =>
-    ({
-      border: 'none',
-      borderTop: `1px solid ${c.line}`,
-      margin: '20px 0 14px',
     }) as React.CSSProperties,
   muted: (c: ReturnType<typeof palette>) =>
     ({

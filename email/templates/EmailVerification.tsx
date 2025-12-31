@@ -6,12 +6,12 @@ import {
   Text,
 } from '@react-email/components'
 import * as React from 'react'
-import { BaseLayout } from '../layouts/BaseLayout'
+import { BaseLayout } from './BaseLayout'
 
-type PasswordResetProps = {
+type EmailVerificationProps = {
   userName?: string
-  resetLink: string
-  expiresInMinutes?: number
+  confirmLink: string
+  appName?: string
   mode?: 'light' | 'dark'
 }
 
@@ -26,39 +26,37 @@ function palette(mode?: 'light' | 'dark') {
   }
 }
 
-export function PasswordReset({
+export function EmailVerification({
   userName = 'there',
-  resetLink,
-  expiresInMinutes = 60,
+  confirmLink,
+  appName = 'SHDE',
   mode = 'light',
-}: PasswordResetProps) {
+}: EmailVerificationProps) {
   const colors = palette(mode)
 
   return (
     <BaseLayout
-      heading="Reset your password"
-      previewText="We received a request to reset your password"
+      heading="Verify your email"
+      previewText={`Confirm your ${appName} account in one tap`}
       mode={mode}
     >
-      <Heading style={styles.title(colors)}>Password reset requested</Heading>
+      <Heading style={styles.title(colors)}>Welcome to {appName}</Heading>
       <Text style={styles.paragraph(colors)}>
         Hi {userName},
         <br />
-        We received a request to reset your password. If this was you, click the
-        button below. This link is active for {expiresInMinutes} minutes.
+        Confirm your email to secure your account and start planning events.
       </Text>
 
       <Section style={styles.actionRow}>
-        <Button href={resetLink} style={styles.primaryButton(colors)}>
-          Reset password
+        <Button href={confirmLink} style={styles.primaryButton(colors)}>
+          Confirm email
         </Button>
-        <Text style={styles.linkHint(colors)}>{resetLink}</Text>
+        <Text style={styles.linkHint(colors)}>{confirmLink}</Text>
       </Section>
 
       <Hr style={styles.hr(colors)} />
       <Text style={styles.muted(colors)}>
-        If you didn’t request this, no action is needed. Your password will stay
-        the same.
+        Didn’t create an account? You can ignore this email.
       </Text>
     </BaseLayout>
   )

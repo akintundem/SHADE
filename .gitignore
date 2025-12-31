@@ -70,6 +70,19 @@ test/reports/
 test/qr-codes/*.png
 test/qr-codes/*.txt
 
+# Email service
+email/node_modules/
+email/package-lock.json
+email/.env
+email/.env.*
+email/.DS_Store
+
+# Global env files (any folder)
+.env
+.env.*
+*.env
+*.env.*
+
 # Email preview tooling (Node)
 /src/main/resources/emails/node_modules/
 /src/main/resources/emails/package-lock.json
