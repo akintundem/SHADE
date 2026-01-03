@@ -55,6 +55,7 @@ help:
 	@echo "$(YELLOW)Available Services:$(NC)"
 	@echo "  - java-app"
 	@echo "  - email-service"
+	@echo "  - push-service"
 	@echo ""
 	@echo "$(YELLOW)Legacy Commands:$(NC)"
 	@echo "  make build              - Build the application with Maven"
@@ -94,6 +95,7 @@ compose-up:
 	ENV_FILE=$(ENV_FILE) docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up -d
 	@echo "$(GREEN)Services started with $(ENV_NAME) configuration!$(NC)"
 	@echo "$(YELLOW)Java App: http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Push Service: http://localhost:${PUSH_SERVICE_PORT:-3100}$(NC)"
 	@make compose-ps
 
 compose-up-dev:
@@ -106,6 +108,7 @@ compose-up-dev:
 	ENV_FILE=.env.dev docker-compose -f $(COMPOSE_FILE) --env-file .env.dev up -d
 	@echo "$(GREEN)Services started with DEV configuration!$(NC)"
 	@echo "$(YELLOW)Java App: http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Push Service: http://localhost:${PUSH_SERVICE_PORT:-3100}$(NC)"
 	@make compose-ps
 
 compose-up-prod:
@@ -119,6 +122,7 @@ compose-up-prod:
 	ENV_FILE=.env.prod docker-compose -f $(COMPOSE_FILE) --env-file .env.prod up -d
 	@echo "$(GREEN)Services started with PROD configuration!$(NC)"
 	@echo "$(YELLOW)Java App: http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Push Service: http://localhost:${PUSH_SERVICE_PORT:-3100}$(NC)"
 	@make compose-ps
 
 compose-up-build:
@@ -225,7 +229,7 @@ service-rebuild:
 	@if [ -z "$(SERVICE)" ]; then \
 		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
 		echo "Usage: make service-rebuild SERVICE=<service-name>"; \
-		echo "Available services: java-app"; \
+		echo "Available services: java-app, email-service, push-service"; \
 		exit 1; \
 	fi
 	@echo "$(GREEN)Rebuilding service: $(SERVICE)$(NC)"
@@ -238,7 +242,7 @@ service-recreate:
 	@if [ -z "$(SERVICE)" ]; then \
 		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
 		echo "Usage: make service-recreate SERVICE=<service-name>"; \
-		echo "Available services: java-app"; \
+		echo "Available services: java-app, email-service, push-service"; \
 		exit 1; \
 	fi
 	@echo "$(GREEN)Recreating service: $(SERVICE)$(NC)"
@@ -249,7 +253,7 @@ service-logs:
 	@if [ -z "$(SERVICE)" ]; then \
 		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
 		echo "Usage: make service-logs SERVICE=<service-name>"; \
-		echo "Available services: java-app"; \
+		echo "Available services: java-app, email-service, push-service"; \
 		exit 1; \
 	fi
 	@echo "$(GREEN)Showing logs for service: $(SERVICE)$(NC)"

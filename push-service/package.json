@@ -1,0 +1,16 @@
+{
+  "name": "shade-push-service",
+  "version": "0.0.1",
+  "description": "Lightweight push proxy for local development",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "uuid": "^10.0.0",
+    "firebase-admin": "^12.0.0",
+    "dotenv": "^16.4.5"
+  }
+}

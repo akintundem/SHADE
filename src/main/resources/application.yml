@@ -117,11 +117,6 @@ aws:
     endpoint: ${AWS_S3_ENDPOINT:}
     path-style-access-enabled: ${AWS_S3_PATH_STYLE:false}
 
-# Firebase Configuration
-firebase:
-  service-account-key-path: ${FIREBASE_SERVICE_ACCOUNT_KEY_PATH}
-  project-id: ${FIREBASE_PROJECT_ID}
-
 # JWT Configuration
 jwt:
   secret: ${JWT_SECRET} 
@@ -205,6 +200,9 @@ external:
   resend:
     api-key: ${RESEND_API_KEY}
     from-email: ${RESEND_FROM_EMAIL}
+  push-service:
+    url: ${EXTERNAL_PUSH_SERVICE_URL:http://shade-push-service:3100}
+    secret: ${EXTERNAL_PUSH_SERVICE_SECRET:}
   google:
     maps-api-key: ${GOOGLE_MAPS_API_KEY}
 

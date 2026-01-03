@@ -26,6 +26,14 @@
 *.env
 .venv/
 
+# Credentials folder (contains sensitive files like Firebase keys)
+**/cred/
+**/credentials/
+# Firebase service account keys (but allow other JSON config files)
+*-firebase-adminsdk-*.json
+firebase-adminsdk-*.json
+service-account*.json
+
 # Python
 __pycache__/
 *.py[cod]
@@ -76,6 +84,17 @@ email/package-lock.json
 email/.env
 email/.env.*
 email/.DS_Store
+
+# Push service
+push/node_modules/
+push/package-lock.json
+push/.env
+push/.env.*
+push-service/node_modules/
+push-service/package-lock.json
+push-service/.env
+push-service/.env.*
+push-service/cred/
 
 # Global env files (any folder)
 .env

@@ -77,19 +77,6 @@
         </dependency>
         
 
-        <!-- Firebase -->
-        <dependency>
-            <groupId>com.google.firebase</groupId>
-            <artifactId>firebase-admin</artifactId>
-            <version>9.2.0</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>commons-logging</groupId>
-                    <artifactId>commons-logging</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        
         <!-- AWS S3 -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
@@ -210,6 +197,15 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <excludes>
+                    <!-- Skip example env files so the resources plugin doesn't try to copy them (avoids deadlock errors on some FS setups) -->
+                    <exclude>push/.env.example</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
