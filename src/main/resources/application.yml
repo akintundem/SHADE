@@ -104,7 +104,7 @@ spring:
 
 assistant:
   service:
-    base-url: ${SHADE_ASSISTANT_URL:http://python-app:8000}
+    base-url: ${SHADE_ASSISTANT_URL:${EXTERNAL_AI_SERVICE_URL:http://shade-ai-service:8000}}
 
 aws:
   s3:

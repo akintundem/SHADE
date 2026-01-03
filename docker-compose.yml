@@ -29,6 +29,26 @@ services:
     networks:
       - event-planner-network
 
+  ai-service:
+    build:
+      context: ./ai-service
+    image: ${AI_SERVICE_IMAGE:-shade-ai-service:local}
+    container_name: shade-ai-service
+    ports:
+      - "${AI_SERVICE_PORT:-8000}:8000"
+    environment:
+      PORT: ${AI_SERVICE_PORT:-8000}
+      AI_SERVICE_SECRET: ${EXTERNAL_AI_SERVICE_SECRET:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4-turbo-preview}
+      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-dall-e-3}
+      RETURN_BASE64: ${AI_RETURN_BASE64:-false}
+    env_file:
+      - ${AI_ENV_FILE:-./ai-service/.env}
+    restart: unless-stopped
+    networks:
+      - event-planner-network
+
   # Java Spring Boot Application
   java-app:
     build: .
@@ -36,6 +56,7 @@ services:
     depends_on:
       - email-service
       - push-service
+      - ai-service
     ports:
       - "8080:8080"
       - "5005:5005"  # Debug port for IDE attachment
@@ -94,6 +115,9 @@ services:
       RESEND_SHARED_SECRET: ${RESEND_SHARED_SECRET:-}
       EXTERNAL_PUSH_SERVICE_URL: ${EXTERNAL_PUSH_SERVICE_URL:-http://shade-push-service:3100}
       EXTERNAL_PUSH_SERVICE_SECRET: ${EXTERNAL_PUSH_SERVICE_SECRET:-}
+      # AI service integration
+      EXTERNAL_AI_SERVICE_URL: ${EXTERNAL_AI_SERVICE_URL:-http://shade-ai-service:8000}
+      EXTERNAL_AI_SERVICE_SECRET: ${EXTERNAL_AI_SERVICE_SECRET:-}
       EXTERNAL_EMAIL_FROM: ${RESEND_FROM_EMAIL:-Shade <noreply@shade.com>}
       EXTERNAL_EMAIL_FROM_SECURITY: ${RESEND_FROM_SECURITY:-security@noreply.mayokun.dev}
       EXTERNAL_EMAIL_FROM_EVENTS: ${RESEND_FROM_EVENTS:-events@noreply.mayokun.dev}

@@ -96,6 +96,14 @@ push-service/.env
 push-service/.env.*
 push-service/cred/
 
+# AI service
+ai-service/__pycache__/
+ai-service/*.pyc
+ai-service/.env
+ai-service/.env.*
+ai-service/venv/
+ai-service/.venv/
+
 # Global env files (any folder)
 .env
 .env.*

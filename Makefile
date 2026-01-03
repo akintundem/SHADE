@@ -56,6 +56,7 @@ help:
 	@echo "  - java-app"
 	@echo "  - email-service"
 	@echo "  - push-service"
+	@echo "  - ai-service"
 	@echo ""
 	@echo "$(YELLOW)Legacy Commands:$(NC)"
 	@echo "  make build              - Build the application with Maven"
