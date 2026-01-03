@@ -9,6 +9,9 @@ import eventplanner.features.feeds.entity.PostComment;
 import eventplanner.features.feeds.repository.FeedPostRepository;
 import eventplanner.features.feeds.repository.PostCommentRepository;
 import eventplanner.common.storage.upload.MediaUploadStatus;
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.domain.enums.CommunicationType;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -19,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.HashMap;
 
 @Service
 @Slf4j
@@ -29,15 +33,18 @@ public class PostCommentService {
     private final FeedPostRepository postRepository;
     private final UserAccountRepository userAccountRepository;
     private final EventAccessControlService accessControlService;
+    private final NotificationService notificationService;
 
     public PostCommentService(PostCommentRepository commentRepository,
                              FeedPostRepository postRepository,
                              UserAccountRepository userAccountRepository,
-                             EventAccessControlService accessControlService) {
+                             EventAccessControlService accessControlService,
+                             NotificationService notificationService) {
         this.commentRepository = commentRepository;
         this.postRepository = postRepository;
         this.userAccountRepository = userAccountRepository;
         this.accessControlService = accessControlService;
+        this.notificationService = notificationService;
     }
 
     public CommentResponse createComment(UUID eventId, UUID postId, UserPrincipal principal, CommentCreateRequest request) {
@@ -78,6 +85,7 @@ public class PostCommentService {
         PostComment saved = commentRepository.save(comment);
         
         log.debug("User {} created comment {} on post {}", principal.getId(), saved.getId(), postId);
+        sendPostOwnerPush(post, user, "New comment on your post", content);
         
         return CommentResponse.from(saved);
     }
@@ -183,6 +191,34 @@ public class PostCommentService {
 
     public long getCommentCount(UUID postId) {
         return commentRepository.countByPostId(postId);
+    }
+    
+    private void sendPostOwnerPush(EventFeedPost post, UserAccount actor, String subject, String body) {
+        try {
+            if (post == null || post.getCreatedBy() == null || post.getCreatedBy().getId() == null) {
+                return;
+            }
+            if (actor != null && actor.getId() != null && actor.getId().equals(post.getCreatedBy().getId())) {
+                return; // Skip notifying self
+            }
+            UUID eventId = post.getEvent() != null ? post.getEvent().getId() : null;
+            HashMap<String, Object> data = new HashMap<>();
+            data.put("body", body != null ? body : "New activity on your post");
+            data.put("postId", post.getId() != null ? post.getId().toString() : null);
+            if (eventId != null) {
+                data.put("eventId", eventId.toString());
+            }
+            
+            notificationService.send(NotificationRequest.builder()
+                    .type(CommunicationType.PUSH_NOTIFICATION)
+                    .to(post.getCreatedBy().getId().toString())
+                    .subject(subject)
+                    .templateVariables(data)
+                    .eventId(eventId)
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to send post owner push for post {}: {}", post != null ? post.getId() : null, e.getMessage());
+        }
     }
 
     private String safeTrimToNull(String s) {

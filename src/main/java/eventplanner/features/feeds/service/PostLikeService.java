@@ -6,6 +6,9 @@ import eventplanner.features.feeds.entity.PostLike;
 import eventplanner.features.feeds.repository.FeedPostRepository;
 import eventplanner.features.feeds.repository.PostLikeRepository;
 import eventplanner.common.storage.upload.MediaUploadStatus;
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.domain.enums.CommunicationType;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -14,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.HashMap;
 
 @Service
 @Slf4j
@@ -24,15 +28,18 @@ public class PostLikeService {
     private final FeedPostRepository postRepository;
     private final UserAccountRepository userAccountRepository;
     private final EventAccessControlService accessControlService;
+    private final NotificationService notificationService;
 
     public PostLikeService(PostLikeRepository likeRepository,
                           FeedPostRepository postRepository,
                           UserAccountRepository userAccountRepository,
-                          EventAccessControlService accessControlService) {
+                          EventAccessControlService accessControlService,
+                          NotificationService notificationService) {
         this.likeRepository = likeRepository;
         this.postRepository = postRepository;
         this.userAccountRepository = userAccountRepository;
         this.accessControlService = accessControlService;
+        this.notificationService = notificationService;
     }
 
     public void likePost(UUID eventId, UUID postId, UserPrincipal principal) {
@@ -68,6 +75,7 @@ public class PostLikeService {
         likeRepository.save(like);
         
         log.debug("User {} liked post {}", userId, postId);
+        sendPostOwnerPush(post, user, "New like on your post");
     }
 
     public void unlikePost(UUID eventId, UUID postId, UserPrincipal principal) {
@@ -105,5 +113,33 @@ public class PostLikeService {
 
     public long getLikeCount(UUID postId) {
         return likeRepository.countByPostId(postId);
+    }
+    
+    private void sendPostOwnerPush(EventFeedPost post, UserAccount actor, String subject) {
+        try {
+            if (post == null || post.getCreatedBy() == null || post.getCreatedBy().getId() == null) {
+                return;
+            }
+            if (actor != null && actor.getId() != null && actor.getId().equals(post.getCreatedBy().getId())) {
+                return; // Skip notifying self
+            }
+            UUID eventId = post.getEvent() != null ? post.getEvent().getId() : null;
+            HashMap<String, Object> data = new HashMap<>();
+            data.put("body", "Your post has a new like");
+            data.put("postId", post.getId() != null ? post.getId().toString() : null);
+            if (eventId != null) {
+                data.put("eventId", eventId.toString());
+            }
+            
+            notificationService.send(NotificationRequest.builder()
+                    .type(CommunicationType.PUSH_NOTIFICATION)
+                    .to(post.getCreatedBy().getId().toString())
+                    .subject(subject)
+                    .templateVariables(data)
+                    .eventId(eventId)
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to send post like push for post {}: {}", post != null ? post.getId() : null, e.getMessage());
+        }
     }
 }

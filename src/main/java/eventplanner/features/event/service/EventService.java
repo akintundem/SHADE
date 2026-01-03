@@ -26,6 +26,11 @@ import eventplanner.features.budget.service.BudgetService;
 import eventplanner.common.storage.s3.services.S3StorageService;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.domain.enums.CommunicationType;
+import eventplanner.features.event.enums.RecipientType;
+import eventplanner.features.event.service.EventRecipientResolverService.RecipientInfo;
 import java.util.Set;
 import java.util.Comparator;
 import eventplanner.security.authorization.domain.repository.EventRoleRepository;
@@ -49,6 +54,9 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Objects;
 
 @Service
 @Transactional
@@ -83,6 +91,12 @@ public class EventService {
 
     @Autowired(required = false)
     private TicketTypeRepository ticketTypeRepository;
+    
+    @Autowired
+    private NotificationService notificationService;
+    
+    @Autowired
+    private EventRecipientResolverService eventRecipientResolverService;
 
     /**
      * Get event by ID
@@ -139,9 +153,15 @@ public class EventService {
     public Event update(UUID id, UpdateEventRequest request) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + id));
+        boolean importantChange = false;
+        List<String> changeSummary = new ArrayList<>();
         
         // Update only the fields that are provided (not null)
         if (request.getName() != null) {
+            if (!Objects.equals(event.getName(), request.getName())) {
+                importantChange = true;
+                changeSummary.add("Name");
+            }
             event.setName(request.getName());
         }
         if (request.getDescription() != null) {
@@ -151,18 +171,38 @@ public class EventService {
             event.setEventType(request.getEventType());
         }
         if (request.getEventStatus() != null) {
+            if (!Objects.equals(event.getEventStatus(), request.getEventStatus())) {
+                importantChange = true;
+                changeSummary.add("Status");
+            }
             event.setEventStatus(request.getEventStatus());
         }
         if (request.getStartDateTime() != null) {
+            if (!Objects.equals(event.getStartDateTime(), request.getStartDateTime())) {
+                importantChange = true;
+                changeSummary.add("Start date/time");
+            }
             event.setStartDateTime(request.getStartDateTime());
         }
         if (request.getEndDateTime() != null) {
+            if (!Objects.equals(event.getEndDateTime(), request.getEndDateTime())) {
+                importantChange = true;
+                changeSummary.add("End date/time");
+            }
             event.setEndDateTime(request.getEndDateTime());
         }
         if (request.getRegistrationDeadline() != null) {
+            if (!Objects.equals(event.getRegistrationDeadline(), request.getRegistrationDeadline())) {
+                importantChange = true;
+                changeSummary.add("Registration deadline");
+            }
             event.setRegistrationDeadline(request.getRegistrationDeadline());
         }
         if (request.getCapacity() != null) {
+            if (!Objects.equals(event.getCapacity(), request.getCapacity())) {
+                importantChange = true;
+                changeSummary.add("Capacity");
+            }
             event.setCapacity(request.getCapacity());
         }
         if (request.getCurrentAttendeeCount() != null) {
@@ -240,7 +280,51 @@ public class EventService {
             event.setFeedsPublicAfterEvent(request.getFeedsPublicAfterEvent());
         }
         
-        return eventRepository.save(event);
+        Event saved = eventRepository.save(event);
+        if (importantChange) {
+            notifyEventUpdate(saved, changeSummary);
+        }
+        return saved;
+    }
+    
+    private void notifyEventUpdate(Event event, List<String> changeSummary) {
+        try {
+            if (event == null || event.getId() == null) {
+                return;
+            }
+            RecipientInfo recipients = eventRecipientResolverService.resolveRecipients(
+                    event.getId(),
+                    List.of(RecipientType.ALL_COLLABORATORS),
+                    null,
+                    null);
+            Set<UUID> userIds = new HashSet<>(recipients != null ? recipients.getUserIds() : Set.of());
+            if (event.getOwner() != null && event.getOwner().getId() != null) {
+                userIds.add(event.getOwner().getId());
+            }
+            if (userIds.isEmpty()) {
+                return;
+            }
+            
+            String summaryText = changeSummary != null && !changeSummary.isEmpty()
+                    ? String.join(", ", changeSummary)
+                    : "Event details updated";
+            Map<String, Object> data = new HashMap<>();
+            data.put("body", summaryText);
+            data.put("eventId", event.getId().toString());
+            data.put("eventName", event.getName());
+            
+            for (UUID userId : userIds) {
+                notificationService.send(NotificationRequest.builder()
+                        .type(CommunicationType.PUSH_NOTIFICATION)
+                        .to(userId.toString())
+                        .subject("Event updated: " + event.getName())
+                        .templateVariables(data)
+                        .eventId(event.getId())
+                        .build());
+            }
+        } catch (Exception e) {
+            // Best-effort push; swallow errors to avoid blocking updates
+        }
     }
 
     /**

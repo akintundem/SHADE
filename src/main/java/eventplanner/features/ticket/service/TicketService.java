@@ -503,6 +503,25 @@ public class TicketService {
                         .from(eventsFrom)
                         .build());
                 }
+                
+                if (Boolean.TRUE.equals(sendPushNotification) && attendee != null && attendee.getUser() != null
+                        && attendee.getUser().getId() != null) {
+                    Map<String, Object> pushData = new java.util.HashMap<>();
+                    pushData.put("body", "Your tickets for: " + event.getName());
+                    pushData.put("eventId", event.getId().toString());
+                    pushData.put("ticketCount", entry.getValue().size());
+                    if (event.getEventWebsiteUrl() != null) {
+                        pushData.put("ticketsUrl", event.getEventWebsiteUrl());
+                    }
+                    
+                    notificationService.send(NotificationRequest.builder()
+                        .type(CommunicationType.PUSH_NOTIFICATION)
+                        .to(attendee.getUser().getId().toString())
+                        .subject("Tickets confirmed")
+                        .templateVariables(pushData)
+                        .eventId(event.getId())
+                        .build());
+                }
             } catch (Exception e) {
             }
         }

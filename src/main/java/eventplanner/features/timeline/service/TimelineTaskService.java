@@ -4,6 +4,9 @@ import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.domain.enums.CommunicationType;
 import eventplanner.common.domain.enums.TimelineStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
@@ -37,6 +40,7 @@ public class TimelineTaskService {
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final AuthorizationService authorizationService;
+    private final NotificationService notificationService;
     
     /**
      * Validate event access
@@ -76,9 +80,11 @@ public class TimelineTaskService {
         validateEventAccess(user, eventId);
         
         Task task;
+        UUID previousAssignee = null;
         if (request.getId() != null) {
             task = taskRepository.findByIdAndEventId(request.getId(), eventId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+            previousAssignee = task.getAssignedTo() != null ? task.getAssignedTo().getId() : null;
         } else {
             task = new Task();
             task.setEvent(ensureEventExists(eventId));
@@ -90,6 +96,7 @@ public class TimelineTaskService {
         updateTaskFields(task, request);
         
         task = taskRepository.save(task);
+        notifyTaskAssignmentIfChanged(task, previousAssignee);
         return mapToTaskDetailResponse(task);
     }
 
@@ -101,6 +108,7 @@ public class TimelineTaskService {
         
         Task task = taskRepository.findByIdAndEventId(taskId, eventId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+        UUID previousAssignee = task.getAssignedTo() != null ? task.getAssignedTo().getId() : null;
             
         updateTaskFields(task, request);
         
@@ -111,6 +119,7 @@ public class TimelineTaskService {
         
         task.setIsDraft(false);
         task = taskRepository.save(task);
+        notifyTaskAssignmentIfChanged(task, previousAssignee);
         return Optional.of(mapToTaskDetailResponse(task));
     }
 
@@ -141,12 +150,14 @@ public class TimelineTaskService {
         validateEventAccess(user, parentTask.getEvent().getId());
         
         Checklist item;
+        UUID previousAssignee = null;
         if (request.getId() != null) {
             item = checklistRepository.findById(request.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Checklist item not found"));
             if (!item.getTask().getId().equals(taskId)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item does not belong to this task");
             }
+            previousAssignee = item.getAssignedTo() != null ? item.getAssignedTo().getId() : null;
         } else {
             item = new Checklist();
             item.setTask(parentTask);
@@ -158,6 +169,7 @@ public class TimelineTaskService {
         
         item = checklistRepository.save(item);
         recalculateTaskProgress(taskId);
+        notifyChecklistAssignmentIfChanged(item, previousAssignee);
         
         return mapToChecklistItemResponse(item);
     }
@@ -173,6 +185,7 @@ public class TimelineTaskService {
         
         Checklist item = checklistRepository.findById(itemId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Checklist item not found"));
+        UUID previousAssignee = item.getAssignedTo() != null ? item.getAssignedTo().getId() : null;
             
         if (!item.getTask().getId().equals(taskId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item does not belong to this task");
@@ -189,6 +202,7 @@ public class TimelineTaskService {
         item.setIsDraft(false);
         item = checklistRepository.save(item);
         recalculateTaskProgress(taskId);
+        notifyChecklistAssignmentIfChanged(item, previousAssignee);
         
         return Optional.of(mapToChecklistItemResponse(item));
     }
@@ -269,6 +283,84 @@ public class TimelineTaskService {
         
         checklistRepository.delete(item);
         recalculateTaskProgress(taskId);
+    }
+    
+    private void notifyTaskAssignmentIfChanged(Task task, UUID previousAssignee) {
+        if (task == null || task.getAssignedTo() == null || task.getAssignedTo().getId() == null) {
+            return;
+        }
+        if (Boolean.TRUE.equals(task.getIsDraft())) {
+            return;
+        }
+        UUID currentAssignee = task.getAssignedTo().getId();
+        if (previousAssignee != null && previousAssignee.equals(currentAssignee)) {
+            return;
+        }
+        Event event = task.getEvent();
+        if (event == null) {
+            return;
+        }
+        
+        Map<String, Object> data = new HashMap<>();
+        data.put("body", "You were assigned to task: " + (task.getTitle() != null ? task.getTitle() : "Task"));
+        if (task.getId() != null) {
+            data.put("taskId", task.getId().toString());
+        }
+        if (event.getId() != null) {
+            data.put("eventId", event.getId().toString());
+        }
+        if (task.getDueDate() != null) {
+            data.put("dueDate", task.getDueDate().toString());
+        }
+        
+        notificationService.send(NotificationRequest.builder()
+                .type(CommunicationType.PUSH_NOTIFICATION)
+                .to(currentAssignee.toString())
+                .subject("New task assignment")
+                .templateVariables(data)
+                .eventId(event.getId())
+                .build());
+    }
+    
+    private void notifyChecklistAssignmentIfChanged(Checklist item, UUID previousAssignee) {
+        if (item == null || item.getAssignedTo() == null || item.getAssignedTo().getId() == null) {
+            return;
+        }
+        if (Boolean.TRUE.equals(item.getIsDraft())) {
+            return;
+        }
+        UUID currentAssignee = item.getAssignedTo().getId();
+        if (previousAssignee != null && previousAssignee.equals(currentAssignee)) {
+            return;
+        }
+        Task task = item.getTask();
+        if (task == null || task.getEvent() == null) {
+            return;
+        }
+        Event event = task.getEvent();
+        
+        Map<String, Object> data = new HashMap<>();
+        data.put("body", "You were assigned to checklist: " + (item.getTitle() != null ? item.getTitle() : "Checklist"));
+        if (task.getId() != null) {
+            data.put("taskId", task.getId().toString());
+        }
+        if (item.getId() != null) {
+            data.put("checklistId", item.getId().toString());
+        }
+        if (event.getId() != null) {
+            data.put("eventId", event.getId().toString());
+        }
+        if (item.getDueDate() != null) {
+            data.put("dueDate", item.getDueDate().toString());
+        }
+        
+        notificationService.send(NotificationRequest.builder()
+                .type(CommunicationType.PUSH_NOTIFICATION)
+                .to(currentAssignee.toString())
+                .subject("New checklist assignment")
+                .templateVariables(data)
+                .eventId(event.getId())
+                .build());
     }
 
     private TaskDetailResponse mapToTaskDetailResponse(Task task) {

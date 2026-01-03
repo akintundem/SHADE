@@ -1,6 +1,9 @@
 package eventplanner.features.attendee.service;
 
 import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.domain.enums.CommunicationType;
 import eventplanner.features.attendee.entity.AttendeeInvite;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeInviteStatus;
@@ -19,6 +22,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.HashMap;
 
 
 @Service
@@ -28,15 +32,18 @@ public class AttendeeInviteService {
     private final AttendeeInviteRepository inviteRepository;
     private final AttendeeRepository attendeeRepository;
     private final UserAccountRepository userAccountRepository;
+    private final NotificationService notificationService;
 
     public AttendeeInviteService(
             AttendeeInviteRepository inviteRepository,
             AttendeeRepository attendeeRepository,
-            UserAccountRepository userAccountRepository
+            UserAccountRepository userAccountRepository,
+            NotificationService notificationService
     ) {
         this.inviteRepository = inviteRepository;
         this.attendeeRepository = attendeeRepository;
         this.userAccountRepository = userAccountRepository;
+        this.notificationService = notificationService;
     }
 
 
@@ -86,17 +93,21 @@ public class AttendeeInviteService {
             invite.setStatus(AttendeeInviteStatus.EXPIRED);
             invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
             inviteRepository.save(invite);
+            notifyOwnerOfInviteStatus(invite.getEvent(), principal.getUser(), AttendeeInviteStatus.EXPIRED);
             throw new IllegalArgumentException("Invite has expired");
         }
         
         // Handle status update
         if (status == AttendeeInviteStatus.ACCEPTED) {
-            return acceptInviteInternal(invite, principal);
+            Attendee attendee = acceptInviteInternal(invite, principal);
+            notifyOwnerOfInviteStatus(invite.getEvent(), principal.getUser(), AttendeeInviteStatus.ACCEPTED);
+            return attendee;
         } else {
             // DECLINED, REVOKED, or EXPIRED
             invite.setStatus(status);
             invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
             inviteRepository.save(invite);
+            notifyOwnerOfInviteStatus(invite.getEvent(), principal.getUser(), status);
             return null;
         }
     }
@@ -182,6 +193,42 @@ public class AttendeeInviteService {
         invite.setStatus(status);
         invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
         inviteRepository.save(invite);
+    }
+    
+    private void notifyOwnerOfInviteStatus(Event event, UserAccount invitee, AttendeeInviteStatus status) {
+        try {
+            if (event == null || event.getOwner() == null || event.getOwner().getId() == null) {
+                return;
+            }
+            UUID ownerId = event.getOwner().getId();
+            if (invitee != null && invitee.getId() != null && invitee.getId().equals(ownerId)) {
+                return; // Do not notify self
+            }
+            String inviteeName = invitee != null
+                    ? (invitee.getName() != null ? invitee.getName() : invitee.getEmail())
+                    : "Guest";
+            String body = String.format("%s %s the invite for %s",
+                    inviteeName != null ? inviteeName : "Guest",
+                    status.name().toLowerCase(),
+                    event.getName());
+            
+            HashMap<String, Object> data = new HashMap<>();
+            data.put("body", body);
+            if (event.getId() != null) {
+                data.put("eventId", event.getId().toString());
+            }
+            data.put("inviteStatus", status.name());
+            
+            notificationService.send(NotificationRequest.builder()
+                    .type(CommunicationType.PUSH_NOTIFICATION)
+                    .to(ownerId.toString())
+                    .subject("Invite " + status.name().toLowerCase())
+                    .templateVariables(data)
+                    .eventId(event.getId())
+                    .build());
+        } catch (Exception e) {
+            // Best-effort notification
+        }
     }
 
     private void verifyInviteBelongsToPrincipal(AttendeeInvite invite, UserPrincipal principal) {
