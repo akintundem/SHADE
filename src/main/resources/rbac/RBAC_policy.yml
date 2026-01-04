@@ -690,33 +690,6 @@ policy:
         owns_scope: false
         is_member: false
     -
-      name: auth.login
-      scope: PUBLIC
-      resources: null
-      description: Login user
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
-      name: auth.register
-      scope: PUBLIC
-      resources: null
-      description: Register new user
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
-      name: auth.validate
-      scope: PUBLIC
-      resources: null
-      description: Validate token
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
       name: budget.categories.read
       scope: PUBLIC
       resources: null
@@ -875,28 +848,10 @@ policy:
         owns_scope: false
         is_member: false
     -
-      name: auth.logout
-      scope: SYSTEM
-      resources: null
-      description: Logout user
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: false
-    -
       name: auth.me
       scope: SYSTEM
       resources: null
       description: Get current user info
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: false
-    -
-      name: auth.refresh
-      scope: SYSTEM
-      resources: null
-      description: Refresh access token
       abac:
         is_authenticated: true
         owns_scope: false
@@ -1076,9 +1031,7 @@ policy:
         - admin.users.detail
         - admin.users.read
         - admin.users.update
-        - auth.logout
         - auth.me
-        - auth.refresh
         - event.create
         - event.read
         - organization.create
@@ -1088,8 +1041,6 @@ policy:
         - payment.read
         - payment.refund
         - user.read
-        - user.sessions.read
-        - user.sessions.delete
         - user.search
         - user.update
         - vendor.create
@@ -1098,9 +1049,7 @@ policy:
         - public.events.search
         - vendor.search
       ORGANIZER:
-        - auth.logout
         - auth.me
-        - auth.refresh
         - organization.create
         - organization.search
         - vendor.create
@@ -1108,9 +1057,7 @@ policy:
         - public.events.search
         - vendor.search
       USER:
-        - auth.logout
         - auth.me
-        - auth.refresh
         - event.create
         - event.read
         - organization.search
@@ -1118,8 +1065,6 @@ policy:
         - payment.process
         - payment.read
         - user.read
-        - user.sessions.read
-        - user.sessions.delete
         - user.search
         - user.update
         - my.events.search

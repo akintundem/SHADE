@@ -3,11 +3,9 @@ import { render } from '@react-email/render'
 import { AttendeeWelcome } from './AttendeeWelcome'
 import { CollaboratorInvite } from './CollaboratorInvite'
 import { CollaboratorWelcome } from './CollaboratorWelcome'
-import { EmailVerification } from './EmailVerification'
 import { EventAnnouncement } from './EventAnnouncement'
 import { EventCancelled } from './EventCancelled'
 import { EventReminder } from './EventReminder'
-import { PasswordReset } from './PasswordReset'
 import { TicketConfirmation } from './TicketConfirmation'
 
 type TemplateEntry<P> = {
@@ -17,17 +15,6 @@ type TemplateEntry<P> = {
 }
 
 export const EMAIL_TEMPLATES = {
-  EMAIL_VERIFICATION: {
-    id: 'email-verification',
-    subject: ({ appName = 'SHDE' }: { appName?: string }) =>
-      `Confirm your ${appName} email`,
-    component: EmailVerification,
-  },
-  PASSWORD_RESET: {
-    id: 'password-reset',
-    subject: 'Reset your password',
-    component: PasswordReset,
-  },
   GENERAL_ANNOUNCEMENT: {
     id: 'general-announcement',
     subject: ({ eventName }: { eventName: string }) =>
@@ -100,10 +87,8 @@ export {
   AttendeeWelcome,
   CollaboratorInvite,
   CollaboratorWelcome,
-  EmailVerification,
   EventAnnouncement,
   EventCancelled,
   EventReminder,
-  PasswordReset,
   TicketConfirmation,
 }
