@@ -1,0 +1,87 @@
+_format_version: "3.0"
+_transform: true
+
+plugins:
+  - name: cors
+    config:
+      origins:
+        - http://localhost:3000
+        - http://localhost:8000
+        - http://127.0.0.1:3000
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Authorization
+        - Content-Type
+        - Accept
+        - Origin
+        - X-Requested-With
+        - X-API-Key
+        - Idempotency-Key
+        - X-Device-ID
+      exposed_headers:
+        - X-RateLimit-Limit-Minute
+        - X-RateLimit-Remaining-Minute
+        - X-RateLimit-Limit-Hour
+        - X-RateLimit-Remaining-Hour
+        - ETag
+      credentials: true
+      max_age: 3600
+
+  - name: response-transformer
+    config:
+      add:
+        headers:
+          - "X-Content-Type-Options:nosniff"
+          - "Referrer-Policy:strict-origin-when-cross-origin"
+          - "X-Frame-Options:DENY"
+          - "X-XSS-Protection:1; mode=block"
+          - "Permissions-Policy:geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+          - "Content-Security-Policy:default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
+          - "Cache-Control:no-store, no-cache, must-revalidate, proxy-revalidate"
+          - "Pragma:no-cache"
+          - "Expires:0"
+
+services:
+  - name: event-planner
+    url: http://event-planner-app:8080
+    routes:
+      - name: event-planner-route
+        paths:
+          - /
+        strip_path: false
+        protocols:
+          - http
+    plugins:
+      - name: request-transformer
+        config:
+          remove:
+            headers:
+              - X-API-Key
+          add:
+            headers:
+              - "X-API-Key:local-gateway-key"
+
+  - name: ai-service
+    url: http://shade-ai-service:8000
+    routes:
+      - name: ai-service-route
+        paths:
+          - /ai-service
+        strip_path: true
+        protocols:
+          - http
+    plugins:
+      - name: request-transformer
+        config:
+          remove:
+            headers:
+              - x-ai-secret
+          add:
+            headers:
+              - "x-ai-secret:local-ai-secret"

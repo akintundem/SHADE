@@ -12,6 +12,9 @@ COPY pom.xml .
 # Download dependencies (will use cache if pom.xml doesn't change)
 RUN mvn dependency:go-offline -B || true
 
+# Clean any existing compiled classes to avoid stale class issues
+RUN rm -rf target/classes || true
+
 # Expose port
 EXPOSE 8080
 
@@ -25,4 +28,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
 # Run Maven spring-boot:run for hot-reload
 # Source code will be mounted as volume from docker-compose
 # Spring Boot DevTools will automatically restart on file changes
-CMD ["mvn", "spring-boot:run", "-Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"]
+# Clean compile to ensure fresh classes
+CMD ["mvn", "clean", "spring-boot:run", "-Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"]

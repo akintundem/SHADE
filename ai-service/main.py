@@ -7,13 +7,14 @@ import base64
 import io
 import random
 from typing import Optional, Dict, Any, List
-from datetime import datetime
-from fastapi import FastAPI, HTTPException, Header
+from datetime import datetime, timedelta
+from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from openai import OpenAI
 from dotenv import load_dotenv
 import httpx
+from jose import jwt, JWTError
 
 # Load environment variables
 load_dotenv()
@@ -28,6 +29,12 @@ app = FastAPI(
 PORT = int(os.getenv("PORT", "8000"))
 SHARED_SECRET = os.getenv("AI_SERVICE_SECRET") or os.getenv("EXTERNAL_AI_SERVICE_SECRET") or ""
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+COGNITO_ISSUER = os.getenv("AI_COGNITO_ISSUER") or os.getenv("COGNITO_ISSUER_URI") or ""
+COGNITO_AUDIENCE = os.getenv("AI_COGNITO_AUDIENCE") or os.getenv("COGNITO_AUDIENCE") or ""
+JWKS_URL = os.getenv("AI_COGNITO_JWKS_URL") or (f"{COGNITO_ISSUER}/.well-known/jwks.json" if COGNITO_ISSUER else "")
+JWKS_CACHE_SECONDS = int(os.getenv("AI_JWKS_CACHE_SECONDS", "3600"))
+
+jwks_cache: Dict[str, Any] = {"keys": None, "expires_at": datetime.min}
 
 # Initialize OpenAI client
 openai_client = None
@@ -35,6 +42,53 @@ if OPENAI_API_KEY:
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
 else:
     print("[ai] WARNING: OPENAI_API_KEY not configured. Image generation will not work.")
+
+
+async def fetch_jwks():
+    """Fetch and cache JWKS from Cognito."""
+    global jwks_cache
+    now = datetime.utcnow()
+    if jwks_cache.get("keys") and jwks_cache.get("expires_at") and now < jwks_cache["expires_at"]:
+        return jwks_cache["keys"]
+
+    if not JWKS_URL:
+        raise HTTPException(status_code=500, detail="Cognito JWKS URL not configured")
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(JWKS_URL, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        jwks_cache = {
+            "keys": data.get("keys", []),
+            "expires_at": now + timedelta(seconds=JWKS_CACHE_SECONDS)
+        }
+        return jwks_cache["keys"]
+
+
+async def verify_jwt_token(token: str) -> Dict[str, Any]:
+    """Validate Cognito JWT using JWKS."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    keys = await fetch_jwks()
+    try:
+        header = jwt.get_unverified_header(token)
+        kid = header.get("kid")
+        key = next((k for k in keys if k.get("kid") == kid), None)
+        if not key:
+            raise HTTPException(status_code=401, detail="Unable to match signing key")
+
+        options = {"verify_aud": bool(COGNITO_AUDIENCE)}
+        claims = jwt.decode(
+            token,
+            key,
+            algorithms=[key.get("alg", "RS256")],
+            audience=COGNITO_AUDIENCE or None,
+            issuer=COGNITO_ISSUER or None,
+            options=options
+        )
+        return claims
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
 
 
 # Request/Response Models
@@ -91,20 +145,26 @@ class EventCoverImageRequest(BaseModel):
 
 # Middleware for secret authentication
 @app.middleware("http")
-async def verify_secret(request, call_next):
+async def verify_auth(request: Request, call_next):
     # Skip authentication for health endpoint
     if request.url.path == "/health":
         return await call_next(request)
-    
-    if not SHARED_SECRET:
-        return await call_next(request)
-    
+
     secret_header = request.headers.get("x-ai-secret")
-    if secret_header != SHARED_SECRET:
+    if SHARED_SECRET and secret_header == SHARED_SECRET:
+        return await call_next(request)
+
+    auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+    token = auth_header[len("Bearer "):] if auth_header and auth_header.startswith("Bearer ") else None
+
+    try:
+        await verify_jwt_token(token)
+    except HTTPException as exc:
         return JSONResponse(
-            status_code=401,
-            content={"success": False, "error": "Invalid AI service secret"}
+            status_code=exc.status_code,
+            content={"success": False, "error": exc.detail}
         )
+
     return await call_next(request)
 
 
@@ -711,4 +771,3 @@ async def generate_event_cover_image(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=PORT)
-

@@ -21,7 +21,7 @@ GET /health
 ```
 POST /generate-cover-image
 Content-Type: application/json
-x-ai-secret: <secret>
+x-ai-secret: <secret> (or Authorization: Bearer <Cognito JWT>)
 
 {
   "event_name": "Summer Music Festival",
@@ -55,7 +55,7 @@ Same request format, but always returns image as base64.
 ```
 POST /generate-event-cover-image
 Content-Type: application/json
-x-ai-secret: <secret>
+x-ai-secret: <secret> (or Authorization: Bearer <Cognito JWT>)
 
 {
   "name": "Summer Music Festival",
@@ -101,6 +101,9 @@ x-ai-secret: <secret>
 
 - `PORT`: Service port (default: 8000)
 - `AI_SERVICE_SECRET`: Secret for service authentication
+- `AI_COGNITO_ISSUER`: Cognito issuer (e.g., `https://cognito-idp.us-east-2.amazonaws.com/us-east-2_AbcdefGhi`)
+- `AI_COGNITO_AUDIENCE`: Cognito app client ID to validate `aud`
+- `AI_COGNITO_JWKS_URL`: Optional override for JWKS URL (defaults to `<issuer>/.well-known/jwks.json`)
 - `OPENAI_API_KEY`: OpenAI API key (required)
 - `OPENAI_CHAT_MODEL`: Model for prompt refinement (default: gpt-4-turbo-preview)
 - `OPENAI_IMAGE_MODEL`: Model for image generation (default: gpt-image-1.5, falls back to dall-e-3)
@@ -213,4 +216,3 @@ ImageGenerationResponse response = restTemplate.postForObject(
 - Caching for similar events
 - AI-powered event recommendations
 - Natural language event planning assistance
-

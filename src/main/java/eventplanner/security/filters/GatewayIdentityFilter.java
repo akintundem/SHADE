@@ -39,7 +39,7 @@ public class GatewayIdentityFilter extends OncePerRequestFilter {
     @Value("${gateway.auth.auto-provision:true}")
     private boolean autoProvision;
 
-    @Value("${gateway.auth.require-user-header:true}")
+    @Value("${gateway.auth.require-user-header:false}")
     private boolean requireUserHeader;
 
     @Override

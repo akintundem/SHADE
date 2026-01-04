@@ -44,6 +44,8 @@ services:
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4-turbo-preview}
       OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-dall-e-3}
       RETURN_BASE64: ${AI_RETURN_BASE64:-false}
+      AI_COGNITO_ISSUER: ${AI_COGNITO_ISSUER:-}
+      AI_COGNITO_AUDIENCE: ${AI_COGNITO_AUDIENCE:-}
     env_file:
       - ${AI_ENV_FILE:-./ai-service/.env}
     restart: unless-stopped
@@ -75,6 +77,14 @@ services:
       SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "true"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: "2s"
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: "1s"
+
+      # DB migrations
+      SPRING_FLYWAY_ENABLED: ${SPRING_FLYWAY_ENABLED:-false}
+
+      # Cognito JWT validation
+      COGNITO_ISSUER_URI: ${COGNITO_ISSUER_URI:-}
+      COGNITO_JWK_SET_URI: ${COGNITO_JWK_SET_URI:-}
+      COGNITO_AUDIENCE: ${COGNITO_AUDIENCE:-}
 
       # Database — uses Railway's DATABASE_URL or external database
       DATABASE_URL: ${DATABASE_URL:-}

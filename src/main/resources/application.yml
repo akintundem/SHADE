@@ -73,6 +73,14 @@ spring:
         max-idle: ${SPRING_REDIS_POOL_MAX_IDLE:8}
         min-idle: ${SPRING_REDIS_POOL_MIN_IDLE:0}
   
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${COGNITO_ISSUER_URI:}
+          jwk-set-uri: ${COGNITO_JWK_SET_URI:}
+          audiences: ${COGNITO_AUDIENCE:}
+  
   
   ai:
     openai:
@@ -101,7 +109,7 @@ spring:
     caffeine:
       spec: maximumSize=${CACHE_MAX_SIZE:1000},expireAfterWrite=${CACHE_EXPIRE_AFTER_WRITE:300s}
   flyway:
-    enabled: true
+    enabled: ${SPRING_FLYWAY_ENABLED:true}
     baseline-on-migrate: true
     locations: classpath:db/migration
 
@@ -126,7 +134,7 @@ jwt:
   expiration: ${JWT_EXPIRATION:86400000} 
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
 
-# Gateway-authenticated identity headers (Kong validates Cognito)
+# Gateway-authenticated identity headers (optional; app now validates Cognito JWT directly)
 gateway:
   auth:
     user-id-header: ${GATEWAY_USER_ID_HEADER:X-User-Id}
