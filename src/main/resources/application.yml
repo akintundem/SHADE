@@ -126,13 +126,11 @@ jwt:
   expiration: ${JWT_EXPIRATION:86400000} 
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
 
-# Authentication Configuration
-auth:
-  cognito:
-    issuer-uri: ${AUTH_COGNITO_ISSUER_URI:}
-    audience: ${AUTH_COGNITO_AUDIENCE:}
-    jwk-set-uri: ${AUTH_COGNITO_JWK_SET_URI:}
-    auto-provision: ${AUTH_COGNITO_AUTO_PROVISION:true}
+# Gateway-authenticated identity headers (Kong validates Cognito)
+gateway:
+  auth:
+    user-id-header: ${GATEWAY_USER_ID_HEADER:X-User-Id}
+    auto-provision: ${GATEWAY_AUTO_PROVISION:true}
 
 # Feed Posts Configuration
 feeds:
@@ -157,6 +155,7 @@ service:
     enabled: ${SERVICE_AUTH_ENABLED:true}
     api-key: ${SERVICE_API_KEY:}
     require-header: true
+    allow-service-role-paths: ${SERVICE_ROLE_ALLOWED_PATHS:}
  
 
 # Branded QR code rendering defaults

@@ -1,111 +1,47 @@
 package eventplanner.security.config;
 
-import eventplanner.security.filters.JwtAuthenticationErrorHandler;
-import eventplanner.security.filters.JwtAuthenticationFilter;
-import eventplanner.security.filters.DeviceValidationFilter;
-import eventplanner.security.filters.RateLimitingFilter;
-import eventplanner.security.filters.SecurityHeadersFilter;
+import eventplanner.security.filters.GatewayIdentityFilter;
 import eventplanner.security.filters.RbacContextFilter;
+import eventplanner.security.filters.SecurityHeadersFilter;
 import eventplanner.security.filters.ServiceApiKeyFilter;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
-import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
-    @Value("${APP_CORS_ALLOWED_ORIGINS}")
-    private String allowedOrigins;
-
     private final SecurityHeadersFilter securityHeadersFilter;
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final JwtAuthenticationErrorHandler authenticationErrorHandler;
-    private final DeviceValidationFilter deviceValidationFilter;
-    private final RateLimitingFilter rateLimitingFilter;
     private final RbacContextFilter rbacContextFilter;
     private final ServiceApiKeyFilter serviceApiKeyFilter;
+    private final GatewayIdentityFilter gatewayIdentityFilter;
 
     public SecurityConfig(SecurityHeadersFilter securityHeadersFilter,
-                          JwtAuthenticationFilter jwtAuthenticationFilter,
-                          JwtAuthenticationErrorHandler authenticationErrorHandler,
-                          DeviceValidationFilter deviceValidationFilter,
-                          RateLimitingFilter rateLimitingFilter,
                           RbacContextFilter rbacContextFilter,
-                          ServiceApiKeyFilter serviceApiKeyFilter) {
+                          ServiceApiKeyFilter serviceApiKeyFilter,
+                          GatewayIdentityFilter gatewayIdentityFilter) {
         this.securityHeadersFilter = securityHeadersFilter;
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-        this.authenticationErrorHandler = authenticationErrorHandler;
-        this.deviceValidationFilter = deviceValidationFilter;
-        this.rateLimitingFilter = rateLimitingFilter;
         this.rbacContextFilter = rbacContextFilter;
         this.serviceApiKeyFilter = serviceApiKeyFilter;
-    }
-
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        
-        // Parse allowed origins from environment variable
-        if (allowedOrigins != null && !allowedOrigins.trim().isEmpty()) {
-            configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
-        } else {
-            // Default to localhost for development if not configured
-            configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://localhost:8080"));
-        }
-        
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-        // OWASP: Explicitly whitelist allowed headers instead of using wildcard
-        configuration.setAllowedHeaders(Arrays.asList(
-            "Authorization", 
-            "Content-Type", 
-            "Accept", 
-            "Origin",
-            "X-Requested-With",
-            "X-Device-ID",
-            "X-API-Key",
-            "If-Match",
-            "If-None-Match",
-            "Idempotency-Key"
-        ));
-        // Expose rate limit and security headers to client
-        configuration.setExposedHeaders(Arrays.asList(
-            "X-RateLimit-Limit-Minute",
-            "X-RateLimit-Remaining-Minute",
-            "X-RateLimit-Limit-Hour",
-            "X-RateLimit-Remaining-Hour",
-            "ETag",
-            "X-Idempotency-Replay"
-        ));
-        configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L);
-        
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", configuration);
-        return source;
+        this.gatewayIdentityFilter = gatewayIdentityFilter;
     }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            // Perimeter CORS is enforced at the gateway; disable Spring CORS here.
+            .cors(AbstractHttpConfigurer::disable)
             .csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .ignoringRequestMatchers(
@@ -113,46 +49,28 @@ public class SecurityConfig {
                 )) // Disable CSRF for all API endpoints (using JWT auth)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authz -> authz
-                .requestMatchers("/health", "/actuator/health").permitAll()
+                .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/actuator/info").permitAll()
                 .requestMatchers("/actuator/metrics").authenticated()
                 .requestMatchers("/error", "/favicon.ico", "/css/**", "/js/**", "/images/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").authenticated()
                 .requestMatchers(HttpMethod.GET, "/").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/auth/health").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/v1/auth/forgot-password").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/v1/auth/reset-password").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/v1/auth/verify-email").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/auth/verify-email/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/v1/auth/validate-token").permitAll()
                 .anyRequest().authenticated()
             )
             .httpBasic(httpBasic -> httpBasic.disable())
-            .formLogin(formLogin -> formLogin.disable())
-            .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationErrorHandler))
-            // Register custom filters with explicit anchors so Spring knows their order.
-            // Execution order (outermost -> innermost):
-            // 1. SecurityHeadersFilter
-            // 2. RateLimitingFilter
-            // 3. ServiceApiKeyFilter
-            // 4. JwtAuthenticationFilter
-            // 5. DeviceValidationFilter
-            // 6. RbacContextFilter
-            // 7. UsernamePasswordAuthenticationFilter (Spring Security)
-            .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)     // 1
-            .addFilterAfter(rateLimitingFilter, SecurityHeadersFilter.class)                        // 2
-            .addFilterAfter(serviceApiKeyFilter, RateLimitingFilter.class)                          // 3
-            .addFilterAfter(jwtAuthenticationFilter, ServiceApiKeyFilter.class)                     // 4
-            .addFilterAfter(deviceValidationFilter, JwtAuthenticationFilter.class)                  // 5
-            .addFilterAfter(rbacContextFilter, DeviceValidationFilter.class);                       // 6
+            .formLogin(formLogin -> formLogin.disable());
+
+        // Execution order (outermost -> innermost):
+        // 1. SecurityHeadersFilter
+        // 2. ServiceApiKeyFilter
+        // 3. GatewayIdentityFilter (trusts gateway-authenticated user headers)
+        // 4. RbacContextFilter
+        // 5. UsernamePasswordAuthenticationFilter (Spring Security)
+        http.addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterAfter(serviceApiKeyFilter, SecurityHeadersFilter.class);
+        http.addFilterAfter(gatewayIdentityFilter, ServiceApiKeyFilter.class);
+        http.addFilterAfter(rbacContextFilter, GatewayIdentityFilter.class);
 
         return http.build();
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
     }
 }

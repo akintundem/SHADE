@@ -69,7 +69,7 @@ public class UserPrincipal implements UserDetails {
     
     @Override
     public String getPassword() {
-        return user.getPasswordHash();
+        return null;
     }
     
     @Override
@@ -97,10 +97,6 @@ public class UserPrincipal implements UserDetails {
         return user.getStatus() == UserStatus.ACTIVE;
     }
 
-    public boolean isEmailVerified() {
-        return user.isEmailVerified();
-    }
-
     public java.util.UUID getId() {
         return user.getId();
     }
@@ -111,10 +107,6 @@ public class UserPrincipal implements UserDetails {
 
     public String getProfilePictureUrl() {
         return user.getProfilePictureUrl();
-    }
-
-    public java.time.LocalDateTime getLastLoginAt() {
-        return user.getLastLoginAt();
     }
 
     public List<String> getEventRoles() {

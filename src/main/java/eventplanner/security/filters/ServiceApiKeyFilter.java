@@ -5,15 +5,18 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.security.MessageDigest;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -21,7 +24,6 @@ import java.util.Map;
  * Invalid keys short-circuit with a 403 JSON response.
  */
 @Component
-@Slf4j
 public class ServiceApiKeyFilter extends OncePerRequestFilter {
 
     @Value("${service.auth.api-key:}")
@@ -30,7 +32,15 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
     @Value("${service.auth.enabled:true}")
     private boolean serviceAuthEnabled;
 
+    @Value("${service.auth.require-header:false}")
+    private boolean requireApiKeyHeader;
+
+    @Value("${service.auth.allow-service-role-paths:}")
+    private String allowServiceRolePaths;
+
     private final ObjectMapper objectMapper;
+
+    private static final String HEADER_NAME = "X-API-Key";
 
     public ServiceApiKeyFilter(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -47,11 +57,11 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
             return;
         }
 
-        String apiKey = request.getHeader("X-API-Key");
+        String apiKey = request.getHeader(HEADER_NAME);
 
-        // If no API key is present, continue (regular mobile/user request)
-        if (!StringUtils.hasText(apiKey)) {
-            filterChain.doFilter(request, response);
+        // Require Kong-injected header when enabled to prevent direct access
+        if (requireApiKeyHeader && !StringUtils.hasText(apiKey)) {
+            sendForbiddenResponse(response, "Missing service API key", request.getRequestURI());
             return;
         }
 
@@ -59,6 +69,16 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
         if (!StringUtils.hasText(expectedApiKey) || !constantTimeEquals(apiKey, expectedApiKey)) {
             sendForbiddenResponse(response, "Invalid service API key", request.getRequestURI());
             return;
+        }
+
+        // Attach a service-level authentication token so downstream auth checks pass.
+        if (SecurityContextHolder.getContext().getAuthentication() == null && isServicePathAllowed(request.getRequestURI())) {
+            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                "service",
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_SERVICE"))
+            );
+            SecurityContextHolder.getContext().setAuthentication(authentication);
         }
 
         // API key is valid, continue
@@ -73,6 +93,19 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
             return false;
         }
         return MessageDigest.isEqual(a.getBytes(), b.getBytes());
+    }
+
+    private boolean isServicePathAllowed(String path) {
+        if (!StringUtils.hasText(allowServiceRolePaths)) {
+            return false;
+        }
+        for (String prefix : allowServiceRolePaths.split(",")) {
+            String trimmed = prefix.trim();
+            if (!trimmed.isEmpty() && path.startsWith(trimmed)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void sendForbiddenResponse(HttpServletResponse response, String message, String path) throws IOException {
