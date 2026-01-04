@@ -35,10 +35,7 @@ public final class RbacPermissions {
     public static final String ATTENDEE_QR_SCAN = "attendee.qrcode.scan";
     public static final String ATTENDEE_READ = "attendee.read";
     public static final String ATTENDEE_VALIDATE = "attendee.validate";
-    public static final String AUTH_LOGOUT = "auth.logout";
     public static final String AUTH_ME = "auth.me";
-    public static final String AUTH_REFRESH = "auth.refresh";
-    public static final String AUTH_VALIDATE = "auth.validate";
     public static final String BUDGET_ANALYTICS_READ = "budget.analytics.read";
     public static final String BUDGET_APPROVE = "budget.approve";
     public static final String BUDGET_CREATE = "budget.create";
@@ -107,7 +104,5 @@ public final class RbacPermissions {
     public static final String TICKET_VALIDATE = "ticket.validate";
     public static final String USER_READ = "user.read";
     public static final String USER_SEARCH = "user.search";
-    public static final String USER_SESSIONS_DELETE = "user.sessions.delete";
-    public static final String USER_SESSIONS_READ = "user.sessions.read";
     public static final String USER_UPDATE = "user.update";
 }

@@ -22,7 +22,6 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(
@@ -43,8 +42,8 @@ public class UserAccount extends BaseEntity {
     @Column(nullable = false, unique = true, length = 180)
     private String email;
 
-    @Column(name = "password_hash", nullable = false, length = 255)
-    private String passwordHash;
+    @Column(name = "cognito_sub", unique = true, length = 120)
+    private String cognitoSub;
 
     @Column(nullable = false, length = 120)
     private String name;
@@ -66,9 +65,6 @@ public class UserAccount extends BaseEntity {
     @Column(name = "user_type", nullable = false, length = 30)
     private UserType userType;
 
-    @Column(name = "email_verified", nullable = false)
-    private boolean emailVerified;
-
     @Column(name = "accept_terms", nullable = false)
     private boolean acceptTerms;
 
@@ -84,19 +80,9 @@ public class UserAccount extends BaseEntity {
     @Column(name = "preferences", columnDefinition = "TEXT")
     private String preferences;
 
-    @Column(name = "last_login_at")
-    private LocalDateTime lastLoginAt;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private UserStatus status;
-
-    @Column(name = "failed_login_attempts", nullable = false, columnDefinition = "integer default 0")
-    @Builder.Default
-    private Integer failedLoginAttempts = 0;
-
-    @Column(name = "locked_until")
-    private LocalDateTime lockedUntil;
 
     @Column(name = "profile_completed", nullable = false)
     @Builder.Default
@@ -114,9 +100,6 @@ public class UserAccount extends BaseEntity {
         }
         if (status == null) {
             status = UserStatus.ACTIVE;
-        }
-        if (failedLoginAttempts == null) {
-            failedLoginAttempts = 0;
         }
         if (profileCompleted == null) {
             profileCompleted = false;

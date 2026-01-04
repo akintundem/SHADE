@@ -20,7 +20,6 @@ spring:
   # Enable JPA for auth system only
   autoconfigure:
     exclude:
-      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchDataAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchRepositoriesAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ReactiveElasticsearchRepositoriesAutoConfiguration
@@ -101,6 +100,10 @@ spring:
     type: caffeine
     caffeine:
       spec: maximumSize=${CACHE_MAX_SIZE:1000},expireAfterWrite=${CACHE_EXPIRE_AFTER_WRITE:300s}
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
 
 assistant:
   service:
@@ -125,13 +128,11 @@ jwt:
 
 # Authentication Configuration
 auth:
-  session:
-    max-concurrent: ${AUTH_SESSION_MAX_CONCURRENT:5}
-    cleanup-interval-ms: ${AUTH_SESSION_CLEANUP_INTERVAL_MS:3600000}
-  lockout:
-    max-attempts: ${AUTH_LOCKOUT_MAX_ATTEMPTS:5}
-    initial-duration-minutes: ${AUTH_LOCKOUT_INITIAL_DURATION_MINUTES:15}
-    max-duration-hours: ${AUTH_LOCKOUT_MAX_DURATION_HOURS:24}
+  cognito:
+    issuer-uri: ${AUTH_COGNITO_ISSUER_URI:}
+    audience: ${AUTH_COGNITO_AUDIENCE:}
+    jwk-set-uri: ${AUTH_COGNITO_JWK_SET_URI:}
+    auto-provision: ${AUTH_COGNITO_AUTO_PROVISION:true}
 
 # Feed Posts Configuration
 feeds:
@@ -155,6 +156,7 @@ service:
   auth:
     enabled: ${SERVICE_AUTH_ENABLED:true}
     api-key: ${SERVICE_API_KEY:}
+    require-header: true
  
 
 # Branded QR code rendering defaults

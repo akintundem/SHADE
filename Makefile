@@ -304,7 +304,6 @@ build:
 start:
 	@echo "$(GREEN)Starting Event Planner Monolith...$(NC)"
 	@echo "$(YELLOW)Application will be available at: http://localhost:8080$(NC)"
-	@echo "$(YELLOW)Auth health check: http://localhost:8080/api/v1/auth/health$(NC)"
 	@echo "$(YELLOW)Press Ctrl+C to stop the application$(NC)"
 	@echo ""
 	@if [ -f .env ]; then \

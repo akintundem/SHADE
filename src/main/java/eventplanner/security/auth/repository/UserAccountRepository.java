@@ -1,38 +1,23 @@
 package eventplanner.security.auth.repository;
 
-import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.common.domain.enums.UserStatus;
 import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.security.auth.entity.UserAccount;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> {
+    Optional<UserAccount> findByCognitoSub(String cognitoSub);
     Optional<UserAccount> findByEmailIgnoreCase(String email);
     boolean existsByEmailIgnoreCase(String email);
-    Optional<UserAccount> findByUsernameIgnoreCase(String username);
     boolean existsByUsernameIgnoreCase(String username);
-    Page<UserAccount> findByNameContainingIgnoreCase(String name, Pageable pageable);
-    Page<UserAccount> findByUsernameContainingIgnoreCaseOrNameContainingIgnoreCase(String username, String name, Pageable pageable);
     Page<UserAccount> findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(String name, String email, Pageable pageable);
-    
-    @Query("SELECT COUNT(u) FROM UserAccount u WHERE u.createdAt BETWEEN :startDate AND :endDate")
-    Long countByDateRange(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
-    
-    @Query("SELECT u.status, COUNT(u) FROM UserAccount u GROUP BY u.status")
-    Map<String, Long> getUsersByStatus();
-    
-    @Query("SELECT DATE(u.createdAt) as date, COUNT(u) as count FROM UserAccount u WHERE u.createdAt BETWEEN :startDate AND :endDate GROUP BY DATE(u.createdAt) ORDER BY DATE(u.createdAt)")
-    List<Map<String, Object>> getUserGrowthTrend(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
-
     @Query("SELECT u FROM UserAccount u LEFT JOIN u.settings s " +
             "WHERE (LOWER(u.username) LIKE LOWER(CONCAT('%', :term, '%')) " +
             "OR LOWER(u.name) LIKE LOWER(CONCAT('%', :term, '%'))) " +
@@ -47,6 +32,5 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
             "AND (s.profileVisibility IS NULL OR s.profileVisibility <> :privateVisibility)")
     Page<UserAccount> listDirectoryUsers(@Param("privateVisibility") VisibilityLevel privateVisibility,
                                          Pageable pageable);
-    
     Long countByStatus(UserStatus status);
 }

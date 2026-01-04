@@ -2,27 +2,24 @@ package eventplanner.security.util;
 
 import eventplanner.security.auth.dto.LocationDto;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
-import eventplanner.security.auth.dto.res.UserSessionResponse;
 import eventplanner.security.auth.dto.res.UserSettingsResponse;
 import eventplanner.security.auth.entity.Location;
 import eventplanner.security.auth.entity.UserAccount;
-import eventplanner.security.auth.entity.UserSession;
 import eventplanner.security.auth.entity.UserSettings;
+import lombok.experimental.UtilityClass;
 
 /**
  * Utility mappers for converting authentication domain entities to DTOs.
  */
-public final class AuthMapper {
-
-    private AuthMapper() {
-    }
+@UtilityClass
+public class AuthMapper {
 
     /**
      * Creates a secure user response that excludes sensitive internal identifiers.
      * This should be used for all public-facing API responses.
      * Includes userId so clients can use it in subsequent requests.
      */
-    public static SecureUserResponse toSecureUserResponse(UserAccount user) {
+    public SecureUserResponse toSecureUserResponse(UserAccount user) {
         return SecureUserResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
@@ -31,7 +28,6 @@ public final class AuthMapper {
                 .phoneNumber(user.getPhoneNumber())
                 .dateOfBirth(user.getDateOfBirth())
                 .userType(user.getUserType())
-                .emailVerified(user.isEmailVerified())
                 .marketingOptIn(user.isMarketingOptIn())
                 .profilePictureUrl(user.getProfilePictureUrl())
                 .preferences(user.getPreferences())
@@ -41,7 +37,7 @@ public final class AuthMapper {
                 .build();
     }
 
-    private static UserSettingsResponse toUserSettingsResponse(UserSettings settings) {
+    private UserSettingsResponse toUserSettingsResponse(UserSettings settings) {
         UserSettings effective = settings != null ? settings : UserSettings.createDefault(null);
         
         LocationDto locationDto = null;
@@ -79,15 +75,4 @@ public final class AuthMapper {
                 .build();
     }
 
-    public static UserSessionResponse toSessionResponse(UserSession session) {
-        return UserSessionResponse.builder()
-                .id(session.getId())
-                .deviceId(session.getDeviceId())
-                .ipAddress(session.getIpAddress())
-                .createdAt(session.getCreatedAt())
-                .lastSeenAt(session.getLastSeenAt())
-                .expiresAt(session.getExpiresAt())
-                .active(!session.isRevoked() && session.getExpiresAt().isAfter(java.time.LocalDateTime.now()))
-                .build();
-    }
 }

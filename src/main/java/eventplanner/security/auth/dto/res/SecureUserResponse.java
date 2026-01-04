@@ -23,7 +23,6 @@ public class SecureUserResponse {
     String phoneNumber;
     LocalDate dateOfBirth;
     UserType userType;
-    boolean emailVerified;
     boolean marketingOptIn;
     String profilePictureUrl;
     String preferences;
