@@ -162,7 +162,7 @@ service:
   auth:
     enabled: ${SERVICE_AUTH_ENABLED:true}
     api-key: ${SERVICE_API_KEY:}
-    require-header: true
+    require-header: ${SERVICE_AUTH_REQUIRE_HEADER:true}
     allow-service-role-paths: ${SERVICE_ROLE_ALLOWED_PATHS:}
  
 

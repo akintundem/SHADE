@@ -51,6 +51,13 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         
+        // Allow actuator endpoints without service auth to keep container health checks working
+        String path = request.getRequestURI();
+        if (path != null && path.startsWith("/actuator")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         // If service auth is disabled, skip validation
         if (!serviceAuthEnabled) {
             filterChain.doFilter(request, response);
