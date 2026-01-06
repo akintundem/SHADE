@@ -26,11 +26,10 @@ import eventplanner.features.budget.service.BudgetService;
 import eventplanner.common.storage.s3.services.S3StorageService;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
-import eventplanner.common.communication.services.core.NotificationService;
-import eventplanner.common.communication.services.core.dto.NotificationRequest;
-import eventplanner.common.domain.enums.CommunicationType;
-import eventplanner.features.event.enums.RecipientType;
-import eventplanner.features.event.service.EventRecipientResolverService.RecipientInfo;
+import eventplanner.common.communication.services.core.BulkNotificationService;
+import eventplanner.common.communication.services.core.NotificationTargetResolver;
+import eventplanner.common.communication.services.core.dto.BulkNotificationRequest;
+import eventplanner.common.communication.services.core.dto.NotificationTarget;
 import java.util.Set;
 import java.util.Comparator;
 import eventplanner.security.authorization.domain.repository.EventRoleRepository;
@@ -93,10 +92,10 @@ public class EventService {
     private TicketTypeRepository ticketTypeRepository;
     
     @Autowired
-    private NotificationService notificationService;
+    private NotificationTargetResolver notificationTargetResolver;
     
     @Autowired
-    private EventRecipientResolverService eventRecipientResolverService;
+    private BulkNotificationService bulkNotificationService;
 
     /**
      * Get event by ID
@@ -292,36 +291,61 @@ public class EventService {
             if (event == null || event.getId() == null) {
                 return;
             }
-            RecipientInfo recipients = eventRecipientResolverService.resolveRecipients(
+            
+            Set<UUID> recipientIds = new HashSet<>();
+            
+            NotificationTarget attendees = notificationTargetResolver.resolveTarget(
+                    NotificationTarget.TargetType.EVENT_ATTENDEES,
                     event.getId(),
-                    List.of(RecipientType.ALL_COLLABORATORS),
-                    null,
-                    null);
-            Set<UUID> userIds = new HashSet<>(recipients != null ? recipients.getUserIds() : Set.of());
-            if (event.getOwner() != null && event.getOwner().getId() != null) {
-                userIds.add(event.getOwner().getId());
+                    Map.of());
+            if (attendees.getUserIds() != null) {
+                recipientIds.addAll(attendees.getUserIds());
             }
-            if (userIds.isEmpty()) {
+            
+            NotificationTarget collaborators = notificationTargetResolver.resolveTarget(
+                    NotificationTarget.TargetType.EVENT_COLLABORATORS,
+                    event.getId(),
+                    Map.of());
+            if (collaborators.getUserIds() != null) {
+                recipientIds.addAll(collaborators.getUserIds());
+            }
+            
+            if (event.getOwner() != null && event.getOwner().getId() != null) {
+                recipientIds.add(event.getOwner().getId());
+            }
+            
+            if (recipientIds.isEmpty()) {
                 return;
             }
             
             String summaryText = changeSummary != null && !changeSummary.isEmpty()
-                    ? String.join(", ", changeSummary)
+                    ? "Updated: " + String.join(", ", changeSummary)
                     : "Event details updated";
-            Map<String, Object> data = new HashMap<>();
-            data.put("body", summaryText);
-            data.put("eventId", event.getId().toString());
-            data.put("eventName", event.getName());
+            String title = event.getName() != null && !event.getName().isBlank()
+                    ? "Event updated: " + event.getName()
+                    : "Event updated";
             
-            for (UUID userId : userIds) {
-                notificationService.send(NotificationRequest.builder()
-                        .type(CommunicationType.PUSH_NOTIFICATION)
-                        .to(userId.toString())
-                        .subject("Event updated: " + event.getName())
-                        .templateVariables(data)
-                        .eventId(event.getId())
-                        .build());
+            Map<String, String> data = new HashMap<>();
+            data.put("eventId", event.getId().toString());
+            data.put("changeSummary", summaryText);
+            data.put("type", "event_updated");
+            if (event.getName() != null && !event.getName().isBlank()) {
+                data.put("eventName", event.getName());
             }
+            
+            Map<String, Object> parameters = new HashMap<>();
+            parameters.put("userIds", new ArrayList<>(recipientIds));
+            
+            BulkNotificationRequest request = BulkNotificationRequest.builder()
+                    .targetType(NotificationTarget.TargetType.SPECIFIC_USERS)
+                    .eventId(event.getId())
+                    .title(title)
+                    .body(summaryText)
+                    .data(data)
+                    .parameters(parameters)
+                    .build();
+            
+            bulkNotificationService.sendBulkPushNotification(request);
         } catch (Exception e) {
             // Best-effort push; swallow errors to avoid blocking updates
         }
