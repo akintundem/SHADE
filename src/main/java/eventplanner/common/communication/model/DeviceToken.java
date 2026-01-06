@@ -1,9 +1,10 @@
 package eventplanner.common.communication.model;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -13,6 +14,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "device_tokens")
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class DeviceToken {
@@ -38,10 +40,24 @@ public class DeviceToken {
     private String appVersion;
     
     @Column(name = "is_active", nullable = false)
+    @Builder.Default
     private Boolean isActive = true;
     
     @Column(name = "last_used_at")
     private LocalDateTime lastUsedAt;
+    
+    @Column(name = "invalidated_at")
+    private LocalDateTime invalidatedAt;
+    
+    @Column(name = "failure_count", nullable = false)
+    @Builder.Default
+    private Integer failureCount = 0;
+    
+    @Column(name = "last_failure_at")
+    private LocalDateTime lastFailureAt;
+    
+    @Column(name = "last_failure_reason", length = 500)
+    private String lastFailureReason;
     
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -68,5 +84,42 @@ public class DeviceToken {
     
     public void deactivate() {
         this.isActive = false;
+        this.invalidatedAt = LocalDateTime.now();
+    }
+    
+    /**
+     * Mark token as invalid due to push service error
+     */
+    public void markAsInvalid(String reason) {
+        this.isActive = false;
+        this.invalidatedAt = LocalDateTime.now();
+        this.failureCount = (this.failureCount != null ? this.failureCount : 0) + 1;
+        this.lastFailureAt = LocalDateTime.now();
+        this.lastFailureReason = reason;
+    }
+    
+    /**
+     * Increment failure count (for transient failures)
+     */
+    public void recordFailure(String reason) {
+        this.failureCount = (this.failureCount != null ? this.failureCount : 0) + 1;
+        this.lastFailureAt = LocalDateTime.now();
+        this.lastFailureReason = reason;
+    }
+    
+    /**
+     * Reset failure count after successful send
+     */
+    public void resetFailureCount() {
+        this.failureCount = 0;
+        this.lastFailureAt = null;
+        this.lastFailureReason = null;
+    }
+    
+    /**
+     * Check if token should be considered invalid based on failure count
+     */
+    public boolean shouldBeInvalidated(int maxFailures) {
+        return (this.failureCount != null && this.failureCount >= maxFailures);
     }
 }

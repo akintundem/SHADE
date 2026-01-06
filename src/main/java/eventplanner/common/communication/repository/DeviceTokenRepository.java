@@ -26,14 +26,14 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, UUID> 
     Optional<DeviceToken> findByDeviceToken(String deviceToken);
     
     /**
-     * Find active device tokens by platform
-     */
-    List<DeviceToken> findByPlatformAndIsActiveTrue(DeviceToken.Platform platform);
-    
-    /**
      * Find all active device tokens
      */
     List<DeviceToken> findByIsActiveTrue();
+    
+    /**
+     * Find all inactive device tokens
+     */
+    List<DeviceToken> findByIsActiveFalse();
     
     /**
      * Deactivate old device tokens that haven't been used recently
@@ -47,9 +47,4 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, UUID> 
      */
     @Query("SELECT dt FROM DeviceToken dt WHERE dt.userId IN :userIds AND dt.isActive = true")
     List<DeviceToken> findByUserIdInAndIsActiveTrue(@Param("userIds") List<UUID> userIds);
-    
-    /**
-     * Count active tokens for a user
-     */
-    long countByUserIdAndIsActiveTrue(UUID userId);
 }

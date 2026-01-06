@@ -22,6 +22,11 @@ import java.util.Optional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.Set;
+import java.util.HashSet;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 /**
  * Service for managing device tokens and proxying push notifications to the external push microservice.
@@ -34,14 +39,21 @@ public class PushNotificationService {
     private final RestTemplate restTemplate;
     private final String pushServiceUrl;
     private final String sharedSecret;
+    private final ObjectMapper objectMapper;
+    
+    // Configuration for token invalidation
+    private static final int MAX_TOKEN_FAILURES = 3;
+    private static final int BATCH_SIZE = 1000; // Max tokens per batch to avoid payload size limits
 
     public PushNotificationService(DeviceTokenRepository deviceTokenRepository,
                                    @Value("${external.push-service.url:http://shade-push-service:3100}") String pushServiceUrl,
-                                   @Value("${external.push-service.secret:}") String sharedSecret) {
+                                   @Value("${external.push-service.secret:}") String sharedSecret,
+                                   ObjectMapper objectMapper) {
         this.deviceTokenRepository = deviceTokenRepository;
         this.restTemplate = createRestTemplate();
         this.pushServiceUrl = pushServiceUrl.endsWith("/") ? pushServiceUrl.substring(0, pushServiceUrl.length() - 1) : pushServiceUrl;
         this.sharedSecret = sharedSecret;
+        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
     }
 
     private RestTemplate createRestTemplate() {
@@ -173,15 +185,16 @@ public class PushNotificationService {
      * Send push notification to a specific user
      */
     public PushResult sendToNotification(UUID userId, String title, String body, Map<String, String> data) {
+        List<DeviceToken> tokens = deviceTokenRepository.findByUserIdAndIsActiveTrue(userId);
+        
+        if (tokens.isEmpty()) {
+            return PushResult.builder()
+                    .success(false)
+                    .errorMessage("No active device tokens found for user")
+                    .build();
+        }
+        
         try {
-            List<DeviceToken> tokens = deviceTokenRepository.findByUserIdAndIsActiveTrue(userId);
-            
-            if (tokens.isEmpty()) {
-                return PushResult.builder()
-                        .success(false)
-                        .errorMessage("No active device tokens found for user")
-                        .build();
-            }
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -205,13 +218,31 @@ public class PushNotificationService {
             );
 
             if (response.getStatusCode().is2xxSuccessful()) {
-                tokens.forEach(token -> updateLastUsed(token.getDeviceToken()));
+                // Parse response to check for invalid tokens
+                String responseBody = response.getBody();
+                handlePushResponse(tokens, responseBody);
+                
+                tokens.forEach(token -> {
+                    token.markAsUsed();
+                    token.resetFailureCount();
+                    deviceTokenRepository.save(token);
+                });
+                
                 return PushResult.builder()
                     .success(true)
-                    .messageId(null)
+                    .messageId(extractMessageId(responseBody))
                     .build();
             } else {
                 String errorMessage = "HTTP " + response.getStatusCode() + ": " + response.getBody();
+                // Record failures for all tokens
+                tokens.forEach(token -> {
+                    token.recordFailure(errorMessage);
+                    if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
+                        token.markAsInvalid("Max failures reached: " + errorMessage);
+                    }
+                    deviceTokenRepository.save(token);
+                });
+                
                 return PushResult.builder()
                         .success(false)
                         .errorMessage(errorMessage)
@@ -219,15 +250,307 @@ public class PushNotificationService {
             }
 
         } catch (RestClientException e) {
+            // Record failures for all tokens
+            tokens.forEach(token -> {
+                token.recordFailure(e.getMessage());
+                if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
+                    token.markAsInvalid("Max failures reached: " + e.getMessage());
+                }
+                deviceTokenRepository.save(token);
+            });
+            
             return PushResult.builder()
                     .success(false)
                     .errorMessage(e.getMessage())
                     .build();
         } catch (Exception e) {
+            // Record failures for all tokens
+            tokens.forEach(token -> {
+                token.recordFailure(e.getMessage());
+                if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
+                    token.markAsInvalid("Max failures reached: " + e.getMessage());
+                }
+                deviceTokenRepository.save(token);
+            });
+            
             return PushResult.builder()
                     .success(false)
                     .errorMessage(e.getMessage())
                     .build();
+        }
+    }
+    
+    /**
+     * Send push notification to multiple users (bulk)
+     * Handles batching and token invalidation
+     */
+    public BulkPushResult sendBulkNotification(List<UUID> userIds, String title, String body, Map<String, String> data) {
+        BulkPushResult result = new BulkPushResult();
+        
+        if (userIds == null || userIds.isEmpty()) {
+            return result;
+        }
+        
+        // Get all active tokens for all users
+        List<DeviceToken> allTokens = deviceTokenRepository.findByUserIdInAndIsActiveTrue(userIds);
+        
+        if (allTokens.isEmpty()) {
+            result.setTotalRecipients(0);
+            result.setSuccessCount(0);
+            result.setFailureCount(0);
+            return result;
+        }
+        
+        // Group tokens by user for tracking
+        Map<UUID, List<DeviceToken>> tokensByUser = new java.util.HashMap<>();
+        for (DeviceToken token : allTokens) {
+            tokensByUser.computeIfAbsent(token.getUserId(), k -> new ArrayList<>()).add(token);
+        }
+        
+        // Batch tokens to avoid payload size limits
+        List<List<DeviceToken>> batches = batchTokens(allTokens, BATCH_SIZE);
+        
+        for (List<DeviceToken> batch : batches) {
+            try {
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                if (sharedSecret != null && !sharedSecret.isBlank()) {
+                    headers.add("x-push-secret", sharedSecret);
+                }
+                
+                var bodyPayload = new java.util.HashMap<String, Object>();
+                bodyPayload.put("to", batch.stream().map(DeviceToken::getDeviceToken).toList());
+                bodyPayload.put("title", title);
+                bodyPayload.put("body", body != null ? body : "");
+                bodyPayload.put("data", data != null ? data : Map.of());
+                
+                HttpEntity<Map<String, Object>> request = new HttpEntity<>(bodyPayload, headers);
+                
+                ResponseEntity<String> response = restTemplate.exchange(
+                        pushServiceUrl + "/send-push",
+                        HttpMethod.POST,
+                        request,
+                        String.class
+                );
+                
+                if (response.getStatusCode().is2xxSuccessful()) {
+                    String responseBody = response.getBody();
+                    handlePushResponse(batch, responseBody);
+                    
+                    batch.forEach(token -> {
+                        token.markAsUsed();
+                        token.resetFailureCount();
+                        deviceTokenRepository.save(token);
+                    });
+                    
+                    result.incrementSuccess(batch.size());
+                } else {
+                    String errorMessage = "HTTP " + response.getStatusCode() + ": " + response.getBody();
+                    batch.forEach(token -> {
+                        token.recordFailure(errorMessage);
+                        if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
+                            token.markAsInvalid("Max failures reached: " + errorMessage);
+                        }
+                        deviceTokenRepository.save(token);
+                    });
+                    
+                    result.incrementFailure(batch.size());
+                }
+            } catch (Exception e) {
+                batch.forEach(token -> {
+                    token.recordFailure(e.getMessage());
+                    if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
+                        token.markAsInvalid("Max failures reached: " + e.getMessage());
+                    }
+                    deviceTokenRepository.save(token);
+                });
+                
+                result.incrementFailure(batch.size());
+            }
+        }
+        
+        result.setTotalRecipients(tokensByUser.size());
+        return result;
+    }
+    
+    /**
+     * Send push notification to a list of device tokens directly
+     * Useful for custom recipient lists
+     */
+    public BulkPushResult sendToTokens(List<String> deviceTokens, String title, String body, Map<String, String> data) {
+        BulkPushResult result = new BulkPushResult();
+        
+        if (deviceTokens == null || deviceTokens.isEmpty()) {
+            return result;
+        }
+        
+        // Fetch token entities
+        List<DeviceToken> tokens = new ArrayList<>();
+        for (String tokenStr : deviceTokens) {
+            deviceTokenRepository.findByDeviceToken(tokenStr)
+                    .filter(DeviceToken::getIsActive)
+                    .ifPresent(tokens::add);
+        }
+        
+        if (tokens.isEmpty()) {
+            return result;
+        }
+        
+        // Batch and send
+        List<List<DeviceToken>> batches = batchTokens(tokens, BATCH_SIZE);
+        
+        for (List<DeviceToken> batch : batches) {
+            try {
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                if (sharedSecret != null && !sharedSecret.isBlank()) {
+                    headers.add("x-push-secret", sharedSecret);
+                }
+                
+                var bodyPayload = new java.util.HashMap<String, Object>();
+                bodyPayload.put("to", batch.stream().map(DeviceToken::getDeviceToken).toList());
+                bodyPayload.put("title", title);
+                bodyPayload.put("body", body != null ? body : "");
+                bodyPayload.put("data", data != null ? data : Map.of());
+                
+                HttpEntity<Map<String, Object>> request = new HttpEntity<>(bodyPayload, headers);
+                
+                ResponseEntity<String> response = restTemplate.exchange(
+                        pushServiceUrl + "/send-push",
+                        HttpMethod.POST,
+                        request,
+                        String.class
+                );
+                
+                if (response.getStatusCode().is2xxSuccessful()) {
+                    String responseBody = response.getBody();
+                    handlePushResponse(batch, responseBody);
+                    
+                    batch.forEach(token -> {
+                        token.markAsUsed();
+                        token.resetFailureCount();
+                        deviceTokenRepository.save(token);
+                    });
+                    
+                    result.incrementSuccess(batch.size());
+                } else {
+                    String errorMessage = "HTTP " + response.getStatusCode() + ": " + response.getBody();
+                    batch.forEach(token -> {
+                        token.recordFailure(errorMessage);
+                        if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
+                            token.markAsInvalid("Max failures reached: " + errorMessage);
+                        }
+                        deviceTokenRepository.save(token);
+                    });
+                    
+                    result.incrementFailure(batch.size());
+                }
+            } catch (Exception e) {
+                batch.forEach(token -> {
+                    token.recordFailure(e.getMessage());
+                    if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
+                        token.markAsInvalid("Max failures reached: " + e.getMessage());
+                    }
+                    deviceTokenRepository.save(token);
+                });
+                
+                result.incrementFailure(batch.size());
+            }
+        }
+        
+        Set<UUID> uniqueUsers = new HashSet<>();
+        tokens.forEach(token -> uniqueUsers.add(token.getUserId()));
+        result.setTotalRecipients(uniqueUsers.size());
+        
+        return result;
+    }
+    
+    /**
+     * Handle push service response and invalidate tokens if needed
+     * In a real implementation, the push service should return invalid token IDs
+     */
+    private void handlePushResponse(List<DeviceToken> tokens, String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return;
+        }
+        
+        try {
+            // Parse response to check for invalid tokens
+            // Expected format: {"success": true, "messageId": "...", "invalidTokens": ["token1", "token2"], ...}
+            Map<String, Object> response = objectMapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+            
+            @SuppressWarnings("unchecked")
+            List<String> invalidTokens = (List<String>) response.get("invalidTokens");
+            
+            if (invalidTokens != null && !invalidTokens.isEmpty()) {
+                Set<String> invalidTokenSet = new HashSet<>(invalidTokens);
+                tokens.forEach(token -> {
+                    if (invalidTokenSet.contains(token.getDeviceToken())) {
+                        token.markAsInvalid("Token reported as invalid by push service");
+                        deviceTokenRepository.save(token);
+                    }
+                });
+            }
+        } catch (Exception e) {
+            // Log but don't fail - response parsing is best effort
+            // In production, you'd want proper logging here
+        }
+    }
+    
+    private String extractMessageId(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return null;
+        }
+        
+        try {
+            Map<String, Object> response = objectMapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+            Object messageId = response.get("messageId");
+            return messageId != null ? messageId.toString() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+    
+    private List<List<DeviceToken>> batchTokens(List<DeviceToken> tokens, int batchSize) {
+        List<List<DeviceToken>> batches = new ArrayList<>();
+        for (int i = 0; i < tokens.size(); i += batchSize) {
+            batches.add(tokens.subList(i, Math.min(i + batchSize, tokens.size())));
+        }
+        return batches;
+    }
+    
+    /**
+     * Result class for bulk push operations
+     */
+    public static class BulkPushResult {
+        private int totalRecipients = 0;
+        private int successCount = 0;
+        private int failureCount = 0;
+        private String messageId;
+        private String errorMessage;
+        
+        public void incrementSuccess(int count) {
+            this.successCount += count;
+        }
+        
+        public void incrementFailure(int count) {
+            this.failureCount += count;
+        }
+        
+        // Getters and setters
+        public int getTotalRecipients() { return totalRecipients; }
+        public void setTotalRecipients(int totalRecipients) { this.totalRecipients = totalRecipients; }
+        public int getSuccessCount() { return successCount; }
+        public void setSuccessCount(int successCount) { this.successCount = successCount; }
+        public int getFailureCount() { return failureCount; }
+        public void setFailureCount(int failureCount) { this.failureCount = failureCount; }
+        public String getMessageId() { return messageId; }
+        public void setMessageId(String messageId) { this.messageId = messageId; }
+        public String getErrorMessage() { return errorMessage; }
+        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+        
+        public boolean isSuccess() {
+            return failureCount == 0 && successCount > 0;
         }
     }
 }
