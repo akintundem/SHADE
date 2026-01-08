@@ -8,12 +8,15 @@ import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import jakarta.validation.Valid;
+import eventplanner.common.dto.ApiMessageResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -50,6 +53,17 @@ public class UserManagementController {
             throw new AccessDeniedException("Authentication required");
         }
         return userAccountService.updateSecureUser(userId, principal.getUser(), request);
+    }
+
+    @DeleteMapping("/{userId}")
+    @RequiresPermission(value = RbacPermissions.USER_DELETE, resources = {"user_id=#userId"})
+    public ResponseEntity<ApiMessageResponse> deleteUser(@AuthenticationPrincipal UserPrincipal principal,
+                                                         @PathVariable UUID userId) {
+        if (principal == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        userAccountService.deleteUserAccount(userId, principal.getUser());
+        return ResponseEntity.ok(ApiMessageResponse.success("User account deleted"));
     }
 
     @GetMapping("/search")

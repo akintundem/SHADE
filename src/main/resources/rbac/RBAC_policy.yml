@@ -941,6 +941,15 @@ policy:
         owns_scope: false
         is_member: false
     -
+      name: user.delete
+      scope: SYSTEM
+      resources: user_id
+      description: Delete or deactivate own account
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
       name: user.read
       scope: SYSTEM
       resources: user_id
@@ -1040,6 +1049,7 @@ policy:
         - payment.process
         - payment.read
         - payment.refund
+        - user.delete
         - user.read
         - user.search
         - user.update
@@ -1064,6 +1074,7 @@ policy:
         - payment.create
         - payment.process
         - payment.read
+        - user.delete
         - user.read
         - user.search
         - user.update

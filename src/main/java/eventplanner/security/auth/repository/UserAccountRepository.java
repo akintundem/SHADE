@@ -22,15 +22,19 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
             "WHERE (LOWER(u.username) LIKE LOWER(CONCAT('%', :term, '%')) " +
             "OR LOWER(u.name) LIKE LOWER(CONCAT('%', :term, '%'))) " +
             "AND (s.searchVisibility IS NULL OR s.searchVisibility = true) " +
-            "AND (s.profileVisibility IS NULL OR s.profileVisibility <> :privateVisibility)")
+            "AND (s.profileVisibility IS NULL OR s.profileVisibility <> :privateVisibility) " +
+            "AND (u.status IS NULL OR u.status = :activeStatus)")
     Page<UserAccount> searchDirectoryUsers(@Param("term") String term,
                                            @Param("privateVisibility") VisibilityLevel privateVisibility,
+                                           @Param("activeStatus") UserStatus activeStatus,
                                            Pageable pageable);
 
     @Query("SELECT u FROM UserAccount u LEFT JOIN u.settings s " +
             "WHERE (s.searchVisibility IS NULL OR s.searchVisibility = true) " +
-            "AND (s.profileVisibility IS NULL OR s.profileVisibility <> :privateVisibility)")
+            "AND (s.profileVisibility IS NULL OR s.profileVisibility <> :privateVisibility) " +
+            "AND (u.status IS NULL OR u.status = :activeStatus)")
     Page<UserAccount> listDirectoryUsers(@Param("privateVisibility") VisibilityLevel privateVisibility,
+                                         @Param("activeStatus") UserStatus activeStatus,
                                          Pageable pageable);
     Long countByStatus(UserStatus status);
 }

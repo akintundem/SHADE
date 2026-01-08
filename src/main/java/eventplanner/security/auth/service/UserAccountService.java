@@ -11,9 +11,11 @@ import eventplanner.security.auth.repository.LocationRepository;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.util.AuthMapper;
 import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.common.domain.enums.UserStatus;
 import eventplanner.common.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -128,6 +130,26 @@ public class UserAccountService {
 
         userAccountRepository.save(user);
         return AuthMapper.toSecureUserResponse(user);
+    }
+
+    /**
+     * Deactivate a user account and revoke active sessions.
+     */
+    public void deleteUserAccount(UUID userId, UserAccount requester) {
+        if (requester == null || requester.getId() == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        if (!requester.getId().equals(userId)) {
+            throw new AccessDeniedException("Cannot delete another user's account");
+        }
+
+        UserAccount user = userAccountRepository.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (user.getStatus() != UserStatus.DELETED) {
+            user.setStatus(UserStatus.DELETED);
+            userAccountRepository.save(user);
+        }
     }
 
     private UserSettings getOrCreateSettings(UserAccount user) {
@@ -257,7 +279,7 @@ public class UserAccountService {
         }
 
         return userAccountRepository
-            .searchDirectoryUsers(sanitized, VisibilityLevel.PRIVATE, pageable)
+            .searchDirectoryUsers(sanitized, VisibilityLevel.PRIVATE, UserStatus.ACTIVE, pageable)
             .map(this::toPublicUserResponse);
     }
 
@@ -265,7 +287,7 @@ public class UserAccountService {
      * Public directory listing (paginated). Intended for "suggested users" UX.
      */
     public Page<PublicUserResponse> listPublicUsers(Pageable pageable) {
-        return userAccountRepository.listDirectoryUsers(VisibilityLevel.PRIVATE, pageable)
+        return userAccountRepository.listDirectoryUsers(VisibilityLevel.PRIVATE, UserStatus.ACTIVE, pageable)
             .map(this::toPublicUserResponse);
     }
 
