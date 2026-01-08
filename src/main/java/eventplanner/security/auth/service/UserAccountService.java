@@ -33,13 +33,16 @@ public class UserAccountService {
     private final UserAccountRepository userAccountRepository;
     private final ProfileImageService profileImageService;
     private final LocationRepository locationRepository;
+    private final CognitoUserService cognitoUserService;
 
     public UserAccountService(UserAccountRepository userAccountRepository,
                              ProfileImageService profileImageService,
-                             LocationRepository locationRepository) {
+                             LocationRepository locationRepository,
+                             CognitoUserService cognitoUserService) {
         this.userAccountRepository = userAccountRepository;
         this.profileImageService = profileImageService;
         this.locationRepository = locationRepository;
+        this.cognitoUserService = cognitoUserService;
     }
 
     public SecureUserResponse getSecureUser(UUID userId) {
@@ -145,6 +148,9 @@ public class UserAccountService {
 
         UserAccount user = userAccountRepository.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        // Attempt Cognito removal before marking the account as deleted locally
+        cognitoUserService.deleteUser(user.getCognitoSub(), user.getEmail());
 
         if (user.getStatus() != UserStatus.DELETED) {
             user.setStatus(UserStatus.DELETED);

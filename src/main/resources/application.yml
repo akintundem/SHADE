@@ -127,6 +127,9 @@ aws:
       event: ${AWS_S3_EVENT_BUCKET:}
     endpoint: ${AWS_S3_ENDPOINT:}
     path-style-access-enabled: ${AWS_S3_PATH_STYLE:false}
+  cognito:
+    user-pool-id: ${AWS_COGNITO_USER_POOL_ID:}
+    region: ${AWS_COGNITO_REGION:${AWS_REGION:}}
 
 # JWT Configuration
 jwt:

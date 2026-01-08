@@ -22,6 +22,10 @@ Deployable as a single JAR with Docker support for simplified infrastructure man
 - Configure gateway-forwarded identity header if needed: `GATEWAY_USER_ID_HEADER` (default `X-User-Id`) and `GATEWAY_AUTO_PROVISION` (default `true`) to auto-create users when unseen.
 - Service-to-service proof stays enforced via `SERVICE_AUTH_REQUIRE_HEADER=true` and matching `SERVICE_API_KEY`/`GATEWAY_SERVICE_API_KEY`.
 
+## Account management
+
+- `DELETE /api/v1/auth/users/{userId}` (requires `user.delete` with self-scope) deactivates an account by marking it `DELETED`; directory listings return only `ACTIVE` users. When `AWS_COGNITO_USER_POOL_ID`/`AWS_COGNITO_REGION` are set, the Cognito user is removed too.
+
 ## Local usage
 
 - Start the stack through Kong: `docker-compose up --build kong` (or `docker-compose up`).
