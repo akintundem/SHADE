@@ -6,6 +6,7 @@ import org.springframework.util.StringUtils;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminDeleteUserRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminUserGlobalSignOutRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.CognitoIdentityProviderException;
 
 /**
@@ -40,6 +41,30 @@ public class CognitoUserService {
                 .region(region)
                 .build()) {
             client.adminDeleteUser(AdminDeleteUserRequest.builder()
+                    .userPoolId(userPoolId)
+                    .username(username)
+                    .build());
+        } catch (CognitoIdentityProviderException ex) {
+        } catch (Exception ex) {
+        }
+    }
+
+    /**
+     * Revoke Cognito sessions/tokens for a user. No-ops if configuration is missing.
+     */
+    public void signOutUser(String cognitoSub, String usernameFallback) {
+        String username = StringUtils.hasText(cognitoSub) ? cognitoSub : usernameFallback;
+        if (!StringUtils.hasText(username)) {
+            return;
+        }
+        if (userPoolId == null || region == null) {
+            return;
+        }
+
+        try (CognitoIdentityProviderClient client = CognitoIdentityProviderClient.builder()
+                .region(region)
+                .build()) {
+            client.adminUserGlobalSignOut(AdminUserGlobalSignOutRequest.builder()
                     .userPoolId(userPoolId)
                     .username(username)
                     .build());

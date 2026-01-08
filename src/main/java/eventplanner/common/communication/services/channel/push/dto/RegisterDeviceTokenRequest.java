@@ -12,14 +12,14 @@ import lombok.NoArgsConstructor;
 import java.util.UUID;
 
 /**
- * Request DTO for registering device tokens.
+ * Request DTO for registering device tokens
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class RegisterDeviceTokenRequest {
-
+    
     @Schema(description = "User ID associated with the device token", example = "123e4567-e89b-12d3-a456-426614174000")
     private UUID userId;
 

@@ -6,15 +6,16 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Result DTO for email sending operations.
+ * Result DTO for email sending operations
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class EmailResult {
-
+    
     private boolean success;
     private String messageId;
     private String errorMessage;
 }
+
