@@ -248,7 +248,10 @@ public class EventCrudController {
             try {
                 Event created = eventService.create(request.getEvent(), principal.getId());
                 EventResponse eventResponse = eventService.toResponse(created, principal);
-                var coverUpload = eventMediaService.createCoverImageUpload(created.getId(), principal, request.getCoverUpload());
+
+                var coverUpload = request.getCoverUpload() != null
+                        ? eventMediaService.createCoverImageUpload(created.getId(), principal, request.getCoverUpload())
+                        : null;
 
                 CreateEventWithCoverUploadResponse response = CreateEventWithCoverUploadResponse.builder()
                         .event(eventResponse)

@@ -27,8 +27,6 @@ public class CreateEventWithCoverUploadRequest {
     private CreateEventRequest event;
 
     @Valid
-    @NotNull
-    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Cover image upload metadata (used to generate presigned URL)")
+    @Schema(description = "Cover image upload metadata (used to generate presigned URL). Optional; if omitted, event is created without requesting a cover upload.")
     private EventMediaUploadRequest coverUpload;
 }
-

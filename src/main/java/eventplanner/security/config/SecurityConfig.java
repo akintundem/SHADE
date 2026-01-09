@@ -67,6 +67,7 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/metrics").authenticated()
                 .requestMatchers("/error", "/favicon.ico", "/css/**", "/js/**", "/images/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup").permitAll()
                 .requestMatchers(HttpMethod.GET, "/").permitAll()
                 .anyRequest().authenticated()
             )
