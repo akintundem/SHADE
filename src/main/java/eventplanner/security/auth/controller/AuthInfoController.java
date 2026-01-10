@@ -3,19 +3,20 @@ package eventplanner.security.auth.controller;
 import eventplanner.common.dto.ApiMessageResponse;
 import eventplanner.common.exception.ResourceNotFoundException;
 import eventplanner.common.exception.UnauthorizedException;
-import eventplanner.security.auth.dto.res.SecureUserResponse;
+import eventplanner.security.auth.dto.res.AuthSessionResponse;
 import eventplanner.security.auth.service.CognitoUserService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.util.AuthMapper;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.util.StringUtils;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -27,13 +28,19 @@ public class AuthInfoController {
         this.cognitoUserService = cognitoUserService;
     }
 
-    @GetMapping("/me")
+    @GetMapping("/session")
     @RequiresPermission(value = RbacPermissions.AUTH_ME, resources = {"user_id=#principal.id"})
-    public ResponseEntity<SecureUserResponse> currentUser(@AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<AuthSessionResponse> session(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
             throw new ResourceNotFoundException("User not found");
         }
-        return ResponseEntity.status(HttpStatus.OK).body(AuthMapper.toSecureUserResponse(principal.getUser()));
+        var account = principal.getUser();
+        var userResponse = AuthMapper.toSecureUserResponse(account);
+        var session = AuthSessionResponse.builder()
+                .user(userResponse)
+                .onboardingRequired(isOnboardingRequired(account))
+                .build();
+        return ResponseEntity.ok(session);
     }
 
     @RequestMapping(value = "/logout", method = {RequestMethod.POST, RequestMethod.GET})
@@ -46,5 +53,17 @@ public class AuthInfoController {
                 principal.getUser().getEmail()
         );
         return ResponseEntity.ok(ApiMessageResponse.success("Logged out successfully"));
+    }
+
+    private boolean isOnboardingRequired(UserAccount user) {
+        if (user == null) {
+            return true;
+        }
+        boolean missingName = !StringUtils.hasText(user.getName());
+        boolean missingUsername = !StringUtils.hasText(user.getUsername());
+        boolean missingPhone = !StringUtils.hasText(user.getPhoneNumber());
+        boolean missingTerms = !user.isAcceptTerms();
+        boolean missingPrivacy = !user.isAcceptPrivacy();
+        return missingName || missingUsername || missingPhone || missingTerms || missingPrivacy;
     }
 }

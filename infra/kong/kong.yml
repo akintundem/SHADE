@@ -65,7 +65,7 @@ services:
               - X-API-Key
           add:
             headers:
-              - "X-API-Key:local-gateway-key"
+              - "X-API-Key:shade_service_api_key_12345"
 
   - name: ai-service
     url: http://shade-ai-service:8000

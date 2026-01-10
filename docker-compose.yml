@@ -128,7 +128,7 @@ services:
       # AI service integration
       EXTERNAL_AI_SERVICE_URL: ${EXTERNAL_AI_SERVICE_URL:-http://kong:8000/ai-service}
       EXTERNAL_AI_SERVICE_SECRET: ${EXTERNAL_AI_SERVICE_SECRET:-}
-      SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY:-local-gateway-key}
+      SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY:-shade_service_api_key_12345}
       SERVICE_AUTH_REQUIRE_HEADER: "true"
       EXTERNAL_EMAIL_FROM: ${RESEND_FROM_EMAIL:-Shade <noreply@shade.com>}
       EXTERNAL_EMAIL_FROM_SECURITY: ${RESEND_FROM_SECURITY:-security@noreply.mayokun.dev}
