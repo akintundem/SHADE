@@ -131,12 +131,6 @@ aws:
     user-pool-id: ${AWS_COGNITO_USER_POOL_ID:}
     region: ${AWS_COGNITO_REGION:${AWS_REGION:}}
 
-# JWT Configuration
-jwt:
-  secret: ${JWT_SECRET} 
-  expiration: ${JWT_EXPIRATION:86400000} 
-  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
-
 # Gateway-authenticated identity headers (optional; app now validates Cognito JWT directly)
 gateway:
   auth:

@@ -1,6 +1,5 @@
 package eventplanner.security.auth.service;
 
-import eventplanner.security.auth.dto.req.SignupRequest;
 import eventplanner.security.auth.dto.req.UpdateUserProfileRequest;
 import eventplanner.security.auth.dto.req.UserSettingsUpdateRequest;
 import eventplanner.security.auth.dto.res.PublicUserResponse;
@@ -11,7 +10,6 @@ import eventplanner.security.auth.entity.UserSettings;
 import eventplanner.security.auth.repository.LocationRepository;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.util.AuthMapper;
-import eventplanner.common.domain.enums.UserType;
 import eventplanner.common.domain.enums.VisibilityLevel;
 import eventplanner.common.domain.enums.UserStatus;
 import eventplanner.common.exception.ResourceNotFoundException;
@@ -45,94 +43,6 @@ public class UserAccountService {
         this.profileImageService = profileImageService;
         this.locationRepository = locationRepository;
         this.cognitoUserService = cognitoUserService;
-    }
-
-    /**
-     * Provision a local user record for Cognito sign-up flows.
-     * - Creates a new user if none exists for the email.
-     * - Idempotently updates existing users with Cognito subject and preferences.
-     * - Rejects attempts to overwrite a different Cognito subject.
-     */
-    public ProvisionedUser provisionCognitoUser(SignupRequest request) {
-        String normalizedEmail = normalizeEmail(request.getEmail());
-        if (!StringUtils.hasText(normalizedEmail)) {
-            throw new IllegalArgumentException("Email is required");
-        }
-
-        String requestedName = safeTrim(request.getName());
-        String resolvedName = StringUtils.hasText(requestedName)
-                ? requestedName
-                : deriveDisplayName(normalizedEmail);
-
-        String phone = safeTrim(request.getPhoneNumber());
-        String cognitoSub = safeTrim(request.getCognitoSub());
-        UserType userType = request.getUserType() != null ? request.getUserType() : UserType.INDIVIDUAL;
-
-        var existingUserOpt = userAccountRepository.findByEmailIgnoreCase(normalizedEmail);
-        boolean created = existingUserOpt.isEmpty();
-
-        // If a user already exists and is linked to Cognito, block duplicate signup attempts
-        if (existingUserOpt.isPresent()) {
-            UserAccount existing = existingUserOpt.get();
-            String existingSub = safeTrim(existing.getCognitoSub());
-            if (StringUtils.hasText(existingSub) && (cognitoSub == null || !existingSub.equals(cognitoSub))) {
-                throw new IllegalStateException("Invalid signup attempt");
-            }
-        }
-
-        UserAccount user = existingUserOpt.orElseGet(() -> {
-            UserAccount newUser = UserAccount.builder()
-                    .email(normalizedEmail)
-                    .name(resolvedName)
-                    .phoneNumber(StringUtils.hasText(phone) ? phone : null)
-                    .marketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()))
-                    .acceptTerms(Boolean.TRUE.equals(request.getAcceptTerms()))
-                    .acceptPrivacy(Boolean.TRUE.equals(request.getAcceptPrivacy()))
-                    .userType(userType)
-                    .status(UserStatus.ACTIVE)
-                    .profileCompleted(false)
-                    .build();
-            if (StringUtils.hasText(cognitoSub)) {
-                newUser.setCognitoSub(cognitoSub);
-            }
-            newUser.setSettings(UserSettings.createDefault(newUser));
-            return newUser;
-        });
-
-        // Update existing user with new attributes when present
-        if (StringUtils.hasText(requestedName) || !StringUtils.hasText(user.getName())) {
-            user.setName(resolvedName);
-        }
-        if (StringUtils.hasText(phone)) {
-            user.setPhoneNumber(phone);
-        }
-        if (request.getMarketingOptIn() != null) {
-            user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
-        }
-        if (request.getAcceptTerms() != null && request.getAcceptTerms()) {
-            user.setAcceptTerms(true);
-        }
-        if (request.getAcceptPrivacy() != null && request.getAcceptPrivacy()) {
-            user.setAcceptPrivacy(true);
-        }
-        if (request.getUserType() != null) {
-            user.setUserType(userType);
-        }
-
-        if (StringUtils.hasText(cognitoSub)) {
-            String existingSub = safeTrim(user.getCognitoSub());
-            if (StringUtils.hasText(existingSub) && !existingSub.equals(cognitoSub)) {
-                throw new IllegalStateException("User already linked to a different Cognito subject");
-            }
-            user.setCognitoSub(cognitoSub);
-        }
-
-        if (user.getSettings() == null) {
-            user.setSettings(UserSettings.createDefault(user));
-        }
-
-        UserAccount saved = userAccountRepository.save(user);
-        return new ProvisionedUser(saved, created);
     }
 
     public SecureUserResponse getSecureUser(UUID userId) {
@@ -407,18 +317,4 @@ public class UserAccountService {
     public UserAccount save(UserAccount user) {
         return userAccountRepository.save(user);
     }
-
-    private String deriveDisplayName(String email) {
-        if (!StringUtils.hasText(email)) {
-            return "User";
-        }
-        String localPart = email.split("@")[0];
-        if (!StringUtils.hasText(localPart)) {
-            return "User";
-        }
-        String normalized = localPart.trim();
-        return normalized.substring(0, Math.min(normalized.length(), 120));
-    }
-
-    public record ProvisionedUser(UserAccount user, boolean created) {}
 }

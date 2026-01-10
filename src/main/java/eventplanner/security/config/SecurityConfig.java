@@ -1,29 +1,36 @@
 package eventplanner.security.config;
 
+import eventplanner.security.auth.jwt.CognitoJwtAuthenticationConverter;
 import eventplanner.security.filters.RbacContextFilter;
 import eventplanner.security.filters.SecurityHeadersFilter;
 import eventplanner.security.filters.ServiceApiKeyFilter;
-import eventplanner.security.auth.jwt.CognitoJwtAuthenticationConverter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtDecoders;
-import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.util.StringUtils;
+
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
@@ -36,18 +43,22 @@ public class SecurityConfig {
     private final CognitoJwtAuthenticationConverter jwtAuthenticationConverter;
     private final String issuerUri;
     private final String jwkSetUri;
+    private final String audienceProperty;
 
     public SecurityConfig(SecurityHeadersFilter securityHeadersFilter,
                           RbacContextFilter rbacContextFilter,
                           ServiceApiKeyFilter serviceApiKeyFilter,
                           CognitoJwtAuthenticationConverter jwtAuthenticationConverter,
-                          org.springframework.core.env.Environment environment) {
+                          @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:}") String issuerUri,
+                          @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri:}") String jwkSetUri,
+                          @Value("${spring.security.oauth2.resourceserver.jwt.audiences:}") String audienceProperty) {
         this.securityHeadersFilter = securityHeadersFilter;
         this.rbacContextFilter = rbacContextFilter;
         this.serviceApiKeyFilter = serviceApiKeyFilter;
         this.jwtAuthenticationConverter = jwtAuthenticationConverter;
-        this.issuerUri = environment.getProperty("spring.security.oauth2.resourceserver.jwt.issuer-uri", "");
-        this.jwkSetUri = environment.getProperty("spring.security.oauth2.resourceserver.jwt.jwk-set-uri", "");
+        this.issuerUri = issuerUri;
+        this.jwkSetUri = jwkSetUri;
+        this.audienceProperty = audienceProperty;
     }
 
     @Bean
@@ -67,7 +78,6 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/metrics").authenticated()
                 .requestMatchers("/error", "/favicon.ico", "/css/**", "/js/**", "/images/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup").permitAll()
                 .requestMatchers(HttpMethod.GET, "/").permitAll()
                 .anyRequest().authenticated()
             )
@@ -90,17 +100,59 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JwtDecoder jwtDecoder(org.springframework.core.env.Environment environment) {
-        String issuer = environment.getProperty("spring.security.oauth2.resourceserver.jwt.issuer-uri", "");
-        String jwks = environment.getProperty("spring.security.oauth2.resourceserver.jwt.jwk-set-uri", "");
+    public JwtDecoder jwtDecoder() {
+        String issuer = issuerUri;
+        String jwks = jwkSetUri;
+        String audience = audienceProperty;
 
-        if (StringUtils.hasText(jwks)) {
-            return NimbusJwtDecoder.withJwkSetUri(jwks).build();
+        if (!StringUtils.hasText(jwks) && !StringUtils.hasText(issuer)) {
+            return token -> { throw new org.springframework.security.oauth2.jwt.JwtException("JWT validation is disabled (no issuer configured)"); };
         }
-        if (StringUtils.hasText(issuer)) {
-            return JwtDecoders.fromIssuerLocation(issuer);
+
+        NimbusJwtDecoder decoder = StringUtils.hasText(jwks)
+                ? NimbusJwtDecoder.withJwkSetUri(jwks).build()
+                : NimbusJwtDecoder.withIssuerLocation(issuer).build();
+
+        decoder.setJwtValidator(buildJwtValidator(issuer, audience));
+        return decoder;
+    }
+
+    private OAuth2TokenValidator<Jwt> buildJwtValidator(String issuer, String audienceProperty) {
+        if (!StringUtils.hasText(audienceProperty)) {
+            throw new IllegalStateException("JWT audience must be configured when JWT validation is enabled");
         }
-        // Dummy decoder to satisfy bean requirements when JWT validation is not configured locally.
-        return token -> { throw new JwtException("JWT validation is disabled (no issuer configured)"); };
+
+        OAuth2TokenValidator<Jwt> baseValidator = StringUtils.hasText(issuer)
+                ? JwtValidators.createDefaultWithIssuer(issuer)
+                : JwtValidators.createDefault();
+
+        Set<String> audiences = Arrays.stream(audienceProperty.split(","))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+
+        if (audiences.isEmpty()) {
+            throw new IllegalStateException("JWT audience must not be empty");
+        }
+
+        OAuth2TokenValidator<Jwt> audienceValidator = new AudienceValidator(audiences);
+        return new DelegatingOAuth2TokenValidator<>(baseValidator, audienceValidator);
+    }
+
+    private static class AudienceValidator implements OAuth2TokenValidator<Jwt> {
+        private final Set<String> allowedAudiences;
+
+        AudienceValidator(Set<String> allowedAudiences) {
+            this.allowedAudiences = allowedAudiences;
+        }
+
+        @Override
+        public OAuth2TokenValidatorResult validate(Jwt token) {
+            if (token.getAudience() != null && token.getAudience().stream().anyMatch(allowedAudiences::contains)) {
+                return OAuth2TokenValidatorResult.success();
+            }
+            OAuth2Error error = new OAuth2Error("invalid_token", "The required audience is missing", null);
+            return OAuth2TokenValidatorResult.failure(error);
+        }
     }
 }
