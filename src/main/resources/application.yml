@@ -159,9 +159,17 @@ service:
   auth:
     enabled: ${SERVICE_AUTH_ENABLED:true}
     api-key: ${SERVICE_API_KEY:}
+    # SECURITY: Set to true in production to ensure all traffic comes through Kong
     require-header: ${SERVICE_AUTH_REQUIRE_HEADER:true}
     allow-service-role-paths: ${SERVICE_ROLE_ALLOWED_PATHS:}
- 
+
+# Security Configuration
+security:
+  # JWT auto-provisioning (create user account on first JWT validation)
+  jwt:
+    auto-provision: ${SECURITY_JWT_AUTO_PROVISION:true}
+  
+
 
 # Branded QR code rendering defaults
 qr-code:

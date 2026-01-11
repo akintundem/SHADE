@@ -20,8 +20,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Allows trusted service-to-service traffic using an `X-API-Key` header while letting user traffic pass through.
- * Invalid keys short-circuit with a 403 JSON response.
+ * Validates service-to-service traffic using an `X-API-Key` header injected by Kong.
+ * 
+ * Security behavior:
+ * - If service auth is disabled: pass through to JWT auth
+ * - If API key header is required but missing: reject with 403
+ * - If API key is present but invalid: reject with 403
+ * - If API key is valid: optionally set service authentication for allowed paths
+ * - If no API key and not required: pass through to JWT auth
  */
 @Component
 public class ServiceApiKeyFilter extends OncePerRequestFilter {
@@ -32,7 +38,7 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
     @Value("${service.auth.enabled:true}")
     private boolean serviceAuthEnabled;
 
-    @Value("${service.auth.require-header:false}")
+    @Value("${service.auth.require-header:true}")
     private boolean requireApiKeyHeader;
 
     @Value("${service.auth.allow-service-role-paths:}")
@@ -51,14 +57,14 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         
-        // Allow actuator endpoints without service auth to keep container health checks working
+        // Allow actuator endpoints without service auth for container health checks
         String path = request.getRequestURI();
         if (path != null && path.startsWith("/actuator")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // If service auth is disabled, skip validation
+        // If service auth is entirely disabled, skip all validation
         if (!serviceAuthEnabled) {
             filterChain.doFilter(request, response);
             return;
@@ -66,20 +72,33 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
 
         String apiKey = request.getHeader(HEADER_NAME);
 
-        // Require Kong-injected header when enabled to prevent direct access
-        if (requireApiKeyHeader && !StringUtils.hasText(apiKey)) {
-            sendForbiddenResponse(response, "Missing service API key", request.getRequestURI());
+        // Case 1: No API key provided
+        if (!StringUtils.hasText(apiKey)) {
+            if (requireApiKeyHeader) {
+                // Header is required but missing - reject
+                sendForbiddenResponse(response, "Missing service API key", request.getRequestURI());
+                return;
+            }
+            // Header not required and not present - continue to JWT auth
+            filterChain.doFilter(request, response);
             return;
         }
 
-        // If API key is present, it must be valid
-        if (!StringUtils.hasText(expectedApiKey) || !constantTimeEquals(apiKey, expectedApiKey)) {
+        // Case 2: API key is present - it MUST be valid
+        if (!StringUtils.hasText(expectedApiKey)) {
+            // No expected key configured but one was provided - reject to prevent misconfiguration
+            sendForbiddenResponse(response, "Service authentication not configured", request.getRequestURI());
+            return;
+        }
+
+        if (!constantTimeEquals(apiKey, expectedApiKey)) {
+            // Invalid API key - always reject
             sendForbiddenResponse(response, "Invalid service API key", request.getRequestURI());
             return;
         }
 
-        // Attach a service-level authentication token so downstream auth checks pass.
-        if (SecurityContextHolder.getContext().getAuthentication() == null && isServicePathAllowed(request.getRequestURI())) {
+        // Case 3: Valid API key - attach service-level authentication for allowed paths
+        if (SecurityContextHolder.getContext().getAuthentication() == null && isServicePathAllowed(path)) {
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 "service",
                 null,
@@ -94,6 +113,7 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
 
     /**
      * Constant-time string comparison to prevent timing attacks.
+     * Uses MessageDigest.isEqual which is designed for cryptographic comparisons.
      */
     private boolean constantTimeEquals(String a, String b) {
         if (a == null || b == null) {
@@ -102,6 +122,10 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
         return MessageDigest.isEqual(a.getBytes(), b.getBytes());
     }
 
+    /**
+     * Check if the given path is allowed for service-level authentication.
+     * Only specific internal API paths should get ROLE_SERVICE.
+     */
     private boolean isServicePathAllowed(String path) {
         if (!StringUtils.hasText(allowServiceRolePaths)) {
             return false;
@@ -115,6 +139,9 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
         return false;
     }
 
+    /**
+     * Send a 403 Forbidden response with JSON body.
+     */
     private void sendForbiddenResponse(HttpServletResponse response, String message, String path) throws IOException {
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

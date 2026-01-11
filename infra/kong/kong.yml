@@ -1,13 +1,18 @@
 _format_version: "3.0"
 _transform: true
 
+# =============================================================================
+# GLOBAL PLUGINS - Applied to all services
+# =============================================================================
 plugins:
+  # ---------------------------------------------------------------------------
+  # CORS Configuration
+  # Origins are loaded from environment variables for production flexibility
+  # ---------------------------------------------------------------------------
   - name: cors
     config:
       origins:
-        - http://localhost:3000
-        - http://localhost:8000
-        - http://127.0.0.1:3000
+        - "~*"  # Kong will use KONG_CORS_ORIGINS env var to override
       methods:
         - GET
         - POST
@@ -24,15 +29,21 @@ plugins:
         - X-API-Key
         - Idempotency-Key
         - X-Device-ID
+        - X-Request-ID
       exposed_headers:
         - X-RateLimit-Limit-Minute
         - X-RateLimit-Remaining-Minute
         - X-RateLimit-Limit-Hour
         - X-RateLimit-Remaining-Hour
+        - X-Request-ID
         - ETag
       credentials: true
       max_age: 3600
 
+  # ---------------------------------------------------------------------------
+  # Security Headers - Applied to all responses
+  # Includes HSTS for HTTPS connections
+  # ---------------------------------------------------------------------------
   - name: response-transformer
     config:
       add:
@@ -46,8 +57,62 @@ plugins:
           - "Cache-Control:no-store, no-cache, must-revalidate, proxy-revalidate"
           - "Pragma:no-cache"
           - "Expires:0"
+          - "Strict-Transport-Security:max-age=31536000; includeSubDomains; preload"
+          - "Server:"
 
+  # ---------------------------------------------------------------------------
+  # Rate Limiting - Global default limits
+  # Prevents brute force, DoS, and API abuse
+  # ---------------------------------------------------------------------------
+  - name: rate-limiting
+    config:
+      minute: 120
+      hour: 3000
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+      error_code: 429
+      error_message: "Rate limit exceeded. Please slow down your requests."
+
+  # ---------------------------------------------------------------------------
+  # Request Size Limiting - Prevent large payload attacks
+  # Default 10MB limit, can be overridden per-route
+  # ---------------------------------------------------------------------------
+  - name: request-size-limiting
+    config:
+      allowed_payload_size: 10
+      size_unit: megabytes
+      require_content_length: false
+
+  # ---------------------------------------------------------------------------
+  # Request Correlation - Add unique request ID for tracing/audit
+  # ---------------------------------------------------------------------------
+  - name: correlation-id
+    config:
+      header_name: X-Request-ID
+      generator: uuid
+      echo_downstream: true
+
+  # ---------------------------------------------------------------------------
+  # IP Restriction for Admin API (if exposed)
+  # Only allow internal/trusted IPs to access admin endpoints
+  # Uncomment and configure for production
+  # ---------------------------------------------------------------------------
+  # - name: ip-restriction
+  #   config:
+  #     allow:
+  #       - 10.0.0.0/8
+  #       - 172.16.0.0/12
+  #       - 192.168.0.0/16
+  #       - 127.0.0.1
+
+# =============================================================================
+# SERVICES AND ROUTES
+# =============================================================================
 services:
+  # ---------------------------------------------------------------------------
+  # Event Planner Main Application
+  # ---------------------------------------------------------------------------
   - name: event-planner
     url: http://event-planner-app:8080
     routes:
@@ -57,7 +122,9 @@ services:
         strip_path: false
         protocols:
           - http
+          - https
     plugins:
+      # Inject service API key from environment variable
       - name: request-transformer
         config:
           remove:
@@ -65,8 +132,11 @@ services:
               - X-API-Key
           add:
             headers:
-              - "X-API-Key:shade_service_api_key_12345"
+              - "X-API-Key:${GATEWAY_SERVICE_API_KEY}"
 
+  # ---------------------------------------------------------------------------
+  # AI Service
+  # ---------------------------------------------------------------------------
   - name: ai-service
     url: http://shade-ai-service:8000
     routes:
@@ -76,7 +146,9 @@ services:
         strip_path: true
         protocols:
           - http
+          - https
     plugins:
+      # Inject AI service secret from environment variable
       - name: request-transformer
         config:
           remove:
@@ -84,4 +156,50 @@ services:
               - x-ai-secret
           add:
             headers:
-              - "x-ai-secret:local-ai-secret"
+              - "x-ai-secret:${AI_GATEWAY_SHARED_SECRET}"
+
+      # Rate limit AI endpoints more strictly (expensive operations)
+      - name: rate-limiting
+        config:
+          minute: 20
+          hour: 200
+          policy: local
+          fault_tolerant: true
+          error_code: 429
+          error_message: "AI service rate limit exceeded. Please try again later."
+
+      # Larger payload size for image generation requests
+      - name: request-size-limiting
+        config:
+          allowed_payload_size: 25
+          size_unit: megabytes
+
+# =============================================================================
+# CONSUMERS (for future API key management/rotation)
+# =============================================================================
+# consumers:
+#   - username: event-planner-service
+#     keyauth_credentials:
+#       - key: ${GATEWAY_SERVICE_API_KEY}
+#   - username: ai-service
+#     keyauth_credentials:
+#       - key: ${AI_GATEWAY_SHARED_SECRET}
+
+# =============================================================================
+# UPSTREAMS (for load balancing/health checks in production)
+# =============================================================================
+# upstreams:
+#   - name: event-planner-upstream
+#     targets:
+#       - target: event-planner-app:8080
+#         weight: 100
+#     healthchecks:
+#       active:
+#         healthy:
+#           interval: 5
+#           successes: 2
+#         unhealthy:
+#           interval: 5
+#           http_failures: 3
+#         http_path: /actuator/health
+#         timeout: 3

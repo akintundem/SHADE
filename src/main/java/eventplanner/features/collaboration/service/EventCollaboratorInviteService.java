@@ -48,6 +48,7 @@ public class EventCollaboratorInviteService {
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
+    
     @Value("${external.email.from.events:events@noreply.mayokun.dev}")
     private String eventsFrom;
 
@@ -211,6 +212,7 @@ public class EventCollaboratorInviteService {
         if (principal.getUser() == null) {
             throw new IllegalArgumentException("User account information is required");
         }
+        
         EventCollaboratorInvite invite = inviteRepository.findById(inviteId)
                 .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
         // Verify the logged-in user is the one who can accept this invite
@@ -228,6 +230,7 @@ public class EventCollaboratorInviteService {
         if (token == null || token.trim().isEmpty()) {
             throw new IllegalArgumentException("token is required");
         }
+        
         String tokenHash = TokenHashUtil.sha256(token.trim());
         EventCollaboratorInvite invite = inviteRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new IllegalArgumentException("Invite not found"));

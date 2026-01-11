@@ -63,7 +63,7 @@ public class EventCollaboratorInviteController {
             CollaboratorInviteResponse response = inviteService.createInvite(eventId, principal, request);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
         }
     }
 
@@ -103,12 +103,12 @@ public class EventCollaboratorInviteController {
             inviteService.revokeInvite(inviteId);
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
         }
     }
 
     @GetMapping("/api/v1/collaborator-invites/incoming")
-    @RequiresPermission(value = RbacPermissions.ROLE_READ)
+    // No @RequiresPermission - any authenticated user can view their own pending invites
     @Operation(summary = "List my collaborator invites", description = "List pending collaborator invites for the authenticated user")
     public ResponseEntity<List<CollaboratorInviteResponse>> myInvites(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
@@ -117,7 +117,7 @@ public class EventCollaboratorInviteController {
         try {
             return ResponseEntity.ok(inviteService.listMyPendingInvites(principal));
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
         }
     }
 
@@ -146,7 +146,7 @@ public class EventCollaboratorInviteController {
             response.setUpdatedAt(membership.getUpdatedAt());
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
         }
     }
 
@@ -174,7 +174,7 @@ public class EventCollaboratorInviteController {
             r.setUpdatedAt(membership.getUpdatedAt());
             return ResponseEntity.ok(r);
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
         }
     }
 
@@ -193,7 +193,7 @@ public class EventCollaboratorInviteController {
             inviteService.declineInvite(inviteId, principal);
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
         }
     }
 }

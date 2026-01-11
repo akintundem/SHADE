@@ -1,7 +1,6 @@
 package eventplanner.common.exception;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -25,11 +24,49 @@ import org.springframework.web.servlet.NoHandlerFoundException;
 @Slf4j
 public class GlobalExceptionHandler {
 
-    @Value("${spring.profiles.active:prod}")
-    private String activeProfile;
-
-    private boolean isDevelopmentEnvironment() {
-        return "dev".equals(activeProfile) || "development".equals(activeProfile);
+    /**
+     * Sanitizes error messages to prevent exposure of internal details.
+     * Removes entity names, IDs, class paths, SQL statements, and other sensitive information.
+     * Returns null if the message contains any internal details, forcing use of generic messages.
+     */
+    private String sanitizeMessage(String message) {
+        if (message == null || message.isEmpty()) {
+            return null;
+        }
+        
+        String lowerMessage = message.toLowerCase();
+        
+        // Reject messages containing any of these internal details - return null to force generic message
+        if (lowerMessage.contains("row was") || 
+            lowerMessage.contains("transaction") ||
+            lowerMessage.contains("unsaved-value") ||
+            lowerMessage.contains("mapping was incorrect") ||
+            lowerMessage.contains("update ") ||
+            lowerMessage.contains("select ") ||
+            lowerMessage.contains("insert ") ||
+            lowerMessage.contains("delete ") ||
+            lowerMessage.contains("hibernate") ||
+            lowerMessage.contains("entity") ||
+            lowerMessage.contains("staleobject") ||
+            lowerMessage.contains("optimistic") ||
+            lowerMessage.contains("jpa") ||
+            lowerMessage.contains("persistence") ||
+            message.contains("#") || // Entity IDs like UserAccount#uuid
+            message.matches(".*[a-z]+\\.[a-z]+\\.[a-z]+\\.[A-Z][a-zA-Z]+.*") || // Package paths
+            message.matches(".*[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}.*")) { // UUIDs
+            return null; // Return null to use generic message
+        }
+        
+        // Remove any remaining entity class paths (e.g., eventplanner.security.auth.entity.UserAccount)
+        message = message.replaceAll("\\[?[a-z]+(\\.[a-z]+)*\\.[A-Z][a-zA-Z]+#[a-f0-9-]+\\]?", "");
+        
+        // Remove UUIDs
+        message = message.replaceAll("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}", "");
+        
+        // Remove class paths
+        message = message.replaceAll("[a-z]+(\\.[a-z]+)*\\.[A-Z][a-zA-Z]+", "");
+        
+        return message.trim().isEmpty() ? null : message.trim();
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -59,11 +96,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleIllegalArgumentException(
             IllegalArgumentException ex, WebRequest request) {
 
+        log.warn("Invalid argument: {}", ex.getMessage());
+        
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.BAD_REQUEST.value())
                 .error("Bad Request")
-                .message(ex.getMessage())
+                .message("Invalid request parameters")
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
@@ -74,16 +113,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(
             HttpMessageNotReadableException ex, WebRequest request) {
 
-        String message = "Malformed request payload";
-        if (isDevelopmentEnvironment() && ex.getMostSpecificCause() != null && ex.getMostSpecificCause().getMessage() != null) {
-            message = "Malformed request payload: " + ex.getMostSpecificCause().getMessage();
-        }
+        log.warn("Malformed request payload: {}", ex.getMessage());
 
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.BAD_REQUEST.value())
                 .error("Bad Request")
-                .message(message)
+                .message("Malformed request payload")
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
@@ -94,16 +130,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleMissingServletRequestParameter(
             MissingServletRequestParameterException ex, WebRequest request) {
 
-        String message = "Required parameter '" + ex.getParameterName() + "' is missing";
-        if (ex.getParameterType() != null) {
-            message += " (expected type: " + ex.getParameterType() + ")";
-        }
+        log.warn("Missing required parameter: {}", ex.getParameterName());
 
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.BAD_REQUEST.value())
                 .error("Bad Request")
-                .message(message)
+                .message("Required parameter is missing")
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
@@ -114,11 +147,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleResourceNotFoundException(
             ResourceNotFoundException ex, WebRequest request) {
 
+        log.warn("Resource not found: {}", ex.getMessage());
+
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.NOT_FOUND.value())
                 .error("Not Found")
-                .message(ex.getMessage())
+                .message("The requested resource was not found")
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
@@ -129,11 +164,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleUnauthorizedException(
             UnauthorizedException ex, WebRequest request) {
 
+        log.warn("Unauthorized access attempt: {}", ex.getMessage());
+
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.UNAUTHORIZED.value())
                 .error("Unauthorized")
-                .message(ex.getMessage())
+                .message("Authentication required")
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
@@ -144,11 +181,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAccessDenied(
             AccessDeniedException ex, WebRequest request) {
 
+        log.warn("Access denied: {}", ex.getMessage());
+
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.FORBIDDEN.value())
                 .error("Forbidden")
-                .message(ex.getMessage())
+                .message("Access denied")
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
@@ -159,11 +198,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleForbiddenException(
             ForbiddenException ex, WebRequest request) {
 
+        log.warn("Forbidden access attempt: {}", ex.getMessage());
+
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.FORBIDDEN.value())
                 .error("Forbidden")
-                .message(ex.getMessage())
+                .message("Access denied")
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
@@ -174,14 +215,22 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleApiException(
             ApiException ex, WebRequest request) {
 
+        log.warn("API exception: {}", ex.getMessage());
+
         // Use standard HTTP status text instead of custom error codes
         String errorText = getStandardHttpStatusText(ex.getStatus());
+        
+        // Sanitize message to prevent internal details exposure
+        String sanitizedMessage = sanitizeMessage(ex.getMessage());
+        if (sanitizedMessage == null) {
+            sanitizedMessage = getGenericMessageForStatus(ex.getStatus());
+        }
         
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(ex.getStatus())
                 .error(errorText)
-                .message(ex.getMessage())
+                .message(sanitizedMessage)
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
@@ -209,11 +258,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleNoHandlerFoundException(
             NoHandlerFoundException ex, WebRequest request) {
 
+        log.warn("No handler found for: {}", ex.getRequestURL());
+
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.NOT_FOUND.value())
                 .error("Not Found")
-                .message("Resource not found: " + ex.getRequestURL())
+                .message("The requested resource was not found")
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
@@ -223,12 +274,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(
             HttpRequestMethodNotSupportedException ex, WebRequest request) {
-        String message = "Request method '" + ex.getMethod() + "' is not supported";
+        
+        log.warn("Method not supported: {} for {}", ex.getMethod(), request.getDescription(false));
+        
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.METHOD_NOT_ALLOWED.value())
                 .error("Method Not Allowed")
-                .message(message)
+                .message("The request method is not supported for this resource")
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(errorResponse);
@@ -237,20 +290,97 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ErrorResponse> handleResponseStatusException(
             ResponseStatusException ex, WebRequest request) {
-        String message = ex.getReason();
-        if (message == null || message.isEmpty()) {
-            message = ex.getStatusCode().toString();
+        
+        log.warn("Response status exception: {}", ex.getReason());
+        
+        // Sanitize the reason message
+        String sanitizedMessage = sanitizeMessage(ex.getReason());
+        if (sanitizedMessage == null) {
+            sanitizedMessage = getGenericMessageForStatus(ex.getStatusCode().value());
         }
+        
+        String errorText = getStandardHttpStatusText(ex.getStatusCode().value());
         
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(ex.getStatusCode().value())
-                .error(ex.getStatusCode().toString())
-                .message(message)
+                .error(errorText)
+                .message(sanitizedMessage)
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
         
         return ResponseEntity.status(ex.getStatusCode()).body(errorResponse);
+    }
+
+    @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLockingFailure(
+            org.springframework.orm.ObjectOptimisticLockingFailureException ex, WebRequest request) {
+        
+        log.warn("Optimistic locking failure: {}", ex.getMessage());
+        
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.CONFLICT.value())
+                .error("Conflict")
+                .message("The resource has been modified. Please refresh and try again.")
+                .path(request.getDescription(false).replace("uri=", ""))
+                .build();
+        
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+    }
+
+
+    @ExceptionHandler(org.springframework.dao.DataAccessException.class)
+    public ResponseEntity<ErrorResponse> handleDataAccessException(
+            org.springframework.dao.DataAccessException ex, WebRequest request) {
+        
+        log.error("Database access error while processing {}", request.getDescription(false), ex);
+        
+        // Check if it's a stale object/optimistic locking issue
+        String exceptionMessage = ex.getMessage();
+        if (exceptionMessage != null && (exceptionMessage.contains("Row was updated or deleted") || 
+            exceptionMessage.contains("StaleObjectStateException") ||
+            exceptionMessage.contains("optimistic lock") ||
+            exceptionMessage.contains("unsaved-value mapping"))) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                ErrorResponse.builder()
+                    .timestamp(LocalDateTime.now())
+                    .status(HttpStatus.CONFLICT.value())
+                    .error("Conflict")
+                    .message("The resource has been modified. Please refresh and try again.")
+                    .path(request.getDescription(false).replace("uri=", ""))
+                    .build()
+            );
+        }
+        
+        // Never expose SQL details, entity names, IDs, or any internal details to clients
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+                .error("Internal Server Error")
+                .message("A database error occurred. Please try again.")
+                .path(request.getDescription(false).replace("uri=", ""))
+                .build();
+        
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    }
+
+    @ExceptionHandler(java.sql.SQLException.class)
+    public ResponseEntity<ErrorResponse> handleSQLException(
+            java.sql.SQLException ex, WebRequest request) {
+        
+        log.error("SQL error while processing {}", request.getDescription(false), ex);
+        
+        // Never expose SQL details to clients, even in dev mode
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+                .error("Internal Server Error")
+                .message("A database error occurred. Please try again.")
+                .path(request.getDescription(false).replace("uri=", ""))
+                .build();
+        
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
     }
 
     @ExceptionHandler(Exception.class)
@@ -259,14 +389,31 @@ public class GlobalExceptionHandler {
 
         log.error("Unhandled exception while processing {}", request.getDescription(false), ex);
 
+        // NEVER expose internal details - always use generic message
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
                 .error("Internal Server Error")
-                .message(isDevelopmentEnvironment() ? ex.getMessage() : "An unexpected error occurred")
+                .message("An unexpected error occurred")
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    }
+
+    /**
+     * Returns a generic error message for a given HTTP status code.
+     */
+    private String getGenericMessageForStatus(int status) {
+        return switch (status) {
+            case 400 -> "Invalid request";
+            case 401 -> "Authentication required";
+            case 403 -> "Access denied";
+            case 404 -> "The requested resource was not found";
+            case 409 -> "A conflict occurred with the current state of the resource";
+            case 429 -> "Too many requests. Please try again later";
+            case 500 -> "An unexpected error occurred";
+            default -> "An error occurred";
+        };
     }
 }
