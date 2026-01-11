@@ -27,12 +27,20 @@ app = FastAPI(
 
 # Configuration
 PORT = int(os.getenv("PORT", "8000"))
-SHARED_SECRET = os.getenv("AI_SERVICE_SECRET") or os.getenv("EXTERNAL_AI_SERVICE_SECRET") or ""
+# Kong → AI service shared secret (injected by Kong via x-ai-secret header)
+SHARED_SECRET = os.getenv("AI_SERVICE_SECRET", "")
+# Whether to require the x-ai-secret header for all requests (except /health)
+REQUIRE_SECRET = os.getenv("AI_SERVICE_REQUIRE_SECRET", "true").lower() == "true"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 COGNITO_ISSUER = os.getenv("AI_COGNITO_ISSUER") or os.getenv("COGNITO_ISSUER_URI") or ""
 COGNITO_AUDIENCE = os.getenv("AI_COGNITO_AUDIENCE") or os.getenv("COGNITO_AUDIENCE") or ""
 JWKS_URL = os.getenv("AI_COGNITO_JWKS_URL") or (f"{COGNITO_ISSUER}/.well-known/jwks.json" if COGNITO_ISSUER else "")
 JWKS_CACHE_SECONDS = int(os.getenv("AI_JWKS_CACHE_SECONDS", "3600"))
+
+# Validate required configuration on startup
+if REQUIRE_SECRET and not SHARED_SECRET:
+    print("[ai] WARNING: AI_SERVICE_SECRET is not set but REQUIRE_SECRET is true. "
+          "All requests will require valid Cognito JWT instead.")
 
 jwks_cache: Dict[str, Any] = {"keys": None, "expires_at": datetime.min}
 
@@ -144,22 +152,41 @@ class EventCoverImageRequest(BaseModel):
 
 
 # Middleware for secret authentication
+# Kong injects x-ai-secret header for all requests routed through /ai-service
 @app.middleware("http")
 async def verify_auth(request: Request, call_next):
     # Skip authentication for health endpoint
     if request.url.path == "/health":
         return await call_next(request)
 
+    # Check for Kong-injected service secret
     secret_header = request.headers.get("x-ai-secret")
+    
+    # If shared secret is configured and matches, allow the request (Kong gateway auth)
     if SHARED_SECRET and secret_header == SHARED_SECRET:
         return await call_next(request)
-
+    
+    # If secret is required but missing/invalid, check for valid JWT as fallback
     auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
     token = auth_header[len("Bearer "):] if auth_header and auth_header.startswith("Bearer ") else None
+
+    # If no secret provided and we require it, reject unless JWT is valid
+    if REQUIRE_SECRET and not secret_header:
+        if not token:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "error": "Missing required x-ai-secret header"}
+            )
 
     try:
         await verify_jwt_token(token)
     except HTTPException as exc:
+        # If secret was provided but invalid, give specific error
+        if secret_header and SHARED_SECRET and secret_header != SHARED_SECRET:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "error": "Invalid x-ai-secret header"}
+            )
         return JSONResponse(
             status_code=exc.status_code,
             content={"success": False, "error": exc.detail}

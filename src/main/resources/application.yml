@@ -154,12 +154,14 @@ app:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
   base-url: ${APP_BASE_URL:http://localhost:8080}
 
-# Service Authentication (for AI service and other internal services)
+# Service Authentication (Kong gateway API key validation)
+# GATEWAY_SERVICE_API_KEY is the canonical key shared between Kong and Java app
 service:
   auth:
     enabled: ${SERVICE_AUTH_ENABLED:true}
-    api-key: ${SERVICE_API_KEY:}
-    # SECURITY: Set to true in production to ensure all traffic comes through Kong
+    # REQUIRED: API key injected by Kong via X-API-Key header
+    api-key: ${SERVICE_API_KEY}
+    # Require X-API-Key header for all non-actuator requests (enforced in production)
     require-header: ${SERVICE_AUTH_REQUIRE_HEADER:true}
     allow-service-role-paths: ${SERVICE_ROLE_ALLOWED_PATHS:}
 

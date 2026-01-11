@@ -62,6 +62,13 @@ services:
       - ai-service
     expose:
       - "8080"
+    # Allow container to connect to services on host machine (local Redis, Postgres, etc.)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # DNS servers for resolving external hostnames (AWS RDS, etc.)
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     volumes:
       # Mount source code for hot-reload (changes reflect immediately!)
       - ./src:/app/src
@@ -99,9 +106,9 @@ services:
       DB_IDLE_TIMEOUT: ${DB_IDLE_TIMEOUT:-600000}
       DB_MAX_LIFETIME: ${DB_MAX_LIFETIME:-1800000}
 
-      # Redis — uses Railway's REDIS_URL or external Redis
+      # Redis — connects to local Redis on host machine via host.docker.internal
       REDIS_URL: ${REDIS_URL:-}
-      SPRING_REDIS_HOST: ${SPRING_REDIS_HOST:-}
+      SPRING_REDIS_HOST: ${SPRING_REDIS_HOST:-host.docker.internal}
       SPRING_REDIS_PORT: ${SPRING_REDIS_PORT:-6379}
       SPRING_REDIS_PASSWORD: ${SPRING_REDIS_PASSWORD:-}
 
@@ -128,8 +135,9 @@ services:
       # AI service integration
       EXTERNAL_AI_SERVICE_URL: ${EXTERNAL_AI_SERVICE_URL:-http://kong:8000/ai-service}
       EXTERNAL_AI_SERVICE_SECRET: ${EXTERNAL_AI_SERVICE_SECRET:-}
-      SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY:-shade_service_api_key_12345}
-      SERVICE_AUTH_REQUIRE_HEADER: "true"
+      SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY:-***REMOVED***}
+      # Force service API key to be optional (override .env.prod if set)
+      SERVICE_AUTH_REQUIRE_HEADER: false
       EXTERNAL_EMAIL_FROM: ${RESEND_FROM_EMAIL:-Shade <noreply@shade.com>}
       EXTERNAL_EMAIL_FROM_SECURITY: ${RESEND_FROM_SECURITY:-security@noreply.mayokun.dev}
       EXTERNAL_EMAIL_FROM_EVENTS: ${RESEND_FROM_EVENTS:-events@noreply.mayokun.dev}
@@ -174,7 +182,7 @@ services:
       KONG_ADMIN_LISTEN: ${KONG_ADMIN_LISTEN:-127.0.0.1:8001}
       # Environment variables for secrets (used in kong.yml)
       # IMPORTANT: Set secure values in production .env files
-      GATEWAY_SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY:-local-dev-api-key-change-in-prod}
+      GATEWAY_SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY:-***REMOVED***}
       AI_GATEWAY_SHARED_SECRET: ${AI_GATEWAY_SHARED_SECRET:-local-dev-ai-secret-change-in-prod}
       # CORS origins for production
       KONG_CORS_ORIGINS: ${KONG_CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}

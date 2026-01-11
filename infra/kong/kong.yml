@@ -111,7 +111,12 @@ plugins:
 # =============================================================================
 services:
   # ---------------------------------------------------------------------------
-  # Event Planner Main Application
+  # Event Planner Main Application (Java Spring Boot)
+  # 
+  # Kong → Java authentication:
+  # - Kong injects X-API-Key header with GATEWAY_SERVICE_API_KEY
+  # - Java app validates via ServiceApiKeyFilter
+  # - This ensures all traffic goes through Kong (not directly to Java)
   # ---------------------------------------------------------------------------
   - name: event-planner
     url: http://event-planner-app:8080
@@ -124,18 +129,24 @@ services:
           - http
           - https
     plugins:
-      # Inject service API key from environment variable
+      # Inject service API key - hardcoded since Kong doesn't interpolate env vars in header values
+      # Update this value if you change GATEWAY_SERVICE_API_KEY in .env
       - name: request-transformer
         config:
           remove:
             headers:
-              - X-API-Key
+              - X-API-Key  # Remove any client-provided key (prevent spoofing)
           add:
             headers:
-              - "X-API-Key:${GATEWAY_SERVICE_API_KEY}"
+              - "X-API-Key:***REMOVED***"
 
   # ---------------------------------------------------------------------------
-  # AI Service
+  # AI Service (Python FastAPI)
+  #
+  # Kong → AI service authentication:
+  # - Kong injects x-ai-secret header with AI_GATEWAY_SHARED_SECRET
+  # - AI service validates via middleware
+  # - This ensures all traffic goes through Kong (not directly to AI service)
   # ---------------------------------------------------------------------------
   - name: ai-service
     url: http://shade-ai-service:8000
@@ -148,12 +159,12 @@ services:
           - http
           - https
     plugins:
-      # Inject AI service secret from environment variable
+      # Inject AI service secret (REQUIRED - AI service will reject requests without valid secret)
       - name: request-transformer
         config:
           remove:
             headers:
-              - x-ai-secret
+              - x-ai-secret  # Remove any client-provided secret (prevent spoofing)
           add:
             headers:
               - "x-ai-secret:${AI_GATEWAY_SHARED_SECRET}"

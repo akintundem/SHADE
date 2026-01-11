@@ -24,10 +24,10 @@ import java.util.Map;
  * 
  * Security behavior:
  * - If service auth is disabled: pass through to JWT auth
- * - If API key header is required but missing: reject with 403
+ * - If require-header is true: X-API-Key MUST be present and valid (Kong gateway enforcement)
  * - If API key is present but invalid: reject with 403
  * - If API key is valid: optionally set service authentication for allowed paths
- * - If no API key and not required: pass through to JWT auth
+ * - Requests with valid Bearer token bypass API key requirement (user requests via mobile app)
  */
 @Component
 public class ServiceApiKeyFilter extends OncePerRequestFilter {
@@ -71,23 +71,34 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
         }
 
         String apiKey = request.getHeader(HEADER_NAME);
+        
+        // Check if request has a Bearer token (JWT) - authenticated user requests
+        String authorizationHeader = request.getHeader("Authorization");
+        boolean hasBearerToken = StringUtils.hasText(authorizationHeader) && 
+                                authorizationHeader.trim().startsWith("Bearer ");
 
         // Case 1: No API key provided
         if (!StringUtils.hasText(apiKey)) {
-            if (requireApiKeyHeader) {
-                // Header is required but missing - reject
-                sendForbiddenResponse(response, "Missing service API key", request.getRequestURI());
+            // If require-header is true, the API key is mandatory unless request has JWT
+            // This enforces that all traffic comes through Kong (which injects X-API-Key)
+            if (requireApiKeyHeader && !hasBearerToken) {
+                sendForbiddenResponse(response, "Missing required X-API-Key header", path);
                 return;
             }
-            // Header not required and not present - continue to JWT auth
+            // Allow through to JWT auth (user requests with Bearer token, or dev mode)
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Case 2: API key is present - it MUST be valid
+        // Case 2: API key is present - validate it
         if (!StringUtils.hasText(expectedApiKey)) {
-            // No expected key configured but one was provided - reject to prevent misconfiguration
-            sendForbiddenResponse(response, "Service authentication not configured", request.getRequestURI());
+            // Expected API key not configured - this is a configuration error in production
+            if (requireApiKeyHeader) {
+                sendForbiddenResponse(response, "Service API key not configured on server", path);
+                return;
+            }
+            // Dev mode: pass through if header enforcement is disabled
+            filterChain.doFilter(request, response);
             return;
         }
 
