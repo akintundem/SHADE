@@ -11,6 +11,7 @@ import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.dto.response.EventFeedResponse;
 import eventplanner.features.event.dto.response.UpdateEventWithCoverUploadResponse;
 import eventplanner.common.domain.enums.EventScope;
+import eventplanner.common.domain.enums.EventStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.service.EventIdempotencyService;
 import eventplanner.features.event.service.EventMediaService;
@@ -106,6 +107,70 @@ public class EventCrudController {
         }
     }
 
+    @GetMapping("/for-you")
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+    @Operation(summary = "Get For You feed", description = "Get personalized event recommendations based on user interests, past events, and preferences.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "For You feed retrieved successfully"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    public ResponseEntity<Page<EventResponse>> getForYouFeed(
+            @Valid EventListRequest request,
+            @AuthenticationPrincipal UserPrincipal user) {
+        try {
+            if (user == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            EventListRequest req = request != null ? request : new EventListRequest();
+            Page<Event> events = eventService.getForYouFeed(req, user);
+            Page<EventResponse> responses = events.map(event -> eventService.toResponse(event, user));
+            return ResponseEntity.ok(responses);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
+    }
+
+    @GetMapping("/following")
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+    @Operation(summary = "Get Following feed", description = "Get events from users and organizations you follow.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Following feed retrieved successfully"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    public ResponseEntity<Page<EventResponse>> getFollowingFeed(
+            @Valid EventListRequest request,
+            @AuthenticationPrincipal UserPrincipal user) {
+        try {
+            if (user == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+            EventListRequest req = request != null ? request : new EventListRequest();
+            Page<Event> events = eventService.getFollowingFeed(req, user);
+            Page<EventResponse> responses = events.map(event -> eventService.toResponse(event, user));
+            return ResponseEntity.ok(responses);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
+    }
+
+    @GetMapping("/{id}/feed")
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+    @Operation(summary = "Get event feed", description = "COMPLETE - Get the social feed for an event (videos, pictures, tweets) with pagination. Available to all users with event access. Use page parameter to load more posts.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Event feed retrieved successfully",
+                content = @Content(schema = @Schema(implementation = EventFeedResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Event not found or access denied"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    public ResponseEntity<EventFeedResponse> getFeed(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal user,
+            @ModelAttribute @Valid EventFeedRequest request) {
+        EventFeedRequest feedRequest = request != null ? request : new EventFeedRequest();
+        EventFeedResponse feedResponse = eventService.buildEventFeed(id, user, feedRequest);
+        return ResponseEntity.ok(feedResponse);
+    }
+
     @GetMapping("/{id}")
     @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
     @Operation(summary = "Get event by ID", description = "COMPLETE - Retrieve a specific event by its unique identifier. Returns full details for owners/high-responsibility users, or feed view for guests.")
@@ -150,7 +215,7 @@ public class EventCrudController {
             response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
             response.setAvailableSpots(eventService.getAvailableCapacity(id));
             response.setUtilizationPercentage(calculateUtilizationPercentage(event.getCapacity(), event.getCurrentAttendeeCount()));
-            boolean open = event.getEventStatus() == eventplanner.common.domain.enums.EventStatus.REGISTRATION_OPEN
+            boolean open = event.getEventStatus() == EventStatus.REGISTRATION_OPEN
                     && (event.getRegistrationDeadline() == null || LocalDateTime.now(ZoneOffset.UTC).isBefore(event.getRegistrationDeadline()));
             response.setIsRegistrationOpen(open);
             return ResponseEntity.ok(response);
@@ -482,22 +547,5 @@ public class EventCrudController {
         }
     }
 
-    @GetMapping("/{id}/feed")
-    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
-    @Operation(summary = "Get event feed", description = "COMPLETE - Get the social feed for an event (videos, pictures, tweets) with pagination. Available to all users with event access. Use page parameter to load more posts.")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Event feed retrieved successfully",
-                content = @Content(schema = @Schema(implementation = EventFeedResponse.class))),
-        @ApiResponse(responseCode = "404", description = "Event not found or access denied"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized")
-    })
-    public ResponseEntity<EventFeedResponse> getFeed(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @AuthenticationPrincipal UserPrincipal user,
-            @ModelAttribute @Valid EventFeedRequest request) {
-        EventFeedRequest feedRequest = request != null ? request : new EventFeedRequest();
-        EventFeedResponse feedResponse = eventService.buildEventFeed(id, user, feedRequest);
-        return ResponseEntity.ok(feedResponse);
-    }
 
 }

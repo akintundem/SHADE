@@ -105,6 +105,17 @@ public class FeedPostController {
         postService.delete(id, postId, principal);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{id}/posts/{postId}/repost")
+    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
+    @Operation(summary = "Repost", description = "Repost a post to share it with your network")
+    public ResponseEntity<FeedPostResponse> repost(
+            @Parameter(description = "Event ID") @PathVariable UUID id,
+            @Parameter(description = "Post ID") @PathVariable UUID postId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ResponseEntity.ok(postService.repost(id, postId, principal));
+    }
 }
 
 

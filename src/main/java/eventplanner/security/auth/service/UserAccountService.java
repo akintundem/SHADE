@@ -1,5 +1,14 @@
 package eventplanner.security.auth.service;
 
+import eventplanner.common.domain.enums.UserStatus;
+import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.common.exception.ResourceNotFoundException;
+import eventplanner.features.feeds.dto.response.PostListResponse;
+import eventplanner.features.feeds.service.FeedPostService;
+import eventplanner.security.auth.dto.req.NotificationSettingsUpdateRequest;
+import eventplanner.security.auth.dto.req.PrivacySettingsUpdateRequest;
+import eventplanner.security.auth.dto.req.SecuritySettingsUpdateRequest;
+import eventplanner.security.auth.dto.req.SignupRequest;
 import eventplanner.security.auth.dto.req.UpdateUserProfileRequest;
 import eventplanner.security.auth.dto.req.UserSettingsUpdateRequest;
 import eventplanner.security.auth.dto.res.PublicUserResponse;
@@ -10,9 +19,7 @@ import eventplanner.security.auth.entity.UserSettings;
 import eventplanner.security.auth.repository.LocationRepository;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.util.AuthMapper;
-import eventplanner.common.domain.enums.VisibilityLevel;
-import eventplanner.common.domain.enums.UserStatus;
-import eventplanner.common.exception.ResourceNotFoundException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
@@ -20,6 +27,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.Collections;
+import java.util.Optional;
 import java.util.UUID;
 
 import static eventplanner.security.util.AuthValidationUtil.normalizeEmail;
@@ -30,10 +39,18 @@ import static eventplanner.security.util.AuthValidationUtil.safeTrim;
 @Transactional
 public class UserAccountService {
 
+    /**
+     * Result of provisioning a Cognito user - indicates whether user was newly created.
+     */
+    public record ProvisionResult(UserAccount user, boolean created) {}
+
     private final UserAccountRepository userAccountRepository;
     private final ProfileImageService profileImageService;
     private final LocationRepository locationRepository;
     private final CognitoUserService cognitoUserService;
+    
+    @Autowired(required = false)
+    private FeedPostService feedPostService;
 
     public UserAccountService(UserAccountRepository userAccountRepository,
                              ProfileImageService profileImageService,
@@ -317,4 +334,187 @@ public class UserAccountService {
     public UserAccount save(UserAccount user) {
         return userAccountRepository.save(user);
     }
+
+    /**
+     * Provision or update a local user record from a Cognito signup.
+     * If the user already exists (by email), update their Cognito sub if provided.
+     * Otherwise, create a new user account.
+     *
+     * @param request The signup request containing user details
+     * @return ProvisionResult with the user and whether they were newly created
+     */
+    public ProvisionResult provisionCognitoUser(SignupRequest request) {
+        String email = normalizeEmail(request.getEmail());
+        if (email == null) {
+            throw new IllegalArgumentException("Valid email is required");
+        }
+
+        Optional<UserAccount> existingUser = userAccountRepository.findByEmailIgnoreCase(email);
+        
+        if (existingUser.isPresent()) {
+            UserAccount user = existingUser.get();
+            // Update Cognito sub if provided and not already set
+            if (StringUtils.hasText(request.getCognitoSub()) && !StringUtils.hasText(user.getCognitoSub())) {
+                user.setCognitoSub(request.getCognitoSub());
+                userAccountRepository.save(user);
+            }
+            return new ProvisionResult(user, false);
+        }
+
+        // Create new user
+        UserAccount newUser = new UserAccount();
+        newUser.setEmail(email);
+        newUser.setName(StringUtils.hasText(request.getName()) ? request.getName().trim() : email.split("@")[0]);
+        newUser.setCognitoSub(request.getCognitoSub());
+        newUser.setPhoneNumber(StringUtils.hasText(request.getPhoneNumber()) ? request.getPhoneNumber().trim() : null);
+        newUser.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
+        newUser.setAcceptTerms(Boolean.TRUE.equals(request.getAcceptTerms()));
+        newUser.setAcceptPrivacy(Boolean.TRUE.equals(request.getAcceptPrivacy()));
+        newUser.setUserType(request.getUserType());
+        newUser.setProfilePictureUrl(getDefaultProfilePictureUrl());
+        
+        // Mark profile as complete if required fields are present
+        if (StringUtils.hasText(newUser.getName()) && newUser.isAcceptTerms() && newUser.isAcceptPrivacy()) {
+            newUser.setProfileCompleted(true);
+        }
+
+        UserAccount savedUser = userAccountRepository.save(newUser);
+        return new ProvisionResult(savedUser, true);
+    }
+
+    /**
+     * Get all posts created by the current user.
+     */
+    public PostListResponse getUserPosts(UserPrincipal principal, Integer page, Integer size) {
+        if (principal == null || principal.getId() == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        
+        if (feedPostService == null) {
+            // Return empty response if FeedPostService is not available
+            PostListResponse response = new PostListResponse();
+            response.setPosts(Collections.emptyList());
+            response.setCurrentPage(page != null ? page : 0);
+            response.setPageSize(size != null ? size : 20);
+            response.setTotalPosts(0L);
+            response.setTotalPages(0);
+            response.setHasNext(false);
+            response.setHasPrevious(false);
+            return response;
+        }
+        
+        return feedPostService.getUserPosts(principal.getId(), page, size, principal);
+    }
+
+    /**
+     * Update notification settings for the current user
+     */
+    public SecureUserResponse updateNotificationSettings(
+            UserPrincipal principal, NotificationSettingsUpdateRequest request) {
+        if (principal == null || principal.getId() == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        
+        UserAccount user = userAccountRepository.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        UserSettings settings = getOrCreateSettings(user);
+        if (request.getEmailNotificationsEnabled() != null) {
+            settings.setEmailNotificationsEnabled(request.getEmailNotificationsEnabled());
+        }
+        if (request.getPushNotificationsEnabled() != null) {
+            settings.setPushNotificationsEnabled(request.getPushNotificationsEnabled());
+        }
+        if (request.getSmsNotificationsEnabled() != null) {
+            settings.setSmsNotificationsEnabled(request.getSmsNotificationsEnabled());
+        }
+        if (request.getEventInvitationsEnabled() != null) {
+            settings.setEventInvitationsEnabled(request.getEventInvitationsEnabled());
+        }
+        if (request.getEventUpdatesEnabled() != null) {
+            settings.setEventUpdatesEnabled(request.getEventUpdatesEnabled());
+        }
+        if (request.getEventRemindersEnabled() != null) {
+            settings.setEventRemindersEnabled(request.getEventRemindersEnabled());
+        }
+        if (request.getRsvpNotificationsEnabled() != null) {
+            settings.setRsvpNotificationsEnabled(request.getRsvpNotificationsEnabled());
+        }
+        if (request.getCommentNotificationsEnabled() != null) {
+            settings.setCommentNotificationsEnabled(request.getCommentNotificationsEnabled());
+        }
+        if (request.getCollaborationRequestsEnabled() != null) {
+            settings.setCollaborationRequestsEnabled(request.getCollaborationRequestsEnabled());
+        }
+        if (request.getWeeklyDigestEnabled() != null) {
+            settings.setWeeklyDigestEnabled(request.getWeeklyDigestEnabled());
+        }
+        if (request.getActivityFeedNotificationsEnabled() != null) {
+            settings.setActivityFeedNotificationsEnabled(request.getActivityFeedNotificationsEnabled());
+        }
+        if (request.getReminderTimingMinutes() != null) {
+            settings.setReminderTimingMinutes(request.getReminderTimingMinutes());
+        }
+        
+        userAccountRepository.save(user);
+        return AuthMapper.toSecureUserResponse(user);
+    }
+
+    /**
+     * Update privacy settings for the current user
+     */
+    public SecureUserResponse updatePrivacySettings(
+            UserPrincipal principal, PrivacySettingsUpdateRequest request) {
+        if (principal == null || principal.getId() == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        
+        UserAccount user = userAccountRepository.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        UserSettings settings = getOrCreateSettings(user);
+        if (request.getProfileVisibility() != null) {
+            settings.setProfileVisibility(request.getProfileVisibility());
+        }
+        if (request.getEventParticipationVisibility() != null) {
+            settings.setEventParticipationVisibility(request.getEventParticipationVisibility());
+        }
+        if (request.getSearchVisibility() != null) {
+            settings.setSearchVisibility(request.getSearchVisibility());
+        }
+        if (request.getShowInEventDirectory() != null) {
+            settings.setShowInEventDirectory(request.getShowInEventDirectory());
+        }
+        
+        userAccountRepository.save(user);
+        return AuthMapper.toSecureUserResponse(user);
+    }
+
+    /**
+     * Update security settings for the current user
+     */
+    public SecureUserResponse updateSecuritySettings(
+            UserPrincipal principal, SecuritySettingsUpdateRequest request) {
+        if (principal == null || principal.getId() == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        
+        UserAccount user = userAccountRepository.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        UserSettings settings = getOrCreateSettings(user);
+        if (request.getMfaEnabled() != null) {
+            settings.setMfaEnabled(request.getMfaEnabled());
+        }
+        if (request.getAutoAcceptInvitations() != null) {
+            settings.setAutoAcceptInvitations(request.getAutoAcceptInvitations());
+        }
+        if (request.getExportEventDataEnabled() != null) {
+            settings.setExportEventDataEnabled(request.getExportEventDataEnabled());
+        }
+        
+        userAccountRepository.save(user);
+        return AuthMapper.toSecureUserResponse(user);
+    }
+
 }

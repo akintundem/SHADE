@@ -13,7 +13,7 @@ Deployable as a single JAR with Docker support for simplified infrastructure man
 - Kong is the only public entry; event-planner, AI, email, and push stay on the internal Docker network. Kong injects `X-API-Key` for event-planner and `x-ai-secret` for AI requests.
 - CORS and security headers live at the gateway (global plugins). Spring CORS remains disabled; services are intended to be reached only through Kong.
 - Rate limiting is expected at the gateway; the in-app rate limiter has been removed.
-- Secrets: `GATEWAY_SERVICE_API_KEY` and `AI_GATEWAY_SHARED_SECRET` default to local values; keep them in sync with `infra/kong/kong.yml` and override for real deployments.
+- Secrets: `GATEWAY_SERVICE_API_KEY` (default `shade_service_api_key_12345`) and `AI_GATEWAY_SHARED_SECRET` default to local values; keep them in sync with `infra/kong/kong.yml` and override for real deployments.
 - Event-planner enforces the service API key with `SERVICE_AUTH_REQUIRE_HEADER=true` to ensure traffic originates from Kong.
 
 ## Auth config

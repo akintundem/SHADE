@@ -126,6 +126,24 @@
             <version>${springdoc.version}</version>
         </dependency>
 
+        <!-- Zalando Problem - RFC 7807 Problem Details for HTTP APIs -->
+        <!-- Provides standardized error response format and sanitization -->
+        <dependency>
+            <groupId>org.zalando</groupId>
+            <artifactId>problem</artifactId>
+            <version>0.27.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.zalando</groupId>
+            <artifactId>jackson-datatype-problem</artifactId>
+            <version>0.27.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.zalando</groupId>
+            <artifactId>problem-spring-web</artifactId>
+            <version>0.29.1</version>
+        </dependency>
+
         <!-- External API Clients -->
         <dependency>
             <groupId>com.stripe</groupId>

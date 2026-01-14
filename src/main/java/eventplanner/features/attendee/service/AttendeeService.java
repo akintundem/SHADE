@@ -3,6 +3,7 @@ package eventplanner.features.attendee.service;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.domain.enums.CommunicationType;
+import eventplanner.common.domain.enums.EventAccessType;
 import eventplanner.common.domain.enums.VisibilityLevel;
 import eventplanner.features.attendee.dto.request.AttendeeInfo;
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
@@ -21,6 +22,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import eventplanner.features.event.entity.Event;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -413,5 +415,132 @@ public class AttendeeService {
                 log.warn("Failed to send notification to attendee {}: {}", attendee.getId(), e.getMessage());
             }
         }
+    }
+
+    // ==================== RSVP Operations ====================
+
+    /**
+     * RSVP to an event that requires RSVP.
+     * Creates or updates an attendee record with CONFIRMED status.
+     * 
+     * @param eventId The event ID
+     * @param userId The user ID RSVPing
+     * @return The created or updated attendee
+     */
+    public Attendee rsvpToEvent(UUID eventId, UUID userId) {
+        if (eventId == null || userId == null) {
+            throw new IllegalArgumentException("Event ID and User ID are required");
+        }
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+
+        // Verify event requires RSVP
+        if (event.getAccessType() != EventAccessType.RSVP_REQUIRED) {
+            throw new IllegalArgumentException("Event does not require RSVP");
+        }
+
+        UserAccount user = userAccountRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+
+        // Check if user is already an attendee
+        Optional<Attendee> existingAttendee = repository.findByEventIdAndUserId(eventId, userId);
+
+        if (existingAttendee.isPresent()) {
+            // Update existing attendee to CONFIRMED
+            Attendee attendee = existingAttendee.get();
+            attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
+            return repository.save(attendee);
+        } else {
+            // Create new attendee with CONFIRMED status
+            Attendee attendee = new Attendee();
+            attendee.setEvent(event);
+            attendee.setUser(user);
+            attendee.setName(user.getName());
+            attendee.setEmail(user.getEmail());
+            attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
+            
+            Attendee saved = repository.save(attendee);
+            
+            // Update event attendee count
+            if (event.getCurrentAttendeeCount() == null) {
+                event.setCurrentAttendeeCount(0);
+            }
+            event.setCurrentAttendeeCount(event.getCurrentAttendeeCount() + 1);
+            eventRepository.save(event);
+            
+            return saved;
+        }
+    }
+
+    /**
+     * Get count of confirmed attendees for an event.
+     * 
+     * @param eventId The event ID
+     * @return Count of confirmed attendees
+     */
+    @Transactional(readOnly = true)
+    public int getConfirmedAttendeeCount(UUID eventId) {
+        if (eventId == null) {
+            return 0;
+        }
+        try {
+            List<Attendee> confirmedAttendees = repository.findByEventId(eventId).stream()
+                    .filter(a -> a.getRsvpStatus() == AttendeeStatus.CONFIRMED)
+                    .collect(java.util.stream.Collectors.toList());
+            return confirmedAttendees.size();
+        } catch (Exception e) {
+            log.warn("Failed to get attendee count for event {}: {}", eventId, e.getMessage());
+            return 0;
+        }
+    }
+
+    // ==================== Event Queries ====================
+
+    /**
+     * Get events where user has been invited as an attendee (but not as owner).
+     * Returns events where the user is an attendee, excluding events they own.
+     * 
+     * @param userId The user ID
+     * @param page Page number (0-based)
+     * @param size Page size
+     * @return Page of events where user is an attendee
+     */
+    @Transactional(readOnly = true)
+    public Page<Event> getInvitedEvents(UUID userId, Integer page, Integer size) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID is required");
+        }
+        
+        int pageNum = Math.max(0, page != null ? page : 0);
+        int pageSize = Math.min(100, Math.max(1, size != null ? size : 20));
+        Pageable pageable = PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "event.startDateTime"));
+        
+        // Get all attendees for this user
+        List<Attendee> attendees = repository.findByUserId(userId);
+        
+        // Extract unique events where user is attendee but not owner, sorted by start date
+        List<Event> allMatchingEvents = attendees.stream()
+                .map(Attendee::getEvent)
+                .filter(event -> event != null && event.getOwner() != null && !event.getOwner().getId().equals(userId))
+                .distinct()
+                .sorted((e1, e2) -> {
+                    if (e1.getStartDateTime() == null && e2.getStartDateTime() == null) return 0;
+                    if (e1.getStartDateTime() == null) return 1;
+                    if (e2.getStartDateTime() == null) return -1;
+                    return e2.getStartDateTime().compareTo(e1.getStartDateTime());
+                })
+                .collect(java.util.stream.Collectors.toList());
+        
+        // Get total count before pagination
+        long totalCount = allMatchingEvents.size();
+        
+        // Apply pagination
+        List<Event> paginatedEvents = allMatchingEvents.stream()
+                .skip((long) pageNum * pageSize)
+                .limit(pageSize)
+                .collect(java.util.stream.Collectors.toList());
+        
+        return new PageImpl<>(paginatedEvents, pageable, totalCount);
     }
 }

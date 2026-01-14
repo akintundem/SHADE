@@ -3,6 +3,7 @@ package eventplanner.features.event.service;
 import eventplanner.features.event.dto.VenueDTO;
 import eventplanner.features.event.dto.request.CreateEventRequest;
 import eventplanner.features.event.dto.request.UpdateEventRequest;
+import eventplanner.features.event.dto.request.EventListRequest;
 import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.dto.response.TicketTypeSummary;
 import eventplanner.features.event.dto.response.UserEventContext;
@@ -1127,6 +1128,74 @@ public class EventService {
         }
         
         return toFeedResponse(eventOpt.get(), user, request);
+    }
+
+    /**
+     * Get personalized "For You" feed based on user interests and preferences
+     * @param request List request with pagination
+     * @param user The user principal
+     * @return Page of recommended events
+     */
+    public Page<Event> getForYouFeed(EventListRequest request, UserPrincipal user) {
+        if (user == null) {
+            throw new IllegalArgumentException("Authentication required for For You feed");
+        }
+        
+        // For now, return public events sorted by relevance (can be enhanced with ML/recommendations)
+        // Priority: events from users you've interacted with, events in your location, upcoming events
+        EventListRequest forYouRequest = new EventListRequest();
+        if (request != null) {
+            forYouRequest.setPage(request.getPage() != null ? request.getPage() : 0);
+            forYouRequest.setSize(request.getSize() != null ? request.getSize() : 20);
+        } else {
+            forYouRequest.setPage(0);
+            forYouRequest.setSize(20);
+        }
+        forYouRequest.setIsPublic(true);
+        forYouRequest.setTimeframe("UPCOMING");
+        forYouRequest.setSortBy("startDateTime");
+        forYouRequest.setSortDirection("ASC");
+        
+        Page<Event> events = listEvents(forYouRequest, user);
+        
+        // TODO: Enhance with personalized recommendations based on:
+        // - Past event attendance
+        // - User interests/preferences
+        // - Similar events to ones user has attended
+        // - Events from users/organizations user follows
+        
+        return events;
+    }
+
+    /**
+     * Get "Following" feed - events from users/organizations you follow
+     * @param request List request with pagination
+     * @param user The user principal
+     * @return Page of events from followed users
+     */
+    public Page<Event> getFollowingFeed(EventListRequest request, UserPrincipal user) {
+        if (user == null) {
+            throw new IllegalArgumentException("Authentication required for Following feed");
+        }
+        
+        // TODO: Implement proper follow/following relationship when that feature is added
+        // For now, return upcoming public events as a placeholder.
+        // When follow feature is implemented, this should filter to events from
+        // users/organizations the current user follows.
+        EventListRequest followingRequest = new EventListRequest();
+        if (request != null) {
+            followingRequest.setPage(request.getPage() != null ? request.getPage() : 0);
+            followingRequest.setSize(request.getSize() != null ? request.getSize() : 20);
+        } else {
+            followingRequest.setPage(0);
+            followingRequest.setSize(20);
+        }
+        followingRequest.setIsPublic(true);
+        followingRequest.setTimeframe("UPCOMING");
+        followingRequest.setSortBy("startDateTime");
+        followingRequest.setSortDirection("ASC");
+        
+        return listEvents(followingRequest, user);
     }
 
 }

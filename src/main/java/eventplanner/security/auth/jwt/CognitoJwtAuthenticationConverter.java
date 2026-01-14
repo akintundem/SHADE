@@ -1,5 +1,7 @@
 package eventplanner.security.auth.jwt;
 
+import eventplanner.common.domain.enums.UserStatus;
+import eventplanner.common.domain.enums.UserType;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.entity.UserSettings;
 import eventplanner.security.auth.repository.UserAccountRepository;
@@ -141,8 +143,8 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
                 .acceptTerms(false)
                 .acceptPrivacy(false)
                 .marketingOptIn(false)
-                .userType(eventplanner.common.domain.enums.UserType.INDIVIDUAL)
-                .status(eventplanner.common.domain.enums.UserStatus.ACTIVE)
+                .userType(UserType.INDIVIDUAL)
+                .status(UserStatus.ACTIVE)
                 .profileCompleted(false)
                 .build();
         user.setSettings(UserSettings.createDefault(user));

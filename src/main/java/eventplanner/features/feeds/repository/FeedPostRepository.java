@@ -41,6 +41,16 @@ public interface FeedPostRepository extends JpaRepository<EventFeedPost, UUID> {
             MediaUploadStatus status,
             LocalDateTime before
     );
+    
+    /**
+     * Find all posts created by a user
+     */
+    @Query("SELECT p FROM EventFeedPost p WHERE p.createdBy.id = :userId AND p.mediaUploadStatus = :status ORDER BY p.createdAt DESC")
+    Page<EventFeedPost> findByCreatedByUserIdAndMediaUploadStatusOrderByCreatedAtDesc(
+            @Param("userId") UUID userId,
+            @Param("status") MediaUploadStatus status,
+            Pageable pageable
+    );
 }
 
 

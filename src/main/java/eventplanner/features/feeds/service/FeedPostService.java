@@ -35,6 +35,7 @@ import java.net.URL;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -495,5 +496,84 @@ public class FeedPostService {
         } catch (Exception e) {
             log.error("Error in scheduled feed post cleanup", e);
         }
+    }
+
+    /**
+     * Repost a post - creates a new post that references the original
+     * @param eventId The event ID
+     * @param postId The original post ID
+     * @param principal The user principal
+     * @return The reposted post response
+     */
+    public FeedPostResponse repost(UUID eventId, UUID postId, UserPrincipal principal) {
+        if (principal == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        
+        // Get the original post
+        EventFeedPost originalPost = postRepository.findById(postId)
+                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+        
+        // Verify the post belongs to the event
+        if (!originalPost.getEvent().getId().equals(eventId)) {
+            throw new IllegalArgumentException("Post does not belong to this event");
+        }
+        
+        // Verify access to the event (requireMediaView checks access and throws if denied)
+        accessControlService.requireMediaView(principal, eventId);
+        
+        // Create a new post that references the original
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+        
+        UserAccount author = userAccountRepository.findById(principal.getId())
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        
+        EventFeedPost repost = new EventFeedPost();
+        repost.setEvent(event);
+        repost.setCreatedBy(author);
+        repost.setPostType(EventFeedPost.PostType.TEXT);
+        String originalContent = originalPost.getContent() != null ? originalPost.getContent() : "";
+        repost.setContent("Reposted: " + originalContent);
+        repost.setMediaUploadStatus(MediaUploadStatus.COMPLETED);
+        
+        EventFeedPost saved = postRepository.save(repost);
+        
+        // Convert to response
+        return toResponse(saved, eventId);
+    }
+
+    /**
+     * Get all posts created by a user
+     */
+    public PostListResponse getUserPosts(UUID userId, Integer page, Integer size, UserPrincipal principal) {
+        // Enforce max page size
+        int pageNum = Math.max(0, page != null ? page : 0);
+        int pageSize = Math.min(100, Math.max(1, size != null ? size : 20));
+        
+        Pageable pageable = PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+        
+        // Get only completed posts by user
+        Page<EventFeedPost> postPage = postRepository.findByCreatedByUserIdAndMediaUploadStatusOrderByCreatedAtDesc(
+                userId, MediaUploadStatus.COMPLETED, pageable);
+        
+        // Enrich with engagement data
+        List<FeedPostResponse> enrichedPosts = new ArrayList<>();
+        for (EventFeedPost post : postPage.getContent()) {
+            if (post.getEvent() != null && post.getEvent().getId() != null) {
+                enrichedPosts.add(toResponse(post, post.getEvent().getId()));
+            }
+        }
+        
+        PostListResponse response = new PostListResponse();
+        response.setPosts(enrichedPosts);
+        response.setCurrentPage(pageNum);
+        response.setPageSize(pageSize);
+        response.setTotalPosts(postPage.getTotalElements());
+        response.setTotalPages(postPage.getTotalPages());
+        response.setHasNext(postPage.hasNext());
+        response.setHasPrevious(postPage.hasPrevious());
+        
+        return response;
     }
 }

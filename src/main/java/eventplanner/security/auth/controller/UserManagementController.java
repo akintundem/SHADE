@@ -1,5 +1,9 @@
 package eventplanner.security.auth.controller;
 
+import eventplanner.features.feeds.dto.response.PostListResponse;
+import eventplanner.security.auth.dto.req.NotificationSettingsUpdateRequest;
+import eventplanner.security.auth.dto.req.PrivacySettingsUpdateRequest;
+import eventplanner.security.auth.dto.req.SecuritySettingsUpdateRequest;
 import eventplanner.security.auth.dto.req.UpdateUserProfileRequest;
 import eventplanner.security.auth.dto.res.PublicUserResponse;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
@@ -25,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import io.swagger.v3.oas.annotations.Operation;
 
 import java.util.UUID;
 
@@ -86,6 +91,60 @@ public class UserManagementController {
             return userAccountService.listPublicUsers(pageable);
         }
         return userAccountService.searchPublicUsers(sanitizedTerm, pageable);
+    }
+
+    @GetMapping("/me/posts")
+    @RequiresPermission(RbacPermissions.USER_SEARCH)
+    @Operation(summary = "Get my posts", description = "Get all posts created by the current user across all events")
+    public ResponseEntity<PostListResponse> getMyPosts(
+            @RequestParam(required = false, defaultValue = "0") Integer page,
+            @RequestParam(required = false, defaultValue = "20") Integer size,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        PostListResponse posts = 
+                userAccountService.getUserPosts(principal, page, size);
+        return ResponseEntity.ok(posts);
+    }
+
+    @PutMapping("/me/notification-settings")
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
+    @Operation(summary = "Update notification settings", description = "Update current user's notification preferences")
+    public ResponseEntity<SecureUserResponse> updateNotificationSettings(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody NotificationSettingsUpdateRequest request) {
+        if (principal == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        SecureUserResponse updated = userAccountService.updateNotificationSettings(principal, request);
+        return ResponseEntity.ok(updated);
+    }
+
+    @PutMapping("/me/privacy-settings")
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
+    @Operation(summary = "Update privacy settings", description = "Update current user's privacy preferences")
+    public ResponseEntity<SecureUserResponse> updatePrivacySettings(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody PrivacySettingsUpdateRequest request) {
+        if (principal == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        SecureUserResponse updated = userAccountService.updatePrivacySettings(principal, request);
+        return ResponseEntity.ok(updated);
+    }
+
+    @PutMapping("/me/security-settings")
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
+    @Operation(summary = "Update security settings", description = "Update current user's security preferences (MFA, etc.)")
+    public ResponseEntity<SecureUserResponse> updateSecuritySettings(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody SecuritySettingsUpdateRequest request) {
+        if (principal == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        SecureUserResponse updated = userAccountService.updateSecuritySettings(principal, request);
+        return ResponseEntity.ok(updated);
     }
 
 }
