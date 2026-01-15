@@ -108,6 +108,19 @@ public class UserManagementController {
         return ResponseEntity.ok(posts);
     }
 
+    @GetMapping("/{userId}/posts")
+    @RequiresPermission(RbacPermissions.USER_SEARCH)
+    @Operation(summary = "Get user posts", description = "Get all posts created by the requested user across all events")
+    public ResponseEntity<PostListResponse> getUserPostsById(
+            @PathVariable UUID userId,
+            @RequestParam(required = false, defaultValue = "0") Integer page,
+            @RequestParam(required = false, defaultValue = "20") Integer size,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        ensurePrincipalMatchesUser(userId, principal);
+        PostListResponse posts = userAccountService.getUserPosts(principal, page, size);
+        return ResponseEntity.ok(posts);
+    }
+
     @PutMapping("/me/notification-settings")
     @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
     @Operation(summary = "Update notification settings", description = "Update current user's notification preferences")
@@ -117,6 +130,18 @@ public class UserManagementController {
         if (principal == null) {
             throw new AccessDeniedException("Authentication required");
         }
+        SecureUserResponse updated = userAccountService.updateNotificationSettings(principal, request);
+        return ResponseEntity.ok(updated);
+    }
+
+    @PutMapping("/{userId}/notification-settings")
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#userId"})
+    @Operation(summary = "Update notification settings", description = "Update the specified user's notification preferences")
+    public ResponseEntity<SecureUserResponse> updateNotificationSettingsForUser(
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody NotificationSettingsUpdateRequest request) {
+        ensurePrincipalMatchesUser(userId, principal);
         SecureUserResponse updated = userAccountService.updateNotificationSettings(principal, request);
         return ResponseEntity.ok(updated);
     }
@@ -134,6 +159,18 @@ public class UserManagementController {
         return ResponseEntity.ok(updated);
     }
 
+    @PutMapping("/{userId}/privacy-settings")
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#userId"})
+    @Operation(summary = "Update privacy settings", description = "Update the specified user's privacy preferences")
+    public ResponseEntity<SecureUserResponse> updatePrivacySettingsForUser(
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody PrivacySettingsUpdateRequest request) {
+        ensurePrincipalMatchesUser(userId, principal);
+        SecureUserResponse updated = userAccountService.updatePrivacySettings(principal, request);
+        return ResponseEntity.ok(updated);
+    }
+
     @PutMapping("/me/security-settings")
     @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
     @Operation(summary = "Update security settings", description = "Update current user's security preferences (MFA, etc.)")
@@ -145,6 +182,27 @@ public class UserManagementController {
         }
         SecureUserResponse updated = userAccountService.updateSecuritySettings(principal, request);
         return ResponseEntity.ok(updated);
+    }
+
+    @PutMapping("/{userId}/security-settings")
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#userId"})
+    @Operation(summary = "Update security settings", description = "Update the specified user's security preferences")
+    public ResponseEntity<SecureUserResponse> updateSecuritySettingsForUser(
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody SecuritySettingsUpdateRequest request) {
+        ensurePrincipalMatchesUser(userId, principal);
+        SecureUserResponse updated = userAccountService.updateSecuritySettings(principal, request);
+        return ResponseEntity.ok(updated);
+    }
+
+    private void ensurePrincipalMatchesUser(UUID userId, UserPrincipal principal) {
+        if (principal == null || principal.getId() == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        if (!principal.getId().equals(userId)) {
+            throw new AccessDeniedException("Cannot access another user's data");
+        }
     }
 
 }
