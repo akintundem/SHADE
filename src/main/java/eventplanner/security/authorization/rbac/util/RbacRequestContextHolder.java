@@ -1,4 +1,6 @@
-package eventplanner.security.authorization.rbac;
+package eventplanner.security.authorization.rbac.util;
+
+import eventplanner.security.authorization.rbac.model.RbacRequestContext;
 
 /**
  * Simple ThreadLocal holder so services can access the request RBAC context.

@@ -1,5 +1,6 @@
-package eventplanner.security.authorization.rbac;
+package eventplanner.security.authorization.rbac.model;
 
+import eventplanner.security.filters.RbacContextFilter;
 import lombok.Builder;
 import lombok.Value;
 
@@ -8,7 +9,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Thread scoped authorization context prepared by {@link eventplanner.security.filters.RbacContextFilter}.
+ * Thread scoped authorization context prepared by {@link RbacContextFilter}.
  */
 @Value
 @Builder

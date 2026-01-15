@@ -1,4 +1,4 @@
-package eventplanner.security.authorization.rbac;
+package eventplanner.security.authorization.rbac.model;
 
 import lombok.Builder;
 import lombok.Value;

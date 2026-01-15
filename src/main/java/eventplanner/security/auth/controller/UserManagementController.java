@@ -11,7 +11,7 @@ import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.service.LocationService;
 import eventplanner.security.auth.service.UserAccountService;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import jakarta.validation.Valid;
 import eventplanner.common.dto.ApiMessageResponse;

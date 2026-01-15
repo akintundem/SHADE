@@ -1,4 +1,4 @@
-package eventplanner.security.authorization.rbac;
+package eventplanner.security.authorization.rbac.constants;
 
 /**
  * Centralized permission identifiers used throughout the controllers.

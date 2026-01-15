@@ -24,7 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
-import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.auth.service.UserPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

@@ -4,7 +4,7 @@ import eventplanner.features.ticket.dto.request.CreateTicketCheckoutRequest;
 import eventplanner.features.ticket.dto.response.TicketCheckoutResponse;
 import eventplanner.features.ticket.dto.response.TicketPaymentInitResponse;
 import eventplanner.features.ticket.service.TicketCheckoutService;
-import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;

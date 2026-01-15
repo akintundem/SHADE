@@ -1,4 +1,4 @@
-package eventplanner.security.authorization.rbac;
+package eventplanner.security.authorization.rbac.service;
 
 import eventplanner.features.attendee.repository.AttendeeInviteRepository;
 import eventplanner.features.attendee.repository.AttendeeRepository;
@@ -6,6 +6,10 @@ import eventplanner.features.ticket.repository.TicketRepository;
 import eventplanner.features.timeline.repository.TaskRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
+import eventplanner.security.authorization.rbac.model.RbacPermissionDefinition;
+import eventplanner.security.authorization.rbac.model.RbacRequestContext;
+import eventplanner.security.authorization.rbac.model.RbacScope;
+import eventplanner.security.authorization.rbac.util.RbacRequestContextHolder;
 import eventplanner.security.authorization.service.AuthorizationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,10 +48,10 @@ public class RbacAuthorizationService {
     }
 
     public boolean isAuthorized(UserPrincipal principal, String permissionName, Map<String, Object> resources) {
-        var permission = policyStore.findPermission(permissionName)
+        RbacPermissionDefinition permission = policyStore.findPermission(permissionName)
                 .orElseThrow(() -> new AccessDeniedException("Permission not defined in policy: " + permissionName));
 
-        var abac = permission.getAbac();
+        RbacPermissionDefinition.AbacRules abac = permission.getAbac();
         if (abac.isAuthenticated() && principal == null) {
             return false;
         }
@@ -198,15 +202,6 @@ public class RbacAuthorizationService {
                     UUID inviteId = extractUuid(resources, "invite_id");
                     if (inviteId != null) {
                         eventId = resolveEventIdFromInviteId(inviteId);
-                        if (eventId != null) {
-                            resources.put("event_id", eventId);
-                        }
-                    }
-                }
-                if (eventId == null) {
-                    UUID ticketId = extractUuid(resources, "ticket_id");
-                    if (ticketId != null) {
-                        eventId = resolveEventIdFromTicketId(ticketId);
                         if (eventId != null) {
                             resources.put("event_id", eventId);
                         }

@@ -1,4 +1,4 @@
-package eventplanner.security.authorization.rbac;
+package eventplanner.security.authorization.rbac.model;
 
 /**
  * Scope dimension for RBAC permissions as defined in the policy document.

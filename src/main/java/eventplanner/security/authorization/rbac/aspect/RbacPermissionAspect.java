@@ -1,7 +1,7 @@
 package eventplanner.security.authorization.rbac.aspect;
 
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.security.authorization.rbac.RbacAuthorizationService;
+import eventplanner.security.authorization.rbac.service.RbacAuthorizationService;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

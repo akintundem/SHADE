@@ -10,7 +10,7 @@ import eventplanner.security.auth.service.CognitoUserService;
 import eventplanner.security.auth.service.UserAccountService;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.auth.entity.UserAccount;
-import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.auth.dto.AuthMapper;
 import jakarta.validation.Valid;

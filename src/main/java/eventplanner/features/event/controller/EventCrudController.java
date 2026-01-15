@@ -17,7 +17,7 @@ import eventplanner.features.event.service.EventIdempotencyService;
 import eventplanner.features.event.service.EventMediaService;
 import eventplanner.features.event.service.EventService;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
 import io.swagger.v3.oas.annotations.Operation;

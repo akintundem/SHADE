@@ -14,7 +14,7 @@ import eventplanner.features.event.service.EventService;
 import eventplanner.features.ticket.dto.response.TicketResponse;
 import eventplanner.features.ticket.enums.TicketStatus;
 import eventplanner.features.ticket.service.TicketService;
-import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;

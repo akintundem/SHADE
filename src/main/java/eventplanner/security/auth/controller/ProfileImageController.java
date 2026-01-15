@@ -7,7 +7,7 @@ import eventplanner.security.auth.dto.res.ProfileImageCompleteResponse;
 import eventplanner.security.auth.dto.res.ProfileImageUploadResponse;
 import eventplanner.security.auth.service.ProfileImageService;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;

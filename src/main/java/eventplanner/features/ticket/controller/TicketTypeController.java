@@ -6,7 +6,7 @@ import eventplanner.features.ticket.dto.response.TicketTypeResponse;
 import eventplanner.features.ticket.entity.TicketType;
 import eventplanner.features.ticket.enums.TicketTypeCategory;
 import eventplanner.features.ticket.service.TicketTypeService;
-import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;

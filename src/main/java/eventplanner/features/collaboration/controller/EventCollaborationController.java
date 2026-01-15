@@ -4,7 +4,7 @@ import eventplanner.features.collaboration.dto.request.EventCollaboratorRequest;
 import eventplanner.features.collaboration.dto.response.EventCollaboratorResponse;
 import eventplanner.features.collaboration.service.EventCollaboratorService;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
 import io.swagger.v3.oas.annotations.Operation;

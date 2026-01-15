@@ -4,7 +4,7 @@ import eventplanner.features.timeline.dto.request.ChecklistAutoSaveRequest;
 import eventplanner.features.timeline.dto.response.TaskDetailResponse;
 import eventplanner.features.timeline.service.TimelineTaskService;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.security.authorization.rbac.RbacPermissions;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

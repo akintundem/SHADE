@@ -1,8 +1,11 @@
-package eventplanner.security.authorization.rbac;
+package eventplanner.security.authorization.rbac.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import eventplanner.security.authorization.rbac.model.RbacPermissionDefinition;
+import eventplanner.security.authorization.rbac.model.RbacPolicyMetadata;
+import eventplanner.security.authorization.rbac.model.RbacScope;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -106,14 +109,6 @@ public class RbacPolicyStore {
             }
         }
         return false;
-    }
-
-    public Set<String> getPermissionsForRole(RbacScope scope, String roleName) {
-        if (scope == null || !StringUtils.hasText(roleName)) {
-            return Set.of();
-        }
-        return roleIndex.getOrDefault(scope, Collections.emptyMap())
-                .getOrDefault(roleName.toUpperCase(Locale.US), Set.of());
     }
 
     private void parsePermissions(JsonNode permissionsNode) {
