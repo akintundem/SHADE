@@ -9,11 +9,6 @@ import java.util.regex.Pattern;
 public final class ResponseSanitizer {
 
     private ResponseSanitizer() {}
-
-    // Pre-compiled patterns for performance
-    private static final Pattern UUID_PATTERN = Pattern.compile(
-            "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}", 
-            Pattern.CASE_INSENSITIVE);
     
     private static final Pattern PACKAGE_PATH_PATTERN = Pattern.compile(
             "[a-z]+\\.[a-z]+\\.[a-z]+\\.[A-Z][a-zA-Z]+");

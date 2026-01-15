@@ -152,7 +152,6 @@ public class SanitizingResponseBodyAdvice implements ResponseBodyAdvice<Object> 
         return response;
     }
 
-    @SuppressWarnings("unchecked")
     private Object sanitizeMapResponse(java.util.Map<?, ?> mapBody, int status) {
         java.util.Map<String, Object> sanitized = new java.util.HashMap<>();
         boolean needsSanitization = false;
