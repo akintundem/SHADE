@@ -1,6 +1,6 @@
-package eventplanner.security.authorization.domain.repository;
+package eventplanner.features.event.repository;
 
-import eventplanner.security.authorization.domain.entity.EventRole;
+import eventplanner.features.event.entity.EventRole;
 import eventplanner.common.domain.enums.RoleName;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

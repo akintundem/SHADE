@@ -12,7 +12,7 @@ import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.authorization.rbac.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
-import eventplanner.security.util.AuthMapper;
+import eventplanner.security.auth.dto.AuthMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

@@ -14,7 +14,7 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.security.util.TokenHashUtil;
+import eventplanner.security.util.TokenUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -73,7 +73,7 @@ public class AttendeeInviteService {
             invite = inviteRepository.findById(inviteId)
                     .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
         } else if (token != null && !token.trim().isEmpty()) {
-            String tokenHash = TokenHashUtil.sha256(token.trim());
+            String tokenHash = TokenUtil.hashToken(token.trim());
             invite = inviteRepository.findByTokenHash(tokenHash)
                     .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
         } else {

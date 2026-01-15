@@ -18,7 +18,7 @@ import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.entity.UserSettings;
 import eventplanner.security.auth.repository.LocationRepository;
 import eventplanner.security.auth.repository.UserAccountRepository;
-import eventplanner.security.util.AuthMapper;
+import eventplanner.security.auth.dto.AuthMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

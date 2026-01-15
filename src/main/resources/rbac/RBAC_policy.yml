@@ -344,6 +344,15 @@ policy:
         owns_scope: false
         is_member: true
     -
+      name: collaborator.invite.accept
+      scope: SYSTEM
+      resources: user_id
+      description: Accept collaborator invite via token
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
       name: event.assets.read
       scope: EVENT
       resources: id
@@ -959,6 +968,15 @@ policy:
         owns_scope: true
         is_member: true
     -
+      name: user.notifications.manage
+      scope: SYSTEM
+      resources: user_id
+      description: Register/refresh push notification device tokens
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
       name: user.search
       scope: SYSTEM
       resources: null
@@ -1041,6 +1059,7 @@ policy:
         - admin.users.read
         - admin.users.update
         - auth.me
+        - collaborator.invite.accept
         - event.create
         - event.read
         - organization.create
@@ -1050,6 +1069,7 @@ policy:
         - payment.read
         - payment.refund
         - user.delete
+        - user.notifications.manage
         - user.read
         - user.search
         - user.update
@@ -1060,14 +1080,17 @@ policy:
         - vendor.search
       ORGANIZER:
         - auth.me
+        - collaborator.invite.accept
         - organization.create
         - organization.search
         - vendor.create
         - vendor.read
         - public.events.search
         - vendor.search
+        - user.notifications.manage
       USER:
         - auth.me
+        - collaborator.invite.accept
         - event.create
         - event.read
         - organization.search
@@ -1075,6 +1098,7 @@ policy:
         - payment.process
         - payment.read
         - user.delete
+        - user.notifications.manage
         - user.read
         - user.search
         - user.update

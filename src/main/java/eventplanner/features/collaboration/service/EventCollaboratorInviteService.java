@@ -18,8 +18,7 @@ import eventplanner.common.util.UserAccountUtil;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.security.util.SecureTokenUtil;
-import eventplanner.security.util.TokenHashUtil;
+import eventplanner.security.util.TokenUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -165,8 +164,8 @@ public class EventCollaboratorInviteService {
 
         // If we have an email, create a token-based acceptance flow.
         if (inviteeEmail != null) {
-            rawToken = SecureTokenUtil.generateSecureToken();
-            invite.setTokenHash(TokenHashUtil.sha256(rawToken));
+            rawToken = TokenUtil.generateToken();
+            invite.setTokenHash(TokenUtil.hashToken(rawToken));
         } else {
             invite.setTokenHash(null);
         }
@@ -231,7 +230,7 @@ public class EventCollaboratorInviteService {
             throw new IllegalArgumentException("token is required");
         }
         
-        String tokenHash = TokenHashUtil.sha256(token.trim());
+        String tokenHash = TokenUtil.hashToken(token.trim());
         EventCollaboratorInvite invite = inviteRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
         // Verify the logged-in user is the one who can accept this invite (even with token)

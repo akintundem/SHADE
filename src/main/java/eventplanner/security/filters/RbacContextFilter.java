@@ -1,8 +1,8 @@
 package eventplanner.security.filters;
 
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.security.authorization.domain.entity.EventRole;
-import eventplanner.security.authorization.domain.repository.EventRoleRepository;
+import eventplanner.features.event.entity.EventRole;
+import eventplanner.features.event.repository.EventRoleRepository;
 import eventplanner.security.authorization.rbac.RbacRequestContext;
 import eventplanner.security.authorization.rbac.RbacRequestContextHolder;
 import jakarta.servlet.FilterChain;

@@ -1,5 +1,7 @@
 package eventplanner.security.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import eventplanner.common.exception.ProblemBuilder;
 import eventplanner.security.auth.jwt.CognitoJwtAuthenticationConverter;
 import eventplanner.security.filters.RbacContextFilter;
 import eventplanner.security.filters.SecurityHeadersFilter;
@@ -8,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -27,7 +30,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.util.StringUtils;
+import org.zalando.problem.Problem;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -41,6 +46,7 @@ public class SecurityConfig {
     private final RbacContextFilter rbacContextFilter;
     private final ServiceApiKeyFilter serviceApiKeyFilter;
     private final CognitoJwtAuthenticationConverter jwtAuthenticationConverter;
+    private final ObjectMapper objectMapper;
     private final String issuerUri;
     private final String jwkSetUri;
     private final String audienceProperty;
@@ -49,6 +55,7 @@ public class SecurityConfig {
                           RbacContextFilter rbacContextFilter,
                           ServiceApiKeyFilter serviceApiKeyFilter,
                           CognitoJwtAuthenticationConverter jwtAuthenticationConverter,
+                          ObjectMapper objectMapper,
                           @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:}") String issuerUri,
                           @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri:}") String jwkSetUri,
                           @Value("${spring.security.oauth2.resourceserver.jwt.audiences:}") String audienceProperty) {
@@ -56,6 +63,7 @@ public class SecurityConfig {
         this.rbacContextFilter = rbacContextFilter;
         this.serviceApiKeyFilter = serviceApiKeyFilter;
         this.jwtAuthenticationConverter = jwtAuthenticationConverter;
+        this.objectMapper = objectMapper;
         this.issuerUri = issuerUri;
         this.jwkSetUri = jwkSetUri;
         this.audienceProperty = audienceProperty;
@@ -83,17 +91,15 @@ public class SecurityConfig {
             )
             .httpBasic(httpBasic -> httpBasic.disable())
             .formLogin(formLogin -> formLogin.disable())
-            // Custom exception handling to prevent leaking internal details
+            // Custom exception handling using Zalando Problem (RFC 7807) for consistent error responses
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint((request, response, authException) -> {
-                    response.setContentType("application/json");
-                    response.setStatus(401);
-                    response.getWriter().write("{\"timestamp\":\"" + java.time.LocalDateTime.now() + "\",\"status\":401,\"error\":\"Unauthorized\",\"message\":\"Authentication required\",\"path\":\"" + request.getRequestURI() + "\"}");
+                    Problem problem = ProblemBuilder.unauthorized("Authentication required");
+                    writeProblemResponse(response, problem, 401);
                 })
                 .accessDeniedHandler((request, response, accessDeniedException) -> {
-                    response.setContentType("application/json");
-                    response.setStatus(403);
-                    response.getWriter().write("{\"timestamp\":\"" + java.time.LocalDateTime.now() + "\",\"status\":403,\"error\":\"Forbidden\",\"message\":\"Access denied\",\"path\":\"" + request.getRequestURI() + "\"}");
+                    Problem problem = ProblemBuilder.forbidden("Access denied");
+                    writeProblemResponse(response, problem, 403);
                 })
             );
 
@@ -150,6 +156,16 @@ public class SecurityConfig {
 
         OAuth2TokenValidator<Jwt> audienceValidator = new AudienceValidator(audiences);
         return new DelegatingOAuth2TokenValidator<>(baseValidator, audienceValidator);
+    }
+
+    /**
+     * Write Problem response to HTTP response using ObjectMapper.
+     * Ensures consistent error format with the rest of the application.
+     */
+    private void writeProblemResponse(jakarta.servlet.http.HttpServletResponse response, Problem problem, int status) throws IOException {
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setStatus(status);
+        response.getWriter().write(objectMapper.writeValueAsString(problem));
     }
 
     private static class AudienceValidator implements OAuth2TokenValidator<Jwt> {

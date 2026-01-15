@@ -151,7 +151,7 @@ public class EventCollaboratorInviteController {
     }
 
     @PostMapping("/api/v1/collaborator-invites/accept")
-    @RequiresPermission(value = RbacPermissions.ROLE_ASSIGN)
+    @RequiresPermission(value = RbacPermissions.COLLABORATOR_INVITE_ACCEPT, resources = {"user_id=#principal.id"})
     @Operation(summary = "Accept collaborator invite by token", description = "Accept a collaborator invite using an email token (requires authentication)")
     public ResponseEntity<EventCollaboratorResponse> acceptInviteByToken(
             @RequestParam String token,
@@ -197,7 +197,6 @@ public class EventCollaboratorInviteController {
         }
     }
 }
-
 
 
 

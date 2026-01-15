@@ -60,7 +60,7 @@ public class PushNotificationController {
             )
     })
     @PostMapping("/devices/register")
-    @RequiresPermission(value = RbacPermissions.COMMUNICATION_SEND, resources = {"user_id=#principal.id"})
+    @RequiresPermission(value = RbacPermissions.USER_NOTIFICATIONS_MANAGE, resources = {"user_id=#principal.id"})
     public ResponseEntity<DeviceToken> registerDeviceToken(
             @Valid @RequestBody RegisterDeviceTokenRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -96,7 +96,7 @@ public class PushNotificationController {
             )
     })
     @PostMapping("/refresh-device-token")
-    @RequiresPermission(value = RbacPermissions.COMMUNICATION_SEND, resources = {"user_id=#principal.id"})
+    @RequiresPermission(value = RbacPermissions.USER_NOTIFICATIONS_MANAGE, resources = {"user_id=#principal.id"})
     public ResponseEntity<DeviceToken> refreshDeviceToken(
             @Valid @RequestBody RefreshDeviceTokenRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {

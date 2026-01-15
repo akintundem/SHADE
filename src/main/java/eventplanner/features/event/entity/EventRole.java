@@ -1,4 +1,4 @@
-package eventplanner.security.authorization.domain.entity;
+package eventplanner.features.event.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.common.domain.enums.RoleName;

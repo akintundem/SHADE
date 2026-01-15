@@ -70,22 +70,30 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
             return;
         }
 
-        String apiKey = request.getHeader(HEADER_NAME);
-        
         // Check if request has a Bearer token (JWT) - authenticated user requests
+        // If Bearer token is present, bypass API key validation entirely
         String authorizationHeader = request.getHeader("Authorization");
         boolean hasBearerToken = StringUtils.hasText(authorizationHeader) && 
                                 authorizationHeader.trim().startsWith("Bearer ");
 
+        // Bearer tokens are for user requests - skip API key validation
+        if (hasBearerToken) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // No Bearer token - validate API key for service-to-service requests
+        String apiKey = request.getHeader(HEADER_NAME);
+
         // Case 1: No API key provided
         if (!StringUtils.hasText(apiKey)) {
-            // If require-header is true, the API key is mandatory unless request has JWT
-            // This enforces that all traffic comes through Kong (which injects X-API-Key)
-            if (requireApiKeyHeader && !hasBearerToken) {
+            // If require-header is true, the API key is mandatory for service requests
+            // This enforces that all service traffic comes through Kong (which injects X-API-Key)
+            if (requireApiKeyHeader) {
                 sendForbiddenResponse(response, "Missing required X-API-Key header", path);
                 return;
             }
-            // Allow through to JWT auth (user requests with Bearer token, or dev mode)
+            // Dev mode: pass through if header enforcement is disabled
             filterChain.doFilter(request, response);
             return;
         }

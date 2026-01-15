@@ -15,7 +15,7 @@ import eventplanner.features.event.repository.EventRepository;
 import eventplanner.common.domain.enums.EventAccessType;
 import eventplanner.common.domain.enums.EventStatus;
 import eventplanner.common.domain.enums.EventScope;
-import eventplanner.security.authorization.domain.entity.EventRole;
+import eventplanner.features.event.entity.EventRole;
 import eventplanner.common.domain.enums.RoleName;
 import eventplanner.features.event.dto.request.EventFeedRequest;
 import eventplanner.features.event.dto.response.EventFeedResponse;
@@ -33,7 +33,7 @@ import eventplanner.common.communication.services.core.dto.BulkNotificationReque
 import eventplanner.common.communication.services.core.dto.NotificationTarget;
 import java.util.Set;
 import java.util.Comparator;
-import eventplanner.security.authorization.domain.repository.EventRoleRepository;
+import eventplanner.features.event.repository.EventRoleRepository;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
 import org.springframework.beans.factory.annotation.Autowired;

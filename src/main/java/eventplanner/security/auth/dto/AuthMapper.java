@@ -1,6 +1,5 @@
-package eventplanner.security.util;
+package eventplanner.security.auth.dto;
 
-import eventplanner.security.auth.dto.LocationDto;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.dto.res.UserSettingsResponse;
 import eventplanner.security.auth.entity.Location;
@@ -9,7 +8,7 @@ import eventplanner.security.auth.entity.UserSettings;
 import lombok.experimental.UtilityClass;
 
 /**
- * Utility mappers for converting authentication domain entities to DTOs.
+ * Mappers for converting authentication domain entities to DTOs.
  */
 @UtilityClass
 public class AuthMapper {

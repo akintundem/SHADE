@@ -22,7 +22,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "eventplanner.features.feeds.repository",
     "eventplanner.common.communication.repository",
     "eventplanner.security.auth.repository",
-    "eventplanner.security.authorization.domain.repository",
+    "eventplanner.features.event.repository",
     "eventplanner.admin.repository"
 })
 @EntityScan(basePackages = {
@@ -37,7 +37,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "eventplanner.common.communication.core",
     "eventplanner.common.domain.entity",
     "eventplanner.security.auth.entity",
-    "eventplanner.security.authorization.domain.entity",
+    "eventplanner.features.event.entity",
     "eventplanner.admin.entity"
 })
 public class EventPlannerApplication {

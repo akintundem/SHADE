@@ -49,6 +49,7 @@ public final class RbacPermissions {
     public static final String BUDGET_REJECT = "budget.reject";
     public static final String BUDGET_SUBMIT = "budget.submit";
     public static final String BUDGET_UPDATE = "budget.update";
+    public static final String COLLABORATOR_INVITE_ACCEPT = "collaborator.invite.accept";
     public static final String COMMUNICATION_READ = "communication.read";
     public static final String COMMUNICATION_SEND = "communication.send";
     public static final String EVENT_ASSETS_READ = "event.assets.read";
@@ -103,6 +104,7 @@ public final class RbacPermissions {
     public static final String TICKET_TYPE_UPDATE = "ticket.type.update";
     public static final String TICKET_VALIDATE = "ticket.validate";
     public static final String USER_DELETE = "user.delete";
+    public static final String USER_NOTIFICATIONS_MANAGE = "user.notifications.manage";
     public static final String USER_READ = "user.read";
     public static final String USER_SEARCH = "user.search";
     public static final String USER_UPDATE = "user.update";
