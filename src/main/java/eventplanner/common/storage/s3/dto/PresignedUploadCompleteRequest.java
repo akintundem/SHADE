@@ -1,4 +1,4 @@
-package eventplanner.common.storage.upload;
+package eventplanner.common.storage.s3.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;

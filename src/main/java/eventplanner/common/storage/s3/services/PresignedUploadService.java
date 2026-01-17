@@ -1,7 +1,9 @@
-package eventplanner.common.storage.upload;
+package eventplanner.common.storage.s3.services;
 
-import eventplanner.common.exception.BadRequestException;
-import eventplanner.common.storage.s3.services.S3StorageService;
+import eventplanner.common.storage.s3.UploadCompletionCallback;
+import eventplanner.common.storage.s3.dto.PresignedUploadCompleteRequest;
+import eventplanner.common.storage.s3.dto.PresignedUploadRequest;
+import eventplanner.common.storage.s3.dto.PresignedUploadResponse;
 import eventplanner.common.util.UserAccountUtil;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventStoredObject;
@@ -62,10 +64,6 @@ public class PresignedUploadService {
             Function<UUID, String> objectKeyBuilder,
             String bucketAlias,
             Duration uploadTtl) {
-        
-        if (!storageService.isConfigured()) {
-            throw new BadRequestException("S3 is not configured for uploads");
-        }
         
         if (!StringUtils.hasText(request.getFileName())) {
             throw new IllegalArgumentException("fileName is required");
@@ -131,8 +129,9 @@ public class PresignedUploadService {
             .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
         
         // Get managed UserAccount entity for JPA relationship (optional)
-        UserAccount uploadedByUser = UserAccountUtil.getManagedUserAccount(principal, userAccountRepository)
-            .orElse(null);
+        UserAccount uploadedByUser = (principal != null && principal.getId() != null)
+            ? UserAccountUtil.getManagedUserAccountOrThrow(principal, userAccountRepository, "User not found")
+            : null;
         
         // Save stored object metadata
         EventStoredObject item = storedObjectRepository.findById(mediaId).orElseGet(EventStoredObject::new);

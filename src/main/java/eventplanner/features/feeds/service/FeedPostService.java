@@ -1,11 +1,11 @@
 package eventplanner.features.feeds.service;
 
 import eventplanner.common.storage.s3.services.S3StorageService;
-import eventplanner.common.storage.upload.MediaUploadStatus;
-import eventplanner.common.storage.upload.PresignedUploadCompleteRequest;
-import eventplanner.common.storage.upload.PresignedUploadRequest;
-import eventplanner.common.storage.upload.PresignedUploadService;
-import eventplanner.common.storage.upload.UploadCompletionCallback;
+import eventplanner.common.storage.s3.dto.MediaUploadStatus;
+import eventplanner.common.storage.s3.dto.PresignedUploadCompleteRequest;
+import eventplanner.common.storage.s3.dto.PresignedUploadRequest;
+import eventplanner.common.storage.s3.services.PresignedUploadService;
+import eventplanner.common.storage.s3.UploadCompletionCallback;
 import eventplanner.common.util.UserAccountUtil;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventStoredObject;
@@ -121,8 +121,9 @@ public class FeedPostService {
         post.setContent(content);
         
         // Set createdBy relationship using managed entity
-        UserAccount creator = UserAccountUtil.getManagedUserAccount(principal, userAccountRepository)
-                .orElse(null);
+        UserAccount creator = (principal != null && principal.getId() != null) 
+            ? UserAccountUtil.getManagedUserAccountOrThrow(principal, userAccountRepository, "User not found")
+            : null;
         post.setCreatedBy(creator);
         
         // Set initial status: TEXT posts are complete, IMAGE/VIDEO start as PENDING
@@ -149,7 +150,7 @@ public class FeedPostService {
             uploadRequest.setIsPublic(mediaUpload.getIsPublic());
             uploadRequest.setDescription(mediaUpload.getDescription());
             
-            eventplanner.common.storage.upload.PresignedUploadResponse genericResponse = presignedUploadService.generatePresignedUpload(
+            eventplanner.common.storage.s3.dto.PresignedUploadResponse genericResponse = presignedUploadService.generatePresignedUpload(
                     uploadRequest,
                     mediaId -> buildObjectKey(event.getId(), mediaId),
                     EVENT_BUCKET_ALIAS,

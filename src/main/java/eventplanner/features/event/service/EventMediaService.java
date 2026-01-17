@@ -224,9 +224,6 @@ public class EventMediaService {
     }
 
     private EventPresignedUploadResponse buildPresignedResponse(UUID eventId, EventMediaUploadRequest request, String purpose) {
-        if (!storageService.isConfigured()) {
-            throw new BadRequestException("S3 is not configured for uploads");
-        }
         if (!StringUtils.hasText(request.getFileName())) {
             throw new IllegalArgumentException("fileName is required");
         }
@@ -307,8 +304,9 @@ public class EventMediaService {
                 .orElseThrow(() -> new IllegalArgumentException("Event not found"));
         
         // Get managed UserAccount entity for JPA relationship (optional)
-        UserAccount uploadedByUser = UserAccountUtil.getManagedUserAccount(principal, userAccountRepository)
-            .orElse(null);
+        UserAccount uploadedByUser = (principal != null && principal.getId() != null)
+            ? UserAccountUtil.getManagedUserAccountOrThrow(principal, userAccountRepository, "User not found")
+            : null;
         
         EventStoredObject item = storedObjectRepository.findById(objectId).orElseGet(EventStoredObject::new);
         item.setId(objectId);

@@ -1,7 +1,7 @@
 package eventplanner.features.feeds.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import eventplanner.common.storage.upload.MediaUploadStatus;
+import eventplanner.common.storage.s3.dto.MediaUploadStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.security.auth.entity.UserAccount;
 import jakarta.persistence.*;

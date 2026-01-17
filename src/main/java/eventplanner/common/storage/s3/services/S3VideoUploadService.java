@@ -17,25 +17,29 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
- * Service for handling image-specific uploads to S3.
- * Provides validation, sanitization, and extension handling for image files.
+ * Service for handling video-specific uploads to S3.
+ * Provides validation, sanitization, and extension handling for video files.
  */
 @Service
 @RequiredArgsConstructor
-public class S3ImageUploadService {
+public class S3VideoUploadService {
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
-        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif"
+        ".mp4", ".webm", ".mov", ".avi", ".mkv", ".flv", ".wmv", ".m4v", ".3gp", ".ogv"
     );
 
-    private static final Map<String, String> CONTENT_TYPE_EXTENSION_MAP = Map.of(
-        "image/jpeg", ".jpg",
-        "image/jpg", ".jpg",
-        "image/png", ".png",
-        "image/gif", ".gif",
-        "image/webp", ".webp",
-        "image/heic", ".heic",
-        "image/heif", ".heif"
+    private static final Map<String, String> CONTENT_TYPE_EXTENSION_MAP = Map.ofEntries(
+        Map.entry("video/mp4", ".mp4"),
+        Map.entry("video/webm", ".webm"),
+        Map.entry("video/quicktime", ".mov"),
+        Map.entry("video/x-msvideo", ".avi"),
+        Map.entry("video/x-matroska", ".mkv"),
+        Map.entry("video/x-flv", ".flv"),
+        Map.entry("video/x-ms-wmv", ".wmv"),
+        Map.entry("video/mp4v-es", ".mp4"),
+        Map.entry("video/x-m4v", ".m4v"),
+        Map.entry("video/3gpp", ".3gp"),
+        Map.entry("video/ogg", ".ogv")
     );
 
     private static final Pattern PATH_TRAVERSAL_PATTERN = Pattern.compile("(\\.\\./|\\.\\.\\\\)");
@@ -43,13 +47,13 @@ public class S3ImageUploadService {
 
     private final S3StorageService storageService;
 
-    public PresignedUploadResult createImageUpload(String bucketAlias,
+    public PresignedUploadResult createVideoUpload(String bucketAlias,
                                                    String keyPrefix,
                                                    String fileName,
                                                    String contentType,
                                                    Duration expiresIn) {
-        if (!StringUtils.hasText(contentType) || !contentType.toLowerCase(Locale.US).startsWith("image/")) {
-            throw new BadRequestException("Only image uploads are allowed");
+        if (!StringUtils.hasText(contentType) || !contentType.toLowerCase(Locale.US).startsWith("video/")) {
+            throw new BadRequestException("Only video uploads are allowed");
         }
 
         validateKeyPrefix(keyPrefix);
@@ -57,8 +61,8 @@ public class S3ImageUploadService {
         String extension = determineExtension(contentType, sanitizedFileName);
         
         // Validate that content-type matches the extension
-        if (StringUtils.hasText(extension) && !isValidImageExtension(extension)) {
-            throw new BadRequestException("Invalid image file extension: " + extension);
+        if (StringUtils.hasText(extension) && !isValidVideoExtension(extension)) {
+            throw new BadRequestException("Invalid video file extension: " + extension);
         }
         
         String objectKey = buildObjectKey(keyPrefix, extension);
@@ -95,12 +99,12 @@ public class S3ImageUploadService {
             URL url = new URL(resourceUrl.trim());
             return storageService.stripQuery(url);
         } catch (Exception ex) {
-            throw new BadRequestException("Invalid profile image URL");
+            throw new BadRequestException("Invalid video URL");
         }
     }
 
     private String sanitizeFileName(String fileName) {
-        String cleaned = StringUtils.hasText(fileName) ? fileName.trim() : "image";
+        String cleaned = StringUtils.hasText(fileName) ? fileName.trim() : "video";
         cleaned = cleaned.replace("\\", "/");
         int lastSlash = cleaned.lastIndexOf('/');
         if (lastSlash >= 0 && lastSlash < cleaned.length() - 1) {
@@ -109,7 +113,7 @@ public class S3ImageUploadService {
         cleaned = cleaned.replaceAll("\\s+", "_");
         cleaned = cleaned.replaceAll("[^a-zA-Z0-9._-]", "_");
         if (!StringUtils.hasText(cleaned) || ".".equals(cleaned)) {
-            cleaned = "image";
+            cleaned = "video";
         }
         if (cleaned.length() > 120) {
             cleaned = cleaned.substring(0, 120);
@@ -122,7 +126,7 @@ public class S3ImageUploadService {
         if (dotIndex > 0 && dotIndex < fileName.length() - 1) {
             String rawExtension = fileName.substring(dotIndex).toLowerCase(Locale.US);
             if (ALLOWED_EXTENSIONS.contains(rawExtension)) {
-                return ".jpeg".equals(rawExtension) ? ".jpg" : rawExtension;
+                return rawExtension;
             }
         }
         String normalizedType = contentType.toLowerCase(Locale.US);
@@ -165,9 +169,7 @@ public class S3ImageUploadService {
     /**
      * Validates that the extension is in the allowed list.
      */
-    private boolean isValidImageExtension(String extension) {
+    private boolean isValidVideoExtension(String extension) {
         return ALLOWED_EXTENSIONS.contains(extension.toLowerCase(Locale.US));
     }
 }
-
-

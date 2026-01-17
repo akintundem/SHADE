@@ -1,8 +1,7 @@
 package eventplanner.common.storage.s3.services;
 
-import eventplanner.common.storage.s3.config.AwsS3Properties;
+import eventplanner.common.storage.s3.registry.BucketRegistry;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -20,26 +19,33 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
-import java.util.Optional;
+import java.util.regex.Pattern;
 
+/**
+ * Centralized S3 storage service for uploading to different buckets.
+ * S3 is mandatory for application startup.
+ * 
+ * Uses BucketRegistry for flexible bucket management - add new buckets via configuration only.
+ */
 @Service
-@Slf4j
 @RequiredArgsConstructor
 public class S3StorageService {
 
     private static final Duration DEFAULT_PRESIGN_DURATION = Duration.ofMinutes(15);
+    private static final Pattern PATH_TRAVERSAL_PATTERN = Pattern.compile("(\\.\\./|\\.\\.\\\\)");
+    private static final int MAX_KEY_LENGTH = 1024;
 
-    private final AwsS3Properties properties;
-    private final Optional<S3Client> s3Client;
-    private final Optional<S3Presigner> s3Presigner;
+    private final BucketRegistry bucketRegistry;
+    private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
 
     public String uploadObject(String key, InputStream content, long contentLength, String contentType) {
         return uploadObject(null, key, content, contentLength, contentType);
     }
 
     public String uploadObject(String bucketAliasOrName, String key, InputStream content, long contentLength, String contentType) {
-        S3Client client = requireClient();
-        String bucket = resolveBucket(bucketAliasOrName);
+        validateObjectKey(key);
+        String bucket = bucketRegistry.resolve(bucketAliasOrName);
         PutObjectRequest.Builder request = PutObjectRequest.builder()
                 .bucket(bucket)
                 .key(key);
@@ -48,8 +54,7 @@ public class S3StorageService {
             request.contentType(contentType);
         }
 
-        client.putObject(request.build(), RequestBody.fromInputStream(content, contentLength));
-        log.debug("Uploaded object {} to bucket {}", key, bucket);
+        s3Client.putObject(request.build(), RequestBody.fromInputStream(content, contentLength));
         return key;
     }
 
@@ -58,13 +63,12 @@ public class S3StorageService {
     }
 
     public void deleteObject(String bucketAliasOrName, String key) {
-        S3Client client = requireClient();
-        String bucket = resolveBucket(bucketAliasOrName);
-        client.deleteObject(DeleteObjectRequest.builder()
+        validateObjectKey(key);
+        String bucket = bucketRegistry.resolve(bucketAliasOrName);
+        s3Client.deleteObject(DeleteObjectRequest.builder()
                 .bucket(bucket)
                 .key(key)
                 .build());
-        log.debug("Deleted object {} from bucket {}", key, bucket);
     }
 
     public URL generatePresignedGetUrl(String key, Duration expiresIn) {
@@ -72,11 +76,11 @@ public class S3StorageService {
     }
 
     public URL generatePresignedGetUrl(String bucketAliasOrName, String key, Duration expiresIn) {
-        S3Presigner presigner = requirePresigner();
-        String bucket = resolveBucket(bucketAliasOrName);
+        validateObjectKey(key);
+        String bucket = bucketRegistry.resolve(bucketAliasOrName);
         Duration duration = expiresIn != null ? expiresIn : DEFAULT_PRESIGN_DURATION;
 
-        PresignedGetObjectRequest presigned = presigner.presignGetObject(GetObjectPresignRequest.builder()
+        PresignedGetObjectRequest presigned = s3Presigner.presignGetObject(GetObjectPresignRequest.builder()
                 .signatureDuration(duration)
                 .getObjectRequest(GetObjectRequest.builder()
                         .bucket(bucket)
@@ -92,8 +96,8 @@ public class S3StorageService {
     }
 
     public URL generatePresignedPutUrl(String bucketAliasOrName, String key, Duration expiresIn, String contentType) {
-        S3Presigner presigner = requirePresigner();
-        String bucket = resolveBucket(bucketAliasOrName);
+        validateObjectKey(key);
+        String bucket = bucketRegistry.resolve(bucketAliasOrName);
         Duration duration = expiresIn != null ? expiresIn : DEFAULT_PRESIGN_DURATION;
 
         PutObjectRequest.Builder putRequest = PutObjectRequest.builder()
@@ -104,16 +108,12 @@ public class S3StorageService {
             putRequest.contentType(contentType);
         }
 
-        PresignedPutObjectRequest presigned = presigner.presignPutObject(PutObjectPresignRequest.builder()
+        PresignedPutObjectRequest presigned = s3Presigner.presignPutObject(PutObjectPresignRequest.builder()
                 .signatureDuration(duration)
                 .putObjectRequest(putRequest.build())
                 .build());
 
         return presigned.url();
-    }
-
-    public boolean isConfigured() {
-        return properties.hasAwsBasicsConfigured() && s3Client.isPresent() && s3Presigner.isPresent();
     }
 
     /**
@@ -134,24 +134,25 @@ public class S3StorageService {
         }
     }
 
-    private S3Client requireClient() {
-        return s3Client.orElseThrow(() -> new IllegalStateException(
-                "AWS S3 is not configured. Set aws.s3.* credentials and bucket."));
-    }
-
-    private S3Presigner requirePresigner() {
-        return s3Presigner.orElseThrow(() -> new IllegalStateException(
-                "AWS S3 is not configured. Set aws.s3.* credentials and bucket."));
-    }
-
-    private String resolveBucket(String bucketAliasOrName) {
-        String bucket = properties.resolveBucket(bucketAliasOrName);
-        if (!StringUtils.hasText(bucket)) {
-            throw new IllegalStateException("No S3 bucket configured for alias '" + bucketAliasOrName + "'. " +
-                    "Ensure aws.s3.buckets.user and aws.s3.buckets.event are set.");
+    /**
+     * Validates object key to prevent path traversal attacks and ensure it meets S3 requirements.
+     */
+    private void validateObjectKey(String key) {
+        if (!StringUtils.hasText(key)) {
+            throw new IllegalArgumentException("Object key cannot be null or empty");
         }
-        return bucket;
+        if (key.length() > MAX_KEY_LENGTH) {
+            throw new IllegalArgumentException("Object key exceeds maximum length of " + MAX_KEY_LENGTH);
+        }
+        if (PATH_TRAVERSAL_PATTERN.matcher(key).find()) {
+            throw new IllegalArgumentException("Object key contains path traversal sequences (../)");
+        }
+        // S3 keys cannot start with / or contain // (except at the beginning)
+        if (key.startsWith("/") || key.contains("//")) {
+            throw new IllegalArgumentException("Object key cannot start with '/' or contain '//'");
+        }
     }
+
 }
 
 

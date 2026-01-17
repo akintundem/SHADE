@@ -8,6 +8,9 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.StringUtils;
 
+/**
+ * AWS S3 configuration properties.
+ */
 @Getter
 @Setter
 @ConfigurationProperties(prefix = "aws.s3")
@@ -18,9 +21,16 @@ public class AwsS3Properties {
     private String region;
 
     /**
-     * Map of named buckets. For now we expect "user" and "event" keys.
+     * Map of bucket aliases to bucket names.
+     * Add new buckets by adding entries: aws.s3.buckets.your-alias: bucket-name
      */
     private Map<String, String> buckets = new HashMap<>();
+
+    /**
+     * Default bucket to use when no bucket is specified.
+     * Optional - if not set, bucket must be explicitly provided.
+     */
+    private String defaultBucket;
 
     private String endpoint;
     private Boolean pathStyleAccessEnabled = false;
@@ -29,28 +39,5 @@ public class AwsS3Properties {
         return StringUtils.hasText(accessKeyId)
                 && StringUtils.hasText(secretAccessKey)
                 && StringUtils.hasText(region);
-    }
-
-    public boolean isConfigured() {
-        return hasAwsBasicsConfigured()
-                && StringUtils.hasText(getUserBucket())
-                && StringUtils.hasText(getEventBucket());
-    }
-
-    public String getUserBucket() {
-        return buckets.get("user");
-    }
-
-    public String getEventBucket() {
-        return buckets.get("event");
-    }
-
-    public String resolveBucket(String aliasOrName) {
-        if (StringUtils.hasText(aliasOrName)) {
-            String mapped = buckets.get(aliasOrName);
-            return StringUtils.hasText(mapped) ? mapped : aliasOrName;
-        }
-        // Default to user bucket when an alias is not provided
-        return getUserBucket();
     }
 }

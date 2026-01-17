@@ -5,7 +5,7 @@ import eventplanner.features.feeds.entity.EventFeedPost;
 import eventplanner.features.feeds.entity.PostLike;
 import eventplanner.features.feeds.repository.FeedPostRepository;
 import eventplanner.features.feeds.repository.PostLikeRepository;
-import eventplanner.common.storage.upload.MediaUploadStatus;
+import eventplanner.common.storage.s3.dto.MediaUploadStatus;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.domain.enums.CommunicationType;

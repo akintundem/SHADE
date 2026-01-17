@@ -1,4 +1,4 @@
-package eventplanner.common.storage.upload;
+package eventplanner.common.storage.s3.dto;
 
 /**
  * Status of media upload for entities that require async S3 uploads.

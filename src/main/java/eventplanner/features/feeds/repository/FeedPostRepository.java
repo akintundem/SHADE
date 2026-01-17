@@ -1,6 +1,6 @@
 package eventplanner.features.feeds.repository;
 
-import eventplanner.common.storage.upload.MediaUploadStatus;
+import eventplanner.common.storage.s3.dto.MediaUploadStatus;
 import eventplanner.features.feeds.entity.EventFeedPost;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
