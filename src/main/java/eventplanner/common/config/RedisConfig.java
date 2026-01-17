@@ -33,8 +33,26 @@ public class RedisConfig {
     @Primary
     public RedisConnectionFactory redisConnectionFactory() {
         RedisStandaloneConfiguration standaloneConfiguration = new RedisStandaloneConfiguration();
-        standaloneConfiguration.setHostName(redisProperties.getHost());
-        standaloneConfiguration.setPort(redisProperties.getPort());
+        // Read from environment variable directly if property is not set or is localhost
+        // This works around Spring Boot property resolution issues with ${SPRING_REDIS_HOST} in application.yml
+        String host = redisProperties.getHost();
+        if (host == null || host.isEmpty() || "localhost".equals(host)) {
+            String envHost = System.getenv("SPRING_REDIS_HOST");
+            if (envHost != null && !envHost.isEmpty()) {
+                host = envHost;
+            }
+        }
+        int port = redisProperties.getPort();
+        if (port == 0) {
+            String envPort = System.getenv("SPRING_REDIS_PORT");
+            if (envPort != null && !envPort.isEmpty()) {
+                port = Integer.parseInt(envPort);
+            } else {
+                port = 6379; // default
+            }
+        }
+        standaloneConfiguration.setHostName(host);
+        standaloneConfiguration.setPort(port);
 
         String redisPassword = redisProperties.getPassword();
         if (redisPassword != null && !redisPassword.isEmpty()) {

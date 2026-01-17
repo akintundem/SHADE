@@ -21,9 +21,8 @@
 .env
 .env.dev
 .env.prod
-# Allow .env.example to be committed as a template
-!.env.example
 *.env
+!/.env.example
 .venv/
 
 # Credentials folder (contains sensitive files like Firebase keys)
@@ -107,8 +106,11 @@ ai-service/.venv/
 # Global env files (any folder)
 .env
 .env.*
+!/.env.example
 *.env
+!/.env.example
 *.env.*
+!/.env.example
 
 # Email preview tooling (Node)
 /src/main/resources/emails/node_modules/

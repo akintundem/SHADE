@@ -34,8 +34,8 @@ services:
       - "8000"
     environment:
       PORT: "8000"
-      AI_SERVICE_SECRET: local-ai-secret
-      EXTERNAL_AI_SERVICE_SECRET: local-ai-secret
+      AI_SERVICE_SECRET: ${AI_SERVICE_SECRET}
+      EXTERNAL_AI_SERVICE_SECRET: ${EXTERNAL_AI_SERVICE_SECRET}
       RETURN_BASE64: "false"
       AI_COGNITO_ISSUER: ""
       AI_COGNITO_AUDIENCE: ""
@@ -69,41 +69,14 @@ services:
       # Cache Maven dependencies to avoid re-downloading
       - maven_cache:/root/.m2
     env_file:
-      - .env
+      - ${ENV_FILE:-.env.prod}
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       # Enable Spring Boot DevTools for hot-reload
       SPRING_DEVTOOLS_RESTART_ENABLED: "true"
       SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "true"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: "2s"
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: "1s"
-
-      # Cognito JWT validation
-      COGNITO_ISSUER_URI: ${COGNITO_ISSUER_URI:-}
-      COGNITO_JWK_SET_URI: ${COGNITO_JWK_SET_URI:-}
-      COGNITO_AUDIENCE: ${COGNITO_AUDIENCE:-}
-
-      DB_HOST: ${DB_HOST:-}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${DB_NAME:-}
-      DB_USERNAME: ${DB_USERNAME:-}
-      DB_PASSWORD: ${DB_PASSWORD:-}
-
-      SPRING_REDIS_HOST: ${SPRING_REDIS_HOST:-host.docker.internal}
-      SPRING_REDIS_PORT: ${SPRING_REDIS_PORT:-6379}
-      SPRING_REDIS_PASSWORD: ${SPRING_REDIS_PASSWORD:-}
-
-      # Email service integration
-      EXTERNAL_EMAIL_SERVICE_URL: http://shade-email-service:3000
-      EXTERNAL_EMAIL_SERVICE_SECRET: ${EXTERNAL_EMAIL_SERVICE_SECRET:-}
-      EXTERNAL_PUSH_SERVICE_URL: ${EXTERNAL_PUSH_SERVICE_URL:-http://shade-push-service:3100}
-      EXTERNAL_PUSH_SERVICE_SECRET: ${EXTERNAL_PUSH_SERVICE_SECRET:-}
-      SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY:-***REMOVED***}
-      # Force service API key to be optional (override .env.prod if set)
-      SERVICE_AUTH_REQUIRE_HEADER: false
-      EXTERNAL_EMAIL_FROM: ${EXTERNAL_EMAIL_FROM:-}
-      EXTERNAL_EMAIL_FROM_EVENTS: ${EXTERNAL_EMAIL_FROM_EVENTS:-}
-      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8000}
+      # Note: All other environment variables are loaded from env_file (.env.prod)
 
     # Extended startup time for Maven build on first run
     healthcheck:
@@ -135,10 +108,10 @@ services:
       KONG_ADMIN_LISTEN: 127.0.0.1:8001
       # Environment variables for secrets (used in kong.yml)
       # IMPORTANT: Set secure values in production .env files
-      GATEWAY_SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY:-***REMOVED***}
-      AI_GATEWAY_SHARED_SECRET: local-ai-secret
+      GATEWAY_SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY}
+      AI_GATEWAY_SHARED_SECRET: ${AI_GATEWAY_SHARED_SECRET}
       # CORS origins for production
-      KONG_CORS_ORIGINS: http://localhost:3000,http://localhost:8000
+      KONG_CORS_ORIGINS: ${KONG_CORS_ORIGINS}
     volumes:
       - ./infra/kong/kong.yml:/kong/kong.yml:ro
     ports:
