@@ -2,7 +2,6 @@ package eventplanner.features.event.service;
 
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.common.dto.ApiMessageResponse;
-import eventplanner.common.exception.exceptions.BadRequestException;
 import eventplanner.common.storage.s3.services.S3StorageService;
 import eventplanner.features.event.dto.request.EventMediaRequest;
 import eventplanner.features.event.dto.request.EventMediaUploadRequest;
