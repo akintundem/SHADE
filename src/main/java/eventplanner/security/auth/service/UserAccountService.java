@@ -1,6 +1,7 @@
 package eventplanner.security.auth.service;
 
 import eventplanner.security.auth.enums.UserStatus;
+import eventplanner.security.auth.enums.UserType;
 import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.feeds.dto.response.PostListResponse;
@@ -125,9 +126,6 @@ public class UserAccountService {
         }
         
         // Update other fields
-        if (request.getUserType() != null) {
-            user.setUserType(request.getUserType());
-        }
         if (request.getPreferences() != null) {
             String trimmedPreferences = safeTrim(request.getPreferences());
             user.setPreferences(StringUtils.hasText(trimmedPreferences) ? trimmedPreferences : null);
@@ -343,44 +341,106 @@ public class UserAccountService {
      * @param request The signup request containing user details
      * @return ProvisionResult with the user and whether they were newly created
      */
-    public ProvisionResult provisionCognitoUser(SignupRequest request) {
+    public ProvisionResult provisionCognitoUser(SignupRequest request, String cognitoSub) {
         String email = normalizeEmail(request.getEmail());
         if (email == null) {
             throw new IllegalArgumentException("Valid email is required");
+        }
+        String normalizedUsername = normalizeUsername(request.getUsername());
+        if (!StringUtils.hasText(normalizedUsername)) {
+            throw new IllegalArgumentException("Username is required");
         }
 
         Optional<UserAccount> existingUser = userAccountRepository.findByEmailIgnoreCase(email);
         
         if (existingUser.isPresent()) {
             UserAccount user = existingUser.get();
-            // Update Cognito sub if provided and not already set
-            if (StringUtils.hasText(request.getCognitoSub()) && !StringUtils.hasText(user.getCognitoSub())) {
-                user.setCognitoSub(request.getCognitoSub());
-                userAccountRepository.save(user);
+            if (StringUtils.hasText(cognitoSub)) {
+                String existingSub = safeTrim(user.getCognitoSub());
+                if (StringUtils.hasText(existingSub) && !existingSub.equals(cognitoSub)) {
+                    throw new IllegalArgumentException("Token subject does not match existing account");
+                }
+                if (!StringUtils.hasText(existingSub)) {
+                    user.setCognitoSub(cognitoSub);
+                }
             }
+            applySignupUpdates(user, request, normalizedUsername);
+            userAccountRepository.save(user);
             return new ProvisionResult(user, false);
+        }
+
+        if (userAccountRepository.existsByUsernameIgnoreCase(normalizedUsername)) {
+            throw new IllegalArgumentException("Username is already taken");
         }
 
         // Create new user
         UserAccount newUser = new UserAccount();
         newUser.setEmail(email);
         newUser.setName(StringUtils.hasText(request.getName()) ? request.getName().trim() : email.split("@")[0]);
-        newUser.setCognitoSub(request.getCognitoSub());
+        newUser.setUsername(normalizedUsername);
+        newUser.setCognitoSub(StringUtils.hasText(cognitoSub) ? cognitoSub : null);
         newUser.setPhoneNumber(StringUtils.hasText(request.getPhoneNumber()) ? request.getPhoneNumber().trim() : null);
         newUser.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
         newUser.setAcceptTerms(Boolean.TRUE.equals(request.getAcceptTerms()));
         newUser.setAcceptPrivacy(Boolean.TRUE.equals(request.getAcceptPrivacy()));
-        newUser.setUserType(request.getUserType());
+        newUser.setUserType(UserType.INDIVIDUAL);
         newUser.setProfilePictureUrl(getDefaultProfilePictureUrl());
         
         // Mark profile as complete if required fields are present
-        if (StringUtils.hasText(newUser.getName()) && newUser.isAcceptTerms() && newUser.isAcceptPrivacy()) {
+        if (isProfileComplete(newUser)) {
             newUser.setProfileCompleted(true);
         }
 
         UserAccount savedUser = userAccountRepository.save(newUser);
         return new ProvisionResult(savedUser, true);
     }
+
+    private void applySignupUpdates(UserAccount user, SignupRequest request, String normalizedUsername) {
+        String existingUsername = safeTrim(user.getUsername());
+        if (StringUtils.hasText(existingUsername)) {
+            if (!existingUsername.equalsIgnoreCase(normalizedUsername)) {
+                throw new IllegalArgumentException("Username cannot be changed once set");
+            }
+        } else {
+            if (userAccountRepository.existsByUsernameIgnoreCase(normalizedUsername)) {
+                throw new IllegalArgumentException("Username is already taken");
+            }
+            user.setUsername(normalizedUsername);
+        }
+
+        String trimmedName = safeTrim(request.getName());
+        if (StringUtils.hasText(trimmedName)) {
+            user.setName(trimmedName);
+        }
+
+        String trimmedPhone = safeTrim(request.getPhoneNumber());
+        if (request.getPhoneNumber() != null) {
+            user.setPhoneNumber(StringUtils.hasText(trimmedPhone) ? trimmedPhone : null);
+        }
+
+        if (request.getMarketingOptIn() != null) {
+            user.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
+        }
+        if (Boolean.TRUE.equals(request.getAcceptTerms())) {
+            user.setAcceptTerms(true);
+        }
+        if (Boolean.TRUE.equals(request.getAcceptPrivacy())) {
+            user.setAcceptPrivacy(true);
+        }
+
+        if (!Boolean.TRUE.equals(user.getProfileCompleted()) && isProfileComplete(user)) {
+            user.setProfileCompleted(true);
+        }
+    }
+
+    private boolean isProfileComplete(UserAccount user) {
+        return StringUtils.hasText(user.getName())
+                && StringUtils.hasText(user.getUsername())
+                && StringUtils.hasText(user.getPhoneNumber())
+                && user.isAcceptTerms()
+                && user.isAcceptPrivacy();
+    }
+
 
     /**
      * Get all posts created by the current user.

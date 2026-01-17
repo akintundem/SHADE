@@ -1,6 +1,5 @@
 package eventplanner.security.auth.dto.req;
 
-import eventplanner.security.auth.enums.UserType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
@@ -35,8 +34,6 @@ public class UpdateUserProfileRequest {
     private Boolean acceptTerms;
 
     private Boolean acceptPrivacy;
-
-    private UserType userType;
 
     @Size(max = 2000)
     private String preferences;

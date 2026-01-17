@@ -1,9 +1,9 @@
 package eventplanner.security.auth.dto.req;
 
-import eventplanner.security.auth.enums.UserType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -16,6 +16,15 @@ public class SignupRequest {
     @NotBlank(message = "Email is required")
     @Email(message = "Email must be valid")
     private String email;
+
+    @Schema(description = "Public handle/username", example = "ada.lovelace", requiredMode = Schema.RequiredMode.REQUIRED)
+    @NotBlank(message = "Username is required")
+    @Size(min = 3, max = 30, message = "Username must be between 3 and 30 characters")
+    @Pattern(
+            regexp = "^[A-Za-z0-9](?:[A-Za-z0-9._]{1,28}[A-Za-z0-9])?$",
+            message = "Username must be 3-30 characters and contain only letters, numbers, '.' or '_' (cannot start/end with '.' or '_')"
+    )
+    private String username;
 
     @Schema(description = "Display name for the user", example = "Ada Lovelace")
     @Size(min = 1, max = 120, message = "Name must be between 1 and 120 characters")
@@ -33,11 +42,4 @@ public class SignupRequest {
 
     @Schema(description = "Whether the user accepted the privacy policy", example = "true")
     private Boolean acceptPrivacy;
-
-    @Schema(description = "Cognito subject to attach to this user (set after Cognito signup)", example = "c1b2c3d4-5678-90ab-cdef-1234567890ab")
-    @Size(max = 120, message = "Cognito subject must be 120 characters or fewer")
-    private String cognitoSub;
-
-    @Schema(description = "User type classification", example = "INDIVIDUAL")
-    private UserType userType;
 }

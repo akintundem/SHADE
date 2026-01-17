@@ -1,6 +1,8 @@
 package eventplanner.security.auth.controller;
 
 import eventplanner.common.dto.ApiMessageResponse;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.common.exception.exceptions.UnauthorizedException;
 import eventplanner.security.auth.dto.req.SignupRequest;
@@ -16,7 +18,10 @@ import eventplanner.security.auth.dto.AuthMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,7 +29,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
+
+import static eventplanner.security.util.AuthValidationUtil.normalizeEmail;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -70,17 +76,76 @@ public class AuthInfoController {
      * Creates/updates a local user record so downstream APIs can resolve the user by email/sub.
      */
     @PostMapping("/signup")
-    public ResponseEntity<SecureUserResponse> signup(@Valid @RequestBody SignupRequest request) {
+    public ResponseEntity<SecureUserResponse> signup(@Valid @RequestBody SignupRequest request,
+                                                     Authentication authentication) {
         try {
-            var result = userAccountService.provisionCognitoUser(request);
+            Jwt jwt = requireJwt(authentication);
+            String tokenUse = jwt.getClaimAsString("token_use");
+            if (!"access".equals(tokenUse)) {
+                throw new UnauthorizedException("Invalid token");
+            }
+            String tokenEmail = normalizeEmail(jwt.getClaimAsString("email"));
+            if (!StringUtils.hasText(tokenEmail)) {
+                throw new UnauthorizedException("Invalid token");
+            }
+            if (!isEmailVerified(jwt)) {
+                throw new ForbiddenException("Email not verified");
+            }
+
+            String requestEmail = normalizeEmail(request.getEmail());
+            if (!tokenEmail.equalsIgnoreCase(requestEmail)) {
+                throw new BadRequestException("Invalid signup payload");
+            }
+
+            request.setEmail(tokenEmail);
+            String subject = jwt.getSubject();
+            if (!StringUtils.hasText(subject)) {
+                throw new UnauthorizedException("Invalid token");
+            }
+            var result = userAccountService.provisionCognitoUser(request, subject);
+            UserAccount user = result.user();
+            cognitoUserService.updateUserProfile(
+                    subject,
+                    tokenEmail,
+                    user.getName(),
+                    user.getUsername(),
+                    user.getPhoneNumber()
+            );
             HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
-            return ResponseEntity.status(status).body(AuthMapper.toSecureUserResponse(result.user()));
+            return ResponseEntity.status(status).body(AuthMapper.toSecureUserResponse(user));
         } catch (IllegalStateException ex) {
             // Return a generic error to avoid revealing whether an account exists
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid credentials", ex);
+            throw new BadRequestException("Invalid credentials", ex);
         } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid credentials", ex);
+            throw new BadRequestException("Invalid credentials", ex);
         }
+    }
+
+    private Jwt requireJwt(Authentication authentication) {
+        if (authentication == null) {
+            throw new UnauthorizedException("Unauthorized");
+        }
+        if (authentication instanceof JwtAuthenticationToken jwtAuth) {
+            return jwtAuth.getToken();
+        }
+        Object details = authentication.getDetails();
+        if (details instanceof Jwt jwt) {
+            return jwt;
+        }
+        Object credentials = authentication.getCredentials();
+        if (credentials instanceof Jwt jwt) {
+            return jwt;
+        }
+        throw new UnauthorizedException("Unauthorized");
+    }
+
+    private boolean isEmailVerified(Jwt jwt) {
+        Boolean verified = jwt.getClaimAsBoolean("email_verified");
+        if (verified != null) {
+            return verified;
+        }
+        String rawValue = jwt.getClaimAsString("email_verified");
+        return "true".equalsIgnoreCase(rawValue);
     }
 
     private boolean isOnboardingRequired(UserAccount user) {

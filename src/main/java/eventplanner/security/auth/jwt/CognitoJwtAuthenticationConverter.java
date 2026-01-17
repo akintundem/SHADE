@@ -17,6 +17,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.BearerTokenAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,16 +52,21 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
         String name = resolveDisplayName(jwt);
 
         var user = resolveOrProvisionUser(subject, email, name);
+        if (user.getUserType() == UserType.ADMIN) {
+            throw invalidToken("Admin identities must use the admin identity provider");
+        }
         UserPrincipal principal = new UserPrincipal(user, List.of(), null);
 
         List<GrantedAuthority> authorities = new ArrayList<>(principal.getAuthorities());
         authorities.addAll(mapGroupsToAuthorities(jwt));
 
-        return new UsernamePasswordAuthenticationToken(
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 principal,
                 new BearerTokenAuthenticationToken(jwt.getTokenValue()),
                 authorities
         );
+        authentication.setDetails(jwt);
+        return authentication;
     }
 
     private OAuth2AuthenticationException invalidToken(String message) {
@@ -74,9 +81,14 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
 
         List<GrantedAuthority> authorities = new ArrayList<>();
         for (String group : groups) {
-            if (StringUtils.hasText(group)) {
-                authorities.add(new SimpleGrantedAuthority("ROLE_" + group.toUpperCase(Locale.ROOT)));
+            if (!StringUtils.hasText(group)) {
+                continue;
             }
+            String normalized = group.trim().toUpperCase(Locale.ROOT);
+            if ("ADMIN".equals(normalized) || "SUPER_ADMIN".equals(normalized)) {
+                throw invalidToken("Admin identities must use the admin identity provider");
+            }
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + normalized));
         }
         return authorities;
     }
@@ -102,6 +114,9 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
         }
 
         if (!autoProvision) {
+            if (isSignupRequest()) {
+                return createSignupPlaceholder(subject, email, name);
+            }
             throw invalidToken("User not found and auto-provision disabled");
         }
 
@@ -160,6 +175,24 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
         return userAccountRepository.save(user);
     }
 
+    private UserAccount createSignupPlaceholder(String subject, String email, String name) {
+        String normalizedEmail = normalizeEmailOrFallback(subject, email);
+        String resolvedName = StringUtils.hasText(name) ? name.trim() : normalizedEmail;
+        UserAccount user = UserAccount.builder()
+                .email(normalizedEmail)
+                .cognitoSub(subject)
+                .name(resolvedName)
+                .acceptTerms(false)
+                .acceptPrivacy(false)
+                .marketingOptIn(false)
+                .userType(UserType.INDIVIDUAL)
+                .status(UserStatus.ACTIVE)
+                .profileCompleted(false)
+                .build();
+        user.setSettings(UserSettings.createDefault(user));
+        return user;
+    }
+
     private String resolveDisplayName(Jwt jwt) {
         String name = safeTrim(jwt.getClaimAsString("name"));
         if (StringUtils.hasText(name)) {
@@ -195,6 +228,19 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
         }
         String fallback = StringUtils.hasText(subject) ? subject : UUID.randomUUID().toString();
         return fallback + "@cognito.local";
+    }
+
+    private boolean isSignupRequest() {
+        var attributes = RequestContextHolder.getRequestAttributes();
+        if (!(attributes instanceof ServletRequestAttributes servletAttributes)) {
+            return false;
+        }
+        var request = servletAttributes.getRequest();
+        if (request == null) {
+            return false;
+        }
+        String path = request.getRequestURI();
+        return "/api/v1/auth/signup".equals(path) || "/api/v1/auth/signup/".equals(path);
     }
 
     private String normalizeEmailClaim(String email) {

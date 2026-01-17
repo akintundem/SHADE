@@ -12,9 +12,10 @@ import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeStatus;
 import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.features.ticket.repository.TicketRepository;
-import org.springframework.http.HttpStatus;
+import eventplanner.common.exception.exceptions.ForbiddenException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.UnauthorizedException;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
@@ -46,7 +47,7 @@ public class EventAccessControlService {
 
     public Event ensureEventExists(UUID eventId) {
         return eventRepository.findById(eventId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
     }
 
     public Event requireMediaView(UserPrincipal principal, UUID eventId) {
@@ -86,9 +87,9 @@ public class EventAccessControlService {
             return event;
         }
         EventUser membership = getMembership(event.getId(), user.getId())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event media"));
+            .orElseThrow(() -> new ForbiddenException("Access denied to event media"));
         if (!MEDIA_VIEW_ROLES.contains(membership.getUserType())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event media");
+            throw new ForbiddenException("Access denied to event media");
         }
         return event;
     }
@@ -122,7 +123,7 @@ public class EventAccessControlService {
             return event;
         }
         
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+        throw new ForbiddenException(
             "Access denied. RSVP confirmation is required to view this event's content.");
     }
 
@@ -155,7 +156,7 @@ public class EventAccessControlService {
             return event;
         }
         
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+        throw new ForbiddenException(
             "Access denied. You must be invited and accept the invitation to view this event's content.");
     }
 
@@ -188,7 +189,7 @@ public class EventAccessControlService {
             return event;
         }
         
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+        throw new ForbiddenException(
             "Access denied. A valid ticket is required to view this event's content.");
     }
 
@@ -253,7 +254,7 @@ public class EventAccessControlService {
         }
         // Any event membership is allowed to upload media
         getMembership(eventId, user.getId())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to upload media"));
+            .orElseThrow(() -> new ForbiddenException("Access denied to upload media"));
         return event;
     }
 
@@ -264,9 +265,9 @@ public class EventAccessControlService {
             return event;
         }
         EventUser membership = getMembership(eventId, user.getId())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to manage media"));
+            .orElseThrow(() -> new ForbiddenException("Access denied to manage media"));
         if (!MEDIA_MANAGE_ROLES.contains(membership.getUserType())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to manage media");
+            throw new ForbiddenException("Access denied to manage media");
         }
         return event;
     }
@@ -278,9 +279,9 @@ public class EventAccessControlService {
             return event;
         }
         EventUser membership = getMembership(eventId, user.getId())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event assets"));
+            .orElseThrow(() -> new ForbiddenException("Access denied to event assets"));
         if (!ASSET_VIEW_ROLES.contains(membership.getUserType())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event assets");
+            throw new ForbiddenException("Access denied to event assets");
         }
         return event;
     }
@@ -291,7 +292,7 @@ public class EventAccessControlService {
 
     private UserPrincipal requireAuthenticated(UserPrincipal principal) {
         if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            throw new UnauthorizedException("Authentication required");
         }
         return principal;
     }

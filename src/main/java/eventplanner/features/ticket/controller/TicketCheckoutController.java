@@ -8,6 +8,8 @@ import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ForbiddenException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -21,7 +23,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.UUID;
 
@@ -46,14 +47,14 @@ public class TicketCheckoutController {
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
             if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+                throw new ForbiddenException("Access denied to event: " + eventId);
             }
             TicketCheckoutResponse response = checkoutService.createCheckout(eventId, request, principal);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
+            throw e;
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new BadRequestException(e.getMessage());
         }
     }
 
@@ -66,14 +67,14 @@ public class TicketCheckoutController {
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
             if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+                throw new ForbiddenException("Access denied to event: " + eventId);
             }
             TicketPaymentInitResponse response = checkoutService.startPayment(checkoutId, eventId, principal);
             return ResponseEntity.ok(response);
         } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
+            throw e;
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new BadRequestException(e.getMessage());
         }
     }
 
@@ -86,14 +87,14 @@ public class TicketCheckoutController {
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
             if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+                throw new ForbiddenException("Access denied to event: " + eventId);
             }
             TicketCheckoutResponse response = checkoutService.getCheckout(checkoutId, eventId);
             return ResponseEntity.ok(response);
         } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
+            throw e;
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new BadRequestException(e.getMessage());
         }
     }
 
@@ -106,14 +107,14 @@ public class TicketCheckoutController {
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
             if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+                throw new ForbiddenException("Access denied to event: " + eventId);
             }
             TicketCheckoutResponse response = checkoutService.cancelCheckout(checkoutId, eventId);
             return ResponseEntity.ok(response);
         } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
+            throw e;
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new BadRequestException(e.getMessage());
         }
     }
 }

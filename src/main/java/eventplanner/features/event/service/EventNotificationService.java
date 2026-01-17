@@ -13,13 +13,15 @@ import eventplanner.features.event.entity.EventNotificationSettings;
 import eventplanner.features.event.enums.EventNotificationChannel;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.common.config.ExternalServicesProperties;
+import eventplanner.common.exception.exceptions.ApiException;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ErrorCode;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.*;
 
@@ -65,7 +67,7 @@ public class EventNotificationService {
 
         // Fetch event details for template variables
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
 
         // Prepare template variables with event details using shared service
         Map<String, Object> templateVariables = templateVariableService.prepareTemplateVariables(
@@ -151,7 +153,7 @@ public class EventNotificationService {
             String errorMsg = String.format("All notifications failed to send. Errors: %s", 
                     String.join(", ", failedRecipients));
             log.error(errorMsg);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, errorMsg);
+            throw new ApiException(ErrorCode.INTERNAL_ERROR, errorMsg);
         }
         
         // If some failed, log warning but don't throw (partial success)
@@ -187,8 +189,7 @@ public class EventNotificationService {
         // For EMAIL channel, require emailTemplateType
         if (type == CommunicationType.EMAIL) {
             if (request.getEmailTemplateType() == null) {
-                throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, 
+                throw new BadRequestException(
                     "emailTemplateType is required for EMAIL channel. Options: ANNOUNCEMENT, CANCEL_EVENT"
                 );
             }
@@ -202,7 +203,7 @@ public class EventNotificationService {
 
     private void validateChannelEnabled(EventNotificationSettings settings, EventNotificationChannel channel) {
         if (channel == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Notification channel is required");
+            throw new BadRequestException("Notification channel is required");
         }
         boolean enabled = switch (channel) {
             case EMAIL -> Boolean.TRUE.equals(settings.getEmailEnabled());
@@ -210,7 +211,7 @@ public class EventNotificationService {
             case PUSH -> Boolean.TRUE.equals(settings.getPushEnabled());
         };
         if (!enabled) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Notification channel is disabled for this event");
+            throw new BadRequestException("Notification channel is disabled for this event");
         }
     }
 

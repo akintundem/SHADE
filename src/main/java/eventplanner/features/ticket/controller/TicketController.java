@@ -12,6 +12,10 @@ import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.common.exception.exceptions.ApiException;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ErrorCode;
+import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.common.exception.exceptions.ConflictException;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
@@ -26,7 +30,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -55,7 +58,7 @@ public class TicketController {
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
             if (requests == null || requests.isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                throw new BadRequestException(
                     "At least one ticket request is required");
             }
 
@@ -63,14 +66,14 @@ public class TicketController {
             UUID eventId = requests.get(0).getEventId();
             for (IssueTicketRequest req : requests) {
                 if (req.getEventId() == null || !req.getEventId().equals(eventId)) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                    throw new BadRequestException(
                         "All ticket requests must be for the same event");
                 }
             }
 
             // Verify user can access the event
             if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                throw new ForbiddenException(
                     "Access denied to event: " + eventId);
             }
 
@@ -81,7 +84,7 @@ public class TicketController {
 
             return ResponseEntity.status(HttpStatus.CREATED).body(responses);
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new BadRequestException(e.getMessage());
         }
     }
 
@@ -104,7 +107,7 @@ public class TicketController {
         try {
             // Verify user can access the event
             if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                throw new ForbiddenException(
                     "Access denied to event: " + eventId);
             }
 
@@ -122,7 +125,7 @@ public class TicketController {
 
             return ResponseEntity.ok(tickets);
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new BadRequestException(e.getMessage());
         }
     }
 
@@ -136,7 +139,7 @@ public class TicketController {
         try {
             // Verify user can access the event
             if (!authorizationService.canAccessEvent(principal, request.getEventId())) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                throw new ForbiddenException(
                     "Access denied to event: " + request.getEventId());
             }
 
@@ -186,15 +189,15 @@ public class TicketController {
             }
             return ResponseEntity.ok(response);
         } catch (ConflictException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+            throw e;
         } catch (ResourceNotFoundException e) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+            throw e;
         } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
+            throw e;
         } catch (IllegalArgumentException | IllegalStateException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new BadRequestException(e.getMessage());
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, 
+            throw new ApiException(ErrorCode.INTERNAL_ERROR, 
                 "An error occurred while canceling the ticket");
         }
     }
@@ -210,7 +213,7 @@ public class TicketController {
             TicketWalletResponse wallet = ticketService.getTicketWallet(id);
             return ResponseEntity.ok(wallet);
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw new BadRequestException(e.getMessage());
         }
     }
 
