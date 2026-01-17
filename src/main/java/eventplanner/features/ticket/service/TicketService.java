@@ -25,8 +25,8 @@ import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import eventplanner.common.config.ExternalServicesProperties;
+import eventplanner.features.config.AppProperties;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -46,7 +46,6 @@ import java.util.stream.Collectors;
  * Handles ticket issuance, validation, QR code generation, and integration with attendee system.
  */
 @Service
-@RequiredArgsConstructor
 @Transactional
 public class TicketService {
 
@@ -56,13 +55,35 @@ public class TicketService {
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
-    @Value("${external.email.from.events:events@noreply.mayokun.dev}")
-    private String eventsFrom;
-
-    @Value("${app.ticket.qr-secret:default-secret-key-change-in-production}")
-    private String qrSecretKey;
+    private final ExternalServicesProperties externalServicesProperties;
+    private final String qrSecretKey;
 
     private static final int DEFAULT_MAX_TICKETS_PER_PERSON = 5;
+
+    public TicketService(TicketRepository ticketRepository,
+                         TicketTypeRepository ticketTypeRepository,
+                         AttendeeRepository attendeeRepository,
+                         EventRepository eventRepository,
+                         UserAccountRepository userAccountRepository,
+                         NotificationService notificationService,
+                         ExternalServicesProperties externalServicesProperties,
+                         AppProperties appProperties) {
+        this.ticketRepository = ticketRepository;
+        this.ticketTypeRepository = ticketTypeRepository;
+        this.attendeeRepository = attendeeRepository;
+        this.eventRepository = eventRepository;
+        this.userAccountRepository = userAccountRepository;
+        this.notificationService = notificationService;
+        this.externalServicesProperties = externalServicesProperties;
+        this.qrSecretKey = requireConfigured(appProperties.getTicket().getQrSecret(), "app.ticket.qr-secret");
+    }
+
+    private static String requireConfigured(String value, String propertyName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(propertyName + " must be configured");
+        }
+        return value;
+    }
 
     /**
      * Check if a ticket type is free (price is null or zero).
@@ -499,7 +520,7 @@ public class TicketService {
                         .templateId("ticket-confirmation")
                         .templateVariables(templateVars)
                         .eventId(event.getId())
-                        .from(eventsFrom)
+                        .from(externalServicesProperties.getEmail().getFromEvents())
                         .build());
                 }
                 

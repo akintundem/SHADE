@@ -2,9 +2,9 @@ package eventplanner.common.communication.services.channel.email;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import eventplanner.common.config.ExternalServicesProperties;
 import eventplanner.common.communication.services.channel.email.dto.EmailResult;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -30,9 +30,12 @@ public class EmailService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
-    public EmailService(
-            @Value("${external.email-service.url:http://shade-email-service:3000}") String emailServiceUrl,
-            @Value("${external.email-service.secret:}") String sharedSecret) {
+    public EmailService(ExternalServicesProperties properties) {
+        String emailServiceUrl = properties.getEmailService().getUrl();
+        String sharedSecret = properties.getEmailService().getSecret();
+        if (emailServiceUrl == null || emailServiceUrl.isBlank()) {
+            throw new IllegalStateException("external.email-service.url must be configured");
+        }
         this.emailServiceUrl = emailServiceUrl.endsWith("/") ? emailServiceUrl.substring(0, emailServiceUrl.length() - 1) : emailServiceUrl;
         this.sharedSecret = sharedSecret;
         this.restTemplate = new RestTemplate();

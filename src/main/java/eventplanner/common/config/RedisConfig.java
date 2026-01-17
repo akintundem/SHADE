@@ -1,6 +1,7 @@
 package eventplanner.common.config;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -19,37 +20,31 @@ import java.time.Duration;
  * Redis configuration for the monolithic Event Planner application
  */
 @Configuration
+@EnableConfigurationProperties(RedisProperties.class)
 public class RedisConfig {
 
-    @Value("${spring.redis.host}")
-    private String redisHost;
+    private final RedisProperties redisProperties;
 
-    @Value("${spring.redis.port}")
-    private int redisPort;
-
-    @Value("${spring.redis.password}")
-    private String redisPassword;
-
-    @Value("${spring.redis.database}")
-    private int redisDatabase;
-
-    @Value("${spring.redis.timeout}")
-    private Duration redisTimeout;
+    public RedisConfig(RedisProperties redisProperties) {
+        this.redisProperties = redisProperties;
+    }
 
     @Bean
     @Primary
     public RedisConnectionFactory redisConnectionFactory() {
         RedisStandaloneConfiguration standaloneConfiguration = new RedisStandaloneConfiguration();
-        standaloneConfiguration.setHostName(redisHost);
-        standaloneConfiguration.setPort(redisPort);
+        standaloneConfiguration.setHostName(redisProperties.getHost());
+        standaloneConfiguration.setPort(redisProperties.getPort());
 
+        String redisPassword = redisProperties.getPassword();
         if (redisPassword != null && !redisPassword.isEmpty()) {
             standaloneConfiguration.setPassword(RedisPassword.of(redisPassword));
         }
-        standaloneConfiguration.setDatabase(redisDatabase);
+        standaloneConfiguration.setDatabase(redisProperties.getDatabase());
 
         LettuceClientConfiguration.LettuceClientConfigurationBuilder builder = LettuceClientConfiguration.builder();
 
+        Duration redisTimeout = redisProperties.getTimeout();
         if (redisTimeout != null) {
             builder.commandTimeout(redisTimeout);
         }

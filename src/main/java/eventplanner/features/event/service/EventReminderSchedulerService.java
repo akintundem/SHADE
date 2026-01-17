@@ -8,9 +8,9 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventReminder;
 import eventplanner.features.event.enums.EmailTemplateType;
 import eventplanner.features.event.repository.EventReminderRepository;
+import eventplanner.common.config.ExternalServicesProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,8 +34,7 @@ public class EventReminderSchedulerService {
     private final NotificationService notificationService;
     private final EventEmailTemplateService emailTemplateService;
     private final EventTemplateVariableService templateVariableService;
-    @Value("${external.email.from.events:events@noreply.mayokun.dev}")
-    private String eventsFrom;
+    private final ExternalServicesProperties externalServicesProperties;
 
     /**
      * Scheduled task that runs every minute to check and send pending reminders
@@ -143,7 +142,7 @@ public class EventReminderSchedulerService {
                             .templateId(templateId)
                             .templateVariables(overrideReminderVariables(templateVariables, event, content))
                             .eventId(event.getId())
-                            .from(eventsFrom)
+                            .from(externalServicesProperties.getEmail().getFromEvents())
                             .build();
 
                     NotificationResponse response = notificationService.send(notificationRequest);
@@ -178,7 +177,7 @@ public class EventReminderSchedulerService {
                                     ? pushData
                                     : overrideReminderVariables(templateVariables, event, content))
                             .eventId(event.getId())
-                            .from(eventsFrom)
+                            .from(externalServicesProperties.getEmail().getFromEvents())
                             .build();
 
                     NotificationResponse response = notificationService.send(notificationRequest);

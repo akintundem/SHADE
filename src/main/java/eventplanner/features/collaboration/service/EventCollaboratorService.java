@@ -14,7 +14,7 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
-import org.springframework.beans.factory.annotation.Value;
+import eventplanner.common.config.ExternalServicesProperties;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,17 +34,18 @@ public class EventCollaboratorService {
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
-    @Value("${external.email.from.events:events@noreply.mayokun.dev}")
-    private String eventsFrom;
+    private final ExternalServicesProperties externalServicesProperties;
 
     public EventCollaboratorService(EventUserRepository eventUserRepository, 
                                    EventRepository eventRepository,
                                    UserAccountRepository userAccountRepository,
-                                   NotificationService notificationService) {
+                                   NotificationService notificationService,
+                                   ExternalServicesProperties externalServicesProperties) {
         this.eventUserRepository = eventUserRepository;
         this.eventRepository = eventRepository;
         this.userAccountRepository = userAccountRepository;
         this.notificationService = notificationService;
+        this.externalServicesProperties = externalServicesProperties;
     }
 
     public List<EventCollaboratorResponse> getCollaborators(UUID eventId, int page, int size) {
@@ -122,7 +123,7 @@ public class EventCollaboratorService {
                         .templateId("collaborator-welcome")
                         .templateVariables(templateVariables)
                         .eventId(event.getId())
-                        .from(eventsFrom)
+                        .from(externalServicesProperties.getEmail().getFromEvents())
                         .build());
             }
             

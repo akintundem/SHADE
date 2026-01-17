@@ -6,7 +6,7 @@ import eventplanner.common.communication.services.core.dto.PushResult;
 import eventplanner.common.communication.model.DeviceToken;
 import eventplanner.common.communication.repository.DeviceTokenRepository;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.beans.factory.annotation.Value;
+import eventplanner.common.config.ExternalServicesProperties;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -46,11 +46,15 @@ public class PushNotificationService {
     private static final int BATCH_SIZE = 1000; // Max tokens per batch to avoid payload size limits
 
     public PushNotificationService(DeviceTokenRepository deviceTokenRepository,
-                                   @Value("${external.push-service.url:http://shade-push-service:3100}") String pushServiceUrl,
-                                   @Value("${external.push-service.secret:}") String sharedSecret,
+                                   ExternalServicesProperties properties,
                                    ObjectMapper objectMapper) {
         this.deviceTokenRepository = deviceTokenRepository;
         this.restTemplate = createRestTemplate();
+        String pushServiceUrl = properties.getPushService().getUrl();
+        String sharedSecret = properties.getPushService().getSecret();
+        if (pushServiceUrl == null || pushServiceUrl.isBlank()) {
+            throw new IllegalStateException("external.push-service.url must be configured");
+        }
         this.pushServiceUrl = pushServiceUrl.endsWith("/") ? pushServiceUrl.substring(0, pushServiceUrl.length() - 1) : pushServiceUrl;
         this.sharedSecret = sharedSecret;
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();

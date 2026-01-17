@@ -1,5 +1,6 @@
 package eventplanner.common.communication.services.core;
 
+import eventplanner.common.config.ExternalServicesProperties;
 import eventplanner.common.communication.model.Communication;
 import eventplanner.common.communication.repository.CommunicationRepository;
 import eventplanner.common.communication.services.channel.email.EmailService;
@@ -13,7 +14,6 @@ import eventplanner.common.communication.enums.CommunicationType;
 import eventplanner.common.communication.model.CommunicationRecipientType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -37,8 +37,7 @@ public class NotificationService {
     private final EmailService emailService;
     private final PushNotificationService pushNotificationService;
     private final CommunicationRepository communicationRepository;
-    @Value("${external.email.from:Shade <noreply@shade.com>}")
-    private String defaultFrom;
+    private final ExternalServicesProperties externalServicesProperties;
 
     /**
      * Send communication based on type
@@ -108,6 +107,7 @@ public class NotificationService {
             
             switch (type) {
                 case EMAIL:
+                    String defaultFrom = externalServicesProperties.getEmail().getFrom();
                     String from = StringUtils.hasText(request.getFrom()) ? request.getFrom() : defaultFrom;
                     if (!StringUtils.hasText(from)) {
                         throw new IllegalArgumentException("From address is required for email notifications");

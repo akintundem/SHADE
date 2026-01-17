@@ -19,7 +19,8 @@ import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.util.TokenUtil;
-import org.springframework.beans.factory.annotation.Value;
+import eventplanner.features.config.AppProperties;
+import eventplanner.common.config.ExternalServicesProperties;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -47,9 +48,7 @@ public class EventCollaboratorInviteService {
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
-    
-    @Value("${external.email.from.events:events@noreply.mayokun.dev}")
-    private String eventsFrom;
+    private final ExternalServicesProperties externalServicesProperties;
 
     private final String appBaseUrl;
 
@@ -59,14 +58,16 @@ public class EventCollaboratorInviteService {
             EventRepository eventRepository,
             UserAccountRepository userAccountRepository,
             NotificationService notificationService,
-            @Value("${app.base-url:http://localhost:8080}") String appBaseUrl
+            ExternalServicesProperties externalServicesProperties,
+            AppProperties appProperties
     ) {
         this.inviteRepository = inviteRepository;
         this.eventUserRepository = eventUserRepository;
         this.eventRepository = eventRepository;
         this.userAccountRepository = userAccountRepository;
         this.notificationService = notificationService;
-        this.appBaseUrl = appBaseUrl;
+        this.externalServicesProperties = externalServicesProperties;
+        this.appBaseUrl = requireConfigured(appProperties.getBaseUrl(), "app.base-url");
     }
 
     public CollaboratorInviteResponse createInvite(UUID eventId, UserPrincipal inviter, CreateCollaboratorInviteRequest request) {
@@ -421,8 +422,15 @@ public class EventCollaboratorInviteService {
                 .templateId("event-invitation")
                 .templateVariables(variables)
                 .eventId(event.getId())
-                .from(eventsFrom)
+                .from(externalServicesProperties.getEmail().getFromEvents())
                 .build());
+    }
+
+    private static String requireConfigured(String value, String propertyName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(propertyName + " must be configured");
+        }
+        return value;
     }
 
 }

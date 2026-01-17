@@ -6,8 +6,7 @@ import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.entity.UserSettings;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import eventplanner.security.config.SecurityJwtProperties;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -29,13 +28,16 @@ import java.util.UUID;
  * provisioning a user account on first sight if enabled.
  */
 @Component
-@RequiredArgsConstructor
 public class CognitoJwtAuthenticationConverter implements Converter<Jwt, UsernamePasswordAuthenticationToken> {
 
     private final UserAccountRepository userAccountRepository;
+    private final boolean autoProvision;
 
-    @Value("${security.jwt.auto-provision:true}")
-    private boolean autoProvision;
+    public CognitoJwtAuthenticationConverter(UserAccountRepository userAccountRepository,
+                                             SecurityJwtProperties securityJwtProperties) {
+        this.userAccountRepository = userAccountRepository;
+        this.autoProvision = requireConfigured(securityJwtProperties.getAutoProvision(), "security.jwt.auto-provision");
+    }
 
     @Override
     public UsernamePasswordAuthenticationToken convert(Jwt jwt) {
@@ -104,6 +106,13 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
         }
 
         return provisionNewUser(subject, email, name);
+    }
+
+    private static boolean requireConfigured(Boolean value, String propertyName) {
+        if (value == null) {
+            throw new IllegalStateException(propertyName + " must be configured");
+        }
+        return value;
     }
 
     private UserAccount updateUserFromClaims(UserAccount user, String subject, String email, String name) {

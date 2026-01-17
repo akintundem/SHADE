@@ -5,7 +5,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Value;
+import eventplanner.security.config.ServiceAuthProperties;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -32,24 +32,21 @@ import java.util.Map;
 @Component
 public class ServiceApiKeyFilter extends OncePerRequestFilter {
 
-    @Value("${service.auth.api-key:}")
-    private String expectedApiKey;
-
-    @Value("${service.auth.enabled:true}")
-    private boolean serviceAuthEnabled;
-
-    @Value("${service.auth.require-header:true}")
-    private boolean requireApiKeyHeader;
-
-    @Value("${service.auth.allow-service-role-paths:}")
-    private String allowServiceRolePaths;
+    private final String expectedApiKey;
+    private final boolean serviceAuthEnabled;
+    private final boolean requireApiKeyHeader;
+    private final String allowServiceRolePaths;
 
     private final ObjectMapper objectMapper;
 
     private static final String HEADER_NAME = "X-API-Key";
 
-    public ServiceApiKeyFilter(ObjectMapper objectMapper) {
+    public ServiceApiKeyFilter(ObjectMapper objectMapper, ServiceAuthProperties serviceAuthProperties) {
         this.objectMapper = objectMapper;
+        this.expectedApiKey = serviceAuthProperties.getApiKey();
+        this.serviceAuthEnabled = requireConfigured(serviceAuthProperties.getEnabled(), "service.auth.enabled");
+        this.requireApiKeyHeader = requireConfigured(serviceAuthProperties.getRequireHeader(), "service.auth.require-header");
+        this.allowServiceRolePaths = serviceAuthProperties.getAllowServiceRolePaths();
     }
 
     @Override
@@ -171,5 +168,12 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
                 "path", path
         );
         response.getWriter().write(objectMapper.writeValueAsString(body));
+    }
+
+    private static boolean requireConfigured(Boolean value, String propertyName) {
+        if (value == null) {
+            throw new IllegalStateException(propertyName + " must be configured");
+        }
+        return value;
     }
 }

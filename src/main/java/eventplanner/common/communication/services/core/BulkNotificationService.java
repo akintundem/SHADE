@@ -1,5 +1,6 @@
 package eventplanner.common.communication.services.core;
 
+import eventplanner.common.config.ExternalServicesProperties;
 import eventplanner.common.communication.model.Communication;
 import eventplanner.common.communication.model.CommunicationRecipientType;
 import eventplanner.common.communication.repository.CommunicationRepository;
@@ -11,7 +12,6 @@ import eventplanner.common.communication.enums.CommunicationStatus;
 import eventplanner.common.communication.enums.CommunicationType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,9 +42,7 @@ public class BulkNotificationService {
     private final PushNotificationService pushNotificationService;
     private final NotificationService notificationService;
     private final CommunicationRepository communicationRepository;
-    
-    @Value("${external.email.from:Shade <noreply@shade.com>}")
-    private String defaultFrom;
+    private final ExternalServicesProperties externalServicesProperties;
 
     /**
      * Send bulk push notifications to a target group
@@ -183,6 +181,7 @@ public class BulkNotificationService {
             
             // Emails from user IDs are already included by the target resolver
             
+            String defaultFrom = externalServicesProperties.getEmail().getFrom();
             String from = request.getFrom() != null ? request.getFrom() : defaultFrom;
             
             for (String email : allEmails) {
@@ -276,4 +275,3 @@ public class BulkNotificationService {
         communicationRepository.save(communication);
     }
 }
-

@@ -14,7 +14,7 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
-import org.springframework.beans.factory.annotation.Value;
+import eventplanner.common.config.ExternalServicesProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -42,8 +42,7 @@ public class AttendeeService {
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
-    @Value("${external.email.from.events:events@noreply.mayokun.dev}")
-    private String eventsFrom;
+    private final ExternalServicesProperties externalServicesProperties;
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
         "name", "email", "rsvpStatus", "checkedInAt", "createdAt"
@@ -392,7 +391,7 @@ public class AttendeeService {
                             .templateId("attendee-welcome")
                             .templateVariables(emailVars)
                             .eventId(event.getId())
-                            .from(eventsFrom)
+                            .from(externalServicesProperties.getEmail().getFromEvents())
                             .build());
                 }
                 

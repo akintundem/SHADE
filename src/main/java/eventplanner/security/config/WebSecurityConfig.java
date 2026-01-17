@@ -6,7 +6,6 @@ import eventplanner.security.auth.jwt.CognitoJwtAuthenticationConverter;
 import eventplanner.security.filters.RbacContextFilter;
 import eventplanner.security.filters.SecurityHeadersFilter;
 import eventplanner.security.filters.ServiceApiKeyFilter;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -40,33 +39,27 @@ import java.util.stream.Collectors;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
-public class SecurityConfig {
+public class WebSecurityConfig {
 
     private final SecurityHeadersFilter securityHeadersFilter;
     private final RbacContextFilter rbacContextFilter;
     private final ServiceApiKeyFilter serviceApiKeyFilter;
     private final CognitoJwtAuthenticationConverter jwtAuthenticationConverter;
     private final ObjectMapper objectMapper;
-    private final String issuerUri;
-    private final String jwkSetUri;
-    private final String audienceProperty;
+    private final ResourceServerJwtProperties resourceServerJwtProperties;
 
-    public SecurityConfig(SecurityHeadersFilter securityHeadersFilter,
+    public WebSecurityConfig(SecurityHeadersFilter securityHeadersFilter,
                           RbacContextFilter rbacContextFilter,
                           ServiceApiKeyFilter serviceApiKeyFilter,
                           CognitoJwtAuthenticationConverter jwtAuthenticationConverter,
                           ObjectMapper objectMapper,
-                          @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:}") String issuerUri,
-                          @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri:}") String jwkSetUri,
-                          @Value("${spring.security.oauth2.resourceserver.jwt.audiences:}") String audienceProperty) {
+                          ResourceServerJwtProperties resourceServerJwtProperties) {
         this.securityHeadersFilter = securityHeadersFilter;
         this.rbacContextFilter = rbacContextFilter;
         this.serviceApiKeyFilter = serviceApiKeyFilter;
         this.jwtAuthenticationConverter = jwtAuthenticationConverter;
         this.objectMapper = objectMapper;
-        this.issuerUri = issuerUri;
-        this.jwkSetUri = jwkSetUri;
-        this.audienceProperty = audienceProperty;
+        this.resourceServerJwtProperties = resourceServerJwtProperties;
     }
 
     @Bean
@@ -107,6 +100,9 @@ public class SecurityConfig {
         http.addFilterAfter(serviceApiKeyFilter, SecurityHeadersFilter.class);
         http.addFilterAfter(rbacContextFilter, BearerTokenAuthenticationFilter.class);
 
+        String issuerUri = resourceServerJwtProperties.getIssuerUri();
+        String jwkSetUri = resourceServerJwtProperties.getJwkSetUri();
+
         if (StringUtils.hasText(issuerUri) || StringUtils.hasText(jwkSetUri)) {
             http.oauth2ResourceServer(oauth2 -> oauth2
                     .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))
@@ -120,9 +116,9 @@ public class SecurityConfig {
 
     @Bean
     public JwtDecoder jwtDecoder() {
-        String issuer = issuerUri;
-        String jwks = jwkSetUri;
-        String audience = audienceProperty;
+        String issuer = resourceServerJwtProperties.getIssuerUri();
+        String jwks = resourceServerJwtProperties.getJwkSetUri();
+        String audience = resourceServerJwtProperties.getAudiences();
 
         if (!StringUtils.hasText(jwks) && !StringUtils.hasText(issuer)) {
             return token -> { throw new org.springframework.security.oauth2.jwt.JwtException("JWT validation is disabled (no issuer configured)"); };

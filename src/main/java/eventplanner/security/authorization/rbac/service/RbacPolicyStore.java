@@ -6,10 +6,9 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import eventplanner.security.authorization.rbac.model.RbacPermissionDefinition;
 import eventplanner.security.authorization.rbac.model.RbacPolicyMetadata;
 import eventplanner.security.authorization.rbac.model.RbacScope;
+import eventplanner.security.config.RbacPolicyProperties;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
@@ -37,15 +36,17 @@ import java.util.stream.Collectors;
  * Loads RBAC_policy.yml into memory and exposes fast lookup helpers.
  */
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class RbacPolicyStore {
 
     private final ResourceLoader resourceLoader;
     private final ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory());
+    private final String policyLocation;
 
-    @Value("${rbac.policy.location:classpath:rbac/RBAC_policy.yml}")
-    private String policyLocation;
+    public RbacPolicyStore(ResourceLoader resourceLoader, RbacPolicyProperties rbacPolicyProperties) {
+        this.resourceLoader = resourceLoader;
+        this.policyLocation = requireConfigured(rbacPolicyProperties.getLocation(), "rbac.policy.location");
+    }
 
     @Getter
     private RbacPolicyMetadata metadata;
@@ -84,6 +85,13 @@ public class RbacPolicyStore {
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to read RBAC policy at " + policyLocation, ex);
         }
+    }
+
+    private static String requireConfigured(String value, String propertyName) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalStateException(propertyName + " must be configured");
+        }
+        return value;
     }
 
     public Optional<RbacPermissionDefinition> findPermission(String permissionName) {

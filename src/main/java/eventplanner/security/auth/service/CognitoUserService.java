@@ -1,6 +1,6 @@
 package eventplanner.security.auth.service;
 
-import org.springframework.beans.factory.annotation.Value;
+import eventplanner.security.config.AwsCognitoProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import software.amazon.awssdk.regions.Region;
@@ -18,9 +18,9 @@ public class CognitoUserService {
     private final String userPoolId;
     private final Region region;
 
-    public CognitoUserService(
-            @Value("${aws.cognito.user-pool-id:}") String userPoolId,
-            @Value("${aws.cognito.region:}") String region) {
+    public CognitoUserService(AwsCognitoProperties cognitoProperties) {
+        String userPoolId = cognitoProperties.getUserPoolId();
+        String region = cognitoProperties.getRegion();
         this.userPoolId = StringUtils.hasText(userPoolId) ? userPoolId : null;
         this.region = StringUtils.hasText(region) ? Region.of(region) : null;
     }

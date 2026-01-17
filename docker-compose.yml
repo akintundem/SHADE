@@ -4,7 +4,7 @@ services:
       context: ./email
     container_name: shade-email-service
     env_file:
-      - ${EMAIL_ENV_FILE:-./email/.env}
+      - ./email/.env
     expose:
       - "3000"
     restart: unless-stopped
@@ -14,17 +14,13 @@ services:
   push-service:
     build:
       context: ./push-service
-    image: ${PUSH_SERVICE_IMAGE:-shade-push-service:local}
+    image: shade-push-service:local
     container_name: shade-push-service
     expose:
       - "3100"
     environment:
-      PORT: ${PUSH_SERVICE_PORT:-3100}
+      PORT: "3100"
       PUSH_SERVICE_SECRET: ${EXTERNAL_PUSH_SERVICE_SECRET:-}
-      FIREBASE_SERVICE_ACCOUNT_KEY_PATH: ${FIREBASE_SERVICE_ACCOUNT_KEY_PATH:-}
-      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
-      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
     restart: unless-stopped
     networks:
       - event-planner-network
@@ -32,22 +28,19 @@ services:
   ai-service:
     build:
       context: ./ai-service
-    image: ${AI_SERVICE_IMAGE:-shade-ai-service:local}
+    image: shade-ai-service:local
     container_name: shade-ai-service
     expose:
       - "8000"
     environment:
-      PORT: ${AI_SERVICE_PORT:-8000}
-      AI_SERVICE_SECRET: ${AI_GATEWAY_SHARED_SECRET:-local-ai-secret}
-      EXTERNAL_AI_SERVICE_SECRET: ${AI_GATEWAY_SHARED_SECRET:-local-ai-secret}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4-turbo-preview}
-      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-dall-e-3}
-      RETURN_BASE64: ${AI_RETURN_BASE64:-false}
-      AI_COGNITO_ISSUER: ${AI_COGNITO_ISSUER:-}
-      AI_COGNITO_AUDIENCE: ${AI_COGNITO_AUDIENCE:-}
+      PORT: "8000"
+      AI_SERVICE_SECRET: local-ai-secret
+      EXTERNAL_AI_SERVICE_SECRET: local-ai-secret
+      RETURN_BASE64: "false"
+      AI_COGNITO_ISSUER: ""
+      AI_COGNITO_AUDIENCE: ""
     env_file:
-      - ${AI_ENV_FILE:-./ai-service/.env}
+      - ./ai-service/.env
     restart: unless-stopped
     networks:
       - event-planner-network
@@ -76,7 +69,7 @@ services:
       # Cache Maven dependencies to avoid re-downloading
       - maven_cache:/root/.m2
     env_file:
-      - ${ENV_FILE:-.env}
+      - .env
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       # Enable Spring Boot DevTools for hot-reload
@@ -85,72 +78,32 @@ services:
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: "2s"
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: "1s"
 
-      # DB migrations
-      SPRING_FLYWAY_ENABLED: ${SPRING_FLYWAY_ENABLED:-false}
-
       # Cognito JWT validation
       COGNITO_ISSUER_URI: ${COGNITO_ISSUER_URI:-}
       COGNITO_JWK_SET_URI: ${COGNITO_JWK_SET_URI:-}
       COGNITO_AUDIENCE: ${COGNITO_AUDIENCE:-}
 
-      # Database — uses Railway's DATABASE_URL or external database
-      DATABASE_URL: ${DATABASE_URL:-}
       DB_HOST: ${DB_HOST:-}
       DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:-}
       DB_USERNAME: ${DB_USERNAME:-}
       DB_PASSWORD: ${DB_PASSWORD:-}
-      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-20}
-      DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-5}
-      DB_CONNECTION_TIMEOUT: ${DB_CONNECTION_TIMEOUT:-30000}
-      DB_IDLE_TIMEOUT: ${DB_IDLE_TIMEOUT:-600000}
-      DB_MAX_LIFETIME: ${DB_MAX_LIFETIME:-1800000}
 
-      # Redis — connects to local Redis on host machine via host.docker.internal
-      REDIS_URL: ${REDIS_URL:-}
       SPRING_REDIS_HOST: ${SPRING_REDIS_HOST:-host.docker.internal}
       SPRING_REDIS_PORT: ${SPRING_REDIS_PORT:-6379}
       SPRING_REDIS_PASSWORD: ${SPRING_REDIS_PASSWORD:-}
 
-      # MongoDB — uses MONGODB_URL or external MongoDB
-      MONGODB_URL: ${MONGODB_URL:-}
-
-      # JWT + Logging
-      JWT_SECRET: ${JWT_SECRET}
-      LOG_PATTERN: ${LOG_PATTERN:-%d{yyyy-MM-dd HH:mm:ss} - %msg%n}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
-      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-604800000}
-      AUTH_SESSION_MAX_CONCURRENT: ${AUTH_SESSION_MAX_CONCURRENT:-5}
-      CACHE_MAX_SIZE: ${CACHE_MAX_SIZE:-1000}
-      CACHE_EXPIRE_AFTER_WRITE: ${CACHE_EXPIRE_AFTER_WRITE:-300s}
-
-      FIREBASE_SERVICE_ACCOUNT_KEY_PATH: ${FIREBASE_SERVICE_ACCOUNT_KEY_PATH:-}
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
       # Email service integration
       EXTERNAL_EMAIL_SERVICE_URL: http://shade-email-service:3000
-      EXTERNAL_EMAIL_SERVICE_SECRET: ${RESEND_SHARED_SECRET:-}
-      RESEND_SHARED_SECRET: ${RESEND_SHARED_SECRET:-}
+      EXTERNAL_EMAIL_SERVICE_SECRET: ${EXTERNAL_EMAIL_SERVICE_SECRET:-}
       EXTERNAL_PUSH_SERVICE_URL: ${EXTERNAL_PUSH_SERVICE_URL:-http://shade-push-service:3100}
       EXTERNAL_PUSH_SERVICE_SECRET: ${EXTERNAL_PUSH_SERVICE_SECRET:-}
-      # AI service integration
-      EXTERNAL_AI_SERVICE_URL: ${EXTERNAL_AI_SERVICE_URL:-http://kong:8000/ai-service}
-      EXTERNAL_AI_SERVICE_SECRET: ${EXTERNAL_AI_SERVICE_SECRET:-}
       SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY:-***REMOVED***}
       # Force service API key to be optional (override .env.prod if set)
       SERVICE_AUTH_REQUIRE_HEADER: false
-      EXTERNAL_EMAIL_FROM: ${RESEND_FROM_EMAIL:-Shade <noreply@shade.com>}
-      EXTERNAL_EMAIL_FROM_SECURITY: ${RESEND_FROM_SECURITY:-security@noreply.mayokun.dev}
-      EXTERNAL_EMAIL_FROM_EVENTS: ${RESEND_FROM_EVENTS:-events@noreply.mayokun.dev}
+      EXTERNAL_EMAIL_FROM: ${EXTERNAL_EMAIL_FROM:-}
+      EXTERNAL_EMAIL_FROM_EVENTS: ${EXTERNAL_EMAIL_FROM_EVENTS:-}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8000}
-      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000,http://localhost:8000}
-      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
-      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
-      SWAGGER_UI_PATH: ${SWAGGER_UI_PATH:-/swagger-ui}
-      API_DOCS_PATH: ${API_DOCS_PATH:-/v3/api-docs}
-      API_TITLE: ${API_TITLE:-Event Planner API}
-      API_DESCRIPTION: ${API_DESCRIPTION:-AI-powered event planning platform}
-      API_VERSION: ${API_VERSION:-1.0.0}
-      WEATHER_BASE_URL: ${WEATHER_BASE_URL:-http://localhost:8089}
 
     # Extended startup time for Maven build on first run
     healthcheck:
@@ -179,20 +132,20 @@ services:
       KONG_LOG_LEVEL: notice
       KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl
       # Admin API: Only listen on localhost in production, or use KONG_ADMIN_LISTEN=off
-      KONG_ADMIN_LISTEN: ${KONG_ADMIN_LISTEN:-127.0.0.1:8001}
+      KONG_ADMIN_LISTEN: 127.0.0.1:8001
       # Environment variables for secrets (used in kong.yml)
       # IMPORTANT: Set secure values in production .env files
       GATEWAY_SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY:-***REMOVED***}
-      AI_GATEWAY_SHARED_SECRET: ${AI_GATEWAY_SHARED_SECRET:-local-dev-ai-secret-change-in-prod}
+      AI_GATEWAY_SHARED_SECRET: local-ai-secret
       # CORS origins for production
-      KONG_CORS_ORIGINS: ${KONG_CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      KONG_CORS_ORIGINS: http://localhost:3000,http://localhost:8000
     volumes:
       - ./infra/kong/kong.yml:/kong/kong.yml:ro
     ports:
       - "8000:8000"
       - "8443:8443"
       # Admin port only exposed in development - remove in production
-      - "${KONG_ADMIN_PORT:-8001}:8001"
+      - "8001:8001"
     networks:
       - event-planner-network
 

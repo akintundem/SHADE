@@ -21,11 +21,11 @@ import eventplanner.features.feeds.dto.response.PostListResponse;
 import eventplanner.features.feeds.dto.response.PresignedUploadResponse;
 import eventplanner.features.feeds.entity.EventFeedPost;
 import eventplanner.features.feeds.repository.FeedPostRepository;
+import eventplanner.features.config.FeedsCleanupProperties;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,12 +67,7 @@ public class FeedPostService {
     private final PostLikeService likeService;
     private final PostCommentService commentService;
 
-    /**
-     * Maximum age for incomplete uploads before cleanup (default: 5 minutes)
-     * Can be configured via application.yml: feeds.cleanup.max-age-minutes
-     */
-    @Value("${feeds.cleanup.max-age-minutes:5}")
-    private int maxAgeMinutes;
+    private final int maxAgeMinutes;
 
     public FeedPostService(EventAccessControlService accessControlService,
                            EventRepository eventRepository,
@@ -82,7 +77,8 @@ public class FeedPostService {
                            PresignedUploadService presignedUploadService,
                            UserAccountRepository userAccountRepository,
                            PostLikeService likeService,
-                           PostCommentService commentService) {
+                           PostCommentService commentService,
+                           FeedsCleanupProperties feedsCleanupProperties) {
         this.accessControlService = accessControlService;
         this.eventRepository = eventRepository;
         this.postRepository = postRepository;
@@ -92,6 +88,7 @@ public class FeedPostService {
         this.userAccountRepository = userAccountRepository;
         this.likeService = likeService;
         this.commentService = commentService;
+        this.maxAgeMinutes = requireConfigured(feedsCleanupProperties.getMaxAgeMinutes(), "feeds.cleanup.max-age-minutes");
     }
 
     /**
@@ -441,11 +438,10 @@ public class FeedPostService {
     }
 
     /**
-     * Scheduled task that runs every 5 minutes to clean up incomplete uploads.
+     * Scheduled task that runs to clean up incomplete uploads.
      * Cron expression format: second, minute, hour, day, month, weekday
-     * Default: runs at 0 seconds of every 5th minute
      */
-    @Scheduled(cron = "${feeds.cleanup.cron:0 */5 * * * *}")
+    @Scheduled(cron = "${feeds.cleanup.cron}")
     @Transactional
     public void cleanupIncompleteUploads() {
         try {
@@ -497,6 +493,13 @@ public class FeedPostService {
         } catch (Exception e) {
             log.error("Error in scheduled feed post cleanup", e);
         }
+    }
+
+    private static int requireConfigured(Integer value, String propertyName) {
+        if (value == null) {
+            throw new IllegalStateException(propertyName + " must be configured");
+        }
+        return value;
     }
 
     /**
