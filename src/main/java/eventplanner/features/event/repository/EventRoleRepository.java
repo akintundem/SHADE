@@ -1,7 +1,7 @@
 package eventplanner.features.event.repository;
 
 import eventplanner.features.event.entity.EventRole;
-import eventplanner.common.domain.enums.RoleName;
+import eventplanner.features.event.enums.RoleName;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

@@ -2,9 +2,9 @@ package eventplanner.features.attendee.service;
 
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
-import eventplanner.common.domain.enums.CommunicationType;
-import eventplanner.common.domain.enums.EventAccessType;
-import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.common.communication.enums.CommunicationType;
+import eventplanner.features.event.enums.EventAccessType;
+import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.features.attendee.dto.request.AttendeeInfo;
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
 import eventplanner.features.attendee.entity.Attendee;

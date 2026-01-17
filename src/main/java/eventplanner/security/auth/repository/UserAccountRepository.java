@@ -1,7 +1,7 @@
 package eventplanner.security.auth.repository;
 
-import eventplanner.common.domain.enums.UserStatus;
-import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.security.auth.enums.UserStatus;
+import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.security.auth.entity.UserAccount;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

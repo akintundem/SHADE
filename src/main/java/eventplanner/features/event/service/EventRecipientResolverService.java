@@ -1,6 +1,6 @@
 package eventplanner.features.event.service;
 
-import eventplanner.common.domain.enums.EventUserType;
+import eventplanner.features.event.enums.EventUserType;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.features.collaboration.entity.EventUser;

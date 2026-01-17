@@ -1,6 +1,6 @@
 package eventplanner.features.collaboration.dto.request;
 
-import eventplanner.common.domain.enums.EventUserType;
+import eventplanner.features.event.enums.EventUserType;
 import eventplanner.features.collaboration.enums.EventPermission;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;

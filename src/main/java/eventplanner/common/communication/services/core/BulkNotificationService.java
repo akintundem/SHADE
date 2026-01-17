@@ -7,8 +7,8 @@ import eventplanner.common.communication.services.channel.push.PushNotificationS
 import eventplanner.common.communication.services.core.dto.BulkNotificationRequest;
 import eventplanner.common.communication.services.core.dto.BulkNotificationResponse;
 import eventplanner.common.communication.services.core.dto.NotificationTarget;
-import eventplanner.common.domain.enums.CommunicationStatus;
-import eventplanner.common.domain.enums.CommunicationType;
+import eventplanner.common.communication.enums.CommunicationStatus;
+import eventplanner.common.communication.enums.CommunicationType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

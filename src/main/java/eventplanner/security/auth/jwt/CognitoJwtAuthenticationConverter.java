@@ -1,7 +1,7 @@
 package eventplanner.security.auth.jwt;
 
-import eventplanner.common.domain.enums.UserStatus;
-import eventplanner.common.domain.enums.UserType;
+import eventplanner.security.auth.enums.UserStatus;
+import eventplanner.security.auth.enums.UserType;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.entity.UserSettings;
 import eventplanner.security.auth.repository.UserAccountRepository;

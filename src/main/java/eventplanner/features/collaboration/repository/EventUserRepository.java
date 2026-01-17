@@ -1,7 +1,7 @@
 package eventplanner.features.collaboration.repository;
 
 import eventplanner.features.collaboration.entity.EventUser;
-import eventplanner.common.domain.enums.EventUserType;
+import eventplanner.features.event.enums.EventUserType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

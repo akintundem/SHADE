@@ -25,8 +25,6 @@ import java.util.Map;
 @Slf4j
 public class EmailService {
 
-    public static final String TEMPLATE_EMAIL_VERIFICATION = "email-verification";
-
     private final String emailServiceUrl;
     private final String sharedSecret;
     private final RestTemplate restTemplate;

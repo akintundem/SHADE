@@ -1,8 +1,8 @@
 package eventplanner.security.auth.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import eventplanner.common.domain.enums.UserType;
-import eventplanner.common.domain.enums.UserStatus;
+import eventplanner.security.auth.enums.UserType;
+import eventplanner.security.auth.enums.UserStatus;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

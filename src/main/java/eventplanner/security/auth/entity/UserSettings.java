@@ -1,9 +1,9 @@
 package eventplanner.security.auth.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import eventplanner.common.domain.enums.LanguagePreference;
-import eventplanner.common.domain.enums.ThemePreference;
-import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.security.auth.enums.LanguagePreference;
+import eventplanner.security.auth.enums.ThemePreference;
+import eventplanner.security.auth.enums.VisibilityLevel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

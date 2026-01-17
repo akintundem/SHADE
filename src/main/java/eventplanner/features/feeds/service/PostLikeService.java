@@ -8,7 +8,7 @@ import eventplanner.features.feeds.repository.PostLikeRepository;
 import eventplanner.common.storage.s3.dto.MediaUploadStatus;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
-import eventplanner.common.domain.enums.CommunicationType;
+import eventplanner.common.communication.enums.CommunicationType;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;

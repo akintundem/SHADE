@@ -1,6 +1,6 @@
 package eventplanner.features.attendee.repository;
 
-import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeStatus;
 import org.springframework.data.domain.Page;

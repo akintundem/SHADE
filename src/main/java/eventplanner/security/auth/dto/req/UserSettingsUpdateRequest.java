@@ -1,8 +1,8 @@
 package eventplanner.security.auth.dto.req;
 
-import eventplanner.common.domain.enums.LanguagePreference;
-import eventplanner.common.domain.enums.ThemePreference;
-import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.security.auth.enums.LanguagePreference;
+import eventplanner.security.auth.enums.ThemePreference;
+import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.security.auth.dto.LocationDto;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.Valid;

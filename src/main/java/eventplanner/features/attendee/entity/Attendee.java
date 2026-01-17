@@ -1,6 +1,6 @@
 package eventplanner.features.attendee.entity;
 
-import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.features.attendee.enums.AttendeeStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.security.auth.entity.UserAccount;

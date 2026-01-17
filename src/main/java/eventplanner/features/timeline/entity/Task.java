@@ -1,7 +1,7 @@
 package eventplanner.features.timeline.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import eventplanner.common.domain.enums.TimelineStatus;
+import eventplanner.features.timeline.enums.TimelineStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.security.auth.entity.UserAccount;
 import jakarta.persistence.*;

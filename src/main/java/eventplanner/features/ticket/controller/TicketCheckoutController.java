@@ -50,7 +50,7 @@ public class TicketCheckoutController {
             }
             TicketCheckoutResponse response = checkoutService.createCheckout(eventId, request, principal);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (eventplanner.common.exception.ApiException e) {
+        } catch (eventplanner.common.exception.exceptions.ApiException e) {
             throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
@@ -70,7 +70,7 @@ public class TicketCheckoutController {
             }
             TicketPaymentInitResponse response = checkoutService.startPayment(checkoutId, eventId, principal);
             return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.ApiException e) {
+        } catch (eventplanner.common.exception.exceptions.ApiException e) {
             throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
@@ -90,7 +90,7 @@ public class TicketCheckoutController {
             }
             TicketCheckoutResponse response = checkoutService.getCheckout(checkoutId, eventId);
             return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.ApiException e) {
+        } catch (eventplanner.common.exception.exceptions.ApiException e) {
             throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
@@ -110,7 +110,7 @@ public class TicketCheckoutController {
             }
             TicketCheckoutResponse response = checkoutService.cancelCheckout(checkoutId, eventId);
             return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.ApiException e) {
+        } catch (eventplanner.common.exception.exceptions.ApiException e) {
             throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());

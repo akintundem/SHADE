@@ -1,7 +1,7 @@
 package eventplanner.features.event.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import eventplanner.common.domain.enums.RoleName;
+import eventplanner.features.event.enums.RoleName;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;

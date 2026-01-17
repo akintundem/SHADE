@@ -1,7 +1,8 @@
 package eventplanner.features.ticket.service;
 
-import eventplanner.common.exception.ApiException;
-import eventplanner.common.exception.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.ApiException;
+import eventplanner.common.exception.exceptions.ErrorCode;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.ticket.dto.request.CreateTicketCheckoutRequest;
@@ -199,7 +200,7 @@ public class TicketCheckoutService {
             return TicketCheckoutResponse.from(checkout, items, mapTickets(tickets));
         }
         if (checkout.getStatus() == TicketCheckoutStatus.CANCELLED) {
-            throw new ApiException("CHECKOUT_CANCELLED", "Checkout has been cancelled", 400);
+            throw new ApiException(ErrorCode.CHECKOUT_CANCELLED, "Checkout has been cancelled");
         }
         if (checkout.getStatus() == TicketCheckoutStatus.EXPIRED || shouldExpire(checkout)) {
             return expireAndRespond(checkout, items, tickets);
@@ -221,7 +222,7 @@ public class TicketCheckoutService {
         List<Ticket> tickets = ticketRepository.findByCheckoutId(checkoutId);
 
         if (checkout.getStatus() == TicketCheckoutStatus.COMPLETED) {
-            throw new ApiException("CHECKOUT_COMPLETED", "Checkout is already completed and cannot be cancelled", 409);
+            throw new ApiException(ErrorCode.CHECKOUT_COMPLETED, "Checkout is already completed and cannot be cancelled");
         }
         if (checkout.getStatus() == TicketCheckoutStatus.CANCELLED) {
             return TicketCheckoutResponse.from(checkout, items, mapTickets(tickets));
@@ -254,10 +255,10 @@ public class TicketCheckoutService {
         validateCheckoutEvent(checkout, eventId);
 
         if (checkout.getStatus() == TicketCheckoutStatus.CANCELLED || checkout.getStatus() == TicketCheckoutStatus.EXPIRED) {
-            throw new ApiException("CHECKOUT_INACTIVE", "Checkout is not active", 400);
+            throw new ApiException(ErrorCode.CHECKOUT_INACTIVE, "Checkout is not active");
         }
         if (checkout.getStatus() == TicketCheckoutStatus.COMPLETED) {
-            throw new ApiException("CHECKOUT_COMPLETED", "Checkout already completed", 409);
+            throw new ApiException(ErrorCode.CHECKOUT_COMPLETED, "Checkout already completed");
         }
 
         // Reprice to ensure totals are current before sending to PSP
@@ -285,7 +286,7 @@ public class TicketCheckoutService {
         }
 
         if (shouldExpire(checkout)) {
-            throw new ApiException("CHECKOUT_EXPIRED", "Checkout session expired", 410);
+            throw new ApiException(ErrorCode.CHECKOUT_EXPIRED, "Checkout session expired");
         }
 
         UserAccount issuedBy = principal != null && principal.getId() != null
@@ -299,7 +300,7 @@ public class TicketCheckoutService {
             }
             if (ticket.getStatus() == TicketStatus.PENDING) {
                 if (ticket.isPendingExpired()) {
-                    throw new ApiException("CHECKOUT_EXPIRED", "Checkout session expired", 410);
+                    throw new ApiException(ErrorCode.CHECKOUT_EXPIRED, "Checkout session expired");
                 }
                 ticket.issue(issuedBy);
             }
@@ -364,7 +365,7 @@ public class TicketCheckoutService {
             }
             TicketCheckoutItemRequest item = quantities.get(type.getId());
             if (!type.canPurchase(item.getQuantity())) {
-                throw new ApiException("TICKET_TYPE_SOLD_OUT", "Not enough availability for " + type.getName(), 409);
+                throw new ApiException(ErrorCode.TICKET_TYPE_SOLD_OUT, "Not enough availability");
             }
         }
 

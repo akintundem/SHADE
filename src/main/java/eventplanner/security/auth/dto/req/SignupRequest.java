@@ -1,6 +1,6 @@
 package eventplanner.security.auth.dto.req;
 
-import eventplanner.common.domain.enums.UserType;
+import eventplanner.security.auth.enums.UserType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

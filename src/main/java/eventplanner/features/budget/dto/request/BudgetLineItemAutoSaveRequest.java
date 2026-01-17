@@ -1,6 +1,6 @@
 package eventplanner.features.budget.dto.request;
 
-import eventplanner.common.domain.enums.PlanningStatus;
+import eventplanner.features.budget.enums.PlanningStatus;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import lombok.Data;

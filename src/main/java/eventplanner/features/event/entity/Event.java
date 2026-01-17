@@ -1,9 +1,9 @@
 package eventplanner.features.event.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import eventplanner.common.domain.enums.EventAccessType;
-import eventplanner.common.domain.enums.EventStatus;
-import eventplanner.common.domain.enums.EventType;
+import eventplanner.features.event.enums.EventAccessType;
+import eventplanner.features.event.enums.EventStatus;
+import eventplanner.features.event.enums.EventType;
 import eventplanner.security.auth.entity.UserAccount;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

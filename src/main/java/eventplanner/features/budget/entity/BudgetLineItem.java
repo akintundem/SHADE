@@ -1,7 +1,7 @@
 package eventplanner.features.budget.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import eventplanner.common.domain.enums.PlanningStatus;
+import eventplanner.features.budget.enums.PlanningStatus;
 import jakarta.persistence.*;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;

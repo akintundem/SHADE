@@ -1,8 +1,8 @@
 package eventplanner.security.auth.service;
 
-import eventplanner.common.domain.enums.UserStatus;
-import eventplanner.common.domain.enums.VisibilityLevel;
-import eventplanner.common.exception.ResourceNotFoundException;
+import eventplanner.security.auth.enums.UserStatus;
+import eventplanner.security.auth.enums.VisibilityLevel;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.feeds.dto.response.PostListResponse;
 import eventplanner.features.feeds.service.FeedPostService;
 import eventplanner.security.auth.dto.req.NotificationSettingsUpdateRequest;

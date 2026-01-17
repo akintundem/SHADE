@@ -2,9 +2,9 @@ package eventplanner.features.collaboration.service;
 
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
-import eventplanner.common.domain.enums.CommunicationType;
-import eventplanner.common.domain.enums.EventUserType;
-import eventplanner.common.domain.enums.RegistrationStatus;
+import eventplanner.common.communication.enums.CommunicationType;
+import eventplanner.features.event.enums.EventUserType;
+import eventplanner.features.collaboration.enums.RegistrationStatus;
 import eventplanner.features.collaboration.entity.EventCollaboratorInvite;
 import eventplanner.features.collaboration.entity.EventUser;
 import eventplanner.features.collaboration.enums.CollaboratorInviteStatus;

@@ -162,26 +162,6 @@ public class PushNotificationService {
     }
 
     /**
-     * Deactivate all tokens for a user
-     */
-    public void deactivateAllUserTokens(UUID userId) {
-        List<DeviceToken> tokens = deviceTokenRepository.findByUserIdAndIsActiveTrue(userId);
-        tokens.forEach(DeviceToken::deactivate);
-        deviceTokenRepository.saveAll(tokens);
-    }
-
-    /**
-     * Update last used timestamp for a device token
-     */
-    public void updateLastUsed(String deviceToken) {
-        Optional<DeviceToken> token = deviceTokenRepository.findByDeviceToken(deviceToken);
-        if (token.isPresent()) {
-            token.get().markAsUsed();
-            deviceTokenRepository.save(token.get());
-        }
-    }
-
-    /**
      * Send push notification to a specific user
      */
     public PushResult sendToNotification(UUID userId, String title, String body, Map<String, String> data) {
@@ -370,98 +350,6 @@ public class PushNotificationService {
         }
         
         result.setTotalRecipients(tokensByUser.size());
-        return result;
-    }
-    
-    /**
-     * Send push notification to a list of device tokens directly
-     * Useful for custom recipient lists
-     */
-    public BulkPushResult sendToTokens(List<String> deviceTokens, String title, String body, Map<String, String> data) {
-        BulkPushResult result = new BulkPushResult();
-        
-        if (deviceTokens == null || deviceTokens.isEmpty()) {
-            return result;
-        }
-        
-        // Fetch token entities
-        List<DeviceToken> tokens = new ArrayList<>();
-        for (String tokenStr : deviceTokens) {
-            deviceTokenRepository.findByDeviceToken(tokenStr)
-                    .filter(DeviceToken::getIsActive)
-                    .ifPresent(tokens::add);
-        }
-        
-        if (tokens.isEmpty()) {
-            return result;
-        }
-        
-        // Batch and send
-        List<List<DeviceToken>> batches = batchTokens(tokens, BATCH_SIZE);
-        
-        for (List<DeviceToken> batch : batches) {
-            try {
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_JSON);
-                if (sharedSecret != null && !sharedSecret.isBlank()) {
-                    headers.add("x-push-secret", sharedSecret);
-                }
-                
-                var bodyPayload = new java.util.HashMap<String, Object>();
-                bodyPayload.put("to", batch.stream().map(DeviceToken::getDeviceToken).toList());
-                bodyPayload.put("title", title);
-                bodyPayload.put("body", body != null ? body : "");
-                bodyPayload.put("data", data != null ? data : Map.of());
-                
-                HttpEntity<Map<String, Object>> request = new HttpEntity<>(bodyPayload, headers);
-                
-                ResponseEntity<String> response = restTemplate.exchange(
-                        pushServiceUrl + "/send-push",
-                        HttpMethod.POST,
-                        request,
-                        String.class
-                );
-                
-                if (response.getStatusCode().is2xxSuccessful()) {
-                    String responseBody = response.getBody();
-                    handlePushResponse(batch, responseBody);
-                    
-                    batch.forEach(token -> {
-                        token.markAsUsed();
-                        token.resetFailureCount();
-                        deviceTokenRepository.save(token);
-                    });
-                    
-                    result.incrementSuccess(batch.size());
-                } else {
-                    String errorMessage = "HTTP " + response.getStatusCode() + ": " + response.getBody();
-                    batch.forEach(token -> {
-                        token.recordFailure(errorMessage);
-                        if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
-                            token.markAsInvalid("Max failures reached: " + errorMessage);
-                        }
-                        deviceTokenRepository.save(token);
-                    });
-                    
-                    result.incrementFailure(batch.size());
-                }
-            } catch (Exception e) {
-                batch.forEach(token -> {
-                    token.recordFailure(e.getMessage());
-                    if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
-                        token.markAsInvalid("Max failures reached: " + e.getMessage());
-                    }
-                    deviceTokenRepository.save(token);
-                });
-                
-                result.incrementFailure(batch.size());
-            }
-        }
-        
-        Set<UUID> uniqueUsers = new HashSet<>();
-        tokens.forEach(token -> uniqueUsers.add(token.getUserId()));
-        result.setTotalRecipients(uniqueUsers.size());
-        
         return result;
     }
     

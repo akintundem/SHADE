@@ -1,6 +1,6 @@
 package eventplanner.security.auth.dto.req;
 
-import eventplanner.common.domain.enums.UserType;
+import eventplanner.security.auth.enums.UserType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;

@@ -1,7 +1,7 @@
 package eventplanner.features.event.dto.response;
 
-import eventplanner.common.domain.enums.EventAccessType;
-import eventplanner.common.domain.enums.EventScope;
+import eventplanner.features.event.enums.EventAccessType;
+import eventplanner.features.event.enums.EventScope;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;

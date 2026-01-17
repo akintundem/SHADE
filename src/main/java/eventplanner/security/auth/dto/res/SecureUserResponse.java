@@ -1,6 +1,6 @@
 package eventplanner.security.auth.dto.res;
 
-import eventplanner.common.domain.enums.UserType;
+import eventplanner.security.auth.enums.UserType;
 import lombok.Builder;
 import lombok.Value;
 

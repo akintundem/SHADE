@@ -12,8 +12,8 @@ import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.common.exception.ConflictException;
-import eventplanner.common.exception.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.ConflictException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -149,7 +149,7 @@ public class TicketController {
                 .build();
 
             return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.ApiException e) {
+        } catch (eventplanner.common.exception.exceptions.ApiException e) {
             TicketValidationResponse response = TicketValidationResponse.builder()
                 .valid(false)
                 .message(e.getMessage())
@@ -189,7 +189,7 @@ public class TicketController {
             throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
         } catch (ResourceNotFoundException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
-        } catch (eventplanner.common.exception.ApiException e) {
+        } catch (eventplanner.common.exception.exceptions.ApiException e) {
             throw new ResponseStatusException(HttpStatus.valueOf(e.getStatus()), e.getMessage());
         } catch (IllegalArgumentException | IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());

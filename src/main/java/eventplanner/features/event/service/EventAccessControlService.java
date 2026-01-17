@@ -1,9 +1,9 @@
 package eventplanner.features.event.service;
 
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.common.domain.enums.EventAccessType;
-import eventplanner.common.domain.enums.EventStatus;
-import eventplanner.common.domain.enums.EventUserType;
+import eventplanner.features.event.enums.EventAccessType;
+import eventplanner.features.event.enums.EventStatus;
+import eventplanner.features.event.enums.EventUserType;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.collaboration.entity.EventUser;

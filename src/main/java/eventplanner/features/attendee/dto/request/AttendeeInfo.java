@@ -1,6 +1,6 @@
 package eventplanner.features.attendee.dto.request;
 
-import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.security.auth.enums.VisibilityLevel;
 import jakarta.validation.constraints.Email;
 import lombok.AllArgsConstructor;
 import lombok.Data;

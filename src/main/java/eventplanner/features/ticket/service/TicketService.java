@@ -2,11 +2,12 @@ package eventplanner.features.ticket.service;
 
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
-import eventplanner.common.domain.enums.CommunicationType;
-import eventplanner.common.exception.ApiException;
-import eventplanner.common.exception.BadRequestException;
-import eventplanner.common.exception.ConflictException;
-import eventplanner.common.exception.ResourceNotFoundException;
+import eventplanner.common.communication.enums.CommunicationType;
+import eventplanner.common.exception.exceptions.ApiException;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ConflictException;
+import eventplanner.common.exception.exceptions.ErrorCode;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.ticket.dto.request.IssueTicketRequest;
 import eventplanner.features.ticket.dto.request.ValidateTicketRequest;
 import eventplanner.features.ticket.dto.response.TicketResponse;
@@ -146,8 +147,8 @@ public class TicketService {
 
         // Validate ticket type availability
         if (!ticketType.canPurchase(request.getQuantity())) {
-            throw new ApiException("TICKET_TYPE_SOLD_OUT", 
-                "Not enough tickets available. Remaining: " + ticketType.getQuantityRemaining(), 409);
+            throw new ApiException(ErrorCode.TICKET_TYPE_SOLD_OUT, 
+                "Not enough tickets available");
         }
 
         // Check max tickets per person (null means unlimited, otherwise enforce configured; fall back to default only if explicitly set to 0)
@@ -162,9 +163,8 @@ public class TicketService {
             long existingTickets = ticketRepository.findByAttendeeIdAndEventId(
                 attendee.getId(), request.getEventId()).size();
             if (existingTickets + request.getQuantity() > maxTicketsPerPerson) {
-                throw new ApiException("MAX_TICKETS_EXCEEDED",
-                    "Cannot issue more than " + maxTicketsPerPerson + " tickets per person. " +
-                    "You already have " + existingTickets + " ticket(s) for this event.", 400);
+                throw new ApiException(ErrorCode.MAX_TICKETS_EXCEEDED,
+                    "Cannot issue more than " + maxTicketsPerPerson + " tickets per person");
             }
         }
 
@@ -173,9 +173,8 @@ public class TicketService {
             long existingTickets = ticketRepository.findByOwnerEmailAndEventId(
                 request.getOwnerEmail(), request.getEventId()).size();
             if (existingTickets + request.getQuantity() > maxTicketsPerPerson) {
-                throw new ApiException("MAX_TICKETS_EXCEEDED",
-                    "Cannot issue more than " + maxTicketsPerPerson + " tickets per person. " +
-                    "This email already has " + existingTickets + " ticket(s) for this event.", 400);
+                throw new ApiException(ErrorCode.MAX_TICKETS_EXCEEDED,
+                    "Cannot issue more than " + maxTicketsPerPerson + " tickets per person");
             }
         }
 
@@ -329,8 +328,8 @@ public class TicketService {
         try {
             saved = ticketRepository.save(ticket);
         } catch (Exception e) {
-            throw new ApiException("TICKET_CANCEL_SAVE_FAILED", 
-                "Failed to save ticket cancellation: " + e.getMessage(), 500);
+            throw new ApiException(ErrorCode.TICKET_CANCEL_SAVE_FAILED, 
+                "Failed to save ticket cancellation", e);
         }
 
         // Release reserved quantity if it was reserved
@@ -544,8 +543,8 @@ public class TicketService {
             .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + ticketTypeId));
 
         if (!lockedType.canPurchase(quantity)) {
-            throw new ApiException("TICKET_TYPE_SOLD_OUT",
-                "Not enough tickets available. Remaining: " + lockedType.getQuantityRemaining(), 409);
+            throw new ApiException(ErrorCode.TICKET_TYPE_SOLD_OUT,
+                "Not enough tickets available");
         }
 
         ticketTypeRepository.incrementQuantityReserved(ticketTypeId, quantity);

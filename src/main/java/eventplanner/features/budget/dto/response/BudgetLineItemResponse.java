@@ -1,6 +1,6 @@
 package eventplanner.features.budget.dto.response;
 
-import eventplanner.common.domain.enums.PlanningStatus;
+import eventplanner.features.budget.enums.PlanningStatus;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;

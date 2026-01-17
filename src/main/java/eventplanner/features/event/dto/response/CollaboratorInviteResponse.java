@@ -1,6 +1,6 @@
 package eventplanner.features.event.dto.response;
 
-import eventplanner.common.domain.enums.EventUserType;
+import eventplanner.features.event.enums.EventUserType;
 import eventplanner.features.collaboration.entity.EventCollaboratorInvite;
 import eventplanner.features.collaboration.enums.CollaboratorInviteStatus;
 import lombok.Data;

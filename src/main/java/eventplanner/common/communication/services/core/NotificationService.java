@@ -8,8 +8,8 @@ import eventplanner.common.communication.services.channel.push.PushNotificationS
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.services.core.dto.NotificationResponse;
 import eventplanner.common.communication.services.core.dto.PushResult;
-import eventplanner.common.domain.enums.CommunicationStatus;
-import eventplanner.common.domain.enums.CommunicationType;
+import eventplanner.common.communication.enums.CommunicationStatus;
+import eventplanner.common.communication.enums.CommunicationType;
 import eventplanner.common.communication.model.CommunicationRecipientType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

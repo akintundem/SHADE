@@ -1,8 +1,8 @@
 package eventplanner.security.auth.service;
 
 import eventplanner.security.auth.entity.UserAccount;
-import eventplanner.common.domain.enums.SystemRole;
-import eventplanner.common.domain.enums.UserStatus;
+import eventplanner.security.auth.enums.SystemRole;
+import eventplanner.security.auth.enums.UserStatus;
 import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;

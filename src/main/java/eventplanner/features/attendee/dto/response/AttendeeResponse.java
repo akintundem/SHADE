@@ -1,7 +1,7 @@
 package eventplanner.features.attendee.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeStatus;
 import lombok.AllArgsConstructor;

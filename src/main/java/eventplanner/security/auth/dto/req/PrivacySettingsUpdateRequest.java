@@ -1,6 +1,6 @@
 package eventplanner.security.auth.dto.req;
 
-import eventplanner.common.domain.enums.VisibilityLevel;
+import eventplanner.security.auth.enums.VisibilityLevel;
 import lombok.Data;
 
 @Data

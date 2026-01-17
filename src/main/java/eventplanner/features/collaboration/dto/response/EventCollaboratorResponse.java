@@ -1,6 +1,6 @@
 package eventplanner.features.collaboration.dto.response;
 
-import eventplanner.common.domain.enums.EventUserType;
+import eventplanner.features.event.enums.EventUserType;
 import eventplanner.features.collaboration.enums.EventPermission;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;

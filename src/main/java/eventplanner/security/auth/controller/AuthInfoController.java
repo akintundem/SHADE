@@ -1,8 +1,8 @@
 package eventplanner.security.auth.controller;
 
 import eventplanner.common.dto.ApiMessageResponse;
-import eventplanner.common.exception.ResourceNotFoundException;
-import eventplanner.common.exception.UnauthorizedException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.UnauthorizedException;
 import eventplanner.security.auth.dto.req.SignupRequest;
 import eventplanner.security.auth.dto.res.AuthSessionResponse;
 import eventplanner.security.auth.dto.res.SecureUserResponse;

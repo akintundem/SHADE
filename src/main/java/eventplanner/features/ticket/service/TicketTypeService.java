@@ -2,8 +2,9 @@ package eventplanner.features.ticket.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import eventplanner.common.exception.ApiException;
-import eventplanner.common.exception.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.ApiException;
+import eventplanner.common.exception.exceptions.ErrorCode;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.ticket.dto.request.CreateTicketTypeRequest;
@@ -303,8 +304,8 @@ public class TicketTypeService {
 
         int updated = repository.moveReservedToSold(ticketTypeId, quantity);
         if (updated == 0) {
-            throw new ApiException("TICKET_TYPE_NOT_AVAILABLE", 
-                "Failed to confirm sale - ticket type may have been modified", 409);
+            throw new ApiException(ErrorCode.TICKET_TYPE_NOT_AVAILABLE, 
+                "Failed to confirm sale - ticket type may have been modified");
         }
     }
 

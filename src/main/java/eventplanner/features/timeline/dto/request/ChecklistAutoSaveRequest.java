@@ -1,6 +1,6 @@
 package eventplanner.features.timeline.dto.request;
 
-import eventplanner.common.domain.enums.TimelineStatus;
+import eventplanner.features.timeline.enums.TimelineStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Size;
 import lombok.Data;

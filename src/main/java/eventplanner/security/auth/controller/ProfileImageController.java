@@ -1,6 +1,6 @@
 package eventplanner.security.auth.controller;
 
-import eventplanner.common.exception.UnauthorizedException;
+import eventplanner.common.exception.exceptions.UnauthorizedException;
 import eventplanner.security.auth.dto.req.ProfileImageCompleteRequest;
 import eventplanner.security.auth.dto.req.ProfileImageUploadRequest;
 import eventplanner.security.auth.dto.res.ProfileImageCompleteResponse;

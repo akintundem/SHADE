@@ -16,13 +16,4 @@ public interface UploadCompletionCallback {
      * @param principal The user who completed the upload
      */
     void onUploadCompleted(UUID entityId, UUID mediaId, UserPrincipal principal);
-    
-    /**
-     * Called when upload fails or times out
-     * @param entityId The ID of the entity that owns this upload
-     * @param mediaId The ID of the failed media upload
-     */
-    default void onUploadFailed(UUID entityId, UUID mediaId) {
-        // Default implementation does nothing - override if needed
-    }
 }

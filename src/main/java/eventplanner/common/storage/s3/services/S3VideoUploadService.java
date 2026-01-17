@@ -1,6 +1,6 @@
 package eventplanner.common.storage.s3.services;
 
-import eventplanner.common.exception.BadRequestException;
+import eventplanner.common.exception.exceptions.BadRequestException;
 import eventplanner.common.storage.s3.dto.PresignedUploadResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

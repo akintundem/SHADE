@@ -1,7 +1,7 @@
 package eventplanner.security.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import eventplanner.common.exception.ProblemBuilder;
+import eventplanner.common.exception.util.ProblemBuilder;
 import eventplanner.security.auth.jwt.CognitoJwtAuthenticationConverter;
 import eventplanner.security.filters.RbacContextFilter;
 import eventplanner.security.filters.SecurityHeadersFilter;

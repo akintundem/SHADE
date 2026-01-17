@@ -5,7 +5,7 @@ import eventplanner.common.communication.repository.CommunicationRepository;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.services.core.dto.NotificationResponse;
-import eventplanner.common.domain.enums.CommunicationType;
+import eventplanner.common.communication.enums.CommunicationType;
 import eventplanner.features.event.dto.request.EventNotificationRequest;
 import eventplanner.features.event.dto.response.EventNotificationResponse;
 import eventplanner.features.event.entity.Event;

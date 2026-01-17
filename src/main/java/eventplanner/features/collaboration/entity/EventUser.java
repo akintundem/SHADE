@@ -1,8 +1,8 @@
 package eventplanner.features.collaboration.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import eventplanner.common.domain.enums.EventUserType;
-import eventplanner.common.domain.enums.RegistrationStatus;
+import eventplanner.features.event.enums.EventUserType;
+import eventplanner.features.collaboration.enums.RegistrationStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.security.auth.entity.UserAccount;
 import jakarta.persistence.*;
