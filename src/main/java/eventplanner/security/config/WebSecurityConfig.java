@@ -173,6 +173,13 @@ public class WebSecurityConfig {
 
         @Override
         public OAuth2TokenValidatorResult validate(Jwt token) {
+            String tokenUse = token.getClaimAsString("token_use");
+            if ("access".equals(tokenUse)) {
+                String clientId = token.getClaimAsString("client_id");
+                if (StringUtils.hasText(clientId) && allowedAudiences.contains(clientId)) {
+                    return OAuth2TokenValidatorResult.success();
+                }
+            }
             if (token.getAudience() != null && token.getAudience().stream().anyMatch(allowedAudiences::contains)) {
                 return OAuth2TokenValidatorResult.success();
             }

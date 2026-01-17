@@ -31,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 import static eventplanner.security.util.AuthValidationUtil.normalizeEmail;
+import static eventplanner.security.util.AuthValidationUtil.safeTrim;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -84,15 +85,18 @@ public class AuthInfoController {
             if (!"access".equals(tokenUse)) {
                 throw new UnauthorizedException("Invalid token");
             }
-            String tokenEmail = normalizeEmail(jwt.getClaimAsString("email"));
-            if (!StringUtils.hasText(tokenEmail)) {
-                throw new UnauthorizedException("Invalid token");
-            }
+            String tokenEmail = resolveTokenEmail(jwt);
             if (!isEmailVerified(jwt)) {
                 throw new ForbiddenException("Email not verified");
             }
 
             String requestEmail = normalizeEmail(request.getEmail());
+            if (!StringUtils.hasText(tokenEmail)) {
+                if (!StringUtils.hasText(requestEmail)) {
+                    throw new UnauthorizedException("Invalid token");
+                }
+                tokenEmail = requestEmail;
+            }
             if (!tokenEmail.equalsIgnoreCase(requestEmail)) {
                 throw new BadRequestException("Invalid signup payload");
             }
@@ -145,7 +149,36 @@ public class AuthInfoController {
             return verified;
         }
         String rawValue = jwt.getClaimAsString("email_verified");
-        return "true".equalsIgnoreCase(rawValue);
+        if (StringUtils.hasText(rawValue)) {
+            return "true".equalsIgnoreCase(rawValue);
+        }
+        String tokenUse = jwt.getClaimAsString("token_use");
+        return "access".equals(tokenUse);
+    }
+
+    private String resolveTokenEmail(Jwt jwt) {
+        String email = safeNormalizeEmail(jwt.getClaimAsString("email"));
+        if (StringUtils.hasText(email)) {
+            return email;
+        }
+
+        String username = safeTrim(jwt.getClaimAsString("username"));
+        if (!StringUtils.hasText(username)) {
+            username = safeTrim(jwt.getClaimAsString("cognito:username"));
+        }
+        if (!StringUtils.hasText(username)) {
+            username = safeTrim(jwt.getClaimAsString("preferred_username"));
+        }
+
+        return safeNormalizeEmail(username);
+    }
+
+    private String safeNormalizeEmail(String value) {
+        try {
+            return normalizeEmail(value);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private boolean isOnboardingRequired(UserAccount user) {
