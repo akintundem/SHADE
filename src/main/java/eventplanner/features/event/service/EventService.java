@@ -24,6 +24,7 @@ import eventplanner.features.feeds.entity.EventFeedPost;
 import eventplanner.features.feeds.repository.FeedPostRepository;
 import eventplanner.features.event.repository.EventStoredObjectRepository;
 import eventplanner.features.budget.service.BudgetService;
+import eventplanner.common.storage.s3.registry.BucketAlias;
 import eventplanner.common.storage.s3.services.S3StorageService;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
@@ -1086,7 +1087,7 @@ public class EventService {
                 if (p.getMediaObjectId() != null && eventStoredObjectRepository != null && s3StorageService != null) {
                     eventStoredObjectRepository.findById(p.getMediaObjectId()).ifPresent(obj -> {
                         if (obj.getEvent() != null && event.getId().equals(obj.getEvent().getId())) {
-                            fp.setMediaUrl(s3StorageService.generatePresignedGetUrl("event", obj.getObjectKey(), java.time.Duration.ofMinutes(10)).toString());
+                            fp.setMediaUrl(s3StorageService.generatePresignedGetUrl(BucketAlias.EVENT, obj.getObjectKey(), java.time.Duration.ofMinutes(10)).toString());
                         }
                     });
                 }

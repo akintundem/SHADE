@@ -1,5 +1,6 @@
 package eventplanner.features.feeds.service;
 
+import eventplanner.common.storage.s3.registry.BucketAlias;
 import eventplanner.common.storage.s3.services.S3StorageService;
 import eventplanner.common.storage.s3.dto.MediaUploadStatus;
 import eventplanner.common.storage.s3.dto.PresignedUploadCompleteRequest;
@@ -54,7 +55,7 @@ public class FeedPostService {
 
     private static final Duration UPLOAD_URL_TTL = Duration.ofMinutes(10);
     private static final Duration DOWNLOAD_URL_TTL = Duration.ofMinutes(10);
-    private static final String EVENT_BUCKET_ALIAS = "event";
+    private static final BucketAlias EVENT_BUCKET_ALIAS = BucketAlias.EVENT;
     private static final String PURPOSE_POST_MEDIA = "post_media";
 
     private final EventAccessControlService accessControlService;
@@ -241,6 +242,7 @@ public class FeedPostService {
                 PURPOSE_POST_MEDIA,
                 completeRequest,
                 expectedKey,
+                EVENT_BUCKET_ALIAS,
                 principal,
                 callback
         );

@@ -20,7 +20,7 @@ public class BucketRegistry {
     /**
      * Resolves a bucket alias or name to the actual bucket name.
      * 
-     * @param aliasOrName Bucket alias (e.g., "event", "user") or actual bucket name.
+     * @param aliasOrName Bucket alias (e.g., BucketAlias.EVENT) or actual bucket name.
      *                    If null or empty, returns the default bucket.
      * @return The resolved bucket name
      * @throws IllegalStateException if bucket cannot be resolved
@@ -41,7 +41,14 @@ public class BucketRegistry {
         // Check if it's an alias in the buckets map
         Map<String, String> buckets = properties.getBuckets();
         if (buckets != null && buckets.containsKey(aliasOrName)) {
-            return buckets.get(aliasOrName);
+            String bucket = buckets.get(aliasOrName);
+            if (!StringUtils.hasText(bucket)) {
+                throw new IllegalStateException(
+                    "Bucket alias '" + aliasOrName + "' is configured but empty. " +
+                    "Set aws.s3.buckets." + aliasOrName + " to a valid bucket name."
+                );
+            }
+            return bucket;
         }
 
         // If not found as alias, assume it's already a bucket name

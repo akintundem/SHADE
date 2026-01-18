@@ -1,6 +1,7 @@
 package eventplanner.common.storage.s3.services;
 
 import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.storage.s3.registry.BucketAlias;
 import eventplanner.common.storage.s3.dto.PresignedUploadResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -44,8 +45,18 @@ public class S3VideoUploadService {
 
     private static final Pattern PATH_TRAVERSAL_PATTERN = Pattern.compile("(\\.\\./|\\.\\.\\\\)");
     private static final int MAX_KEY_PREFIX_LENGTH = 500;
+    private static final Duration DEFAULT_UPLOAD_URL_TTL = Duration.ofMinutes(10);
 
     private final S3StorageService storageService;
+
+    public PresignedUploadResult createVideoUpload(BucketAlias bucketAlias,
+                                                   String keyPrefix,
+                                                   String fileName,
+                                                   String contentType,
+                                                   Duration expiresIn) {
+        String alias = bucketAlias != null ? bucketAlias.getAlias() : null;
+        return createVideoUpload(alias, keyPrefix, fileName, contentType, expiresIn);
+    }
 
     public PresignedUploadResult createVideoUpload(String bucketAlias,
                                                    String keyPrefix,
@@ -66,13 +77,14 @@ public class S3VideoUploadService {
         }
         
         String objectKey = buildObjectKey(keyPrefix, extension);
+        Duration ttl = normalizeTtl(expiresIn);
 
         URL uploadUrl;
         try {
             uploadUrl = storageService.generatePresignedPutUrl(
                 bucketAlias,
                 objectKey,
-                expiresIn,
+                ttl,
                 contentType
             );
         } catch (IllegalStateException ex) {
@@ -87,7 +99,7 @@ public class S3VideoUploadService {
             .headers(Map.of("Content-Type", contentType))
             .objectKey(objectKey)
             .resourceUrl(resourceUrl)
-            .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plus(expiresIn))
+            .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plus(ttl))
             .build();
     }
 
@@ -101,6 +113,13 @@ public class S3VideoUploadService {
         } catch (Exception ex) {
             throw new BadRequestException("Invalid video URL");
         }
+    }
+
+    private Duration normalizeTtl(Duration expiresIn) {
+        if (expiresIn == null || expiresIn.isZero() || expiresIn.isNegative()) {
+            return DEFAULT_UPLOAD_URL_TTL;
+        }
+        return expiresIn;
     }
 
     private String sanitizeFileName(String fileName) {

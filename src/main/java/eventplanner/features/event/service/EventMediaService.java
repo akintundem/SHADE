@@ -2,6 +2,7 @@ package eventplanner.features.event.service;
 
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.common.dto.ApiMessageResponse;
+import eventplanner.common.storage.s3.registry.BucketAlias;
 import eventplanner.common.storage.s3.services.S3StorageService;
 import eventplanner.features.event.dto.request.EventMediaRequest;
 import eventplanner.features.event.dto.request.EventMediaUploadRequest;
@@ -35,7 +36,7 @@ import java.util.UUID;
 @Service
 public class EventMediaService {
 
-    private static final String EVENT_BUCKET_ALIAS = "event";
+    private static final BucketAlias EVENT_BUCKET_ALIAS = BucketAlias.EVENT;
     private static final Duration UPLOAD_URL_TTL = Duration.ofMinutes(10);
     private static final Duration DOWNLOAD_URL_TTL = Duration.ofMinutes(10);
 
@@ -313,9 +314,7 @@ public class EventMediaService {
         item.setPurpose(purpose);
         item.setOwnerId(ownerId);
         item.setObjectKey(expectedObjectKey);
-        item.setResourceUrl(StringUtils.hasText(request.getResourceUrl())
-            ? normalizeAndStripUrl(request.getResourceUrl())
-            : null);
+        item.setResourceUrl(storageService.buildObjectUrl(EVENT_BUCKET_ALIAS, expectedObjectKey));
         item.setFileName(request.getFileName());
         item.setContentType(request.getContentType());
         item.setCategory(StringUtils.hasText(categoryOverride) ? categoryOverride : request.getCategory());
@@ -325,14 +324,6 @@ public class EventMediaService {
         item.setMetadata(request.getMetadata());
         item.setUploadedBy(uploadedByUser); // Set user entity relationship
         return storedObjectRepository.save(item);
-    }
-
-    private String normalizeAndStripUrl(String url) {
-        try {
-            return storageService.stripQuery(new URL(url.trim()));
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid resourceUrl");
-        }
     }
 
     private String pathSegment(String purpose) {

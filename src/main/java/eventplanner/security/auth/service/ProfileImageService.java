@@ -2,6 +2,7 @@ package eventplanner.security.auth.service;
 
 import eventplanner.common.exception.exceptions.BadRequestException;
 import eventplanner.common.storage.s3.dto.PresignedUploadResult;
+import eventplanner.common.storage.s3.registry.BucketAlias;
 import eventplanner.common.storage.s3.services.S3ImageUploadService;
 import eventplanner.security.auth.dto.req.ProfileImageCompleteRequest;
 import eventplanner.security.auth.dto.req.ProfileImageUploadRequest;
@@ -21,7 +22,7 @@ import java.time.ZoneOffset;
 public class ProfileImageService {
 
     private static final Duration UPLOAD_URL_TTL = Duration.ofMinutes(10);
-    private static final String USER_BUCKET_ALIAS = "user";
+    private static final BucketAlias USER_BUCKET_ALIAS = BucketAlias.USER;
     private static final String PROFILE_KEY_PREFIX_TEMPLATE = "users/%s/profile";
 
     private final S3ImageUploadService imageUploadService;
@@ -73,16 +74,16 @@ public class ProfileImageService {
             throw new BadRequestException("Invalid object key for this user");
         }
 
-        String normalized = imageUploadService.normalizeResourceUrl(request.getResourceUrl());
-        if (!StringUtils.hasText(normalized)) {
+        String resourceUrl = imageUploadService.buildResourceUrl(USER_BUCKET_ALIAS, objectKey);
+        if (!StringUtils.hasText(resourceUrl)) {
             throw new BadRequestException("Invalid resourceUrl");
         }
 
-        user.setProfilePictureUrl(normalized);
+        user.setProfilePictureUrl(resourceUrl);
         userAccountRepository.save(user);
 
         return ProfileImageCompleteResponse.builder()
-            .profilePictureUrl(normalized)
+            .profilePictureUrl(resourceUrl)
             .updatedAt(LocalDateTime.now(ZoneOffset.UTC))
             .build();
     }

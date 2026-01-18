@@ -1,5 +1,6 @@
 package eventplanner.common.storage.s3.services;
 
+import eventplanner.common.storage.s3.registry.BucketAlias;
 import eventplanner.common.storage.s3.registry.BucketRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -8,6 +9,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetUrlRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -40,7 +42,12 @@ public class S3StorageService {
     private final S3Presigner s3Presigner;
 
     public String uploadObject(String key, InputStream content, long contentLength, String contentType) {
-        return uploadObject(null, key, content, contentLength, contentType);
+        return uploadObject((String) null, key, content, contentLength, contentType);
+    }
+
+    public String uploadObject(BucketAlias bucketAlias, String key, InputStream content, long contentLength, String contentType) {
+        String alias = bucketAlias != null ? bucketAlias.getAlias() : null;
+        return uploadObject(alias, key, content, contentLength, contentType);
     }
 
     public String uploadObject(String bucketAliasOrName, String key, InputStream content, long contentLength, String contentType) {
@@ -59,7 +66,12 @@ public class S3StorageService {
     }
 
     public void deleteObject(String key) {
-        deleteObject(null, key);
+        deleteObject((String) null, key);
+    }
+
+    public void deleteObject(BucketAlias bucketAlias, String key) {
+        String alias = bucketAlias != null ? bucketAlias.getAlias() : null;
+        deleteObject(alias, key);
     }
 
     public void deleteObject(String bucketAliasOrName, String key) {
@@ -72,7 +84,12 @@ public class S3StorageService {
     }
 
     public URL generatePresignedGetUrl(String key, Duration expiresIn) {
-        return generatePresignedGetUrl(null, key, expiresIn);
+        return generatePresignedGetUrl((String) null, key, expiresIn);
+    }
+
+    public URL generatePresignedGetUrl(BucketAlias bucketAlias, String key, Duration expiresIn) {
+        String alias = bucketAlias != null ? bucketAlias.getAlias() : null;
+        return generatePresignedGetUrl(alias, key, expiresIn);
     }
 
     public URL generatePresignedGetUrl(String bucketAliasOrName, String key, Duration expiresIn) {
@@ -92,7 +109,12 @@ public class S3StorageService {
     }
 
     public URL generatePresignedPutUrl(String key, Duration expiresIn, String contentType) {
-        return generatePresignedPutUrl(null, key, expiresIn, contentType);
+        return generatePresignedPutUrl((String) null, key, expiresIn, contentType);
+    }
+
+    public URL generatePresignedPutUrl(BucketAlias bucketAlias, String key, Duration expiresIn, String contentType) {
+        String alias = bucketAlias != null ? bucketAlias.getAlias() : null;
+        return generatePresignedPutUrl(alias, key, expiresIn, contentType);
     }
 
     public URL generatePresignedPutUrl(String bucketAliasOrName, String key, Duration expiresIn, String contentType) {
@@ -114,6 +136,19 @@ public class S3StorageService {
                 .build());
 
         return presigned.url();
+    }
+
+    public String buildObjectUrl(String bucketAliasOrName, String key) {
+        validateObjectKey(key);
+        String bucket = bucketRegistry.resolve(bucketAliasOrName);
+        return s3Client.utilities()
+                .getUrl(GetUrlRequest.builder().bucket(bucket).key(key).build())
+                .toString();
+    }
+
+    public String buildObjectUrl(BucketAlias bucketAlias, String key) {
+        String alias = bucketAlias != null ? bucketAlias.getAlias() : null;
+        return buildObjectUrl(alias, key);
     }
 
     /**
@@ -154,5 +189,4 @@ public class S3StorageService {
     }
 
 }
-
 

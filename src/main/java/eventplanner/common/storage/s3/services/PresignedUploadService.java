@@ -1,6 +1,7 @@
 package eventplanner.common.storage.s3.services;
 
 import eventplanner.common.storage.s3.UploadCompletionCallback;
+import eventplanner.common.storage.s3.registry.BucketAlias;
 import eventplanner.common.storage.s3.dto.PresignedUploadCompleteRequest;
 import eventplanner.common.storage.s3.dto.PresignedUploadRequest;
 import eventplanner.common.storage.s3.dto.PresignedUploadResponse;
@@ -33,7 +34,7 @@ import java.util.function.Function;
 public class PresignedUploadService {
     
     private static final Duration DEFAULT_UPLOAD_URL_TTL = Duration.ofMinutes(10);
-    private static final String DEFAULT_BUCKET_ALIAS = "event";
+    private static final BucketAlias DEFAULT_BUCKET_ALIAS = BucketAlias.EVENT;
     
     private final S3StorageService storageService;
     private final EventRepository eventRepository;
@@ -55,10 +56,19 @@ public class PresignedUploadService {
      * 
      * @param request Upload request with file metadata
      * @param objectKeyBuilder Function to build the S3 object key (e.g., (mediaId) -> "events/{eventId}/media/{mediaId}")
-     * @param bucketAlias S3 bucket alias (defaults to "event")
+     * @param bucketAlias S3 bucket alias string (defaults to BucketAlias.EVENT)
      * @param uploadTtl Time-to-live for the presigned URL (defaults to 10 minutes)
      * @return Presigned upload response with mediaId and upload URL
      */
+    public PresignedUploadResponse generatePresignedUpload(
+            PresignedUploadRequest request,
+            Function<UUID, String> objectKeyBuilder,
+            BucketAlias bucketAlias,
+            Duration uploadTtl) {
+        String alias = bucketAlias != null ? bucketAlias.getAlias() : null;
+        return generatePresignedUpload(request, objectKeyBuilder, alias, uploadTtl);
+    }
+
     public PresignedUploadResponse generatePresignedUpload(
             PresignedUploadRequest request,
             Function<UUID, String> objectKeyBuilder,
@@ -74,7 +84,7 @@ public class PresignedUploadService {
         
         UUID mediaId = UUID.randomUUID();
         String objectKey = objectKeyBuilder.apply(mediaId);
-        String bucket = bucketAlias != null ? bucketAlias : DEFAULT_BUCKET_ALIAS;
+        String bucket = StringUtils.hasText(bucketAlias) ? bucketAlias : DEFAULT_BUCKET_ALIAS.getAlias();
         Duration ttl = uploadTtl != null ? uploadTtl : DEFAULT_UPLOAD_URL_TTL;
         
         URL presignedPut = storageService.generatePresignedPutUrl(bucket, objectKey, ttl, request.getContentType());
@@ -99,6 +109,7 @@ public class PresignedUploadService {
      * @param purpose Purpose/path segment (e.g., "post_media", "event_cover")
      * @param request Completion request with upload metadata
      * @param expectedObjectKey Expected object key (validated against actual)
+     * @param bucketAlias Bucket alias for resolving the resource URL
      * @param principal User who completed the upload
      * @param callback Optional callback for entity-specific completion logic
      * @return Saved EventStoredObject
@@ -110,12 +121,34 @@ public class PresignedUploadService {
             String purpose,
             PresignedUploadCompleteRequest request,
             String expectedObjectKey,
+            BucketAlias bucketAlias,
+            UserPrincipal principal,
+            UploadCompletionCallback callback) {
+        String alias = bucketAlias != null ? bucketAlias.getAlias() : null;
+        return completeUpload(eventId, mediaId, ownerId, purpose, request, expectedObjectKey, alias, principal, callback);
+    }
+
+    public EventStoredObject completeUpload(
+            UUID eventId,
+            UUID mediaId,
+            UUID ownerId,
+            String purpose,
+            PresignedUploadCompleteRequest request,
+            String expectedObjectKey,
+            String bucketAlias,
             UserPrincipal principal,
             UploadCompletionCallback callback) {
         
         // Validate object key matches expected
-        if (StringUtils.hasText(expectedObjectKey) && !expectedObjectKey.equals(request.getObjectKey())) {
-            throw new IllegalArgumentException("objectKey does not match expected key for this upload");
+        if (StringUtils.hasText(expectedObjectKey)) {
+            if (!StringUtils.hasText(request.getObjectKey())) {
+                throw new IllegalArgumentException("objectKey is required");
+            }
+            if (!expectedObjectKey.equals(request.getObjectKey())) {
+                throw new IllegalArgumentException("objectKey does not match expected key for this upload");
+            }
+        } else if (!StringUtils.hasText(request.getObjectKey())) {
+            throw new IllegalArgumentException("objectKey is required");
         }
         if (!StringUtils.hasText(request.getContentType())) {
             throw new IllegalArgumentException("contentType is required");
@@ -123,6 +156,9 @@ public class PresignedUploadService {
         if (!StringUtils.hasText(request.getFileName())) {
             throw new IllegalArgumentException("fileName is required");
         }
+
+        String bucket = StringUtils.hasText(bucketAlias) ? bucketAlias : DEFAULT_BUCKET_ALIAS.getAlias();
+        String objectKey = StringUtils.hasText(expectedObjectKey) ? expectedObjectKey : request.getObjectKey();
         
         // Fetch Event entity
         Event event = eventRepository.findById(eventId)
@@ -139,10 +175,8 @@ public class PresignedUploadService {
         item.setEvent(event);
         item.setPurpose(purpose);
         item.setOwnerId(ownerId);
-        item.setObjectKey(request.getObjectKey());
-        item.setResourceUrl(StringUtils.hasText(request.getResourceUrl())
-                ? normalizeAndStripUrl(request.getResourceUrl())
-                : null);
+        item.setObjectKey(objectKey);
+        item.setResourceUrl(storageService.buildObjectUrl(bucket, objectKey));
         item.setFileName(request.getFileName());
         item.setContentType(request.getContentType());
         item.setCategory(request.getCategory());
@@ -160,13 +194,5 @@ public class PresignedUploadService {
         }
         
         return saved;
-    }
-    
-    private String normalizeAndStripUrl(String url) {
-        try {
-            return storageService.stripQuery(new URL(url.trim()));
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid resourceUrl");
-        }
     }
 }
