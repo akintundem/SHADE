@@ -1,28 +1,29 @@
-require("dotenv").config();
 const amqp = require("amqplib");
 const admin = require("firebase-admin");
+const config = require("./config");
 const fs = require("fs");
 const path = require("path");
-const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@rabbitmq:5672";
-const RABBITMQ_EXCHANGE = process.env.RABBITMQ_EXCHANGE || "notifications";
-const RABBITMQ_QUEUE = process.env.RABBITMQ_PUSH_QUEUE || "push.jobs";
-const RABBITMQ_ROUTING_KEY = process.env.RABBITMQ_PUSH_ROUTING_KEY || "push.send";
-const RABBITMQ_PREFETCH = parseInt(process.env.RABBITMQ_PREFETCH || "10", 10);
-const RABBITMQ_RECONNECT_MS = parseInt(process.env.RABBITMQ_RECONNECT_MS || "5000", 10);
-const RABBITMQ_REQUEUE_ON_ERROR = process.env.RABBITMQ_REQUEUE_ON_ERROR === "true";
-const FIREBASE_KEY_PATH =
-  process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS;
-const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "";
+
+if (!config.rabbitmqUrl) throw new Error("RABBITMQ_URL is required");
+if (!config.rabbitmqExchange) throw new Error("RABBITMQ_EXCHANGE is required");
+if (!config.rabbitmqQueue) throw new Error("RABBITMQ_PUSH_QUEUE is required");
+if (!config.rabbitmqRoutingKey) throw new Error("RABBITMQ_PUSH_ROUTING_KEY is required");
+if (!config.rabbitmqPrefetch) throw new Error("RABBITMQ_PREFETCH is required");
+if (!config.rabbitmqReconnectMs) throw new Error("RABBITMQ_RECONNECT_MS is required");
+if (!config.rabbitmqRequeueOnError) throw new Error("RABBITMQ_REQUEUE_ON_ERROR is required");
+if (!config.firebaseKeyPath) throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY_PATH is required");
+if (!config.firebaseProjectId) throw new Error("FIREBASE_PROJECT_ID is required");
+
+const rabbitmqPrefetch = Number(config.rabbitmqPrefetch);
+const rabbitmqReconnectMs = Number(config.rabbitmqReconnectMs);
+const rabbitmqRequeueOnError = config.rabbitmqRequeueOnError === "true";
 
 let firebaseApp;
 
 function getFirebaseApp() {
   if (firebaseApp) return firebaseApp;
-  if (!FIREBASE_KEY_PATH) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY_PATH is required");
-  }
 
-  const resolvedPath = path.resolve(FIREBASE_KEY_PATH);
+  const resolvedPath = path.resolve(config.firebaseKeyPath);
   if (!fs.existsSync(resolvedPath)) {
     throw new Error(`Firebase service account key not found at ${resolvedPath}`);
   }
@@ -30,7 +31,7 @@ function getFirebaseApp() {
   const serviceAccount = require(resolvedPath);
   firebaseApp = admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    projectId: FIREBASE_PROJECT_ID || serviceAccount.project_id,
+    projectId: config.firebaseProjectId,
   });
 
   return firebaseApp;
@@ -108,21 +109,24 @@ async function sendPush(payload) {
 
 async function startRabbitConsumer() {
   try {
-    const connection = await amqp.connect(RABBITMQ_URL);
+    const connection = await amqp.connect(config.rabbitmqUrl);
     connection.on("error", () => {});
     connection.on("close", () => {
-      setTimeout(startRabbitConsumer, RABBITMQ_RECONNECT_MS);
+      setTimeout(startRabbitConsumer, rabbitmqReconnectMs);
     });
 
     const channel = await connection.createChannel();
-    await channel.assertExchange(RABBITMQ_EXCHANGE, "direct", { durable: true });
-    await channel.assertQueue(RABBITMQ_QUEUE, { durable: true });
-    await channel.bindQueue(RABBITMQ_QUEUE, RABBITMQ_EXCHANGE, RABBITMQ_ROUTING_KEY);
-    channel.prefetch(RABBITMQ_PREFETCH);
+    await channel.assertExchange(config.rabbitmqExchange, "direct", { durable: true });
+    await channel.assertQueue(config.rabbitmqQueue, { durable: true });
+    await channel.bindQueue(
+      config.rabbitmqQueue,
+      config.rabbitmqExchange,
+      config.rabbitmqRoutingKey
+    );
+    channel.prefetch(rabbitmqPrefetch);
 
-    await channel.consume(RABBITMQ_QUEUE, async (msg) => {
+    await channel.consume(config.rabbitmqQueue, async (msg) => {
       if (!msg) return;
-      const jobId = msg.properties.messageId || msg.properties.correlationId || "unknown";
 
       let payload;
       try {
@@ -140,12 +144,12 @@ async function startRabbitConsumer() {
           channel.ack(msg);
           return;
         }
-        channel.nack(msg, false, RABBITMQ_REQUEUE_ON_ERROR);
+        channel.nack(msg, false, rabbitmqRequeueOnError);
       }
     });
 
   } catch (err) {
-    setTimeout(startRabbitConsumer, RABBITMQ_RECONNECT_MS);
+    setTimeout(startRabbitConsumer, rabbitmqReconnectMs);
   }
 }
 

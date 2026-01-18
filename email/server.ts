@@ -1,31 +1,31 @@
 // @ts-nocheck
-import 'dotenv/config'
 import amqp from 'amqplib'
 import { render } from '@react-email/render'
 import { Resend } from 'resend'
+import { config } from './config'
 import { EMAIL_TEMPLATES } from './templates/index'
 
-const DEFAULT_FROM = process.env.RESEND_FROM || ''
+if (!config.resendApiKey) throw new Error('RESEND_API_KEY is required')
+if (!config.resendFrom) throw new Error('RESEND_FROM is required')
+if (!config.rabbitmqUrl) throw new Error('RABBITMQ_URL is required')
+if (!config.rabbitmqExchange) throw new Error('RABBITMQ_EXCHANGE is required')
+if (!config.rabbitmqQueue) throw new Error('RABBITMQ_EMAIL_QUEUE is required')
+if (!config.rabbitmqRoutingKey) throw new Error('RABBITMQ_EMAIL_ROUTING_KEY is required')
+if (!config.rabbitmqPrefetch) throw new Error('RABBITMQ_PREFETCH is required')
+if (!config.rabbitmqReconnectMs) throw new Error('RABBITMQ_RECONNECT_MS is required')
+if (!config.rabbitmqRequeueOnError) throw new Error('RABBITMQ_REQUEUE_ON_ERROR is required')
+
+const rabbitmqPrefetch = Number(config.rabbitmqPrefetch)
+const rabbitmqReconnectMs = Number(config.rabbitmqReconnectMs)
+const rabbitmqRequeueOnError = config.rabbitmqRequeueOnError === 'true'
+const DEFAULT_FROM = config.resendFrom as string
 const ALLOWED = new Set(
-  (process.env.ALLOWED_TEMPLATES || '')
+  (config.allowedTemplates || '')
     .split(',')
-    .map((s) => s.trim())
+    .map((entry) => entry.trim())
     .filter(Boolean)
 )
-const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@rabbitmq:5672'
-const RABBITMQ_EXCHANGE = process.env.RABBITMQ_EXCHANGE || 'notifications'
-const RABBITMQ_QUEUE = process.env.RABBITMQ_EMAIL_QUEUE || 'email.jobs'
-const RABBITMQ_ROUTING_KEY = process.env.RABBITMQ_EMAIL_ROUTING_KEY || 'email.send'
-const RABBITMQ_PREFETCH = Number(process.env.RABBITMQ_PREFETCH || '10')
-const RABBITMQ_RECONNECT_MS = Number(process.env.RABBITMQ_RECONNECT_MS || '5000')
-const RABBITMQ_REQUEUE_ON_ERROR = process.env.RABBITMQ_REQUEUE_ON_ERROR === 'true'
-
-const resendApiKey = process.env.RESEND_API_KEY
-if (!resendApiKey) {
-  throw new Error('RESEND_API_KEY is required (set in .env or environment)')
-}
-
-const resend = new Resend(resendApiKey)
+const resend = new Resend(config.resendApiKey as string)
 
 const templateLookup = new Map()
 Object.entries(EMAIL_TEMPLATES).forEach(([key, entry]) => {
@@ -103,22 +103,24 @@ const sendEmail = async (payload: any) => {
 
 const startRabbitConsumer = async () => {
   try {
-    const connection = await amqp.connect(RABBITMQ_URL)
+    const connection = await amqp.connect(config.rabbitmqUrl as string)
     connection.on('error', () => {})
     connection.on('close', () => {
-      setTimeout(startRabbitConsumer, RABBITMQ_RECONNECT_MS)
+      setTimeout(startRabbitConsumer, rabbitmqReconnectMs)
     })
 
     const channel = await connection.createChannel()
-    await channel.assertExchange(RABBITMQ_EXCHANGE, 'direct', { durable: true })
-    await channel.assertQueue(RABBITMQ_QUEUE, { durable: true })
-    await channel.bindQueue(RABBITMQ_QUEUE, RABBITMQ_EXCHANGE, RABBITMQ_ROUTING_KEY)
-    channel.prefetch(RABBITMQ_PREFETCH)
+    await channel.assertExchange(config.rabbitmqExchange as string, 'direct', { durable: true })
+    await channel.assertQueue(config.rabbitmqQueue as string, { durable: true })
+    await channel.bindQueue(
+      config.rabbitmqQueue as string,
+      config.rabbitmqExchange as string,
+      config.rabbitmqRoutingKey as string
+    )
+    channel.prefetch(rabbitmqPrefetch)
 
-    await channel.consume(RABBITMQ_QUEUE, async (msg) => {
+    await channel.consume(config.rabbitmqQueue as string, async (msg) => {
       if (!msg) return
-      const jobId = msg.properties.messageId || msg.properties.correlationId || 'unknown'
-
       let payload: any
       try {
         payload = JSON.parse(msg.content.toString())
@@ -135,12 +137,12 @@ const startRabbitConsumer = async () => {
           channel.ack(msg)
           return
         }
-        channel.nack(msg, false, RABBITMQ_REQUEUE_ON_ERROR)
+        channel.nack(msg, false, rabbitmqRequeueOnError)
       }
     })
 
   } catch (err) {
-    setTimeout(startRabbitConsumer, RABBITMQ_RECONNECT_MS)
+    setTimeout(startRabbitConsumer, rabbitmqReconnectMs)
   }
 }
 
