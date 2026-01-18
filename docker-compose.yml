@@ -52,6 +52,8 @@ services:
       RABBITMQ_REQUEUE_ON_ERROR: ${RABBITMQ_REQUEUE_ON_ERROR}
       FIREBASE_SERVICE_ACCOUNT_KEY_PATH: ${FIREBASE_SERVICE_ACCOUNT_KEY_PATH}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+    volumes:
+      - ./push-service/cred:/app/cred:ro
     restart: unless-stopped
     networks:
       - event-planner-network
