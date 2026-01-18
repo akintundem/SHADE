@@ -1,23 +1,24 @@
 // @ts-nocheck
 import 'dotenv/config'
-import express from 'express'
-import React from 'react'
+import amqp from 'amqplib'
 import { render } from '@react-email/render'
 import { Resend } from 'resend'
 import { EMAIL_TEMPLATES } from './templates/index'
 
-const app = express()
-app.use(express.json())
-
-const PORT = process.env.PORT || 3000
 const DEFAULT_FROM = process.env.RESEND_FROM || ''
-const SECRET = process.env.RESEND_SHARED_SECRET || process.env.EMAIL_SHARED_SECRET || ''
 const ALLOWED = new Set(
   (process.env.ALLOWED_TEMPLATES || '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
 )
+const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@rabbitmq:5672'
+const RABBITMQ_EXCHANGE = process.env.RABBITMQ_EXCHANGE || 'notifications'
+const RABBITMQ_QUEUE = process.env.RABBITMQ_EMAIL_QUEUE || 'email.jobs'
+const RABBITMQ_ROUTING_KEY = process.env.RABBITMQ_EMAIL_ROUTING_KEY || 'email.send'
+const RABBITMQ_PREFETCH = Number(process.env.RABBITMQ_PREFETCH || '10')
+const RABBITMQ_RECONNECT_MS = Number(process.env.RABBITMQ_RECONNECT_MS || '5000')
+const RABBITMQ_REQUEUE_ON_ERROR = process.env.RABBITMQ_REQUEUE_ON_ERROR === 'true'
 
 const resendApiKey = process.env.RESEND_API_KEY
 if (!resendApiKey) {
@@ -37,62 +38,110 @@ const normalizeList = (value?: string | string[]) => {
   return Array.isArray(value) ? value : [value]
 }
 
-app.get('/health', (_req, res) => {
-  res.json({ ok: true })
-})
+const requestError = (message: string) => {
+  const err = new Error(message) as Error & { statusCode?: number }
+  err.statusCode = 400
+  throw err
+}
 
-app.post('/send-email', async (req, res) => {
+const resolveEmailRequest = (payload: any) => {
+  const { templateId, to, cc, bcc, replyTo, subject, from, variables = {} } = payload || {}
+  if (!templateId) requestError('templateId is required')
+
+  const toList = normalizeList(to)
+  if (!toList.length) requestError('to is required')
+  const fromAddress = from || DEFAULT_FROM
+  if (!fromAddress) requestError('from is required')
+
+  const template = templateLookup.get(templateId)
+  if (!template) requestError('unknown templateId')
+
+  if (ALLOWED.size && !ALLOWED.has(template.id) && !ALLOWED.has(template.key)) {
+    requestError('template not allowed')
+  }
+
+  const props = { ...variables }
+  const resolvedSubject =
+    subject ||
+    (typeof template.subject === 'function'
+      ? template.subject(props as never)
+      : template.subject)
+
+  const ccList = normalizeList(cc)
+  const bccList = normalizeList(bcc)
+
+  return {
+    toList,
+    ccList,
+    bccList,
+    replyTo,
+    resolvedSubject,
+    fromAddress,
+    props,
+    template,
+  }
+}
+
+const sendEmail = async (payload: any) => {
+  const { toList, ccList, bccList, replyTo, resolvedSubject, fromAddress, props, template } =
+    resolveEmailRequest(payload)
+
+  // Render React component to HTML
+  const reactElement = template.component(props as never)
+  const html = await render(reactElement)
+
+  return resend.emails.send({
+    from: fromAddress,
+    to: toList,
+    cc: ccList.length ? ccList : undefined,
+    bcc: bccList.length ? bccList : undefined,
+    reply_to: replyTo,
+    subject: resolvedSubject,
+    html: html,
+  })
+}
+
+const startRabbitConsumer = async () => {
   try {
-    if (SECRET && req.get('x-email-secret') !== SECRET) {
-      return res.status(401).json({ error: 'unauthorized' })
-    }
-
-    const { templateId, to, cc, bcc, replyTo, subject, from, variables = {} } = req.body || {}
-    if (!templateId) return res.status(400).json({ error: 'templateId is required' })
-
-    const toList = normalizeList(to)
-    if (!toList.length) return res.status(400).json({ error: 'to is required' })
-    const fromAddress = from || DEFAULT_FROM
-    if (!fromAddress) return res.status(400).json({ error: 'from is required' })
-
-    const template = templateLookup.get(templateId)
-    if (!template) return res.status(400).json({ error: 'unknown templateId' })
-
-    if (ALLOWED.size && !ALLOWED.has(template.id) && !ALLOWED.has(template.key)) {
-      return res.status(400).json({ error: 'template not allowed' })
-    }
-
-    const props = { ...variables }
-    const resolvedSubject =
-      subject ||
-      (typeof template.subject === 'function'
-        ? template.subject(props as never)
-        : template.subject)
-
-    const ccList = normalizeList(cc)
-    const bccList = normalizeList(bcc)
-
-    // Render React component to HTML
-    const reactElement = template.component(props as never)
-    const html = await render(reactElement)
-
-    const sendResult = await resend.emails.send({
-      from: fromAddress,
-      to: toList,
-      cc: ccList.length ? ccList : undefined,
-      bcc: bccList.length ? bccList : undefined,
-      reply_to: replyTo,
-      subject: resolvedSubject,
-      html: html,
+    const connection = await amqp.connect(RABBITMQ_URL)
+    connection.on('error', () => {})
+    connection.on('close', () => {
+      setTimeout(startRabbitConsumer, RABBITMQ_RECONNECT_MS)
     })
 
-    return res.status(202).json(sendResult)
-  } catch (err: any) {
-    console.error(err)
-    return res.status(500).json({ error: err?.message || 'send failed' })
-  }
-})
+    const channel = await connection.createChannel()
+    await channel.assertExchange(RABBITMQ_EXCHANGE, 'direct', { durable: true })
+    await channel.assertQueue(RABBITMQ_QUEUE, { durable: true })
+    await channel.bindQueue(RABBITMQ_QUEUE, RABBITMQ_EXCHANGE, RABBITMQ_ROUTING_KEY)
+    channel.prefetch(RABBITMQ_PREFETCH)
 
-app.listen(PORT, () => {
-  console.log(`[email-service] listening on ${PORT}`)
-})
+    await channel.consume(RABBITMQ_QUEUE, async (msg) => {
+      if (!msg) return
+      const jobId = msg.properties.messageId || msg.properties.correlationId || 'unknown'
+
+      let payload: any
+      try {
+        payload = JSON.parse(msg.content.toString())
+      } catch (err) {
+        channel.ack(msg)
+        return
+      }
+
+      try {
+        await sendEmail(payload)
+        channel.ack(msg)
+      } catch (err: any) {
+        if (err?.statusCode === 400) {
+          channel.ack(msg)
+          return
+        }
+        channel.nack(msg, false, RABBITMQ_REQUEUE_ON_ERROR)
+      }
+    })
+
+  } catch (err) {
+    setTimeout(startRabbitConsumer, RABBITMQ_RECONNECT_MS)
+  }
+}
+
+startRabbitConsumer()

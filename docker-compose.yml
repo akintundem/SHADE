@@ -1,12 +1,31 @@
 services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: shade-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    restart: unless-stopped
+    networks:
+      - event-planner-network
+
   email-service:
     build:
       context: ./email
     container_name: shade-email-service
+    depends_on:
+      - rabbitmq
     env_file:
       - ./email/.env
-    expose:
-      - "3000"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-notifications}
+      RABBITMQ_EMAIL_QUEUE: ${RABBITMQ_EMAIL_QUEUE:-email.jobs}
+      RABBITMQ_EMAIL_ROUTING_KEY: ${RABBITMQ_EMAIL_ROUTING_KEY:-email.send}
+      RABBITMQ_PREFETCH: ${RABBITMQ_PREFETCH:-10}
     restart: unless-stopped
     networks:
       - event-planner-network
@@ -16,11 +35,14 @@ services:
       context: ./push-service
     image: shade-push-service:local
     container_name: shade-push-service
-    expose:
-      - "3100"
+    depends_on:
+      - rabbitmq
     environment:
-      PORT: "3100"
-      PUSH_SERVICE_SECRET: ${EXTERNAL_PUSH_SERVICE_SECRET:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-notifications}
+      RABBITMQ_PUSH_QUEUE: ${RABBITMQ_PUSH_QUEUE:-push.jobs}
+      RABBITMQ_PUSH_ROUTING_KEY: ${RABBITMQ_PUSH_ROUTING_KEY:-push.send}
+      RABBITMQ_PREFETCH: ${RABBITMQ_PREFETCH:-10}
     restart: unless-stopped
     networks:
       - event-planner-network

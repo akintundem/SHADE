@@ -18,6 +18,7 @@ flowchart LR
     AI["AI Service<br/>Python"]
     ES["Email Service<br/>Node"]
     PS["Push Service<br/>Node"]
+    RMQ["RabbitMQ<br/>Message Broker"]
   end
 
   %% External systems
@@ -42,8 +43,9 @@ flowchart LR
   EP_API --> EP_ATTENDEES
   EP_API --> EP_FEEDS
 
-  EP_API --> ES
-  EP_API --> PS
+  EP_API -->|publish jobs| RMQ
+  RMQ -->|consume jobs| ES
+  RMQ -->|consume jobs| PS
   EP_API --> PG
   EP_API --> RD
   EP_API --> S3

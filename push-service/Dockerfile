@@ -8,5 +8,4 @@ RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit
 COPY server.js ./
 COPY .env* ./
 
-EXPOSE 3100
 CMD ["npm", "run", "start"]
