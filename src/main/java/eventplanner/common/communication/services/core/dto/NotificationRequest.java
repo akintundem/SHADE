@@ -1,6 +1,6 @@
 package eventplanner.common.communication.services.core.dto;
 
-import eventplanner.common.domain.enums.CommunicationType;
+import eventplanner.common.communication.enums.CommunicationType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -30,6 +30,12 @@ public class NotificationRequest {
     @NotBlank(message = "Subject is required")
     private String subject;
 
+    /**
+     * From address for email sends (e.g., "Shade <noreply@shade.com>").
+     * Required when type = EMAIL.
+     */
+    private String from;
+
     private String templateId; // Required for EMAIL, null for PUSH_NOTIFICATION
 
     @Builder.Default
@@ -37,4 +43,3 @@ public class NotificationRequest {
 
     private UUID eventId; // Optional event ID for event-related communications
 }
-

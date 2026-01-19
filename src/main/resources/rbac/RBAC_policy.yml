@@ -115,19 +115,91 @@ policy:
         owns_scope: false
         is_member: true
     -
-      name: attendee.update
-      scope: EVENT
-      resources: attendance_id,attendee_id,event_id
-      description: Bulk update attendees; Update RSVP status; Update attendance details
-      abac:
-        is_authenticated: true
-        owns_scope: true
-        is_member: true
-    -
       name: attendee.validate
       scope: EVENT
       resources: event_id
       description: Validate attendee data
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: ticket.cancel
+      scope: EVENT
+      resources: ticket_id,event_id
+      description: Cancel tickets
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: ticket.checkout
+      scope: EVENT
+      resources: event_id
+      description: Start and manage ticket checkout sessions
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: ticket.create
+      scope: EVENT
+      resources: event_id
+      description: Issue tickets
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: ticket.read
+      scope: EVENT
+      resources: ticket_id,event_id,attendance_id
+      description: View tickets
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: ticket.type.create
+      scope: EVENT
+      resources: event_id
+      description: Create ticket types for an event
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: ticket.type.delete
+      scope: EVENT
+      resources: ticket_type_id,event_id
+      description: Delete ticket types
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: ticket.type.read
+      scope: EVENT
+      resources: event_id,ticket_type_id
+      description: View ticket types
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: ticket.type.update
+      scope: EVENT
+      resources: ticket_type_id,event_id
+      description: Update ticket types
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
+      name: ticket.validate
+      scope: EVENT
+      resources: event_id
+      description: Validate tickets via QR code
       abac:
         is_authenticated: true
         owns_scope: false
@@ -272,13 +344,13 @@ policy:
         owns_scope: false
         is_member: true
     -
-      name: event.analytics.read
-      scope: EVENT
-      resources: id
-      description: Get comprehensive event analytics
+      name: collaborator.invite.accept
+      scope: SYSTEM
+      resources: user_id
+      description: Accept collaborator invite via token
       abac:
         is_authenticated: true
-        owns_scope: false
+        owns_scope: true
         is_member: true
     -
       name: event.assets.read
@@ -294,24 +366,6 @@ policy:
       scope: EVENT
       resources: id
       description: Upload event asset
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
-      name: event.cancel
-      scope: EVENT
-      resources: id
-      description: Cancel event
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
-      name: event.complete
-      scope: EVENT
-      resources: id
-      description: Mark event as completed
       abac:
         is_authenticated: true
         owns_scope: false
@@ -343,24 +397,6 @@ policy:
       abac:
         is_authenticated: true
         owns_scope: true
-        is_member: true
-    -
-      name: event.duplicate
-      scope: EVENT
-      resources: id
-      description: Duplicate event
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
-      name: event.health.read
-      scope: EVENT
-      resources: id
-      description: Event health check
-      abac:
-        is_authenticated: true
-        owns_scope: false
         is_member: true
     -
       name: event.media.delete
@@ -417,46 +453,10 @@ policy:
         owns_scope: false
         is_member: true
     -
-      name: event.publish
-      scope: EVENT
-      resources: id
-      description: Publish event
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
-      name: event.qrcode.delete
-      scope: EVENT
-      resources: id
-      description: Disable QR code
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
-      name: event.qrcode.generate
-      scope: EVENT
-      resources: id
-      description: Generate QR code
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
-      name: event.qrcode.regenerate
-      scope: EVENT
-      resources: id
-      description: Regenerate QR code
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
       name: event.read
       scope: EVENT
       resources: id
-      description: Get available capacity; Get event QR code; Get event capacity info; Get event status; Get event visibility settings; View event details
+      description: Get available capacity; Get event capacity info; Get event status; Get event visibility settings; View event details
       abac:
         is_authenticated: true
         owns_scope: false
@@ -525,25 +525,6 @@ policy:
       abac:
         is_authenticated: true
         owns_scope: false
-        is_member: true
-    -
-      name: event.validate
-      scope: EVENT
-      resources: id
-      description: Validate event data
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: true
-    -
-      name: event.visibility.update
-      scope: EVENT
-      resources: id
-      description: Make event private; Make event public
-      conditions: "Owner or Manager+Owner confirm; audited"
-      abac:
-        is_authenticated: true
-        owns_scope: true
         is_member: true
     -
       name: payment.read
@@ -718,33 +699,6 @@ policy:
         owns_scope: false
         is_member: false
     -
-      name: auth.login
-      scope: PUBLIC
-      resources: null
-      description: Login user
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
-      name: auth.register
-      scope: PUBLIC
-      resources: null
-      description: Register new user
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
-      name: auth.validate
-      scope: PUBLIC
-      resources: null
-      description: Validate token
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
       name: budget.categories.read
       scope: PUBLIC
       resources: null
@@ -758,33 +712,6 @@ policy:
       scope: PUBLIC
       resources: null
       description: Get all public events; Get featured events; Get trending events; Get upcoming public events
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
-      name: weather.geocode
-      scope: PUBLIC
-      resources: null
-      description: Geocode location name
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
-      name: weather.read
-      scope: PUBLIC
-      resources: null
-      description: Get weather forecast (coordinates); Get weather forecast (location name)
-      abac:
-        is_authenticated: false
-        owns_scope: false
-        is_member: false
-    -
-      name: weather.viability.read
-      scope: PUBLIC
-      resources: null
-      description: Check outdoor event viability
       abac:
         is_authenticated: false
         owns_scope: false
@@ -930,15 +857,6 @@ policy:
         owns_scope: false
         is_member: false
     -
-      name: auth.logout
-      scope: SYSTEM
-      resources: null
-      description: Logout user
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: false
-    -
       name: auth.me
       scope: SYSTEM
       resources: null
@@ -948,16 +866,7 @@ policy:
         owns_scope: false
         is_member: false
     -
-      name: auth.refresh
-      scope: SYSTEM
-      resources: null
-      description: Refresh access token
-      abac:
-        is_authenticated: true
-        owns_scope: false
-        is_member: false
-    -
-      name: communication.send
+      name: communication.send.system
       scope: SYSTEM
       resources: null
       description: Send attendee invitations; Send invitations
@@ -1041,10 +950,28 @@ policy:
         owns_scope: false
         is_member: false
     -
+      name: user.delete
+      scope: SYSTEM
+      resources: user_id
+      description: Delete or deactivate own account
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
       name: user.read
       scope: SYSTEM
       resources: user_id
       description: Get user details (self or admin)
+      abac:
+        is_authenticated: true
+        owns_scope: true
+        is_member: true
+    -
+      name: user.notifications.manage
+      scope: SYSTEM
+      resources: user_id
+      description: Register/refresh push notification device tokens
       abac:
         is_authenticated: true
         owns_scope: true
@@ -1086,23 +1013,14 @@ policy:
         owns_scope: false
         is_member: false
     -
-      name: my.events.read
-      scope: SYSTEM
-      resources: null
-      description: List current user's events
-      abac:
-        is_authenticated: true
-        owns_scope: true
-        is_member: true
-    -
       name: my.events.search
       scope: SYSTEM
       resources: null
       description: Search/filter current user's events
       abac:
         is_authenticated: true
-        owns_scope: true
-        is_member: true
+        owns_scope: false
+        is_member: false
     -
       name: public.events.search
       scope: SYSTEM
@@ -1140,9 +1058,8 @@ policy:
         - admin.users.detail
         - admin.users.read
         - admin.users.update
-        - auth.logout
         - auth.me
-        - auth.refresh
+        - collaborator.invite.accept
         - event.create
         - event.read
         - organization.create
@@ -1151,44 +1068,40 @@ policy:
         - payment.process
         - payment.read
         - payment.refund
+        - user.delete
+        - user.notifications.manage
         - user.read
-        - user.sessions.read
-        - user.sessions.delete
         - user.search
         - user.update
         - vendor.create
         - vendor.read
-        - my.events.read
         - my.events.search
         - public.events.search
         - vendor.search
       ORGANIZER:
-        - auth.logout
         - auth.me
-        - auth.refresh
-        - event.create
+        - collaborator.invite.accept
         - organization.create
         - organization.search
         - vendor.create
         - vendor.read
         - public.events.search
         - vendor.search
+        - user.notifications.manage
       USER:
-        - auth.logout
         - auth.me
-        - auth.refresh
+        - collaborator.invite.accept
         - event.create
         - event.read
         - organization.search
         - payment.create
         - payment.process
         - payment.read
+        - user.delete
+        - user.notifications.manage
         - user.read
-        - user.sessions.read
-        - user.sessions.delete
         - user.search
         - user.update
-        - my.events.read
         - my.events.search
         - public.events.search
         - vendor.search
@@ -1205,8 +1118,16 @@ policy:
         - attendee.qrcode.regenerate
         - attendee.qrcode.scan
         - attendee.read
-        - attendee.update
         - attendee.validate
+        - ticket.cancel
+        - ticket.checkout
+        - ticket.create
+        - ticket.read
+        - ticket.type.create
+        - ticket.type.delete
+        - ticket.type.read
+        - ticket.type.update
+        - ticket.validate
         - budget.analytics.read
         - budget.approve
         - budget.create
@@ -1222,26 +1143,17 @@ policy:
         - budget.update
         - communication.read
         - communication.send
-        - event.analytics.read
         - event.assets.read
         - event.assets.upload
-        - event.cancel
-        - event.complete
         - event.coverimage.delete
         - event.coverimage.update
         - event.delete
-        - event.duplicate
-        - event.health.read
         - event.media.delete
         - event.media.read
         - event.media.update
         - event.media.upload
         - event.notification.read
         - event.notification.update
-        - event.publish
-        - event.qrcode.delete
-        - event.qrcode.generate
-        - event.qrcode.regenerate
         - event.read
         - event.registration.close
         - event.registration.open
@@ -1250,8 +1162,6 @@ policy:
         - event.reminder.read
         - event.reminder.update
         - event.update
-        - event.validate
-        - event.visibility.update
         - role.assign
         - role.read
         - role.remove
@@ -1279,8 +1189,16 @@ policy:
         - attendee.qrcode.regenerate
         - attendee.qrcode.scan
         - attendee.read
-        - attendee.update
         - attendee.validate
+        - ticket.cancel
+        - ticket.checkout
+        - ticket.create
+        - ticket.read
+        - ticket.type.create
+        - ticket.type.delete
+        - ticket.type.read
+        - ticket.type.update
+        - ticket.validate
         - budget.analytics.read
         - budget.approve
         - budget.create
@@ -1296,25 +1214,17 @@ policy:
         - budget.update
         - communication.read
         - communication.send
-        - event.analytics.read
         - event.assets.read
         - event.assets.upload
-        - event.cancel
-        - event.complete
         - event.coverimage.delete
         - event.coverimage.update
         - event.delete
-        - event.duplicate
         - event.media.delete
         - event.media.read
         - event.media.update
         - event.media.upload
         - event.notification.read
         - event.notification.update
-        - event.publish
-        - event.qrcode.delete
-        - event.qrcode.generate
-        - event.qrcode.regenerate
         - event.read
         - event.registration.close
         - event.registration.open
@@ -1323,8 +1233,6 @@ policy:
         - event.reminder.read
         - event.reminder.update
         - event.update
-        - event.validate
-        - event.visibility.update
         - role.assign
         - role.read
         - role.remove
@@ -1352,8 +1260,16 @@ policy:
         - attendee.qrcode.regenerate
         - attendee.qrcode.scan
         - attendee.read
-        - attendee.update
         - attendee.validate
+        - ticket.cancel
+        - ticket.checkout
+        - ticket.create
+        - ticket.read
+        - ticket.type.create
+        - ticket.type.delete
+        - ticket.type.read
+        - ticket.type.update
+        - ticket.validate
         - budget.analytics.read
         - budget.approve
         - budget.create
@@ -1371,8 +1287,6 @@ policy:
         - communication.send
         - event.assets.read
         - event.assets.upload
-        - event.cancel
-        - event.complete
         - event.coverimage.delete
         - event.coverimage.update
         - event.delete
@@ -1398,6 +1312,8 @@ policy:
         - attendee.checkout
         - attendee.qrcode.scan
         - attendee.read
+        - ticket.read
+        - ticket.validate
         - event.media.delete
         - event.media.read
         - event.media.update

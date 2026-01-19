@@ -1,6 +1,6 @@
 package eventplanner.features.event.enums;
 
-import eventplanner.common.domain.enums.CommunicationType;
+import eventplanner.common.communication.enums.CommunicationType;
 
 public enum EventNotificationChannel {
     EMAIL(CommunicationType.EMAIL),

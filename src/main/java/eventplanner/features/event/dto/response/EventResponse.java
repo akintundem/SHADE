@@ -1,13 +1,15 @@
 package eventplanner.features.event.dto.response;
 
-import eventplanner.common.domain.enums.EventStatus;
-import eventplanner.common.domain.enums.EventType;
-import eventplanner.common.domain.enums.EventScope;
+import eventplanner.features.event.enums.EventAccessType;
+import eventplanner.features.event.enums.EventStatus;
+import eventplanner.features.event.enums.EventType;
+import eventplanner.features.event.enums.EventScope;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -53,12 +55,6 @@ public class EventResponse {
 
     @Schema(description = "Whether the event requires approval")
     private Boolean requiresApproval;
-
-    @Schema(description = "Whether QR codes are enabled")
-    private Boolean qrCodeEnabled;
-
-    @Schema(description = "QR code value")
-    private String qrCode;
 
     @Schema(description = "Cover image URL for the event")
     private String coverImageUrl;
@@ -122,4 +118,25 @@ public class EventResponse {
 
     @Schema(description = "Event scope: FULL (full details) or FEED (feed view)", example = "FULL")
     private EventScope scope = EventScope.FULL;
+
+    // ============ ACCESS CONTROL SETTINGS ============
+
+    @Schema(description = "How users can access this event's content (OPEN, RSVP_REQUIRED, INVITE_ONLY, TICKETED)", 
+            example = "OPEN")
+    private EventAccessType accessType;
+
+    @Schema(description = "Whether feeds should be made public after the event ends. " +
+            "Applicable for RSVP_REQUIRED, INVITE_ONLY, and TICKETED events.")
+    private Boolean feedsPublicAfterEvent;
+
+    // ============ USER-SPECIFIC CONTEXT ============
+
+    @Schema(description = "User's relationship and access context for this event. " +
+            "Populated when the request includes an authenticated user.")
+    private UserEventContext userContext;
+
+    // ============ TICKET INFO (for ticketed events) ============
+
+    @Schema(description = "List of ticket types available for this event (for TICKETED events)")
+    private List<TicketTypeSummary> ticketTypes;
 }

@@ -8,7 +8,6 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Entity
 @Table(name = "event_reminders")
@@ -18,8 +17,12 @@ import java.util.UUID;
 @EqualsAndHashCode(callSuper = true)
 public class EventReminder extends BaseEntity {
 
-    @Column(name = "event_id", nullable = false)
-    private UUID eventId;
+    /**
+     * Many-to-one relationship with the event this reminder belongs to.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
 
     @Column(name = "title", nullable = false)
     private String title;
@@ -41,6 +44,9 @@ public class EventReminder extends BaseEntity {
 
     @Column(name = "custom_message")
     private String customMessage;
+
+    @Column(name = "email_template_type", length = 50)
+    private String emailTemplateType;
 
     @Column(name = "recipient_user_ids", columnDefinition = "TEXT")
     private String recipientUserIdsCsv;

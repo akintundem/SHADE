@@ -1,15 +1,22 @@
 server:
-  port: ${PORT:8080}
+  port: 8080
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-exception: false
+    include-binding-errors: never
+    whitelabel:
+      enabled: false
 
 spring:
   application:
     name: event-planner-monolith
   
-  # Active profile - defaults to dev on development branch, prod on main
+  # Active profile - defaults to prod on main branch, dev on development branch
   # Override with SPRING_PROFILES_ACTIVE environment variable
   # Development branch uses 'dev' profile, main branch uses 'prod' profile
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:dev}
+    active: ${SPRING_PROFILES_ACTIVE:prod}
   
   jackson:
     serialization:
@@ -20,7 +27,6 @@ spring:
   # Enable JPA for auth system only
   autoconfigure:
     exclude:
-      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchDataAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchRepositoriesAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ReactiveElasticsearchRepositoriesAutoConfiguration
@@ -34,30 +40,35 @@ spring:
   # JPA Configuration
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
+    open-in-view: false  # Disable Open Session In View to prevent lazy loading issues
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false  # Default: false (prod)
-    defer-datasource-initialization: true
+        # Suppress foreign key constraint errors during schema update (orphaned data is cleaned up on startup)
+        jdbc.batch_size: 20
+        order_inserts: true
+        order_updates: true
+    defer-datasource-initialization: false
   
   # Database Configuration
-  # Uses environment variables directly (set in Railway or .env.dev for local)
+  # Uses environment variables directly (set in Railway or .env.prod for local)
   datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE:require}
     driver-class-name: org.postgresql.Driver
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
-      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
-      minimum-idle: ${DB_POOL_MIN_IDLE:5}
-      connection-timeout: ${DB_CONNECTION_TIMEOUT:30000}
-      idle-timeout: ${DB_IDLE_TIMEOUT:600000}
-      max-lifetime: ${DB_MAX_LIFETIME:1800000}
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
   
   redis:
-    # Uses environment variables directly (set in Railway or .env.dev for local)
+    # Uses environment variables directly (set in Railway or .env.prod for local)
     host: ${SPRING_REDIS_HOST}
     port: ${SPRING_REDIS_PORT}
     password: ${SPRING_REDIS_PASSWORD:}
@@ -69,64 +80,90 @@ spring:
         max-idle: ${SPRING_REDIS_POOL_MAX_IDLE:8}
         min-idle: ${SPRING_REDIS_POOL_MIN_IDLE:0}
   
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${COGNITO_ISSUER_URI}
+          jwk-set-uri: ${COGNITO_JWK_SET_URI}
+          audiences: ${COGNITO_AUDIENCE}
   
-  ai:
-    openai:
-      api-key: ${OPENAI_API_KEY}
-      chat:
-        options:
-          model: ${OPENAI_CHAT_MODEL}
-          temperature: ${OPENAI_CHAT_TEMPERATURE}
-          max-tokens: ${OPENAI_CHAT_MAX_TOKENS}
-      embedding:
-        options:
-          model: ${OPENAI_EMBEDDING_MODEL}
-          dimensions: ${OPENAI_EMBEDDING_DIMENSIONS}
-    pinecone:
-      api-key: ${PINECONE_API_KEY}
-      environment: ${PINECONE_ENVIRONMENT}
-      project-name: ${PINECONE_PROJECT}
-      index-name: ${PINECONE_INDEX}
-    vectorstore:
-      pinecone:
-        index-name: ${PINECONE_VECTORSTORE_INDEX}
-        namespace: ${PINECONE_VECTORSTORE_NAMESPACE}
+  
   
   cache:
     type: caffeine
     caffeine:
-      spec: maximumSize=${CACHE_MAX_SIZE:1000},expireAfterWrite=${CACHE_EXPIRE_AFTER_WRITE:300s}
+      spec: maximumSize=1000,expireAfterWrite=300s
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    check-location: true
 
-assistant:
-  service:
-    base-url: ${SHADE_ASSISTANT_URL:http://python-app:8000}
+rabbitmq:
+  url: ${RABBITMQ_URL}
+  exchange: ${RABBITMQ_EXCHANGE}
+  email-routing-key: ${RABBITMQ_EMAIL_ROUTING_KEY}
+  push-routing-key: ${RABBITMQ_PUSH_ROUTING_KEY}
 
-# Firebase Configuration
-firebase:
-  service-account-key-path: ${FIREBASE_SERVICE_ACCOUNT_KEY_PATH}
-  project-id: ${FIREBASE_PROJECT_ID}
+external:
+  email:
+    from: ${EXTERNAL_EMAIL_FROM}
+    from-events: ${EXTERNAL_EMAIL_FROM_EVENTS}
 
-# JWT Configuration
-jwt:
-  secret: ${JWT_SECRET} 
-  expiration: ${JWT_EXPIRATION:86400000} 
-  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+aws:
+  s3:
+    access-key-id: ${AWS_ACCESS_KEY_ID:}
+    secret-access-key: ${AWS_SECRET_ACCESS_KEY:}
+    region: ${AWS_REGION:}
+    buckets:
+      user: ${AWS_S3_USER_BUCKET:}
+      event: ${AWS_S3_EVENT_BUCKET:}
+    endpoint: ${AWS_S3_ENDPOINT:}
+    path-style-access-enabled: ${AWS_S3_PATH_STYLE:false}
+  cognito:
+    user-pool-id: ${AWS_COGNITO_USER_POOL_ID}
+    region: ${AWS_COGNITO_REGION}
 
-# Authentication Configuration
-auth:
-  session:
-    max-concurrent: ${AUTH_SESSION_MAX_CONCURRENT:5}
-    cleanup-interval-ms: ${AUTH_SESSION_CLEANUP_INTERVAL_MS:3600000}
-  lockout:
-    max-attempts: ${AUTH_LOCKOUT_MAX_ATTEMPTS:5}
-    initial-duration-minutes: ${AUTH_LOCKOUT_INITIAL_DURATION_MINUTES:15}
-    max-duration-hours: ${AUTH_LOCKOUT_MAX_DURATION_HOURS:24}
+# Feed Posts Configuration
+feeds:
+  cleanup:
+    # Maximum age for incomplete uploads before cleanup (in minutes)
+    max-age-minutes: ${FEEDS_CLEANUP_MAX_AGE_MINUTES}
+    # Cron expression for cleanup job (runs every 5 minutes by default)
+    # Format: second, minute, hour, day, month, weekday
+    # "0 */5 * * * *" = every 5 minutes
+    # "0 * * * * *" = every minute
+    cron: ${FEEDS_CLEANUP_CRON}
 
 # Application Configuration
 app:
-  cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
-  base-url: ${APP_BASE_URL:http://localhost:8080} 
+  base-url: ${APP_BASE_URL}
+  ticket:
+    qr-secret: ${APP_TICKET_QR_SECRET}
+
+# Service Authentication (Kong gateway API key validation)
+# GATEWAY_SERVICE_API_KEY is the canonical key shared between Kong and Java app
+service:
+  auth:
+    enabled: ${SERVICE_AUTH_ENABLED}
+    # REQUIRED: API key injected by Kong via X-API-Key header
+    api-key: ${SERVICE_API_KEY}
+    # Require X-API-Key header for all non-actuator requests (enforced in production)
+    require-header: ${SERVICE_AUTH_REQUIRE_HEADER}
+    allow-service-role-paths: ${SERVICE_ROLE_ALLOWED_PATHS}
+
+# Security Configuration
+security:
+  # JWT auto-provisioning (create user account on first JWT validation)
+  jwt:
+    auto-provision: ${SECURITY_JWT_AUTO_PROVISION}
+
+rbac:
+  policy:
+    location: ${RBAC_POLICY_LOCATION}
+  
+
 
 # Branded QR code rendering defaults
 qr-code:
@@ -166,26 +203,16 @@ qr-code:
       size: 64
       padding: 12
 
-# External API Keys
-external:
-  resend:
-    api-key: ${RESEND_API_KEY}
-    from-email: ${RESEND_FROM_EMAIL}
-  google:
-    maps-api-key: ${GOOGLE_MAPS_API_KEY}
-  openweather:
-    api-key: ${OPENWEATHER_API_KEY}
-
 # Logging
 logging:
   level:
-    ai.eventplanner: ${LOG_LEVEL_APP:INFO}
-    org.springframework.security: ${LOG_LEVEL_SECURITY:WARN}
-    org.springframework.web: ${LOG_LEVEL_WEB:INFO}
-    org.springframework.ai: ${LOG_LEVEL_AI:INFO}
-    org.springframework.validation: ${LOG_LEVEL_VALIDATION:WARN}
+    ai.eventplanner: INFO
+    org.springframework.security: WARN
+    org.springframework.web: INFO
+    org.springframework.ai: INFO
+    org.springframework.validation: WARN
   pattern:
-    console: ${LOG_PATTERN:%d{yyyy-MM-dd HH:mm:ss} - %msg%n}
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
 
 # Management endpoints
 # SECURITY: Removed 'env' from default exposure to prevent secret leakage
@@ -194,25 +221,21 @@ management:
   endpoints:
     web:
       exposure:
-        include: ${MANAGEMENT_ENDPOINTS:health,info,metrics}
+        include: health,info,metrics
   endpoint:
     health:
-      show-details: ${MANAGEMENT_HEALTH_DETAILS:always}
+      show-details: always
   health:
     elasticsearch:
-      enabled: ${MANAGEMENT_ELASTICSEARCH_ENABLED:false}
+      enabled: false
 
 # OpenAPI Documentation
 springdoc:
   swagger-ui:
-    path: ${SWAGGER_UI_PATH}
+    path: /swagger-ui
   api-docs:
-    path: ${API_DOCS_PATH}
+    path: /v3/api-docs
   info:
-    title: ${API_TITLE}
-    description: ${API_DESCRIPTION}
-    version: ${API_VERSION}
-
-rbac:
-  policy:
-    location: classpath:rbac/RBAC_policy.yml
+    title: Event Planner API
+    description: Event planning platform
+    version: 1.0.0

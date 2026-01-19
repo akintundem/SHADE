@@ -1,130 +1,79 @@
 package eventplanner.common.communication.services.channel.email;
 
-import eventplanner.common.communication.config.ResendConfig;
-import eventplanner.common.communication.services.channel.email.dto.EmailResult;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
+import eventplanner.common.communication.services.channel.email.dto.EmailJobRequest;
+import eventplanner.common.communication.services.channel.email.dto.EmailResult;
+import eventplanner.common.config.RabbitMqProperties;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
- * Email service using Resend API templates
+ * Email service publishing notification jobs to RabbitMQ.
  */
 @Service
-@Slf4j
 public class EmailService {
 
-    public static final String TEMPLATE_EMAIL_VERIFICATION = "email-verification";
-    
-    private static final String RESEND_API_URL = "https://api.resend.com/emails";
-    private final ResendConfig resendConfig;
-    private final RestTemplate restTemplate;
+    private final RabbitTemplate rabbitTemplate;
+    private final String exchange;
+    private final String routingKey;
     private final ObjectMapper objectMapper;
 
-    public EmailService(ResendConfig resendConfig) {
-        this.resendConfig = resendConfig;
-        this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
+    public EmailService(RabbitTemplate rabbitTemplate,
+                        RabbitMqProperties rabbitMqProperties,
+                        ObjectMapper objectMapper) {
+        String exchange = rabbitMqProperties.getExchange();
+        String routingKey = rabbitMqProperties.getEmailRoutingKey();
+        if (exchange == null || exchange.isBlank()) {
+            throw new IllegalStateException("rabbitmq.exchange must be configured");
+        }
+        if (routingKey == null || routingKey.isBlank()) {
+            throw new IllegalStateException("rabbitmq.email-routing-key must be configured");
+        }
+        this.rabbitTemplate = rabbitTemplate;
+        this.exchange = exchange;
+        this.routingKey = routingKey;
+        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
     }
 
     /**
-     * Send email using a Resend template
-     * 
-     * @param to Recipient email address
-     * @param subject Email subject
-     * @param templateId Resend template ID (e.g., "email-verification")
-     * @param variables Map of variables for the template
-     * @return EmailResult with success status and message ID
+     * Queue an email job for the Node email service to consume.
+     *
+     * @param to recipient email
+     * @param subject email subject (optional; template default will be used if null)
+     * @param from sender address (required by the Node service)
+     * @param templateId template key/id understood by the Node service
+     * @param variables template variables
      */
-    public EmailResult sendEmail(String to, String subject, String templateId, Map<String, Object> variables) {
-        // Check if Resend API key is configured
-        if (!resendConfig.isApiKeyConfigured()) {
-            log.warn("Resend API key is not configured. Email not sent.");
-            return EmailResult.builder()
-                    .success(false)
-                    .errorMessage("Resend API key is not configured. Please set RESEND_API_KEY environment variable.")
-                    .build();
-        }
-
+    public EmailResult sendEmail(String to, String subject, String from, String templateId, Map<String, Object> variables) {
         try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(resendConfig.getApiKey());
+            EmailJobRequest payload = EmailJobRequest.builder()
+                    .templateId(templateId)
+                    .to(List.of(to))
+                    .from(from)
+                    .subject(subject)
+                    .variables(variables != null ? variables : new HashMap<>())
+                    .build();
 
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("from", resendConfig.getDefaultFromEmail());
-            requestBody.put("to", List.of(to));
-            requestBody.put("subject", subject);
-            
-            Map<String, Object> template = new HashMap<>();
-            template.put("id", templateId);
-            template.put("variables", variables != null ? variables : new HashMap<>());
-            requestBody.put("template", template);
+            String payloadJson = objectMapper.writeValueAsString(payload);
+            String messageId = UUID.randomUUID().toString();
 
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
-            ResponseEntity<String> response = restTemplate.exchange(
-                    RESEND_API_URL,
-                    HttpMethod.POST,
-                    request,
-                    String.class
-            );
+            rabbitTemplate.convertAndSend(exchange, routingKey, payloadJson, message -> {
+                message.getMessageProperties().setContentType(MediaType.APPLICATION_JSON_VALUE);
+                message.getMessageProperties().setMessageId(messageId);
+                return message;
+            });
 
-            if (response.getStatusCode().is2xxSuccessful()) {
-                JsonNode responseJson = objectMapper.readTree(response.getBody());
-                String messageId = null;
-                if (responseJson.has("id")) {
-                    messageId = responseJson.get("id").asText();
-                }
-                
-                log.info("Email sent successfully. Message ID: {}", messageId);
-                return EmailResult.builder()
-                        .success(true)
-                        .messageId(messageId)
-                        .build();
-            } else {
-                String errorMessage = "HTTP " + response.getStatusCode() + ": " + response.getBody();
-                log.error("Failed to send email. Status: {}, Body: {}", response.getStatusCode(), response.getBody());
-                return EmailResult.builder()
-                        .success(false)
-                        .errorMessage(errorMessage)
-                        .build();
-            }
-
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
-            // Handle HTTP client errors (like domain verification issues)
-            String errorMessage = e.getMessage();
-            if (e.getStatusCode().value() == 403) {
-                // Parse the error response to get the actual message
-                try {
-                    if (e.getResponseBodyAsString() != null) {
-                        JsonNode errorJson = objectMapper.readTree(e.getResponseBodyAsString());
-                        if (errorJson.has("message")) {
-                            errorMessage = errorJson.get("message").asText();
-                        }
-                    }
-                } catch (Exception parseEx) {
-                    // If parsing fails, use the original message
-                }
-                log.warn("Email sending failed due to domain/configuration issue: {}", errorMessage);
-            } else {
-                log.error("Error sending email: {}", errorMessage);
-            }
             return EmailResult.builder()
-                    .success(false)
-                    .errorMessage(errorMessage)
+                    .success(true)
+                    .messageId(messageId)
                     .build();
         } catch (Exception e) {
-            log.error("Error sending email: {}", e.getMessage(), e);
             return EmailResult.builder()
                     .success(false)
                     .errorMessage(e.getMessage())

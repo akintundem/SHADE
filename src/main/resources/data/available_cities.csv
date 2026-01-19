@@ -1,0 +1,112 @@
+uuid,city,state,country,latitude,longitude,gst_rate_bps,pst_rate_bps,hst_rate_bps,tax_effective_year,sales_tax_rate_bps,vat_rate_bps
+39f0c1c3-64b2-55fb-ac27-f28e1353a211,New York,New York,United States,40.7128,-74.0060,0,0,0,2026,400,0
+61d78d06-aa62-51a4-b39c-3c13b18655cc,Los Angeles,California,United States,34.0522,-118.2437,0,0,0,2026,725,0
+bbfe3a11-5ce8-53fb-b9f3-7054d1951d85,Chicago,Illinois,United States,41.8781,-87.6298,0,0,0,2026,625,0
+f5c1f688-8ee0-5ddc-a149-9fc28a2cd666,Houston,Texas,United States,29.7604,-95.3698,0,0,0,2026,625,0
+51012f24-83d8-5a9c-a8b2-10e89017c7ff,Phoenix,Arizona,United States,33.4484,-112.0740,0,0,0,2026,560,0
+270f93bc-326c-540a-a0d6-12fb357907bb,Philadelphia,Pennsylvania,United States,39.9526,-75.1652,0,0,0,2026,600,0
+c93fdb3d-50b7-5a74-a50a-e07575f78faa,San Antonio,Texas,United States,29.4241,-98.4936,0,0,0,2026,625,0
+f57c97dc-6b82-59dc-b71e-c6467bb67d6c,San Diego,California,United States,32.7157,-117.1611,0,0,0,2026,725,0
+453e001f-10a9-5e3f-953f-34da1776b6fc,Dallas,Texas,United States,32.7767,-96.7970,0,0,0,2026,625,0
+81deec24-2b65-55d9-a83d-964424c5869b,San Jose,California,United States,37.3382,-121.8863,0,0,0,2026,725,0
+30c569b9-6cde-5486-96fd-05c5c47f4092,Austin,Texas,United States,30.2672,-97.7431,0,0,0,2026,625,0
+fcf705ad-965d-5ae4-9dfe-c180c559450c,Jacksonville,Florida,United States,30.3322,-81.6557,0,0,0,2026,600,0
+55a1884c-1250-5349-858f-c711fbb53e2d,Fort Worth,Texas,United States,32.7555,-97.3308,0,0,0,2026,625,0
+5b4f142d-2744-5973-a133-1f72be999306,Columbus,Ohio,United States,39.9612,-82.9988,0,0,0,2026,575,0
+53a4e946-e8ac-5c9c-aef5-c20f87be5473,Charlotte,North Carolina,United States,35.2271,-80.8431,0,0,0,2026,475,0
+660edd1a-65dd-5a9b-b8fe-6cecd5e55256,San Francisco,California,United States,37.7749,-122.4194,0,0,0,2026,725,0
+71125db2-3ff4-5448-8464-03074cf6e3ef,Indianapolis,Indiana,United States,39.7684,-86.1581,0,0,0,2026,700,0
+e90f14f2-76a6-5594-bc94-836144b6796f,Seattle,Washington,United States,47.6062,-122.3321,0,0,0,2026,650,0
+fede47d5-e5c5-558f-9c96-44d8b0a2e1bd,Denver,Colorado,United States,39.7392,-104.9903,0,0,0,2026,290,0
+1680d9f5-1d7d-5018-b269-c34ca56c0a37,Washington,District of Columbia,United States,38.9072,-77.0369,0,0,0,2026,600,0
+5010c7d1-1fdd-5171-9562-f5a4dbecc596,Boston,Massachusetts,United States,42.3601,-71.0589,0,0,0,2026,625,0
+8fb59364-f93b-59f4-9c03-22d0286fd80c,El Paso,Texas,United States,31.7619,-106.4850,0,0,0,2026,625,0
+21a38dba-6dce-512a-98e4-53094c1634d1,Nashville,Tennessee,United States,36.1627,-86.7816,0,0,0,2026,700,0
+cc0ed60d-fda1-5af1-82bc-b6fcba2e7749,Detroit,Michigan,United States,42.3314,-83.0458,0,0,0,2026,600,0
+03bef497-b602-5834-aa7c-14de812ef6fd,Oklahoma City,Oklahoma,United States,35.4676,-97.5164,0,0,0,2026,0,0
+9d9ce22e-0ab6-521b-abfe-c3d9f5c56f46,Portland,Oregon,United States,45.5152,-122.6784,0,0,0,2026,0,0
+aa9817ae-02b8-5c10-9439-6da0ba28809a,Las Vegas,Nevada,United States,36.1699,-115.1398,0,0,0,2026,685,0
+5f8eeee0-b5c9-5889-8f39-4c5311fc08b1,Memphis,Tennessee,United States,35.1495,-90.0490,0,0,0,2026,700,0
+ac6caa6b-f339-5326-bad4-20ae6511dc4e,Louisville,Kentucky,United States,38.2527,-85.7585,0,0,0,2026,600,0
+a394c6a7-cff7-5e77-beff-85ec481e0ec8,Baltimore,Maryland,United States,39.2904,-76.6122,0,0,0,2026,600,0
+c2d51b7f-6744-5d2d-b56b-841700758b7d,Milwaukee,Wisconsin,United States,43.0389,-87.9065,0,0,0,2026,500,0
+6d34b1cb-265f-52d0-95bd-f2f67e21fbc1,Albuquerque,New Mexico,United States,35.0844,-106.6504,0,0,0,2026,0,0
+53efa06a-3c36-5c29-a798-2e3d347e9dde,Tucson,Arizona,United States,32.2226,-110.9747,0,0,0,2026,560,0
+b622796a-f115-51d4-81eb-478d40ff623d,Fresno,California,United States,36.7378,-119.7871,0,0,0,2026,725,0
+740a6b4e-7b10-5d4c-9d94-723bfd19e055,Sacramento,California,United States,38.5816,-121.4944,0,0,0,2026,725,0
+74e45418-2ab2-5119-8609-89dfe706580e,Kansas City,Missouri,United States,39.0997,-94.5786,0,0,0,2026,422,0
+badb024a-289f-5156-81be-cd1a19bf5785,Mesa,Arizona,United States,33.4152,-111.8315,0,0,0,2026,560,0
+82683759-da9a-5ce3-b52b-c6a1be8d06e7,Atlanta,Georgia,United States,33.7490,-84.3880,0,0,0,2026,400,0
+817c7e7e-42dd-5fdd-9914-61f96e06ee87,Omaha,Nebraska,United States,41.2565,-95.9345,0,0,0,2026,0,0
+7389d0f0-5207-5ae0-93b9-87fd1a2663dd,Colorado Springs,Colorado,United States,38.8339,-104.8214,0,0,0,2026,290,0
+6aa40ba4-fde8-5448-b679-0a497f9e32e5,Raleigh,North Carolina,United States,35.7796,-78.6382,0,0,0,2026,475,0
+749f65c5-e1a3-5cd7-a99e-7776849a009f,Virginia Beach,Virginia,United States,36.8529,-75.9780,0,0,0,2026,530,0
+94ad43f5-d262-51a4-a324-be871c26be13,Miami,Florida,United States,25.7617,-80.1918,0,0,0,2026,600,0
+30ec53fa-2107-5f89-88e7-19a132d7d5fd,Oakland,California,United States,37.8044,-122.2712,0,0,0,2026,725,0
+9dd85b0a-71f5-5e6d-8791-c57d91796bac,Minneapolis,Minnesota,United States,44.9778,-93.2650,0,0,0,2026,688,0
+222b4228-c0c7-55d4-896a-bf1e316b28d9,Tulsa,Oklahoma,United States,36.1540,-95.9928,0,0,0,2026,0,0
+ce8b82be-0ddc-514d-9201-882a241a6a1c,Cleveland,Ohio,United States,41.4993,-81.6944,0,0,0,2026,575,0
+d484419c-e71f-5a12-8df3-57d4f7f8225a,Wichita,Kansas,United States,37.6872,-97.3301,0,0,0,2026,650,0
+3bf9fb73-49d5-5bdb-88dd-9a0c309c8e7c,Arlington,Texas,United States,32.7357,-97.1081,0,0,0,2026,625,0
+e0fe5cb3-ba3a-569a-ac0a-b607c3ca8208,New Orleans,Louisiana,United States,29.9511,-90.0715,0,0,0,2026,445,0
+c2179422-7bff-5ffe-b1da-9c8fb80afdb9,Tampa,Florida,United States,27.9506,-82.4572,0,0,0,2026,600,0
+03ebbe4c-9bec-5e7f-a1b1-f63ef091b837,Honolulu,Hawaii,United States,21.3099,-157.8581,0,0,0,2026,400,0
+31fc18de-2901-5ed6-8dd5-478a102b78fe,Toronto,Ontario,Canada,43.6532,-79.3832,0,0,1300,2026,0,0
+6be84167-5d26-5b03-a5b0-b29696af457c,Montreal,Quebec,Canada,45.5017,-73.5673,500,998,0,2026,0,0
+a8464246-3155-525c-9a5a-93958eb527aa,Vancouver,British Columbia,Canada,49.2827,-123.1207,500,700,0,2026,0,0
+804d1319-8161-5561-8308-c9999943e446,Calgary,Alberta,Canada,51.0447,-114.0719,500,0,0,2026,0,0
+cbbe7f92-a13d-592b-b471-a562cbc7290e,Edmonton,Alberta,Canada,53.5461,-113.4938,500,0,0,2026,0,0
+24eb4752-9ecf-5d5f-8b94-5017de616180,Ottawa,Ontario,Canada,45.4215,-75.6972,0,0,1300,2026,0,0
+5a9a598f-3a55-5e9f-bc62-4d5d723985d8,Winnipeg,Manitoba,Canada,49.8951,-97.1384,500,700,0,2026,0,0
+6dde0ac9-861b-593a-93e4-0721ab9795b7,Quebec City,Quebec,Canada,46.8139,-71.2080,500,998,0,2026,0,0
+f9651452-fc4b-5176-96ec-609cb8be31fe,Hamilton,Ontario,Canada,43.2557,-79.8711,0,0,1300,2026,0,0
+1a8d5c38-8123-51ce-b5c3-450362e09888,Kitchener,Ontario,Canada,43.4516,-80.4925,0,0,1300,2026,0,0
+e9d5de5e-806b-5518-85ef-af1b131c0fb7,London,Ontario,Canada,42.9849,-81.2453,0,0,1300,2026,0,0
+b46845cc-5eaa-5a49-84c8-ca9831cd7e2a,Victoria,British Columbia,Canada,48.4284,-123.3656,500,700,0,2026,0,0
+90dbe9e4-2bdc-5387-8b23-a22770310208,Halifax,Nova Scotia,Canada,44.6488,-63.5752,0,0,1500,2026,0,0
+9411e532-22e1-510b-87ce-be74f627145f,Oshawa,Ontario,Canada,43.8971,-78.8658,0,0,1300,2026,0,0
+6b1e1026-f25f-5e1d-8d38-a211b2407480,Windsor,Ontario,Canada,42.3149,-83.0364,0,0,1300,2026,0,0
+7fa04b17-b8ea-5b81-8063-e07d1653e79e,Saskatoon,Saskatchewan,Canada,52.1332,-106.6700,500,600,0,2026,0,0
+d5ddf468-8023-590d-b08d-f7e4ff007e27,Regina,Saskatchewan,Canada,50.4452,-104.6189,500,600,0,2026,0,0
+f0a54000-4a10-56af-b999-44d9a0188052,Sherbrooke,Quebec,Canada,45.4000,-71.8990,500,998,0,2026,0,0
+7e3fe1eb-7e74-55cd-86df-61229cb37591,Kelowna,British Columbia,Canada,49.8880,-119.4960,500,700,0,2026,0,0
+2ed97f31-816b-506c-82bc-4894a2194c28,Barrie,Ontario,Canada,44.3894,-79.6903,0,0,1300,2026,0,0
+b9ea8741-de7d-523e-8699-badda088b0bf,Abbotsford,British Columbia,Canada,49.0504,-122.3045,500,700,0,2026,0,0
+e283df4a-3725-5b80-b1e0-b22d66ccef77,Sudbury,Ontario,Canada,46.4920,-80.9900,0,0,1300,2026,0,0
+22508f6a-924d-52e6-9d02-5e58e99f542b,Kingston,Ontario,Canada,44.2312,-76.4860,0,0,1300,2026,0,0
+8696ae55-6930-54c8-b704-f395cbff6bdb,Saguenay,Quebec,Canada,48.4284,-71.0687,500,998,0,2026,0,0
+001d3718-327a-5e68-b91e-148f571ed234,Trois-Rivieres,Quebec,Canada,46.3432,-72.5431,500,998,0,2026,0,0
+044841b4-1b06-5e4d-b418-bccd8c323c49,Guelph,Ontario,Canada,43.5448,-80.2482,0,0,1300,2026,0,0
+48562b93-28bf-5102-9ad3-d07196282539,Cambridge,Ontario,Canada,43.3616,-80.3144,0,0,1300,2026,0,0
+dbb4f250-2d94-5001-9a61-ef9aa0c41f97,Thunder Bay,Ontario,Canada,48.3809,-89.2477,0,0,1300,2026,0,0
+7d5cef01-7bea-5693-a47d-68d4b2e290ef,St. John's,Newfoundland and Labrador,Canada,47.5615,-52.7126,0,0,1500,2026,0,0
+5626c081-becd-5215-9bc1-2c0e859f6e6f,Moncton,New Brunswick,Canada,46.0878,-64.7782,0,0,1500,2026,0,0
+ce246774-c4f8-55b8-ac8d-e2c6e593e422,Mexico City,Mexico City,Mexico,19.4326,-99.1332,0,0,0,2026,0,1600
+f4df70e3-7a99-5493-b0f6-fee4b69df766,Guadalajara,Jalisco,Mexico,20.6597,-103.3496,0,0,0,2026,0,1600
+e053d851-10df-5203-9f9b-51b8d4294f1a,Monterrey,Nuevo Leon,Mexico,25.6866,-100.3161,0,0,0,2026,0,1600
+0a927eed-ad5a-5055-b24c-4db804e2f94f,Puebla,Puebla,Mexico,19.0414,-98.2063,0,0,0,2026,0,1600
+2108746c-00be-535d-a13a-af51b87077b1,Tijuana,Baja California,Mexico,32.5149,-117.0382,0,0,0,2026,0,1600
+ae9f306f-2e85-5558-a1a7-2de7d0e270a8,León,Guanajuato,Mexico,21.1250,-101.6860,0,0,0,2026,0,1600
+8403dd6e-c16a-541f-936c-fb9b830039bf,Juárez,Chihuahua,Mexico,31.6904,-106.4245,0,0,0,2026,0,1600
+7ac9de62-db5f-5893-afb0-d58f2d6aee05,Torreón,Coahuila,Mexico,25.5428,-103.4068,0,0,0,2026,0,1600
+8d3c3699-02c1-5a2d-8b94-ad87d6baadd2,Querétaro,Queretaro,Mexico,20.5888,-100.3899,0,0,0,2026,0,1600
+34484f25-1ceb-591f-8afd-47a412d42889,San Luis Potosí,San Luis Potosi,Mexico,22.1565,-100.9855,0,0,0,2026,0,1600
+1c355a1c-e131-5634-b3c7-6acad2025a19,Mérida,Yucatan,Mexico,20.9674,-89.5926,0,0,0,2026,0,1600
+85fdd624-98f6-5bae-8435-992d86c0cfa5,Mexicali,Baja California,Mexico,32.6278,-115.4545,0,0,0,2026,0,1600
+90a40538-c7cf-5383-92db-b8ca3ff1122c,Aguascalientes,Aguascalientes,Mexico,21.8853,-102.2916,0,0,0,2026,0,1600
+d037bfce-35d0-5e1e-a15e-b36e0babcbb8,Tlalnepantla,Mexico,Mexico,19.5369,-99.1947,0,0,0,2026,0,1600
+c7f30cfb-dbd5-5300-86fa-3de8d831c1af,Chihuahua,Chihuahua,Mexico,28.6329,-106.0691,0,0,0,2026,0,1600
+0a90422b-3666-529e-9786-88cb89989642,Naucalpan,Mexico,Mexico,19.4753,-99.2376,0,0,0,2026,0,1600
+4787944e-7b7a-5a97-b978-1936145256f7,Cancún,Quintana Roo,Mexico,21.1619,-86.8515,0,0,0,2026,0,1600
+388e2783-b21d-5b69-97b6-8bfc74be004a,Saltillo,Coahuila,Mexico,25.4232,-100.9920,0,0,0,2026,0,1600
+8b5e4a69-7560-5c06-91c1-4f3ee59cbf42,Hermosillo,Sonora,Mexico,29.0729,-110.9559,0,0,0,2026,0,1600
+629625b7-368d-508b-ab1c-941ad4ce5b30,Morelia,Michoacan,Mexico,19.7008,-101.1844,0,0,0,2026,0,1600
+3112f843-41f5-5439-bdcc-e39f8a45cf36,Toluca,Mexico,Mexico,19.2925,-99.6569,0,0,0,2026,0,1600
+45395057-771e-5030-b06c-528f6af7f606,Culiacán,Sinaloa,Mexico,24.7903,-107.3878,0,0,0,2026,0,1600
+74f3c524-c651-59a7-8062-f2c7cf42cc5f,Reynosa,Tamaulipas,Mexico,26.0806,-98.2883,0,0,0,2026,0,1600
+44655b61-e745-5f89-b694-692ce8b3da40,Acapulco,Guerrero,Mexico,16.8531,-99.8237,0,0,0,2026,0,1600
+c4cd5b76-65ab-56dc-b56a-b672b552bf69,Veracruz,Veracruz,Mexico,19.1738,-96.1342,0,0,0,2026,0,1600
+65dcb0e2-c4d9-555a-8cba-ddaab9d9b48c,Xalapa,Veracruz,Mexico,19.5312,-96.9159,0,0,0,2026,0,1600
+8fa3dd81-61ab-5968-9111-2a883e9f8e20,Tepic,Nayarit,Mexico,21.5083,-104.8930,0,0,0,2026,0,1600
+fe9f36e7-c0ee-5dc3-bbba-d906b5f998f4,Oaxaca,Oaxaca,Mexico,17.0732,-96.7266,0,0,0,2026,0,1600
+3defc102-09b7-507c-8052-ec0f4a24c547,Villahermosa,Tabasco,Mexico,17.9892,-92.9477,0,0,0,2026,0,1600

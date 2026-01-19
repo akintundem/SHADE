@@ -1,7 +1,8 @@
 package eventplanner.features.event.dto.request;
 
-import eventplanner.common.domain.enums.EventStatus;
-import eventplanner.common.domain.enums.EventType;
+import eventplanner.features.event.enums.EventAccessType;
+import eventplanner.features.event.enums.EventStatus;
+import eventplanner.features.event.enums.EventType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
@@ -48,12 +49,6 @@ public class UpdateEventRequest {
 
     @Schema(description = "Updated approval requirement")
     private Boolean requiresApproval;
-
-    @Schema(description = "Updated QR code flag")
-    private Boolean qrCodeEnabled;
-
-    @Schema(description = "Updated QR code")
-    private String qrCode;
 
     @Schema(description = "Updated cover image URL")
     private String coverImageUrl;
@@ -111,6 +106,19 @@ public class UpdateEventRequest {
     
     @Schema(description = "Venue information with location details")
     private eventplanner.features.event.dto.VenueDTO venue;
+
+    // ============ ACCESS CONTROL SETTINGS ============
+
+    @Schema(description = "How users can access this event's content. " +
+            "OPEN: Anyone can view and RSVP. " +
+            "RSVP_REQUIRED: Users must RSVP to access content. " +
+            "INVITE_ONLY: Only invited users can see/access the event. " +
+            "TICKETED: Users must purchase a ticket to access content.")
+    private EventAccessType accessType;
+
+    @Schema(description = "Whether feeds should be made public after the event ends. " +
+            "Applicable for RSVP_REQUIRED, INVITE_ONLY, and TICKETED events.")
+    private Boolean feedsPublicAfterEvent;
 
     public boolean isVenueCleared() {
         return Boolean.TRUE.equals(venueCleared);

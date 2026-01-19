@@ -16,6 +16,9 @@ public class EventPresignedUploadResponse {
     @Schema(description = "Identifier that should be referenced once upload completes")
     UUID mediaId;
 
+    @Schema(description = "S3 object key that will be created")
+    String objectKey;
+
     @Schema(description = "HTTP method to use when uploading")
     String uploadMethod;
 

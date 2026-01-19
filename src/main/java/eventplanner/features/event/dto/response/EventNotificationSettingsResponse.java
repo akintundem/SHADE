@@ -1,10 +1,12 @@
 package eventplanner.features.event.dto.response;
 
+import eventplanner.features.event.entity.EventNotificationSettings;
 import eventplanner.features.event.enums.EventNotificationChannel;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,6 +17,12 @@ import java.util.UUID;
 @Getter
 @Setter
 public class EventNotificationSettingsResponse {
+
+    private static final List<EventNotificationChannel> SUPPORTED_CHANNELS = 
+            List.of(EventNotificationChannel.EMAIL, EventNotificationChannel.SMS, EventNotificationChannel.PUSH);
+
+    private static final List<String> AVAILABLE_TEMPLATES = 
+            List.of("event_reminder", "event_update", "event_cancelled");
 
     @Schema(description = "Event ID")
     private UUID eventId;
@@ -45,4 +53,34 @@ public class EventNotificationSettingsResponse {
 
     @Schema(description = "Settings updated timestamp ISO-8601")
     private String updatedAt;
+
+    /**
+     * Create an EventNotificationSettingsResponse from an EventNotificationSettings entity.
+     */
+    public static EventNotificationSettingsResponse from(EventNotificationSettings settings) {
+        EventNotificationSettingsResponse response = new EventNotificationSettingsResponse();
+        response.setEventId(settings.getEvent() != null ? settings.getEvent().getId() : null);
+        response.setEmailNotifications(settings.getEmailEnabled());
+        response.setSmsNotifications(settings.getSmsEnabled());
+        response.setPushNotifications(settings.getPushEnabled());
+        response.setReminderEnabled(settings.getReminderEnabled());
+        response.setDefaultReminderMinutes(settings.getDefaultReminderMinutes());
+        response.setAvailableChannels(SUPPORTED_CHANNELS);
+        response.setEnabledChannels(buildEnabledChannels(settings));
+        if (settings.getUpdatedAt() != null) {
+            response.setUpdatedAt(settings.getUpdatedAt().format(DateTimeFormatter.ISO_DATE_TIME));
+        }
+        response.setAvailableTemplates(AVAILABLE_TEMPLATES);
+        return response;
+    }
+
+    private static List<EventNotificationChannel> buildEnabledChannels(EventNotificationSettings settings) {
+        return SUPPORTED_CHANNELS.stream()
+                .filter(channel -> switch (channel) {
+                    case EMAIL -> Boolean.TRUE.equals(settings.getEmailEnabled());
+                    case SMS -> Boolean.TRUE.equals(settings.getSmsEnabled());
+                    case PUSH -> Boolean.TRUE.equals(settings.getPushEnabled());
+                })
+                .toList();
+    }
 }

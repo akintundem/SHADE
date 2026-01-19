@@ -1,7 +1,9 @@
 package eventplanner.features.event.dto.request;
 
+import eventplanner.features.event.enums.EmailTemplateType;
 import eventplanner.features.event.enums.EventNotificationChannel;
 import eventplanner.features.event.enums.EventNotificationPriority;
+import eventplanner.features.event.enums.RecipientType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -15,6 +17,7 @@ import java.util.UUID;
 
 /**
  * Request DTO for event notifications
+ * Supports bulk sending to collaborators, guests, or specific persons
  */
 @Schema(description = "Event notification request")
 @Getter
@@ -34,10 +37,14 @@ public class EventNotificationRequest {
     @Schema(description = "Notification content")
     private String content;
 
-    @Schema(description = "List of recipient user IDs")
+    @Schema(description = "Recipient types for bulk sending. Options: ALL_COLLABORATORS, ALL_GUESTS, SPECIFIC_PERSON. " +
+            "If SPECIFIC_PERSON is used, recipientUserIds or recipientEmails must be provided.")
+    private List<RecipientType> recipientTypes;
+
+    @Schema(description = "List of recipient user IDs (required if SPECIFIC_PERSON is in recipientTypes)")
     private List<UUID> recipientUserIds;
 
-    @Schema(description = "List of recipient email addresses")
+    @Schema(description = "List of recipient email addresses (required if SPECIFIC_PERSON is in recipientTypes)")
     private List<String> recipientEmails;
 
     @Schema(description = "Scheduled send time (if null, send immediately)")
@@ -46,12 +53,13 @@ public class EventNotificationRequest {
     @Schema(description = "Whether to include event details")
     private Boolean includeEventDetails = true;
 
-    @Schema(description = "Whether to include QR code")
-    private Boolean includeQRCode = false;
-
     @Schema(description = "Notification priority", example = "NORMAL")
     private EventNotificationPriority priority = EventNotificationPriority.NORMAL;
 
-    @Schema(description = "Custom template ID")
+    @Schema(description = "Email template type (required for EMAIL channel). Options: ANNOUNCEMENT, CANCEL_EVENT", 
+            example = "ANNOUNCEMENT")
+    private EmailTemplateType emailTemplateType;
+
+    @Schema(description = "Custom template ID (optional, overrides emailTemplateType if provided)")
     private String templateId;
 }

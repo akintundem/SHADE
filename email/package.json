@@ -1,0 +1,25 @@
+{
+  "name": "shade-email-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "start": "NODE_ENV=production node --import tsx --enable-source-maps server.ts"
+  },
+  "dependencies": {
+    "@react-email/components": "^1.0.3",
+    "@react-email/render": "^2.0.1",
+    "amqplib": "^0.10.9",
+    "dotenv": "^16.4.5",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "resend": "^3.3.0",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3"
+  }
+}

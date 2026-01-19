@@ -7,7 +7,6 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -19,7 +18,6 @@ import java.io.IOException;
  * - Web-specific headers: Only applied to web browser requests
  */
 @Component
-@Order(2)
 public class SecurityHeadersFilter implements Filter {
 
     @Override
@@ -96,19 +94,25 @@ public class SecurityHeadersFilter implements Filter {
     private void addWebSpecificHeaders(HttpServletResponse response) {
         // Web-only security headers
         response.setHeader("X-Frame-Options", "DENY");
+        // X-XSS-Protection is deprecated but still useful for older browsers
         response.setHeader("X-XSS-Protection", "1; mode=block");
-        response.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+        // Permissions-Policy restricts browser features
+        response.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=(), usb=()");
         
-        // Content Security Policy (web-only)
+        // Content Security Policy (web-only) - OWASP A03:2021 Injection Prevention
+        // Note: 'unsafe-inline' for styles is often needed for frameworks.
+        // For API-only backends, this is less critical as responses are JSON.
+        // If serving HTML pages, consider using nonces or hashes instead of unsafe-inline.
         response.setHeader("Content-Security-Policy", 
             "default-src 'self'; " +
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
-            "style-src 'self' 'unsafe-inline'; " +
+            "script-src 'self'; " +  // Removed unsafe-inline and unsafe-eval for security
+            "style-src 'self' 'unsafe-inline'; " +  // Inline styles often needed for email templates
             "img-src 'self' data: https:; " +
             "font-src 'self' data:; " +
             "connect-src 'self' https:; " +
             "frame-ancestors 'none'; " +
             "base-uri 'self'; " +
-            "form-action 'self'");
+            "form-action 'self'; " +
+            "upgrade-insecure-requests");
     }
 }

@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -22,6 +23,9 @@ public class EventVisibilityResponse {
 
     @Schema(description = "Whether the event requires approval")
     private Boolean requiresApproval;
+
+    @Schema(description = "Registration deadline for the event")
+    private LocalDateTime registrationDeadline;
 
     @Schema(description = "Access level")
     private String accessLevel;

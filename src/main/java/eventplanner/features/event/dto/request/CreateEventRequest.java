@@ -1,7 +1,8 @@
 package eventplanner.features.event.dto.request;
 
-import eventplanner.common.domain.enums.EventStatus;
-import eventplanner.common.domain.enums.EventType;
+import eventplanner.features.event.enums.EventAccessType;
+import eventplanner.features.event.enums.EventStatus;
+import eventplanner.features.event.enums.EventType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotBlank;
@@ -22,7 +23,7 @@ public class CreateEventRequest {
 
     @NotBlank(message = "Event name is required")
     @Size(max = 255, message = "Event name must not exceed 255 characters")
-    @Schema(description = "Name of the event", example = "Annual Company Conference", required = true)
+    @Schema(description = "Name of the event", example = "Annual Company Conference", requiredMode = Schema.RequiredMode.REQUIRED)
     private String name;
 
     @Size(max = 10000, message = "Description is too long")
@@ -30,7 +31,7 @@ public class CreateEventRequest {
     private String description;
 
     @NotNull(message = "Event type is required")
-    @Schema(description = "Type of the event", example = "CONFERENCE", required = true)
+    @Schema(description = "Type of the event", example = "CONFERENCE", requiredMode = Schema.RequiredMode.REQUIRED)
     private EventType eventType;
 
     @Schema(description = "Status of the event", example = "PLANNING")
@@ -57,12 +58,6 @@ public class CreateEventRequest {
 
     @Schema(description = "Whether the event requires approval", example = "false")
     private Boolean requiresApproval;
-
-    @Schema(description = "Whether QR codes are enabled", example = "true")
-    private Boolean qrCodeEnabled;
-
-    @Schema(description = "QR code content or reference")
-    private String qrCode;
 
     @Schema(description = "Cover image URL for the event")
     private String coverImageUrl;
@@ -111,4 +106,19 @@ public class CreateEventRequest {
     
     @Schema(description = "Venue information with location details")
     private eventplanner.features.event.dto.VenueDTO venue;
+
+    // ============ ACCESS CONTROL SETTINGS ============
+
+    @Schema(description = "How users can access this event's content. " +
+            "OPEN: Anyone can view and RSVP. " +
+            "RSVP_REQUIRED: Users must RSVP to access content. " +
+            "INVITE_ONLY: Only invited users can see/access the event. " +
+            "TICKETED: Users must purchase a ticket to access content.", 
+            example = "OPEN")
+    private EventAccessType accessType;
+
+    @Schema(description = "Whether feeds should be made public after the event ends. " +
+            "Applicable for RSVP_REQUIRED, INVITE_ONLY, and TICKETED events.", 
+            example = "true")
+    private Boolean feedsPublicAfterEvent;
 }

@@ -1,6 +1,6 @@
 package eventplanner.security.auth.dto.res;
 
-import eventplanner.common.domain.enums.UserType;
+import eventplanner.security.auth.enums.UserType;
 import lombok.Builder;
 import lombok.Value;
 
@@ -19,13 +19,14 @@ public class SecureUserResponse {
     UUID id;
     String email;
     String name;
+    String username;
     String phoneNumber;
     LocalDate dateOfBirth;
     UserType userType;
-    boolean emailVerified;
     boolean marketingOptIn;
-    String profileImageUrl;
+    String profilePictureUrl;
     String preferences;
+    UserSettingsResponse settings;
     LocalDateTime createdAt;
     LocalDateTime updatedAt;
 }

@@ -3,12 +3,13 @@
 **/target/
 *.jar
 
-# IntelliJ / IDEA / Eclipse / VS Code
+# IntelliJ / IDEA / Eclipse / VS Code / Cursor
 .idea/
 .project
 .classpath
 .settings/
 .vscode/
+.cursor/
 
 # Logs and runtime files
 *.log
@@ -18,10 +19,19 @@
 
 # Environment & credentials
 .env
-# Allow .env.example to be committed as a template
-!.env.example
+.env.dev
+.env.prod
 *.env
+!/.env.example
 .venv/
+
+# Credentials folder (contains sensitive files like Firebase keys)
+**/cred/
+**/credentials/
+# Firebase service account keys (but allow other JSON config files)
+*-firebase-adminsdk-*.json
+firebase-adminsdk-*.json
+service-account*.json
 
 # Python
 __pycache__/
@@ -66,3 +76,45 @@ test/reports/
 # Test generated QR codes (exclude generated files)
 test/qr-codes/*.png
 test/qr-codes/*.txt
+
+# Email service
+email/node_modules/
+email/package-lock.json
+email/.env
+email/.env.*
+email/.DS_Store
+
+# Push service
+push/node_modules/
+push/package-lock.json
+push/.env
+push/.env.*
+push-service/node_modules/
+push-service/package-lock.json
+push-service/.env
+push-service/.env.*
+push-service/cred/
+
+# AI service
+ai-service/__pycache__/
+ai-service/*.pyc
+ai-service/.env
+ai-service/.env.*
+ai-service/venv/
+ai-service/.venv/
+
+# Global env files (any folder)
+.env
+.env.*
+!/.env.example
+*.env
+!/.env.example
+*.env.*
+!/.env.example
+
+# Email preview tooling (Node)
+/src/main/resources/emails/node_modules/
+/src/main/resources/emails/package-lock.json
+/src/main/resources/emails/pnpm-lock.yaml
+/src/main/resources/emails/yarn.lock
+/src/main/resources/emails/preview.html

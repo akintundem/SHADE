@@ -1,6 +1,6 @@
 package eventplanner.common.communication.services.core.dto;
 
-import eventplanner.common.domain.enums.CommunicationStatus;
+import eventplanner.common.communication.enums.CommunicationStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

@@ -1,20 +1,16 @@
 package eventplanner.security.authorization.service;
 
-import eventplanner.common.domain.enums.OrganizationRoleType;
-import eventplanner.security.authorization.domain.entity.OrganizationRole;
-import eventplanner.security.authorization.domain.repository.OrganizationRoleRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
-import eventplanner.security.authorization.domain.entity.EventRole;
-import eventplanner.security.authorization.domain.repository.EventRoleRepository;
+import eventplanner.features.event.entity.EventRole;
+import eventplanner.features.event.repository.EventRoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -25,7 +21,6 @@ import java.util.UUID;
 @Slf4j
 public class AuthorizationService {
 
-    private final OrganizationRoleRepository organizationRoleRepository;
     private final EventRoleRepository eventRoleRepository;
     private final EventRepository eventRepository;
 
@@ -41,20 +36,6 @@ public class AuthorizationService {
             return false;
         }
         return isEventOwner(user.getId(), eventId);
-    }
-
-    /**
-     * Check if a user is the owner of an organization.
-     * 
-     * @param user The user principal
-     * @param organizationId The organization ID
-     * @return true if the user is the owner of the organization
-     */
-    public boolean isOrganizationOwner(UserPrincipal user, UUID organizationId) {
-        if (user == null || organizationId == null) {
-            return false;
-        }
-        return isOrganizationOwner(user.getId(), organizationId);
     }
 
     /**
@@ -91,20 +72,9 @@ public class AuthorizationService {
             return false;
         }
         return eventRepository.findById(eventId)
-            .map(Event::getOwnerId)
+            .map(event -> event.getOwner() != null ? event.getOwner().getId() : null)
             .filter(userId::equals)
             .isPresent();
-    }
-
-    private boolean isOrganizationOwner(UUID userId, UUID organizationId) {
-        if (organizationId == null) {
-            return false;
-        }
-        return organizationRoleRepository.findByUserIdAndOrganizationIdAndActive(userId, organizationId).stream()
-            .map(OrganizationRole::getRole)
-            .filter(role -> role != null && !role.isBlank())
-            .map(role -> role.toUpperCase(Locale.US))
-            .anyMatch(role -> OrganizationRoleType.OWNER.name().equals(role));
     }
 
     /**
@@ -151,16 +121,6 @@ public class AuthorizationService {
             .anyMatch(EventRole::getIsActive);
         
         return hasActiveRole;
-    }
-
-    /**
-     * Determine if the user holds any active organization role for the given organization.
-     */
-    public boolean hasOrganizationMembership(UserPrincipal user, UUID organizationId) {
-        if (user == null || organizationId == null) {
-            return false;
-        }
-        return !organizationRoleRepository.findByUserIdAndOrganizationIdAndActive(user.getId(), organizationId).isEmpty();
     }
 
     /**

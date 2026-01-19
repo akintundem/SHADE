@@ -25,10 +25,37 @@ public class BudgetDetailResponse {
     private BigDecimal variance;
     private BigDecimal variancePercentage;
     private String budgetStatus;
-    private String approvedBy;
-    private LocalDateTime approvedDate;
     private String notes;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private List<BudgetLineItemResponse> lineItems;
+    private List<BudgetCategoryResponse> categories;
+
+    public static BudgetDetailResponse fromEntity(eventplanner.features.budget.entity.Budget entity) {
+        if (entity == null) return null;
+        BudgetDetailResponse response = new BudgetDetailResponse();
+        response.setId(entity.getId());
+        response.setEventId(entity.getEvent() != null ? entity.getEvent().getId() : null);
+        response.setTotalBudget(entity.getTotalBudget());
+        response.setCurrency(entity.getCurrency());
+        response.setContingencyPercentage(entity.getContingencyPercentage());
+        response.setContingencyAmount(entity.getContingencyAmount());
+        response.setTotalEstimated(entity.getTotalEstimated());
+        response.setTotalActual(entity.getTotalActual());
+        response.setVariance(entity.getVariance());
+        response.setVariancePercentage(entity.getVariancePercentage());
+        response.setBudgetStatus(entity.getBudgetStatus());
+        response.setNotes(entity.getNotes());
+        response.setCreatedAt(entity.getCreatedAt());
+        response.setUpdatedAt(entity.getUpdatedAt());
+        
+        if (entity.getCategories() != null) {
+            // Don't include lineItems in categories to avoid lazy loading issues
+            // Line items are available via separate endpoint /api/v1/events/{eventId}/budget/line-items
+            response.setCategories(entity.getCategories().stream()
+                    .map(cat -> BudgetCategoryResponse.fromEntity(cat, false))
+                    .toList());
+        }
+        
+        return response;
+    }
 }

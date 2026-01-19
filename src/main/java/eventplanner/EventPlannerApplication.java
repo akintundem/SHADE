@@ -8,41 +8,36 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-@SpringBootApplication(exclude = {
-    org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration.class
-})
+@SpringBootApplication
 @EnableCaching
 @EnableAsync
 @EnableScheduling
 @EnableJpaRepositories(basePackages = {
     "eventplanner.features.event.repository",
     "eventplanner.features.attendee.repository",
+    "eventplanner.features.ticket.repository",
     "eventplanner.features.timeline.repository",
     "eventplanner.features.budget.repository",
     "eventplanner.features.collaboration.repository",
-    "eventplanner.features.checklist.repository",
-    "eventplanner.features.vendor.repository",
+    "eventplanner.features.feeds.repository",
     "eventplanner.common.communication.repository",
-    "eventplanner.common.audit.repository",
     "eventplanner.security.auth.repository",
-    "eventplanner.security.authorization.domain.repository",
-    "eventplanner.assistant.repository",
+    "eventplanner.features.event.repository",
     "eventplanner.admin.repository"
 })
 @EntityScan(basePackages = {
     "eventplanner.features.event.entity",
     "eventplanner.features.attendee.entity",
+    "eventplanner.features.ticket.entity",
     "eventplanner.features.timeline.entity",
     "eventplanner.features.budget.entity",
     "eventplanner.features.collaboration.entity",
-    "eventplanner.features.checklist.entity",
-    "eventplanner.features.vendor.entity",
+    "eventplanner.features.feeds.entity",
     "eventplanner.common.communication.model",
     "eventplanner.common.communication.core",
     "eventplanner.common.domain.entity",
     "eventplanner.security.auth.entity",
-    "eventplanner.security.authorization.domain.entity",
-    "eventplanner.assistant.entity",
+    "eventplanner.features.event.entity",
     "eventplanner.admin.entity"
 })
 public class EventPlannerApplication {

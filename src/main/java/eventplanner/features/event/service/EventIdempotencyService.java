@@ -1,7 +1,7 @@
 package eventplanner.features.event.service;
 
+import eventplanner.features.event.dto.response.CreateEventWithCoverUploadResponse;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -14,42 +14,48 @@ import java.util.Optional;
  */
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class EventIdempotencyService {
     
-    private final RedisTemplate<String, String> redisTemplate;
+    private final RedisTemplate<String, Object> redisTemplate;
     private static final String IDEMPOTENCY_KEY_PREFIX = "event:idempotency:";
     private static final Duration IDEMPOTENCY_TTL = Duration.ofHours(24);
     
     /**
      * Check if an event creation with this idempotency key has already been processed
      */
-    public Optional<String> getProcessedResult(String idempotencyKey) {
+    public Optional<CreateEventWithCoverUploadResponse> getProcessedResult(String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return Optional.empty();
         }
         
-        String key = IDEMPOTENCY_KEY_PREFIX + idempotencyKey;
-        String result = redisTemplate.opsForValue().get(key);
-        
-        if (result != null) {
-            log.info("Found cached idempotent result for key: {}", idempotencyKey);
+        try {
+            String key = IDEMPOTENCY_KEY_PREFIX + idempotencyKey;
+            Object result = redisTemplate.opsForValue().get(key);
+            
+            if (result instanceof CreateEventWithCoverUploadResponse) {
+                return Optional.of((CreateEventWithCoverUploadResponse) result);
+            }
+        } catch (Exception e) {
+            // Redis unavailable, proceed without cache
         }
         
-        return Optional.ofNullable(result);
+        return Optional.empty();
     }
     
     /**
      * Store the result of an event creation with this idempotency key
      */
-    public void storeResult(String idempotencyKey, String result) {
+    public void storeResult(String idempotencyKey, CreateEventWithCoverUploadResponse result) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return;
         }
         
-        String key = IDEMPOTENCY_KEY_PREFIX + idempotencyKey;
-        redisTemplate.opsForValue().set(key, result, IDEMPOTENCY_TTL);
-        log.info("Stored idempotent result for key: {}", idempotencyKey);
+        try {
+            String key = IDEMPOTENCY_KEY_PREFIX + idempotencyKey;
+            redisTemplate.opsForValue().set(key, result, IDEMPOTENCY_TTL);
+        } catch (Exception e) {
+            // Redis unavailable, result not cached
+        }
     }
     
     /**
@@ -60,15 +66,14 @@ public class EventIdempotencyService {
             return true; // Allow processing if no key
         }
         
-        String lockKey = IDEMPOTENCY_KEY_PREFIX + "lock:" + idempotencyKey;
-        Boolean success = redisTemplate.opsForValue().setIfAbsent(lockKey, "processing", Duration.ofMinutes(5));
-        
-        if (Boolean.TRUE.equals(success)) {
-            log.debug("Marked operation as processing for key: {}", idempotencyKey);
+        try {
+            String lockKey = IDEMPOTENCY_KEY_PREFIX + "lock:" + idempotencyKey;
+            Boolean success = redisTemplate.opsForValue().setIfAbsent(lockKey, "processing", Duration.ofMinutes(5));
+            
+            return Boolean.TRUE.equals(success);
+        } catch (Exception e) {
+            // Redis unavailable, allow processing
             return true;
-        } else {
-            log.warn("Operation already in progress for key: {}", idempotencyKey);
-            return false;
         }
     }
     
@@ -80,9 +85,12 @@ public class EventIdempotencyService {
             return;
         }
         
-        String lockKey = IDEMPOTENCY_KEY_PREFIX + "lock:" + idempotencyKey;
-        redisTemplate.delete(lockKey);
-        log.debug("Released processing lock for key: {}", idempotencyKey);
+        try {
+            String lockKey = IDEMPOTENCY_KEY_PREFIX + "lock:" + idempotencyKey;
+            redisTemplate.delete(lockKey);
+        } catch (Exception e) {
+            // Redis unavailable, lock will expire naturally
+        }
     }
 }
 

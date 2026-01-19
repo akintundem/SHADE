@@ -7,5 +7,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface EventNotificationSettingsRepository extends JpaRepository<EventNotificationSettings, UUID> {
+
     Optional<EventNotificationSettings> findByEventId(UUID eventId);
 }

@@ -1,0 +1,607 @@
+package eventplanner.features.ticket.service;
+
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.communication.enums.CommunicationType;
+import eventplanner.common.exception.exceptions.ApiException;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ConflictException;
+import eventplanner.common.exception.exceptions.ErrorCode;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.features.ticket.dto.request.IssueTicketRequest;
+import eventplanner.features.ticket.dto.request.ValidateTicketRequest;
+import eventplanner.features.ticket.dto.response.TicketResponse;
+import eventplanner.features.ticket.dto.response.TicketWalletResponse;
+import eventplanner.features.attendee.entity.Attendee;
+import eventplanner.features.ticket.entity.Ticket;
+import eventplanner.features.ticket.entity.TicketType;
+import eventplanner.features.attendee.enums.AttendeeStatus;
+import eventplanner.features.ticket.enums.TicketStatus;
+import eventplanner.features.attendee.repository.AttendeeRepository;
+import eventplanner.features.ticket.repository.TicketRepository;
+import eventplanner.features.ticket.repository.TicketTypeRepository;
+import eventplanner.features.event.entity.Event;
+import eventplanner.features.event.repository.EventRepository;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
+import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.common.config.ExternalServicesProperties;
+import eventplanner.features.config.AppProperties;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+/**
+ * Service for ticket management operations.
+ * Handles ticket issuance, validation, QR code generation, and integration with attendee system.
+ */
+@Service
+@Transactional
+public class TicketService {
+
+    private final TicketRepository ticketRepository;
+    private final TicketTypeRepository ticketTypeRepository;
+    private final AttendeeRepository attendeeRepository;
+    private final EventRepository eventRepository;
+    private final UserAccountRepository userAccountRepository;
+    private final NotificationService notificationService;
+    private final ExternalServicesProperties externalServicesProperties;
+    private final String qrSecretKey;
+
+    private static final int DEFAULT_MAX_TICKETS_PER_PERSON = 5;
+
+    public TicketService(TicketRepository ticketRepository,
+                         TicketTypeRepository ticketTypeRepository,
+                         AttendeeRepository attendeeRepository,
+                         EventRepository eventRepository,
+                         UserAccountRepository userAccountRepository,
+                         NotificationService notificationService,
+                         ExternalServicesProperties externalServicesProperties,
+                         AppProperties appProperties) {
+        this.ticketRepository = ticketRepository;
+        this.ticketTypeRepository = ticketTypeRepository;
+        this.attendeeRepository = attendeeRepository;
+        this.eventRepository = eventRepository;
+        this.userAccountRepository = userAccountRepository;
+        this.notificationService = notificationService;
+        this.externalServicesProperties = externalServicesProperties;
+        this.qrSecretKey = requireConfigured(appProperties.getTicket().getQrSecret(), "app.ticket.qr-secret");
+    }
+
+    private static String requireConfigured(String value, String propertyName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(propertyName + " must be configured");
+        }
+        return value;
+    }
+
+    /**
+     * Check if a ticket type is free (price is null or zero).
+     */
+    private boolean isFreeTicket(TicketType ticketType) {
+        return ticketType.getPriceMinor() == null || ticketType.getPriceMinor() == 0;
+    }
+
+    /**
+     * Issue tickets to one or more attendees.
+     * Accepts a list of ticket requests - each request can issue multiple tickets (quantity) to a single attendee/email.
+     */
+    public List<Ticket> issueTickets(List<IssueTicketRequest> requests, UserPrincipal principal) {
+        return issueTickets(requests, principal, true);
+    }
+
+    /**
+     * Issue tickets with optional control over free-ticket finalization.
+     * When finalizeFreeTickets is false, free tickets are reserved and left in PENDING status (used for checkout flows).
+     */
+    public List<Ticket> issueTickets(List<IssueTicketRequest> requests, UserPrincipal principal, boolean finalizeFreeTickets) {
+        if (requests == null || requests.isEmpty()) {
+            throw new IllegalArgumentException("At least one ticket request is required");
+        }
+
+        List<Ticket> allTickets = new ArrayList<>();
+        UUID eventId = requests.get(0).getEventId();
+
+        // Process each request
+        for (IssueTicketRequest request : requests) {
+            // Validate event ID consistency
+            if (!request.getEventId().equals(eventId)) {
+                throw new IllegalArgumentException("All ticket requests must be for the same event");
+            }
+
+            List<Ticket> tickets = issueSingleTicketRequest(request, principal, finalizeFreeTickets);
+            allTickets.addAll(tickets);
+        }
+
+        return allTickets;
+    }
+
+    /**
+     * Issue one or more tickets to an attendee (internal method).
+     */
+    private List<Ticket> issueSingleTicketRequest(IssueTicketRequest request, UserPrincipal principal, boolean finalizeFreeTickets) {
+        if (request == null) {
+            throw new IllegalArgumentException("Request cannot be null");
+        }
+
+        // Fetch entities
+        Event event = eventRepository.findById(request.getEventId())
+            .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + request.getEventId()));
+
+        TicketType ticketType = ticketTypeRepository.findById(request.getTicketTypeId())
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + request.getTicketTypeId()));
+        if (ticketType.getEvent() == null || !ticketType.getEvent().getId().equals(request.getEventId())) {
+            throw new IllegalArgumentException("Ticket type does not belong to event");
+        }
+
+        if (request.getAttendeeId() == null && (request.getOwnerEmail() == null || request.getOwnerEmail().isBlank())) {
+            if (principal != null && principal.getUser() != null) {
+                String email = principal.getUser().getEmail();
+                String name = principal.getUser().getName();
+                request.setOwnerEmail(email);
+                request.setOwnerName(name != null && !name.isBlank() ? name : email);
+            }
+        }
+
+        // Validate that either attendeeId or email/name is provided
+        if (request.getAttendeeId() == null && (request.getOwnerEmail() == null || request.getOwnerName() == null)) {
+            throw new IllegalArgumentException("Either attendeeId or both ownerEmail and ownerName must be provided");
+        }
+
+        Attendee attendee = null;
+        if (request.getAttendeeId() != null) {
+            attendee = attendeeRepository.findById(request.getAttendeeId())
+                .orElseThrow(() -> new ResourceNotFoundException("Attendee not found: " + request.getAttendeeId()));
+        }
+
+        boolean freeTicket = isFreeTicket(ticketType);
+
+        // Validate ticket type availability
+        if (!ticketType.canPurchase(request.getQuantity())) {
+            throw new ApiException(ErrorCode.TICKET_TYPE_SOLD_OUT, 
+                "Not enough tickets available");
+        }
+
+        // Check max tickets per person (null means unlimited, otherwise enforce configured; fall back to default only if explicitly set to 0)
+        Integer configuredMax = ticketType.getMaxTicketsPerPerson();
+        int maxTicketsPerPerson = configuredMax == null ? Integer.MAX_VALUE : configuredMax;
+        if (configuredMax != null && configuredMax <= 0) {
+            maxTicketsPerPerson = DEFAULT_MAX_TICKETS_PER_PERSON;
+        }
+        
+        // Check limit for attendee-based tickets
+        if (attendee != null) {
+            long existingTickets = ticketRepository.findByAttendeeIdAndEventId(
+                attendee.getId(), request.getEventId()).size();
+            if (existingTickets + request.getQuantity() > maxTicketsPerPerson) {
+                throw new ApiException(ErrorCode.MAX_TICKETS_EXCEEDED,
+                    "Cannot issue more than " + maxTicketsPerPerson + " tickets per person");
+            }
+        }
+
+        // Check limit for email-based tickets
+        if (attendee == null && request.getOwnerEmail() != null) {
+            long existingTickets = ticketRepository.findByOwnerEmailAndEventId(
+                request.getOwnerEmail(), request.getEventId()).size();
+            if (existingTickets + request.getQuantity() > maxTicketsPerPerson) {
+                throw new ApiException(ErrorCode.MAX_TICKETS_EXCEEDED,
+                    "Cannot issue more than " + maxTicketsPerPerson + " tickets per person");
+            }
+        }
+
+        // Reserve inventory with a pessimistic lock to avoid overselling
+        if (!(freeTicket && finalizeFreeTickets)) {
+            reserveTicketsOrThrow(ticketType.getId(), request.getQuantity());
+        }
+
+        UserAccount issuedBy = principal != null && principal.getId() != null
+            ? userAccountRepository.findById(principal.getId()).orElse(null)
+            : null;
+
+        // Create tickets (QR code and ticket number are generated in createTicket)
+        List<Ticket> tickets = new ArrayList<>();
+        for (int i = 0; i < request.getQuantity(); i++) {
+            Ticket ticket = createTicket(event, ticketType, attendee, request.getOwnerEmail(), request.getOwnerName(), issuedBy);
+            tickets.add(ticket);
+        }
+
+        // Save all tickets
+        List<Ticket> savedTickets = ticketRepository.saveAll(tickets);
+
+        // Update ticket type quantities
+        if (freeTicket && finalizeFreeTickets) {
+            // Free ticket (price is null or zero) - immediately mark as sold
+            ticketTypeRepository.incrementQuantitySold(request.getTicketTypeId(), request.getQuantity());
+        }
+
+        // For free tickets, update attendee RSVP status (only if attendee exists)
+        if (freeTicket && finalizeFreeTickets && attendee != null) {
+            attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
+            attendeeRepository.save(attendee);
+        }
+
+        // Issue tickets (set status to ISSUED for free tickets, PENDING for paid)
+        for (Ticket ticket : savedTickets) {
+            if (freeTicket && finalizeFreeTickets) {
+                ticket.issue(issuedBy);
+            }
+        }
+        
+        // Save any status changes
+        if (freeTicket && finalizeFreeTickets) {
+            savedTickets = ticketRepository.saveAll(savedTickets);
+        }
+
+        // Send notifications if requested
+        if (Boolean.TRUE.equals(request.getSendEmail()) || Boolean.TRUE.equals(request.getSendPushNotification())) {
+            sendTicketNotifications(event, savedTickets, request.getSendEmail(), request.getSendPushNotification());
+        }
+
+        return savedTickets;
+    }
+
+
+    /**
+     * Validate a ticket via QR code.
+     */
+    public Ticket validateTicket(ValidateTicketRequest request, UserPrincipal principal) {
+        if (request == null) {
+            throw new IllegalArgumentException("Request cannot be null");
+        }
+
+        // Find ticket by QR code data
+        Ticket ticket = ticketRepository.findByQrCodeData(request.getQrCodeData())
+            .orElseThrow(() -> new BadRequestException("Invalid QR code"));
+
+        // Verify event exists and matches
+        if (ticket.getEvent() == null || ticket.getEvent().getId() == null) {
+            throw new BadRequestException("Ticket is not associated with an event");
+        }
+        if (!ticket.getEvent().getId().equals(request.getEventId())) {
+            throw new BadRequestException("Ticket does not belong to this event");
+        }
+
+        // Check if already validated
+        if (ticket.getStatus() == TicketStatus.VALIDATED) {
+            throw new ConflictException("Ticket has already been validated");
+        }
+
+        // Check if cancelled
+        if (ticket.getStatus() == TicketStatus.CANCELLED) {
+            throw new BadRequestException("Ticket has been cancelled");
+        }
+
+        // Check if pending ticket has expired (15 minute window)
+        if (ticket.getStatus() == TicketStatus.PENDING && ticket.isPendingExpired()) {
+            throw new BadRequestException(
+                "Pending reservation has expired (15 minute window exceeded)");
+        }
+
+        // Check if expired (past event date)
+        if (ticket.isExpired()) {
+            throw new BadRequestException("Ticket has expired");
+        }
+
+        if (ticket.getStatus() != TicketStatus.ISSUED) {
+            throw new ConflictException("Ticket is not in a valid state for validation");
+        }
+
+        // Validate ticket
+        UserAccount validatedBy = principal != null && principal.getId() != null
+            ? userAccountRepository.findById(principal.getId()).orElse(null)
+            : null;
+
+        try {
+            ticket.validate(validatedBy);
+        } catch (IllegalStateException e) {
+            throw new ConflictException(e.getMessage());
+        }
+        ticketRepository.save(ticket);
+
+        return ticket;
+    }
+
+    /**
+     * Cancel a ticket.
+     */
+    public Ticket cancelTicket(UUID ticketId, UserPrincipal principal) {
+        // Load ticket with relationships to avoid lazy loading issues
+        Ticket ticket = ticketRepository.findById(ticketId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
+        
+        // Ensure relationships are loaded by accessing them (triggers lazy load if needed)
+        // This prevents LazyInitializationException when converting to response
+        if (ticket.getEvent() != null) {
+            ticket.getEvent().getId(); // Trigger lazy load
+        }
+        if (ticket.getTicketType() != null) {
+            ticket.getTicketType().getId(); // Trigger lazy load
+        }
+
+        if (ticket.getStatus() == TicketStatus.VALIDATED) {
+            throw new ConflictException("Cannot cancel a validated ticket");
+        }
+        if (ticket.getStatus() == TicketStatus.REFUNDED) {
+            throw new ConflictException("Cannot cancel a refunded ticket");
+        }
+        if (ticket.getStatus() == TicketStatus.CANCELLED) {
+            throw new ConflictException("Ticket is already cancelled");
+        }
+
+        TicketStatus previousStatus = ticket.getStatus();
+        try {
+            ticket.cancel(null);
+        } catch (IllegalStateException e) {
+            throw new ConflictException(e.getMessage());
+        }
+        
+        Ticket saved;
+        try {
+            saved = ticketRepository.save(ticket);
+        } catch (Exception e) {
+            throw new ApiException(ErrorCode.TICKET_CANCEL_SAVE_FAILED, 
+                "Failed to save ticket cancellation", e);
+        }
+
+        // Release reserved quantity if it was reserved
+        if (previousStatus == TicketStatus.PENDING && ticket.getTicketType() != null && ticket.getTicketType().getId() != null) {
+            try {
+                ticketTypeRepository.decrementQuantityReserved(ticket.getTicketType().getId(), 1);
+            } catch (Exception e) {
+                // Don't fail the cancellation if quantity update fails
+            }
+        }
+
+        return saved;
+    }
+
+    /**
+     * Get wallet-ready data for a ticket.
+     */
+    @Transactional(readOnly = true)
+    public TicketWalletResponse getTicketWallet(UUID ticketId) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
+
+        return buildWalletResponse(ticket);
+    }
+
+    /**
+     * Get tickets for an event with pagination and filtering.
+     * Supports filtering by ticketId (for single ticket lookup), status, and ticketTypeId.
+     */
+    @Transactional(readOnly = true)
+    public Page<TicketResponse> getTicketsByEventId(UUID eventId, UUID ticketId, TicketStatus status, 
+                                                     UUID ticketTypeId, Pageable pageable) {
+        // If ticketId is provided, return single ticket in a Page wrapper
+        if (ticketId != null) {
+            Ticket ticket = ticketRepository.findByIdAndEventId(ticketId, eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
+            return new org.springframework.data.domain.PageImpl<>(
+                List.of(TicketResponse.from(ticket)), pageable, 1);
+        }
+
+        // Otherwise, return filtered list
+        Page<Ticket> tickets = ticketRepository.findByEventIdWithFilters(
+            eventId, status, ticketTypeId, pageable);
+
+        return tickets.map(TicketResponse::from);
+    }
+
+    /**
+     * Get tickets for an attendee.
+     */
+    @Transactional(readOnly = true)
+    public List<TicketResponse> getTicketsByAttendeeId(UUID attendeeId) {
+        List<Ticket> tickets = ticketRepository.findByAttendeeId(attendeeId);
+        return tickets.stream()
+            .map(TicketResponse::from)
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Generate unique ticket number.
+     */
+    private String generateTicketNumber(UUID eventId, UUID ticketId) {
+        // Use short UUID format: EVT-{eventIdShort}-{ticketIdShort}
+        String eventShort = eventId.toString().substring(0, 8).toUpperCase();
+        String ticketShort = ticketId.toString().substring(0, 8).toUpperCase();
+        return "EVT-" + eventShort + "-" + ticketShort;
+    }
+
+    /**
+     * Create a new ticket entity.
+     * Supports both attendee-based tickets and email-only tickets.
+     */
+    private Ticket createTicket(Event event, TicketType ticketType, Attendee attendee, 
+                                String ownerEmail, String ownerName, UserAccount issuedBy) {
+        Ticket ticket = new Ticket();
+        ticket.setEvent(event);
+        ticket.setTicketType(ticketType);
+        ticket.setAttendee(attendee);
+        
+        // Set email/name for email-only tickets
+        if (attendee == null) {
+            ticket.setOwnerEmail(ownerEmail);
+            ticket.setOwnerName(ownerName);
+        }
+        
+        ticket.setStatus(TicketStatus.PENDING);
+        
+        // Generate a unique ID for ticket number and QR code generation
+        UUID ticketId = UUID.randomUUID();
+        
+        // Generate ticket number using the pre-generated ID
+        String ticketNumber = generateTicketNumber(event.getId(), ticketId);
+        ticket.setTicketNumber(ticketNumber);
+        
+        // Generate QR code data before save (required by @NotBlank constraint)
+        String qrData = generateQrCodeDataForNewTicket(ticketId, ticketNumber, event.getId());
+        ticket.setQrCodeData(qrData);
+        
+        return ticket;
+    }
+    
+    /**
+     * Generate QR code data for a new ticket (before it has been saved).
+     */
+    private String generateQrCodeDataForNewTicket(UUID ticketId, String ticketNumber, UUID eventId) {
+        try {
+            String data = String.format("ticket:%s:%s:%s",
+                ticketId.toString(),
+                ticketNumber,
+                eventId.toString());
+
+            // Generate hash
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String hashInput = ticketId.toString() + ticketNumber + eventId.toString() + qrSecretKey;
+            byte[] hashBytes = digest.digest(hashInput.getBytes(StandardCharsets.UTF_8));
+            String hash = bytesToHex(hashBytes).substring(0, 8);
+
+            return data + ":" + hash;
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("Failed to generate QR code hash", e);
+        }
+    }
+
+    /**
+     * Send ticket notifications.
+     */
+    private void sendTicketNotifications(Event event, List<Ticket> tickets, 
+                                        Boolean sendEmail, Boolean sendPushNotification) {
+        if (tickets.isEmpty()) {
+            return;
+        }
+
+        // Group tickets by attendee (handle both attendee-based and email-based tickets)
+        Map<String, List<Ticket>> ticketsByRecipient = tickets.stream()
+            .collect(Collectors.groupingBy(t -> {
+                if (t.getAttendee() != null) {
+                    return "attendee:" + t.getAttendee().getId();
+                } else if (t.getOwnerEmail() != null) {
+                    return "email:" + t.getOwnerEmail();
+                }
+                return "unknown";
+            }));
+
+        for (Map.Entry<String, List<Ticket>> entry : ticketsByRecipient.entrySet()) {
+            Ticket firstTicket = entry.getValue().get(0);
+            Attendee attendee = firstTicket.getAttendee();
+            String email = attendee != null ? attendee.getEmail() : firstTicket.getOwnerEmail();
+            
+            try {
+                if (Boolean.TRUE.equals(sendEmail) && email != null) {
+                    Map<String, Object> templateVars = new java.util.HashMap<>();
+                    templateVars.put("eventName", event.getName());
+                    templateVars.put("eventId", event.getId().toString());
+                    templateVars.put("ticketCount", entry.getValue().size());
+                    String attendeeName = attendee != null && attendee.getName() != null && !attendee.getName().isBlank()
+                            ? attendee.getName()
+                            : "there";
+                    templateVars.put("attendeeName", attendeeName);
+                    if (event.getEventWebsiteUrl() != null) {
+                        templateVars.put("ticketsUrl", event.getEventWebsiteUrl());
+                    }
+                    
+                    notificationService.send(NotificationRequest.builder()
+                        .type(CommunicationType.EMAIL)
+                        .to(email)
+                        .subject("Your tickets for: " + event.getName())
+                        .templateId("ticket-confirmation")
+                        .templateVariables(templateVars)
+                        .eventId(event.getId())
+                        .from(externalServicesProperties.getEmail().getFromEvents())
+                        .build());
+                }
+                
+                if (Boolean.TRUE.equals(sendPushNotification) && attendee != null && attendee.getUser() != null
+                        && attendee.getUser().getId() != null) {
+                    Map<String, Object> pushData = new java.util.HashMap<>();
+                    pushData.put("body", "Your tickets for: " + event.getName());
+                    pushData.put("eventId", event.getId().toString());
+                    pushData.put("ticketCount", entry.getValue().size());
+                    if (event.getEventWebsiteUrl() != null) {
+                        pushData.put("ticketsUrl", event.getEventWebsiteUrl());
+                    }
+                    
+                    notificationService.send(NotificationRequest.builder()
+                        .type(CommunicationType.PUSH_NOTIFICATION)
+                        .to(attendee.getUser().getId().toString())
+                        .subject("Tickets confirmed")
+                        .templateVariables(pushData)
+                        .eventId(event.getId())
+                        .build());
+                }
+            } catch (Exception e) {
+            }
+        }
+    }
+
+
+    /**
+     * Convert bytes to hex string.
+     */
+    private String bytesToHex(byte[] bytes) {
+        StringBuilder result = new StringBuilder();
+        for (byte b : bytes) {
+            result.append(String.format("%02x", b));
+        }
+        return result.toString();
+    }
+
+    private void reserveTicketsOrThrow(UUID ticketTypeId, int quantity) {
+        TicketType lockedType = ticketTypeRepository.findByIdForUpdate(ticketTypeId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + ticketTypeId));
+
+        if (!lockedType.canPurchase(quantity)) {
+            throw new ApiException(ErrorCode.TICKET_TYPE_SOLD_OUT,
+                "Not enough tickets available");
+        }
+
+        ticketTypeRepository.incrementQuantityReserved(ticketTypeId, quantity);
+    }
+
+    private TicketWalletResponse buildWalletResponse(Ticket ticket) {
+        if (ticket == null || ticket.getEvent() == null) {
+            return TicketWalletResponse.builder()
+                .available(Boolean.TRUE)
+                .barcodeMessage(ticket != null ? ticket.getQrCodeData() : null)
+                .build();
+        }
+
+        String venueAddress = null;
+        String venueCity = null;
+        String venueState = null;
+        String venueCountry = null;
+        if (ticket.getEvent().getVenue() != null) {
+            venueAddress = ticket.getEvent().getVenue().getAddress();
+            venueCity = ticket.getEvent().getVenue().getCity();
+            venueState = ticket.getEvent().getVenue().getState();
+            venueCountry = ticket.getEvent().getVenue().getCountry();
+        }
+
+        return TicketWalletResponse.builder()
+            .available(Boolean.TRUE)
+            .ticketNumber(ticket.getTicketNumber())
+            .ticketTypeName(ticket.getTicketType() != null ? ticket.getTicketType().getName() : null)
+            .eventName(ticket.getEvent().getName())
+            .eventStartDateTime(ticket.getEvent().getStartDateTime())
+            .eventEndDateTime(ticket.getEvent().getEndDateTime())
+            .venueAddress(venueAddress)
+            .venueCity(venueCity)
+            .venueState(venueState)
+            .venueCountry(venueCountry)
+            .barcodeMessage(ticket.getQrCodeData())
+            .build();
+    }
+}

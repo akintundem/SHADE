@@ -1,50 +1,63 @@
 package eventplanner.features.event.service;
 
-import eventplanner.common.domain.enums.EventType;
 import eventplanner.features.event.dto.VenueDTO;
 import eventplanner.features.event.dto.request.CreateEventRequest;
 import eventplanner.features.event.dto.request.UpdateEventRequest;
-import eventplanner.features.event.dto.request.EventCreationRequest;
-import eventplanner.features.event.dto.request.EventUpdateRequest;
+import eventplanner.features.event.dto.request.EventListRequest;
 import eventplanner.features.event.dto.response.EventResponse;
-import eventplanner.features.event.dto.response.UserEventRelationshipResponse;
-import eventplanner.features.event.dto.response.UserEventsSummaryResponse;
+import eventplanner.features.event.dto.response.TicketTypeSummary;
+import eventplanner.features.event.dto.response.UserEventContext;
 import eventplanner.features.event.entity.Event;
+import eventplanner.features.ticket.entity.TicketType;
+import eventplanner.features.ticket.repository.TicketTypeRepository;
 import eventplanner.features.event.entity.Venue;
 import eventplanner.features.event.repository.EventRepository;
-import eventplanner.common.domain.enums.EventStatus;
-import eventplanner.common.domain.enums.EventUserType;
-import eventplanner.common.domain.enums.EventScope;
-import eventplanner.security.authorization.domain.entity.EventRole;
-import eventplanner.common.domain.enums.RoleName;
+import eventplanner.features.event.enums.EventAccessType;
+import eventplanner.features.event.enums.EventStatus;
+import eventplanner.features.event.enums.EventScope;
+import eventplanner.features.event.entity.EventRole;
+import eventplanner.features.event.enums.RoleName;
 import eventplanner.features.event.dto.request.EventFeedRequest;
 import eventplanner.features.event.dto.response.EventFeedResponse;
 import eventplanner.features.event.dto.response.FeedPost;
+import eventplanner.features.feeds.entity.EventFeedPost;
+import eventplanner.features.feeds.repository.FeedPostRepository;
+import eventplanner.features.event.repository.EventStoredObjectRepository;
+import eventplanner.features.budget.service.BudgetService;
+import eventplanner.common.storage.s3.registry.BucketAlias;
+import eventplanner.common.storage.s3.services.S3StorageService;
+import eventplanner.security.auth.entity.UserAccount;
+import eventplanner.security.auth.repository.UserAccountRepository;
+import eventplanner.common.communication.services.core.BulkNotificationService;
+import eventplanner.common.communication.services.core.NotificationTargetResolver;
+import eventplanner.common.communication.services.core.dto.BulkNotificationRequest;
+import eventplanner.common.communication.services.core.dto.NotificationTarget;
 import java.util.Set;
 import java.util.Comparator;
-import eventplanner.security.authorization.domain.repository.EventRoleRepository;
+import eventplanner.features.event.repository.EventRoleRepository;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.common.qrcode.model.QRCodeGenerationResult;
-import eventplanner.common.qrcode.service.BrandedQRCodeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.Authentication;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Map;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Objects;
 
 @Service
 @Transactional
@@ -57,151 +70,34 @@ public class EventService {
     private EventRoleRepository eventRoleRepository;
     
     @Autowired(required = false)
+    private FeedPostRepository eventPostRepository;
+
+    @Autowired(required = false)
+    private EventStoredObjectRepository eventStoredObjectRepository;
+
+    @Autowired(required = false)
+    private S3StorageService s3StorageService;
+
+    @Autowired(required = false)
+    private UserAccountRepository userAccountRepository;
+
+    @Autowired(required = false)
     private AuthorizationService authorizationService;
     
     @Autowired
-    private BrandedQRCodeService brandedQRCodeService;
+    private BudgetService budgetService;
+    
+    @Autowired(required = false)
+    private UserEventContextService userEventContextService;
 
-    /**
-     * Create a new event from structured DTO
-     * @param request The validated event creation request
-     * @return EventResponse with created event details
-     */
-    public EventResponse createEvent(EventCreationRequest request) {
-        try {
-            // Create new event entity
-            Event event = new Event();
-            
-            // Set basic fields
-            event.setName(request.getName());
-            event.setDescription(request.getDescription());
-            
-            // Validate and set owner ID
-            UUID ownerId = UUID.fromString(request.getOwnerId());
-            event.setOwnerId(ownerId);
-            
-            // Set event type
-            if (request.getEventType() != null) {
-                try {
-                    event.setEventType(eventplanner.common.domain.enums.EventType.valueOf(request.getEventType()));
-                } catch (IllegalArgumentException e) {
-                    event.setEventType(eventplanner.common.domain.enums.EventType.MEETING);
-                }
-            }
-            
-            // Set dates
-            event.setStartDateTime(request.getStartDateTime());
-            if (request.getEndDateTime() != null) {
-                event.setEndDateTime(request.getEndDateTime());
-            }
-            
-            // Set capacity
-            if (request.getCapacity() != null) {
-                event.setCapacity(request.getCapacity());
-            }
-            
-            // Set boolean fields
-            event.setIsPublic(request.getIsPublic() != null ? request.getIsPublic() : true);
-            event.setRequiresApproval(request.getRequiresApproval() != null ? request.getRequiresApproval() : false);
-            event.setQrCodeEnabled(request.getQrCodeEnabled() != null ? request.getQrCodeEnabled() : false);
-            
-            // Set venue if provided
-            if (request.getVenue() != null) {
-                event.setVenue(toVenueEntity(request.getVenue()));
-            }
-            
-            // Handle venue data if provided
-            if (request.getVenues() != null && !request.getVenues().isEmpty()) {
-                EventCreationRequest.VenueRequest selectedVenue = request.getVenues().get(0);
-                String venueInfo = String.format("Venue: %s, Address: %s", 
-                    selectedVenue.getName(), selectedVenue.getAddress());
-                if (event.getDescription() != null) {
-                    event.setDescription(event.getDescription() + "\n\n" + venueInfo);
-                } else {
-                    event.setDescription(venueInfo);
-                }
-            }
-            
-            // Save to database
-            Event savedEvent = eventRepository.save(event);
-            
-            // Convert to response
-            return toResponse(savedEvent);
-            
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to create event: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Update an existing event
-     * @param eventId The ID of the event to update
-     * @param request The validated update request
-     * @return EventResponse with updated event details
-     */
-    public EventResponse updateEvent(String eventId, EventUpdateRequest request) {
-        try {
-            UUID uuid = UUID.fromString(eventId);
-            Optional<Event> eventOpt = eventRepository.findById(uuid);
-            
-            if (eventOpt.isEmpty()) {
-                throw new RuntimeException("Event not found with ID: " + eventId);
-            }
-            
-            Event event = eventOpt.get();
-            
-            // Update fields if provided
-            if (request.getName() != null) {
-                event.setName(request.getName());
-            }
-            if (request.getDescription() != null) {
-                event.setDescription(request.getDescription());
-            }
-            if (request.getCapacity() != null) {
-                event.setCapacity(request.getCapacity());
-            }
-            if (request.getStartDateTime() != null) {
-                event.setStartDateTime(request.getStartDateTime());
-            }
-            if (request.getEndDateTime() != null) {
-                event.setEndDateTime(request.getEndDateTime());
-            }
-            if (request.getIsPublic() != null) {
-                event.setIsPublic(request.getIsPublic());
-            }
-            if (request.getRequiresApproval() != null) {
-                event.setRequiresApproval(request.getRequiresApproval());
-            }
-            if (request.getQrCodeEnabled() != null) {
-                event.setQrCodeEnabled(request.getQrCodeEnabled());
-            }
-            
-            // Update venue if provided
-            if (request.getVenue() != null) {
-                event.setVenue(toVenueEntity(request.getVenue()));
-            }
-            
-            // Save updated event
-            Event savedEvent = eventRepository.save(event);
-            
-            // Convert to response
-            return toResponse(savedEvent);
-            
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to update event: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Get event by chat ID
-     * @param chatId The chat ID
-     * @return EventResponse or null if not found
-     */
-    public EventResponse getEventByChatId(String chatId) {
-        // For now, return null as we don't have chat ID tracking in the Event entity
-        // This would need to be implemented based on your requirements
-        return null;
-    }
+    @Autowired(required = false)
+    private TicketTypeRepository ticketTypeRepository;
+    
+    @Autowired
+    private NotificationTargetResolver notificationTargetResolver;
+    
+    @Autowired
+    private BulkNotificationService bulkNotificationService;
 
     /**
      * Get event by ID
@@ -237,44 +133,17 @@ public class EventService {
             if (!Boolean.TRUE.equals(event.getIsPublic())) {
                 return Optional.empty();
             }
+        } else {
+            // Authorization service unavailable; allow owner, otherwise require public
+            boolean isOwner = event.getOwner() != null && event.getOwner().getId().equals(user.getId());
+            if (!isOwner && !Boolean.TRUE.equals(event.getIsPublic())) {
+                return Optional.empty();
+            }
         }
         
         return Optional.of(event);
     }
 
-    /**
-     * Get current user from security context
-     */
-    private UserPrincipal getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal) {
-            return (UserPrincipal) authentication.getPrincipal();
-        }
-        return null;
-    }
-
-    /**
-     * Filter events based on user access
-     * Returns only events that are either public OR owned by user OR user has role in
-     */
-    private List<Event> filterEventsByAccess(List<Event> events, UserPrincipal user) {
-        if (user == null || authorizationService == null) {
-            // No user context - only return public events
-            return events.stream()
-                .filter(event -> Boolean.TRUE.equals(event.getIsPublic()))
-                .collect(Collectors.toList());
-        }
-        
-        return events.stream()
-            .filter(event -> {
-                if (Boolean.TRUE.equals(event.getIsPublic())) {
-                    return true; // Public events are accessible
-                }
-                // For private events, check if user has access
-                return authorizationService.canAccessEvent(user, event.getId());
-            })
-            .collect(Collectors.toList());
-    }
 
     /**
      * Update an existing event
@@ -285,9 +154,15 @@ public class EventService {
     public Event update(UUID id, UpdateEventRequest request) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + id));
+        boolean importantChange = false;
+        List<String> changeSummary = new ArrayList<>();
         
         // Update only the fields that are provided (not null)
         if (request.getName() != null) {
+            if (!Objects.equals(event.getName(), request.getName())) {
+                importantChange = true;
+                changeSummary.add("Name");
+            }
             event.setName(request.getName());
         }
         if (request.getDescription() != null) {
@@ -297,18 +172,38 @@ public class EventService {
             event.setEventType(request.getEventType());
         }
         if (request.getEventStatus() != null) {
+            if (!Objects.equals(event.getEventStatus(), request.getEventStatus())) {
+                importantChange = true;
+                changeSummary.add("Status");
+            }
             event.setEventStatus(request.getEventStatus());
         }
         if (request.getStartDateTime() != null) {
+            if (!Objects.equals(event.getStartDateTime(), request.getStartDateTime())) {
+                importantChange = true;
+                changeSummary.add("Start date/time");
+            }
             event.setStartDateTime(request.getStartDateTime());
         }
         if (request.getEndDateTime() != null) {
+            if (!Objects.equals(event.getEndDateTime(), request.getEndDateTime())) {
+                importantChange = true;
+                changeSummary.add("End date/time");
+            }
             event.setEndDateTime(request.getEndDateTime());
         }
         if (request.getRegistrationDeadline() != null) {
+            if (!Objects.equals(event.getRegistrationDeadline(), request.getRegistrationDeadline())) {
+                importantChange = true;
+                changeSummary.add("Registration deadline");
+            }
             event.setRegistrationDeadline(request.getRegistrationDeadline());
         }
         if (request.getCapacity() != null) {
+            if (!Objects.equals(event.getCapacity(), request.getCapacity())) {
+                importantChange = true;
+                changeSummary.add("Capacity");
+            }
             event.setCapacity(request.getCapacity());
         }
         if (request.getCurrentAttendeeCount() != null) {
@@ -319,12 +214,6 @@ public class EventService {
         }
         if (request.getRequiresApproval() != null) {
             event.setRequiresApproval(request.getRequiresApproval());
-        }
-        if (request.getQrCodeEnabled() != null) {
-            event.setQrCodeEnabled(request.getQrCodeEnabled());
-        }
-        if (request.getQrCode() != null) {
-            event.setQrCode(request.getQrCode());
         }
         if (request.getCoverImageUrl() != null) {
             event.setCoverImageUrl(request.getCoverImageUrl());
@@ -384,7 +273,84 @@ public class EventService {
             event.setVenue(toVenueEntity(request.getVenue()));
         }
         
-        return eventRepository.save(event);
+        // Update access control settings
+        if (request.getAccessType() != null) {
+            event.setAccessType(request.getAccessType());
+        }
+        if (request.getFeedsPublicAfterEvent() != null) {
+            event.setFeedsPublicAfterEvent(request.getFeedsPublicAfterEvent());
+        }
+        
+        Event saved = eventRepository.save(event);
+        if (importantChange) {
+            notifyEventUpdate(saved, changeSummary);
+        }
+        return saved;
+    }
+    
+    private void notifyEventUpdate(Event event, List<String> changeSummary) {
+        try {
+            if (event == null || event.getId() == null) {
+                return;
+            }
+            
+            Set<UUID> recipientIds = new HashSet<>();
+            
+            NotificationTarget attendees = notificationTargetResolver.resolveTarget(
+                    NotificationTarget.TargetType.EVENT_ATTENDEES,
+                    event.getId(),
+                    Map.of());
+            if (attendees.getUserIds() != null) {
+                recipientIds.addAll(attendees.getUserIds());
+            }
+            
+            NotificationTarget collaborators = notificationTargetResolver.resolveTarget(
+                    NotificationTarget.TargetType.EVENT_COLLABORATORS,
+                    event.getId(),
+                    Map.of());
+            if (collaborators.getUserIds() != null) {
+                recipientIds.addAll(collaborators.getUserIds());
+            }
+            
+            if (event.getOwner() != null && event.getOwner().getId() != null) {
+                recipientIds.add(event.getOwner().getId());
+            }
+            
+            if (recipientIds.isEmpty()) {
+                return;
+            }
+            
+            String summaryText = changeSummary != null && !changeSummary.isEmpty()
+                    ? "Updated: " + String.join(", ", changeSummary)
+                    : "Event details updated";
+            String title = event.getName() != null && !event.getName().isBlank()
+                    ? "Event updated: " + event.getName()
+                    : "Event updated";
+            
+            Map<String, String> data = new HashMap<>();
+            data.put("eventId", event.getId().toString());
+            data.put("changeSummary", summaryText);
+            data.put("type", "event_updated");
+            if (event.getName() != null && !event.getName().isBlank()) {
+                data.put("eventName", event.getName());
+            }
+            
+            Map<String, Object> parameters = new HashMap<>();
+            parameters.put("userIds", new ArrayList<>(recipientIds));
+            
+            BulkNotificationRequest request = BulkNotificationRequest.builder()
+                    .targetType(NotificationTarget.TargetType.SPECIFIC_USERS)
+                    .eventId(event.getId())
+                    .title(title)
+                    .body(summaryText)
+                    .data(data)
+                    .parameters(parameters)
+                    .build();
+            
+            bulkNotificationService.sendBulkPushNotification(request);
+        } catch (Exception e) {
+            // Best-effort push; swallow errors to avoid blocking updates
+        }
     }
 
     /**
@@ -398,10 +364,13 @@ public class EventService {
             throw new IllegalArgumentException("Owner ID is required for event creation");
         }
         
+        UserAccount owner = userAccountRepository.findById(ownerId)
+                .orElseThrow(() -> new IllegalArgumentException("Owner not found"));
+        
         Event event = new Event();
         event.setName(request.getName());
         event.setDescription(request.getDescription());
-        event.setOwnerId(ownerId);
+        event.setOwner(owner);
         event.setEventType(request.getEventType());
         event.setEventStatus(request.getEventStatus() != null ? request.getEventStatus() : EventStatus.PLANNING);
         event.setStartDateTime(request.getStartDateTime());
@@ -409,7 +378,6 @@ public class EventService {
         event.setCapacity(request.getCapacity());
         event.setIsPublic(request.getIsPublic() != null ? request.getIsPublic() : Boolean.TRUE);
         event.setRequiresApproval(request.getRequiresApproval() != null ? request.getRequiresApproval() : Boolean.FALSE);
-        event.setQrCodeEnabled(request.getQrCodeEnabled() != null ? request.getQrCodeEnabled() : Boolean.FALSE);
         event.setVenueRequirements(request.getVenueRequirements());
         event.setCoverImageUrl(request.getCoverImageUrl());
         event.setEventWebsiteUrl(request.getEventWebsiteUrl());
@@ -427,24 +395,23 @@ public class EventService {
         event.setMetadata(request.getMetadata());
         event.setRegistrationDeadline(request.getRegistrationDeadline());
         event.setCurrentAttendeeCount(request.getCurrentAttendeeCount() != null ? request.getCurrentAttendeeCount() : 0);
-        event.setQrCode(request.getQrCode());
         
         // Set venue if provided
         if (request.getVenue() != null) {
             event.setVenue(toVenueEntity(request.getVenue()));
         }
         
+        // Set access control settings
+        event.setAccessType(request.getAccessType() != null ? request.getAccessType() : EventAccessType.OPEN);
+        event.setFeedsPublicAfterEvent(request.getFeedsPublicAfterEvent() != null ? request.getFeedsPublicAfterEvent() : Boolean.FALSE);
+        
         Event savedEvent = eventRepository.save(event);
         assignOwnerOrganizerRole(savedEvent.getId(), ownerId);
+        
+        // Auto-create budget for the event
+        budgetService.createInitialBudget(savedEvent, owner);
+        
         return savedEvent;
-    }
-
-    /**
-     * Delete event by ID (hard delete - use archive instead)
-     * @param id The event ID
-     */
-    public void delete(UUID id) {
-        eventRepository.deleteById(id);
     }
 
     /**
@@ -466,23 +433,115 @@ public class EventService {
         Pageable pageable = PageRequest.of(page, size, sort);
         
         // Normalize search term
-        String search = request.getSearch() != null && !request.getSearch().trim().isEmpty() 
-                ? request.getSearch().trim() 
-                : null;
+        // IMPORTANT: Do not pass null into JPQL optional-search predicates.
+        // Postgres can fail to infer the parameter type when the same null parameter
+        // is used in multiple expressions (e.g. LOWER(CONCAT('%', :search, '%'))),
+        // resulting in "could not determine data type of parameter $N".
+        String search = request.getSearch() != null ? request.getSearch().trim() : "";
         
         // Default to non-archived events unless explicitly requested
         Boolean isArchived = request.getIsArchived() != null ? request.getIsArchived() : false;
         
-        // Query with filters
-        Page<Event> events = eventRepository.findEventsWithFilters(
-                request.getStatus(),
-                request.getIsPublic(),
-                request.getStartDateFrom(),
-                request.getStartDateTo(),
-                isArchived,
-                search,
-                pageable
-        );
+        // Note: Owner scoping is handled in-memory for now (mine=true).
+        // We keep using the shared query and apply owner filtering after fetch.
+
+        // Optional timeframe filtering (relative to now)
+        LocalDateTime startDateFrom = request.getStartDateFrom();
+        LocalDateTime startDateTo = request.getStartDateTo();
+        if (request.getTimeframe() != null && !request.getTimeframe().trim().isEmpty()) {
+            String tf = request.getTimeframe().trim().toUpperCase(Locale.US);
+            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+            if ("UPCOMING".equals(tf)) {
+                if (startDateFrom == null || startDateFrom.isBefore(now)) {
+                    startDateFrom = now;
+                }
+            } else if ("PAST".equals(tf)) {
+                if (startDateTo == null || startDateTo.isAfter(now)) {
+                    startDateTo = now;
+                }
+            } else {
+                throw new IllegalArgumentException("Invalid timeframe. Use UPCOMING or PAST.");
+            }
+        }
+
+        // Public discovery safety: if no authenticated user context, force public-only results.
+        Boolean isPublic = request.getIsPublic();
+        if (user == null) {
+            isPublic = true;
+        }
+
+        final Boolean publicFilter = isPublic;
+        final LocalDateTime startFrom = startDateFrom;
+        final LocalDateTime startTo = startDateTo;
+        final UUID currentUserId = user != null ? user.getId() : null;
+        final boolean authAvailable = authorizationService != null;
+
+        // Build dynamic criteria instead of "(:param is null or ...)" JPQL.
+        // Postgres can fail to infer parameter types for nulls in those patterns ("could not determine data type of parameter $N").
+        Specification<Event> spec = (root, query, cb) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+
+            if (request.getStatus() != null) {
+                predicates.add(cb.equal(root.get("eventStatus"), request.getStatus()));
+            }
+            if (request.getEventType() != null) {
+                predicates.add(cb.equal(root.get("eventType"), request.getEventType()));
+            }
+            if (publicFilter != null) {
+                predicates.add(cb.equal(root.get("isPublic"), publicFilter));
+            }
+            if (startFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("startDateTime"), startFrom));
+            }
+            if (startTo != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("startDateTime"), startTo));
+            }
+            if (isArchived != null) {
+                predicates.add(cb.equal(root.get("isArchived"), isArchived));
+            }
+            // If no authorization service, restrict to public or owned by current user to avoid leaking private events.
+            if (!authAvailable) {
+                jakarta.persistence.criteria.Predicate isPublicPredicate = cb.equal(root.get("isPublic"), true);
+                if (currentUserId != null) {
+                    jakarta.persistence.criteria.Predicate isOwnerPredicate = cb.equal(root.get("owner").get("id"), currentUserId);
+                    predicates.add(cb.or(isPublicPredicate, isOwnerPredicate));
+                } else {
+                    predicates.add(isPublicPredicate);
+                }
+            }
+
+            if (search != null && !search.isBlank()) {
+                String like = "%" + search.toLowerCase(Locale.ROOT) + "%";
+                jakarta.persistence.criteria.Expression<String> name = cb.lower(root.get("name"));
+                jakarta.persistence.criteria.Expression<String> description = cb.lower(root.get("description"));
+                jakarta.persistence.criteria.Expression<String> hashtag = cb.lower(root.get("hashtag"));
+                jakarta.persistence.criteria.Expression<String> theme = cb.lower(root.get("theme"));
+
+                predicates.add(cb.or(
+                        cb.like(name, like),
+                        cb.like(description, like),
+                        cb.like(hashtag, like),
+                        cb.like(theme, like)
+                ));
+            }
+
+            if (Boolean.TRUE.equals(request.getMine()) && user != null) {
+                predicates.add(cb.equal(root.get("owner").get("id"), user.getId()));
+            }
+
+            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
+
+        Page<Event> events = eventRepository.findAll(spec, pageable);
+
+        // Apply mine=true filter (owned-by-current-user) as a post-filter.
+        // This avoids exposing arbitrary ownerId querying.
+        if (Boolean.TRUE.equals(request.getMine()) && user != null) {
+            List<Event> owned = events.getContent().stream()
+                    .filter(e -> e.getOwner() != null && e.getOwner().getId().equals(user.getId()))
+                    .collect(Collectors.toList());
+            return new org.springframework.data.domain.PageImpl<>(owned, pageable, owned.size());
+        }
         
         // Filter by access control if user is provided
         if (user != null && authorizationService != null) {
@@ -519,7 +578,13 @@ public class EventService {
         
         event.setIsArchived(true);
         event.setArchivedAt(LocalDateTime.now());
-        event.setArchivedBy(archivedBy);
+        if (archivedBy != null) {
+            UserAccount archivedByUser = userAccountRepository.findById(archivedBy)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + archivedBy));
+            event.setArchivedBy(archivedByUser);
+        } else {
+            event.setArchivedBy(null);
+        }
         event.setArchiveReason(reason);
         
         return eventRepository.save(event);
@@ -541,7 +606,13 @@ public class EventService {
         
         event.setIsArchived(false);
         event.setRestoredAt(LocalDateTime.now());
-        event.setRestoredBy(restoredBy);
+        if (restoredBy != null) {
+            UserAccount restoredByUser = userAccountRepository.findById(restoredBy)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + restoredBy));
+            event.setRestoredBy(restoredByUser);
+        } else {
+            event.setRestoredBy(null);
+        }
         // Clear archive fields but keep for audit trail
         // event.setArchivedAt(null);
         // event.setArchivedBy(null);
@@ -575,9 +646,13 @@ public class EventService {
     }
 
     /**
-     * Convert Event entity to EventResponse
+     * Convert Event entity to EventResponse with user-specific context.
+     * 
+     * @param event The event entity
+     * @param user The authenticated user (null for anonymous - userContext will be null)
+     * @return EventResponse with user context populated if user is provided
      */
-    public EventResponse toResponse(Event event) {
+    public EventResponse toResponse(Event event, UserPrincipal user) {
         EventResponse response = new EventResponse();
         response.setId(event.getId());
         response.setName(event.getName());
@@ -591,8 +666,7 @@ public class EventService {
         response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
         response.setIsPublic(event.getIsPublic());
         response.setRequiresApproval(event.getRequiresApproval());
-        response.setQrCodeEnabled(event.getQrCodeEnabled());
-        response.setQrCode(event.getQrCode());
+        response.setCoverImageUrl(event.getCoverImageUrl());
         response.setEventWebsiteUrl(event.getEventWebsiteUrl());
         response.setHashtag(event.getHashtag());
         response.setTheme(event.getTheme());
@@ -607,196 +681,138 @@ public class EventService {
         response.setBackupPlan(event.getBackupPlan());
         response.setPostEventTasks(event.getPostEventTasks());
         response.setMetadata(event.getMetadata());
-        response.setOwnerId(event.getOwnerId());
+        response.setOwnerId(event.getOwner() != null ? event.getOwner().getId() : null);
         response.setVenueId(event.getVenueId());
         response.setVenue(event.getVenue() != null ? toVenueDTO(event.getVenue()) : null);
         response.setCreatedAt(event.getCreatedAt());
         response.setUpdatedAt(event.getUpdatedAt());
         response.setScope(EventScope.FULL); // Full details response
+        
+        // Access control settings
+        response.setAccessType(event.getAccessType() != null ? event.getAccessType() : EventAccessType.OPEN);
+        response.setFeedsPublicAfterEvent(event.getFeedsPublicAfterEvent());
+        
+        // Compute and set user-specific context
+        if (userEventContextService != null) {
+            UserEventContext userContext = userEventContextService.buildContext(event, user);
+            response.setUserContext(userContext);
+        }
+        
+        // Populate ticket types information for ticketed events
+        populateTicketInfo(event, response);
+        
         return response;
     }
 
     /**
-     * Convert Map data to EventCreationRequest DTO
-     * This method is used for backward compatibility with existing Map-based data
+     * Populate ticket information for an event response.
+     * Only populates for TICKETED events.
      */
-    public EventCreationRequest convertMapToEventCreationRequest(Map<String, Object> validatedData) {
-        EventCreationRequest request = new EventCreationRequest();
-        
-        request.setName((String) validatedData.get("name"));
-        request.setDescription((String) validatedData.get("description"));
-        request.setOwnerId((String) validatedData.get("ownerId"));
-        request.setEventType((String) validatedData.get("eventType"));
-        
-        // Parse dates
-        String startDateTimeStr = (String) validatedData.get("startDateTime");
-        if (startDateTimeStr != null) {
-            request.setStartDateTime(LocalDateTime.parse(startDateTimeStr));
+    private void populateTicketInfo(Event event, EventResponse response) {
+        if (event.getAccessType() != EventAccessType.TICKETED) {
+            return;
         }
         
-        String endDateTimeStr = (String) validatedData.get("endDateTime");
-        if (endDateTimeStr != null) {
-            request.setEndDateTime(LocalDateTime.parse(endDateTimeStr));
+        if (ticketTypeRepository == null) {
+            return;
         }
         
-        // Parse capacity
-        Object capacityObj = validatedData.get("capacity");
-        if (capacityObj instanceof Integer) {
-            request.setCapacity((Integer) capacityObj);
-        } else if (capacityObj instanceof String) {
-            try {
-                request.setCapacity(Integer.parseInt((String) capacityObj));
-            } catch (NumberFormatException e) {
-                // Ignore invalid capacity
-            }
+        List<TicketType> ticketTypes = ticketTypeRepository.findByEventIdAndIsActiveTrue(event.getId());
+        if (ticketTypes == null || ticketTypes.isEmpty()) {
+            response.setTicketTypes(List.of());
+            return;
         }
         
-        // Set boolean fields
-        request.setIsPublic((Boolean) validatedData.getOrDefault("isPublic", true));
-        request.setRequiresApproval((Boolean) validatedData.getOrDefault("requiresApproval", false));
-        request.setQrCodeEnabled((Boolean) validatedData.getOrDefault("qrCodeEnabled", false));
+        LocalDateTime now = LocalDateTime.now();
+        List<TicketTypeSummary> summaries = ticketTypes.stream()
+                .map(tt -> toTicketTypeSummary(tt, now))
+                .collect(Collectors.toList());
         
-        // Handle venues
-        if (validatedData.containsKey("venues") && validatedData.get("venues") != null) {
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> venues = (List<Map<String, Object>>) validatedData.get("venues");
-            List<EventCreationRequest.VenueRequest> venueRequests = new ArrayList<>();
-            
-            for (Map<String, Object> venue : venues) {
-                EventCreationRequest.VenueRequest venueRequest = new EventCreationRequest.VenueRequest();
-                venueRequest.setName((String) venue.get("name"));
-                venueRequest.setAddress((String) venue.get("address"));
-                venueRequest.setDescription((String) venue.get("description"));
-                venueRequest.setContactEmail((String) venue.get("contactEmail"));
-                venueRequest.setContactPhone((String) venue.get("contactPhone"));
-                venueRequest.setWebsite((String) venue.get("website"));
-                venueRequests.add(venueRequest);
-            }
-            request.setVenues(venueRequests);
-        }
-        
-        return request;
-    }
-    
-    /**
-     * Convert Map data to EventUpdateRequest DTO
-     * This method is used for backward compatibility with existing Map-based data
-     */
-    public EventUpdateRequest convertMapToEventUpdateRequest(Map<String, Object> validatedData) {
-        EventUpdateRequest request = new EventUpdateRequest();
-        
-        if (validatedData.containsKey("name")) {
-            request.setName((String) validatedData.get("name"));
-        }
-        if (validatedData.containsKey("description")) {
-            request.setDescription((String) validatedData.get("description"));
-        }
-        if (validatedData.containsKey("eventType")) {
-            request.setEventType((String) validatedData.get("eventType"));
-        }
-        
-        // Parse dates
-        String startDateTimeStr = (String) validatedData.get("startDateTime");
-        if (startDateTimeStr != null) {
-            request.setStartDateTime(LocalDateTime.parse(startDateTimeStr));
-        }
-        
-        String endDateTimeStr = (String) validatedData.get("endDateTime");
-        if (endDateTimeStr != null) {
-            request.setEndDateTime(LocalDateTime.parse(endDateTimeStr));
-        }
-        
-        // Parse capacity
-        Object capacityObj = validatedData.get("capacity");
-        if (capacityObj instanceof Integer) {
-            request.setCapacity((Integer) capacityObj);
-        } else if (capacityObj instanceof String) {
-            try {
-                request.setCapacity(Integer.parseInt((String) capacityObj));
-            } catch (NumberFormatException e) {
-                // Ignore invalid capacity
-            }
-        }
-        
-        // Set boolean fields
-        if (validatedData.containsKey("isPublic")) {
-            request.setIsPublic((Boolean) validatedData.get("isPublic"));
-        }
-        if (validatedData.containsKey("requiresApproval")) {
-            request.setRequiresApproval((Boolean) validatedData.get("requiresApproval"));
-        }
-        if (validatedData.containsKey("qrCodeEnabled")) {
-            request.setQrCodeEnabled((Boolean) validatedData.get("qrCodeEnabled"));
-        }
-        
-        return request;
-    }
-
-    // ==================== USER-EVENT RELATIONSHIP METHODS ====================
-
-    /**
-     * Get all events for a specific user
-     */
-    public List<Event> getEventsByUser(UUID userId) {
-        return eventRepository.findEventsByOwner(userId);
+        response.setTicketTypes(summaries);
     }
 
     /**
-     * Get events owned by a user
+     * Convert TicketType entity to TicketTypeSummary DTO.
      */
-    public List<Event> getEventsOwnedByUser(UUID userId) {
-        return eventRepository.findEventsByOwner(userId);
+    private TicketTypeSummary toTicketTypeSummary(TicketType tt, LocalDateTime now) {
+        int available = tt.getQuantityAvailable() != null ? tt.getQuantityAvailable() : 0;
+        int sold = tt.getQuantitySold() != null ? tt.getQuantitySold() : 0;
+        int reserved = tt.getQuantityReserved() != null ? tt.getQuantityReserved() : 0;
+
+        int remaining = available - sold - reserved;
+        remaining = Math.max(0, remaining);
+        
+        boolean isFree = tt.getPriceMinor() == null || tt.getPriceMinor() == 0;
+        
+        // Determine if currently on sale
+        boolean isOnSale = true;
+        if (tt.getSaleStartDate() != null && now.isBefore(tt.getSaleStartDate())) {
+            isOnSale = false;
+        }
+        if (tt.getSaleEndDate() != null && now.isAfter(tt.getSaleEndDate())) {
+            isOnSale = false;
+        }
+        
+        boolean isActive = Boolean.TRUE.equals(tt.getIsActive());
+        boolean isAvailable = isActive && isOnSale && remaining > 0;
+        
+        // Generate status message
+        String statusMessage = generateTicketStatusMessage(tt, remaining, isOnSale, now);
+        
+        return TicketTypeSummary.builder()
+                .id(tt.getId())
+                .name(tt.getName())
+                .category(tt.getCategory())
+                .description(tt.getDescription())
+                .priceMinor(tt.getPriceMinor())
+                .currency(tt.getCurrency())
+                .isFree(isFree)
+                .quantityTotal(available)
+                .quantityRemaining(remaining)
+                .quantitySold(sold)
+                .isAvailable(isAvailable)
+                .isActive(isActive)
+                .saleStartDate(tt.getSaleStartDate())
+                .saleEndDate(tt.getSaleEndDate())
+                .isOnSale(isOnSale)
+                .maxPerPerson(tt.getMaxTicketsPerPerson())
+                .requiresApproval(tt.getRequiresApproval())
+                .statusMessage(statusMessage)
+                .build();
     }
 
     /**
-     * Get upcoming events for a user
+     * Generate a user-friendly status message for a ticket type.
      */
-    public List<Event> getUpcomingEventsByUser(UUID userId) {
-        return eventRepository.findUpcomingEventsByOwner(userId, LocalDateTime.now());
+    private String generateTicketStatusMessage(TicketType tt, int remaining, boolean isOnSale, LocalDateTime now) {
+        if (!Boolean.TRUE.equals(tt.getIsActive())) {
+            return "Not available";
+        }
+        
+        if (tt.getSaleStartDate() != null && now.isBefore(tt.getSaleStartDate())) {
+            return "Sales start soon";
+        }
+        
+        if (tt.getSaleEndDate() != null && now.isAfter(tt.getSaleEndDate())) {
+            return "Sales ended";
+        }
+        
+        if (remaining <= 0) {
+            return "Sold out";
+        }
+        
+        if (remaining <= 5) {
+            return "Only " + remaining + " left!";
+        }
+        
+        if (remaining <= 10) {
+            return "Limited availability";
+        }
+        
+        return "Available";
     }
 
-    /**
-     * Get past events for a user
-     */
-    public List<Event> getPastEventsByUser(UUID userId) {
-        return eventRepository.findPastEventsByOwner(userId, LocalDateTime.now());
-    }
 
-    /**
-     * Get user's events summary
-     */
-    public UserEventsSummaryResponse getUserEventsSummary(UUID userId) {
-        UserEventsSummaryResponse summary = new UserEventsSummaryResponse();
-        
-        List<Event> ownedEvents = getEventsOwnedByUser(userId);
-        List<Event> upcomingEvents = getUpcomingEventsByUser(userId);
-        List<Event> pastEvents = getPastEventsByUser(userId);
-        
-        summary.setOwnedEvents(convertToUserEventRelationship(ownedEvents, EventUserType.ORGANIZER));
-        summary.setUpcomingEvents(convertToUserEventRelationship(upcomingEvents, EventUserType.ORGANIZER));
-        summary.setPastEvents(convertToUserEventRelationship(pastEvents, EventUserType.ORGANIZER));
-        
-        // For now, we'll set empty lists for other relationship types
-        // These would be populated by joining with EventUser/EventAttendance tables
-        summary.setAttendingEvents(new ArrayList<>());
-        summary.setOrganizingEvents(new ArrayList<>());
-        summary.setCoordinatingEvents(new ArrayList<>());
-        summary.setVolunteeringEvents(new ArrayList<>());
-        summary.setSpeakingEvents(new ArrayList<>());
-        summary.setSponsoringEvents(new ArrayList<>());
-        
-        // Set counts
-        summary.setTotalCount(ownedEvents.size());
-        summary.setOwnedCount(ownedEvents.size());
-        summary.setAttendingCount(0);
-        summary.setOrganizingCount(0);
-        summary.setCoordinatingCount(0);
-        summary.setVolunteeringCount(0);
-        summary.setSpeakingCount(0);
-        summary.setSponsoringCount(0);
-        
-        return summary;
-    }
 
     // ==================== EVENT STATUS & LIFECYCLE METHODS ====================
 
@@ -842,27 +858,6 @@ public class EventService {
     }
 
     /**
-     * Publish event
-     */
-    public Event publishEvent(UUID eventId) {
-        return updateEventStatus(eventId, EventStatus.PUBLISHED);
-    }
-
-    /**
-     * Cancel event
-     */
-    public Event cancelEvent(UUID eventId) {
-        return updateEventStatus(eventId, EventStatus.CANCELLED);
-    }
-
-    /**
-     * Complete event
-     */
-    public Event completeEvent(UUID eventId) {
-        return updateEventStatus(eventId, EventStatus.COMPLETED);
-    }
-
-    /**
      * Open registration
      */
     public Event openRegistration(UUID eventId) {
@@ -876,111 +871,8 @@ public class EventService {
         return updateEventStatus(eventId, EventStatus.REGISTRATION_CLOSED);
     }
 
-    // ==================== EVENT DISCOVERY & SEARCH METHODS ====================
-
-    /**
-     * Search events
-     */
-    public List<Event> searchEvents(String searchTerm) {
-        if (searchTerm == null || searchTerm.trim().isEmpty()) {
-            return new ArrayList<>();
-        }
-        List<Event> events = eventRepository.searchEvents(searchTerm.trim());
-        // Filter by access - only return events user can access
-        UserPrincipal user = getCurrentUser();
-        return filterEventsByAccess(events, user);
-    }
-
-    /**
-     * Search public events
-     */
-    public List<Event> searchPublicEvents(String searchTerm) {
-        if (searchTerm == null || searchTerm.trim().isEmpty()) {
-            return eventRepository.findByIsPublicTrue();
-        }
-        return eventRepository.searchPublicEvents(searchTerm.trim());
-    }
-
-    /**
-     * Get public events
-     */
-    public List<Event> getPublicEvents() {
-        return eventRepository.findByIsPublicTrue();
-    }
-
-    /**
-     * Get featured events
-     */
-    public List<Event> getFeaturedEvents(Pageable pageable) {
-        return eventRepository.findFeaturedEvents(pageable);
-    }
-
-    /**
-     * Get trending events
-     */
-    public List<Event> getTrendingEvents(Pageable pageable) {
-        return eventRepository.findTrendingEvents(pageable);
-    }
-
-    /**
-     * Get upcoming events
-     */
-    public List<Event> getUpcomingEvents() {
-        return eventRepository.findByStartDateTimeAfterAndIsPublicTrue(LocalDateTime.now());
-    }
-
-    /**
-     * Get events by type
-     */
-    public List<Event> getEventsByType(String eventType) {
-        try {
-            EventType type = EventType.valueOf(eventType.toUpperCase(Locale.US));
-            List<Event> events = eventRepository.findByEventType(type);
-            // Filter by access - only return events user can access
-            UserPrincipal user = getCurrentUser();
-            return filterEventsByAccess(events, user);
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("Invalid event type: " + eventType);
-        }
-    }
-
-    /**
-     * Get events by status
-     */
-    public List<Event> getEventsByStatus(String eventStatus) {
-        try {
-            EventStatus status = EventStatus.valueOf(eventStatus.toUpperCase(Locale.US));
-            List<Event> events = eventRepository.findByEventStatus(status);
-            // Filter by access - only return events user can access
-            UserPrincipal user = getCurrentUser();
-            return filterEventsByAccess(events, user);
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("Invalid event status: " + eventStatus);
-        }
-    }
-
-    /**
-     * Get events by date range
-     */
-    public List<Event> getEventsByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
-        List<Event> events = eventRepository.findByStartDateTimeBetween(startDate, endDate);
-        // Filter by access - only return events user can access
-        UserPrincipal user = getCurrentUser();
-        return filterEventsByAccess(events, user);
-    }
 
     // ==================== EVENT CAPACITY & REGISTRATION METHODS ====================
-
-    /**
-     * Update event capacity
-     */
-    public Event updateCapacity(UUID eventId, Integer newCapacity) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setCapacity(newCapacity);
-        return eventRepository.save(event);
-    }
 
     /**
      * Get available capacity
@@ -997,337 +889,7 @@ public class EventService {
         return Math.max(0, event.getCapacity() - currentCount);
     }
 
-    /**
-     * Update registration deadline
-     */
-    public Event updateRegistrationDeadline(UUID eventId, LocalDateTime deadline) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setRegistrationDeadline(deadline);
-        return eventRepository.save(event);
-    }
-
-    // ==================== EVENT QR CODE METHODS ====================
-
-    /**
-     * Generate QR code for event.
-     * Creates a unique QR code string and enables QR code functionality for the event.
-     */
-    public Event generateQRCode(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        // Generate unique QR code string: EVENT_<eventId_prefix>_<timestamp>
-        String eventPrefix = eventId.toString().replace("-", "").substring(0, 16);
-        long timestamp = System.currentTimeMillis();
-        String qrCode = "EVENT_" + eventPrefix + "_" + timestamp;
-        
-        event.setQrCode(qrCode);
-        event.setQrCodeEnabled(true);
-        
-        return eventRepository.save(event);
-    }
-    
-    /**
-     * Generate QR code image for event.
-     * Returns the rendered QR code image using the branded QR code service.
-     */
-    public QRCodeGenerationResult generateQRCodeImage(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        // Ensure QR code exists
-        if (event.getQrCode() == null) {
-            event = generateQRCode(eventId);
-        }
-        
-        // Generate branded QR code image
-        return brandedQRCodeService.generateForEvent(event.getQrCode());
-    }
-
-    /**
-     * Regenerate QR code for event
-     */
-    public Event regenerateQRCode(UUID eventId) {
-        return generateQRCode(eventId);
-    }
-
-    /**
-     * Disable QR code for event
-     */
-    public Event disableQRCode(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setQrCodeEnabled(false);
-        event.setQrCode(null);
-        
-        return eventRepository.save(event);
-    }
-
     // ==================== EVENT VISIBILITY & ACCESS CONTROL METHODS ====================
-
-    /**
-     * Make event public
-     */
-    public Event makeEventPublic(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setIsPublic(true);
-        return eventRepository.save(event);
-    }
-
-    /**
-     * Make event private
-     */
-    public Event makeEventPrivate(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setIsPublic(false);
-        return eventRepository.save(event);
-    }
-
-    /**
-     * Update event visibility
-     */
-    public Event updateVisibility(UUID eventId, Boolean isPublic) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        event.setIsPublic(isPublic);
-        return eventRepository.save(event);
-    }
-
-    // ==================== EVENT ANALYTICS METHODS ====================
-
-    /**
-     * Get event analytics overview
-     */
-    public Map<String, Object> getEventAnalytics(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        Map<String, Object> analytics = new java.util.HashMap<>();
-        analytics.put("eventId", eventId);
-        analytics.put("eventName", event.getName());
-        analytics.put("currentAttendeeCount", event.getCurrentAttendeeCount());
-        analytics.put("capacity", event.getCapacity());
-        analytics.put("capacityUtilization", calculateCapacityUtilization(event));
-        analytics.put("eventStatus", event.getEventStatus());
-        analytics.put("isPublic", event.getIsPublic());
-        analytics.put("qrCodeEnabled", event.getQrCodeEnabled());
-        analytics.put("createdAt", event.getCreatedAt());
-        analytics.put("updatedAt", event.getUpdatedAt());
-        
-        return analytics;
-    }
-
-    /**
-     * Get attendance analytics
-     */
-    public Map<String, Object> getAttendanceAnalytics(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        Map<String, Object> analytics = new java.util.HashMap<>();
-        analytics.put("eventId", eventId);
-        analytics.put("currentAttendeeCount", event.getCurrentAttendeeCount());
-        analytics.put("capacity", event.getCapacity());
-        analytics.put("availableSpots", getAvailableCapacity(eventId));
-        analytics.put("capacityUtilization", calculateCapacityUtilization(event));
-        analytics.put("registrationDeadline", event.getRegistrationDeadline());
-        analytics.put("isRegistrationOpen", isRegistrationOpen(event));
-        
-        return analytics;
-    }
-
-    // ==================== EVENT DUPLICATION & TEMPLATES METHODS ====================
-
-    /**
-     * Duplicate event
-     */
-    public Event duplicateEvent(UUID eventId, String newEventName) {
-        Event originalEvent = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        Event duplicatedEvent = new Event();
-        duplicatedEvent.setName(newEventName != null ? newEventName : originalEvent.getName() + " (Copy)");
-        duplicatedEvent.setDescription(originalEvent.getDescription());
-        duplicatedEvent.setOwnerId(originalEvent.getOwnerId());
-        duplicatedEvent.setEventType(originalEvent.getEventType());
-        duplicatedEvent.setEventStatus(EventStatus.DRAFT); // Start as draft
-        duplicatedEvent.setCapacity(originalEvent.getCapacity());
-        duplicatedEvent.setIsPublic(false); // Start as private
-        duplicatedEvent.setRequiresApproval(originalEvent.getRequiresApproval());
-        duplicatedEvent.setQrCodeEnabled(false); // Disable QR code initially
-        duplicatedEvent.setTheme(originalEvent.getTheme());
-        duplicatedEvent.setObjectives(originalEvent.getObjectives());
-        duplicatedEvent.setTargetAudience(originalEvent.getTargetAudience());
-        duplicatedEvent.setSuccessMetrics(originalEvent.getSuccessMetrics());
-        duplicatedEvent.setBrandingGuidelines(originalEvent.getBrandingGuidelines());
-        duplicatedEvent.setVenueRequirements(originalEvent.getVenueRequirements());
-        duplicatedEvent.setTechnicalRequirements(originalEvent.getTechnicalRequirements());
-        duplicatedEvent.setAccessibilityFeatures(originalEvent.getAccessibilityFeatures());
-        duplicatedEvent.setEmergencyPlan(originalEvent.getEmergencyPlan());
-        duplicatedEvent.setBackupPlan(originalEvent.getBackupPlan());
-        duplicatedEvent.setPostEventTasks(originalEvent.getPostEventTasks());
-        
-        // Copy venue
-        duplicatedEvent.setVenueId(originalEvent.getVenueId());
-        if (originalEvent.getVenue() != null) {
-            // Create a new Venue instance with copied values
-            Venue copiedVenue = new Venue();
-            Venue originalVenue = originalEvent.getVenue();
-            copiedVenue.setAddress(originalVenue.getAddress());
-            copiedVenue.setCity(originalVenue.getCity());
-            copiedVenue.setState(originalVenue.getState());
-            copiedVenue.setCountry(originalVenue.getCountry());
-            copiedVenue.setZipCode(originalVenue.getZipCode());
-            copiedVenue.setLatitude(originalVenue.getLatitude());
-            copiedVenue.setLongitude(originalVenue.getLongitude());
-            copiedVenue.setGooglePlaceId(originalVenue.getGooglePlaceId());
-            copiedVenue.setGooglePlaceData(originalVenue.getGooglePlaceData());
-            duplicatedEvent.setVenue(copiedVenue);
-        }
-        
-        return eventRepository.save(duplicatedEvent);
-    }
-
-    // ==================== EVENT VALIDATION & HEALTH CHECK METHODS ====================
-
-    /**
-     * Validate event data
-     */
-    public Map<String, Object> validateEvent(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        Map<String, Object> validation = new java.util.HashMap<>();
-        List<String> errors = new ArrayList<>();
-        List<String> warnings = new ArrayList<>();
-        
-        // Required field validations
-        if (event.getName() == null || event.getName().trim().isEmpty()) {
-            errors.add("Event name is required");
-        }
-        
-        if (event.getStartDateTime() == null) {
-            errors.add("Start date and time is required");
-        }
-        
-        if (event.getEventType() == null) {
-            errors.add("Event type is required");
-        }
-        
-        // Warning validations
-        if (event.getDescription() == null || event.getDescription().trim().isEmpty()) {
-            warnings.add("Event description is recommended");
-        }
-        
-        if (event.getCapacity() == null || event.getCapacity() <= 0) {
-            warnings.add("Event capacity should be set");
-        }
-        
-        if (event.getStartDateTime() != null && event.getStartDateTime().isBefore(LocalDateTime.now())) {
-            warnings.add("Event start time is in the past");
-        }
-        
-        validation.put("isValid", errors.isEmpty());
-        validation.put("errors", errors);
-        validation.put("warnings", warnings);
-        validation.put("eventId", eventId);
-        validation.put("eventName", event.getName());
-        
-        return validation;
-    }
-
-    /**
-     * Get event health check
-     */
-    public Map<String, Object> getEventHealthCheck(UUID eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
-        
-        Map<String, Object> healthCheck = new java.util.HashMap<>();
-        healthCheck.put("eventId", eventId);
-        healthCheck.put("eventName", event.getName());
-        healthCheck.put("status", "healthy");
-        healthCheck.put("eventStatus", event.getEventStatus());
-        healthCheck.put("isPublic", event.getIsPublic());
-        healthCheck.put("hasQRCode", event.getQrCodeEnabled() && event.getQrCode() != null);
-        healthCheck.put("hasCapacity", event.getCapacity() != null && event.getCapacity() > 0);
-        healthCheck.put("hasDescription", event.getDescription() != null && !event.getDescription().trim().isEmpty());
-        healthCheck.put("hasStartTime", event.getStartDateTime() != null);
-        healthCheck.put("isUpcoming", event.getStartDateTime() != null && event.getStartDateTime().isAfter(LocalDateTime.now()));
-        healthCheck.put("lastUpdated", event.getUpdatedAt());
-        
-        return healthCheck;
-    }
-
-    // ==================== HELPER METHODS ====================
-
-    /**
-     * Convert events to user event relationship responses
-     */
-    private List<UserEventRelationshipResponse> convertToUserEventRelationship(List<Event> events, EventUserType userRole) {
-        return events.stream()
-                .map(event -> convertToUserEventRelationship(event, userRole))
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Convert single event to user event relationship response
-     */
-    private UserEventRelationshipResponse convertToUserEventRelationship(Event event, EventUserType userRole) {
-        UserEventRelationshipResponse response = new UserEventRelationshipResponse();
-        response.setEventId(event.getId());
-        response.setEventName(event.getName());
-        response.setEventDescription(event.getDescription());
-        response.setEventType(event.getEventType());
-        response.setEventStatus(event.getEventStatus());
-        response.setStartDateTime(event.getStartDateTime());
-        response.setEndDateTime(event.getEndDateTime());
-        response.setUserRole(userRole);
-        response.setIsOwner(userRole == EventUserType.ORGANIZER);
-        response.setCapacity(event.getCapacity());
-        response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
-        response.setIsPublic(event.getIsPublic());
-        response.setCoverImageUrl(event.getCoverImageUrl());
-        response.setEventWebsiteUrl(event.getEventWebsiteUrl());
-        response.setHashtag(event.getHashtag());
-        
-        return response;
-    }
-
-    /**
-     * Calculate capacity utilization percentage
-     */
-    private Double calculateCapacityUtilization(Event event) {
-        if (event.getCapacity() == null || event.getCapacity() == 0) {
-            return null;
-        }
-        
-        int currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
-        return (double) currentCount / event.getCapacity() * 100;
-    }
-
-    /**
-     * Check if registration is open
-     */
-    private Boolean isRegistrationOpen(Event event) {
-        if (event.getEventStatus() != EventStatus.REGISTRATION_OPEN) {
-            return false;
-        }
-        
-        if (event.getRegistrationDeadline() != null) {
-            return LocalDateTime.now().isBefore(event.getRegistrationDeadline());
-        }
-        
-        return true;
-    }
 
     /**
      * Convert VenueDTO to Venue entity
@@ -1459,6 +1021,16 @@ public class EventService {
         feed.setHasPrevious(page > 0);
         feed.setScope(EventScope.FEED); // Feed view response
         
+        // Access control settings
+        feed.setAccessType(event.getAccessType() != null ? event.getAccessType() : EventAccessType.OPEN);
+        feed.setFeedsPublicAfterEvent(event.getFeedsPublicAfterEvent());
+        
+        // Compute and set user-specific context
+        if (userEventContextService != null) {
+            UserEventContext userContext = userEventContextService.buildContext(event, user);
+            feed.setUserContext(userContext);
+        }
+        
         return feed;
     }
 
@@ -1481,10 +1053,52 @@ public class EventService {
      */
     private List<FeedPost> aggregateAllFeedPosts(Event event, UserPrincipal user, EventFeedRequest request) {
         List<FeedPost> posts = new ArrayList<>();
-        
-        // TODO: Implement actual feed aggregation
-        // 1. Get event media and convert to posts
-        // 2. Get user-generated content from internal app
+
+        // Internal app posts (Feeds)
+        if (eventPostRepository != null) {
+            List<EventFeedPost> eventPosts = eventPostRepository.findByEventIdOrderByCreatedAtDesc(event.getId());
+
+            // Fetch authors in one shot (no stubs)
+            Map<java.util.UUID, UserAccount> authorsById = Map.of();
+            if (userAccountRepository != null) {
+                Set<java.util.UUID> authorIds = eventPosts.stream()
+                        .map(EventFeedPost::getCreatedBy)
+                        .filter(java.util.Objects::nonNull)
+                        .map(UserAccount::getId)
+                        .collect(Collectors.toSet());
+                if (!authorIds.isEmpty()) {
+                    authorsById = userAccountRepository.findAllById(authorIds).stream()
+                            .collect(Collectors.toMap(UserAccount::getId, a -> a));
+                }
+            }
+
+            for (EventFeedPost p : eventPosts) {
+                FeedPost fp = new FeedPost();
+                fp.setId(p.getId());
+                fp.setType(p.getPostType() != null ? p.getPostType().name() : "TEXT");
+                fp.setContent(p.getContent());
+                fp.setPostedAt(p.getCreatedAt());
+
+                UserAccount author = p.getCreatedBy() != null ? authorsById.get(p.getCreatedBy().getId()) : null;
+                fp.setAuthorName(author != null ? author.getName() : null);
+                fp.setAuthorAvatarUrl(author != null ? author.getProfilePictureUrl() : null);
+
+                // Attach media if available
+                if (p.getMediaObjectId() != null && eventStoredObjectRepository != null && s3StorageService != null) {
+                    eventStoredObjectRepository.findById(p.getMediaObjectId()).ifPresent(obj -> {
+                        if (obj.getEvent() != null && event.getId().equals(obj.getEvent().getId())) {
+                            fp.setMediaUrl(s3StorageService.generatePresignedGetUrl(BucketAlias.EVENT, obj.getObjectKey(), java.time.Duration.ofMinutes(10)).toString());
+                        }
+                    });
+                }
+
+                // Like/comment counts not implemented yet; default to 0 for now
+                fp.setLikes(0);
+                fp.setComments(0);
+
+                posts.add(fp);
+            }
+        }
         
         // Apply filters if specified
         if (request != null && request.getPostType() != null && !request.getPostType().equals("ALL")) {
@@ -1515,6 +1129,74 @@ public class EventService {
         }
         
         return toFeedResponse(eventOpt.get(), user, request);
+    }
+
+    /**
+     * Get personalized "For You" feed based on user interests and preferences
+     * @param request List request with pagination
+     * @param user The user principal
+     * @return Page of recommended events
+     */
+    public Page<Event> getForYouFeed(EventListRequest request, UserPrincipal user) {
+        if (user == null) {
+            throw new IllegalArgumentException("Authentication required for For You feed");
+        }
+        
+        // For now, return public events sorted by relevance (can be enhanced with ML/recommendations)
+        // Priority: events from users you've interacted with, events in your location, upcoming events
+        EventListRequest forYouRequest = new EventListRequest();
+        if (request != null) {
+            forYouRequest.setPage(request.getPage() != null ? request.getPage() : 0);
+            forYouRequest.setSize(request.getSize() != null ? request.getSize() : 20);
+        } else {
+            forYouRequest.setPage(0);
+            forYouRequest.setSize(20);
+        }
+        forYouRequest.setIsPublic(true);
+        forYouRequest.setTimeframe("UPCOMING");
+        forYouRequest.setSortBy("startDateTime");
+        forYouRequest.setSortDirection("ASC");
+        
+        Page<Event> events = listEvents(forYouRequest, user);
+        
+        // TODO: Enhance with personalized recommendations based on:
+        // - Past event attendance
+        // - User interests/preferences
+        // - Similar events to ones user has attended
+        // - Events from users/organizations user follows
+        
+        return events;
+    }
+
+    /**
+     * Get "Following" feed - events from users/organizations you follow
+     * @param request List request with pagination
+     * @param user The user principal
+     * @return Page of events from followed users
+     */
+    public Page<Event> getFollowingFeed(EventListRequest request, UserPrincipal user) {
+        if (user == null) {
+            throw new IllegalArgumentException("Authentication required for Following feed");
+        }
+        
+        // TODO: Implement proper follow/following relationship when that feature is added
+        // For now, return upcoming public events as a placeholder.
+        // When follow feature is implemented, this should filter to events from
+        // users/organizations the current user follows.
+        EventListRequest followingRequest = new EventListRequest();
+        if (request != null) {
+            followingRequest.setPage(request.getPage() != null ? request.getPage() : 0);
+            followingRequest.setSize(request.getSize() != null ? request.getSize() : 20);
+        } else {
+            followingRequest.setPage(0);
+            followingRequest.setSize(20);
+        }
+        followingRequest.setIsPublic(true);
+        followingRequest.setTimeframe("UPCOMING");
+        followingRequest.setSortBy("startDateTime");
+        followingRequest.setSortDirection("ASC");
+        
+        return listEvents(followingRequest, user);
     }
 
 }

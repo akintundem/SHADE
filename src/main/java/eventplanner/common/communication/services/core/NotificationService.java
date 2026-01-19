@@ -1,5 +1,6 @@
 package eventplanner.common.communication.services.core;
 
+import eventplanner.common.config.ExternalServicesProperties;
 import eventplanner.common.communication.model.Communication;
 import eventplanner.common.communication.repository.CommunicationRepository;
 import eventplanner.common.communication.services.channel.email.EmailService;
@@ -8,13 +9,14 @@ import eventplanner.common.communication.services.channel.push.PushNotificationS
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.services.core.dto.NotificationResponse;
 import eventplanner.common.communication.services.core.dto.PushResult;
-import eventplanner.common.domain.enums.CommunicationStatus;
-import eventplanner.common.domain.enums.CommunicationType;
-import eventplanner.common.domain.enums.RecipientType;
+import eventplanner.common.communication.enums.CommunicationStatus;
+import eventplanner.common.communication.enums.CommunicationType;
+import eventplanner.common.communication.model.CommunicationRecipientType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -35,6 +37,7 @@ public class NotificationService {
     private final EmailService emailService;
     private final PushNotificationService pushNotificationService;
     private final CommunicationRepository communicationRepository;
+    private final ExternalServicesProperties externalServicesProperties;
 
     /**
      * Send communication based on type
@@ -79,7 +82,7 @@ public class NotificationService {
             communication.setEventId(eventId);
         }
         communication.setCommunicationType(type);
-        communication.setRecipientType(RecipientType.USER);
+        communication.setRecipientType(CommunicationRecipientType.USER);
         communication.setSubject(subject);
         communication.setStatus(CommunicationStatus.PENDING);
         
@@ -91,20 +94,6 @@ public class NotificationService {
                     (templateVariables != null ? templateVariables.toString() : "none"));
             communication.setChannel("email");
         } else if (type == CommunicationType.PUSH_NOTIFICATION) {
-            try {
-                UUID userId = UUID.fromString(to);
-                communication.setRecipientId(userId);
-            } catch (IllegalArgumentException e) {
-                log.error("Invalid userId format for push notification: {}", to);
-                // Create communication record with failed status immediately
-                communication.setStatus(CommunicationStatus.FAILED);
-                communication.setFailedAt(LocalDateTime.now());
-                communication.setFailureReason("Invalid userId format: " + to);
-                communication.setChannel("push");
-                Communication saved = communicationRepository.save(communication);
-                return NotificationResponse.failure(saved.getId(), "Invalid userId format: " + to, saved.getStatus());
-            }
-            communication.setContent(subject); // Use subject as body for push
             communication.setChannel("push");
         }
         
@@ -118,26 +107,28 @@ public class NotificationService {
             
             switch (type) {
                 case EMAIL:
-                    EmailResult emailResult = sendEmail(to, subject, templateId, templateVariables);
+                    String defaultFrom = externalServicesProperties.getEmail().getFrom();
+                    String from = StringUtils.hasText(request.getFrom()) ? request.getFrom() : defaultFrom;
+                    if (!StringUtils.hasText(from)) {
+                        throw new IllegalArgumentException("From address is required for email notifications");
+                    }
+                    EmailResult emailResult = sendEmail(to, subject, templateId, templateVariables, from);
                     success = emailResult.isSuccess();
                     externalId = emailResult.getMessageId();
                     errorMessage = emailResult.getErrorMessage();
                     break;
                 case PUSH_NOTIFICATION:
-                    // Convert to Map<String, String> for push notifications
                     Map<String, String> pushData = new HashMap<>();
                     if (templateVariables != null) {
                         for (Map.Entry<String, Object> entry : templateVariables.entrySet()) {
                             pushData.put(entry.getKey(), String.valueOf(entry.getValue()));
                         }
                     }
-                    // Add eventId to data if provided
                     if (eventId != null) {
                         pushData.put("eventId", eventId.toString());
                     }
-                    // Extract body from data if available
                     String body = pushData.remove("body");
-                    
+
                     PushResult pushResult = sendPushNotification(to, subject, body, pushData);
                     success = pushResult.isSuccess();
                     externalId = pushResult.getMessageId();
@@ -182,14 +173,11 @@ public class NotificationService {
      * Send email via EmailService
      */
     private EmailResult sendEmail(String to, String subject, String templateId,
-                                  Map<String, Object> templateVariables) {
-        return emailService.sendEmail(to, subject, templateId, templateVariables);
+                                  Map<String, Object> templateVariables, String from) {
+        return emailService.sendEmail(to, subject, from, templateId, templateVariables);
     }
 
-    /**
-     * Send push notification via PushNotificationService
-     */
-    private PushResult sendPushNotification(String userIdString, String title, String body, 
+    private PushResult sendPushNotification(String userIdString, String title, String body,
                                            Map<String, String> data) {
         try {
             UUID userId = UUID.fromString(userIdString);

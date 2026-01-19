@@ -1,20 +1,19 @@
 package eventplanner.features.event.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import eventplanner.common.domain.enums.EventStatus;
-import eventplanner.common.domain.enums.EventType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Embedded;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Table;
+import eventplanner.features.event.enums.EventAccessType;
+import eventplanner.features.event.enums.EventStatus;
+import eventplanner.features.event.enums.EventType;
+import eventplanner.security.auth.entity.UserAccount;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -32,8 +31,12 @@ public class Event extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "owner_id", nullable = false)
-    private UUID ownerId;
+    /**
+     * Many-to-one relationship with the user who owns this event.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", nullable = false)
+    private UserAccount owner;
 
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
@@ -66,12 +69,6 @@ public class Event extends BaseEntity {
 
     @Column(name = "requires_approval")
     private Boolean requiresApproval = false;
-
-    @Column(name = "qr_code_enabled")
-    private Boolean qrCodeEnabled = false;
-
-    @Column(name = "qr_code")
-    private String qrCode;
 
     @Column(name = "cover_image_url")
     private String coverImageUrl;
@@ -137,6 +134,27 @@ public class Event extends BaseEntity {
     @Column(name = "payment_date")
     private LocalDateTime paymentDate;
 
+    // Event Access Control Settings
+    /**
+     * Defines how users can access this event's content and participate.
+     * - OPEN: Anyone can view and RSVP (default for public events)
+     * - RSVP_REQUIRED: Users must RSVP to access content
+     * - INVITE_ONLY: Only invited users can see/access the event
+     * - TICKETED: Users must purchase a ticket to access content
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "access_type", nullable = false)
+    private EventAccessType accessType = EventAccessType.OPEN;
+
+    /**
+     * Whether feeds should be made public after the event ends (status = COMPLETED).
+     * Applicable for RSVP_REQUIRED, INVITE_ONLY, and TICKETED events.
+     * If true, feeds become publicly viewable after the event completes.
+     * If false, feeds remain restricted to authorized users even after the event.
+     */
+    @Column(name = "feeds_public_after_event", nullable = false)
+    private Boolean feedsPublicAfterEvent = false;
+
     // Timeline publication state
     @Column(name = "timeline_published", nullable = false)
     private Boolean timelinePublished = false;
@@ -144,8 +162,12 @@ public class Event extends BaseEntity {
     @Column(name = "timeline_published_at")
     private LocalDateTime timelinePublishedAt;
 
-    @Column(name = "timeline_published_by")
-    private UUID timelinePublishedBy;
+    /**
+     * Many-to-one relationship with the user who published the timeline.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "timeline_published_by")
+    private UserAccount timelinePublishedBy;
 
     @Column(name = "timeline_publish_message", columnDefinition = "TEXT")
     private String timelinePublishMessage;
@@ -157,8 +179,12 @@ public class Event extends BaseEntity {
     @Column(name = "archived_at")
     private LocalDateTime archivedAt;
 
-    @Column(name = "archived_by")
-    private UUID archivedBy;
+    /**
+     * Many-to-one relationship with the user who archived this event.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "archived_by")
+    private UserAccount archivedBy;
 
     @Column(name = "archive_reason", columnDefinition = "TEXT")
     private String archiveReason;
@@ -166,12 +192,43 @@ public class Event extends BaseEntity {
     @Column(name = "restored_at")
     private LocalDateTime restoredAt;
 
-    @Column(name = "restored_by")
-    private UUID restoredBy;
+    /**
+     * Many-to-one relationship with the user who restored this event.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "restored_by")
+    private UserAccount restoredBy;
 
-    public Event(String name, EventType eventType, UUID ownerId) {
+    /**
+     * One-to-many relationship with stored objects (media, assets, etc.).
+     * Lazy loaded to avoid N+1 queries.
+     */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<EventStoredObject> storedObjects = new ArrayList<>();
+
+    /**
+     * One-to-many relationship with event reminders.
+     * Lazy loaded to avoid N+1 queries.
+     */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<EventReminder> reminders = new ArrayList<>();
+
+    /**
+     * One-to-one relationship with notification settings.
+     */
+    @OneToOne(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private EventNotificationSettings notificationSettings;
+
+    /**
+     * One-to-many relationship with feed posts.
+     * Lazy loaded to avoid N+1 queries.
+     */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<eventplanner.features.feeds.entity.EventFeedPost> feedPosts = new ArrayList<>();
+
+    public Event(String name, EventType eventType, UserAccount owner) {
         this.name = name;
         this.eventType = eventType;
-        this.ownerId = ownerId;
+        this.owner = owner;
     }
 }

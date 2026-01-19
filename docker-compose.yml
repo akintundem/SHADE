@@ -1,77 +1,113 @@
 services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: shade-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    restart: unless-stopped
+    networks:
+      - event-planner-network
+
+  email-service:
+    build:
+      context: ./email
+    container_name: shade-email-service
+    depends_on:
+      - rabbitmq
+    environment:
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: ${RESEND_FROM}
+      ALLOWED_TEMPLATES: ${ALLOWED_TEMPLATES}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
+      RABBITMQ_EMAIL_QUEUE: ${RABBITMQ_EMAIL_QUEUE}
+      RABBITMQ_EMAIL_ROUTING_KEY: ${RABBITMQ_EMAIL_ROUTING_KEY}
+      RABBITMQ_PREFETCH: ${RABBITMQ_PREFETCH}
+      RABBITMQ_RECONNECT_MS: ${RABBITMQ_RECONNECT_MS}
+      RABBITMQ_REQUEUE_ON_ERROR: ${RABBITMQ_REQUEUE_ON_ERROR}
+      APP_ASSET_BUCKET: ${APP_ASSET_BUCKET}
+      LOGO_URL: ${LOGO_URL}
+    restart: unless-stopped
+    networks:
+      - event-planner-network
+
+  push-service:
+    build:
+      context: ./push-service
+    image: shade-push-service:local
+    container_name: shade-push-service
+    depends_on:
+      - rabbitmq
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
+      RABBITMQ_PUSH_QUEUE: ${RABBITMQ_PUSH_QUEUE}
+      RABBITMQ_PUSH_ROUTING_KEY: ${RABBITMQ_PUSH_ROUTING_KEY}
+      RABBITMQ_PREFETCH: ${RABBITMQ_PREFETCH}
+      RABBITMQ_RECONNECT_MS: ${RABBITMQ_RECONNECT_MS}
+      RABBITMQ_REQUEUE_ON_ERROR: ${RABBITMQ_REQUEUE_ON_ERROR}
+      FIREBASE_SERVICE_ACCOUNT_KEY_PATH: ${FIREBASE_SERVICE_ACCOUNT_KEY_PATH}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+    volumes:
+      - ./push-service/cred:/app/cred:ro
+    restart: unless-stopped
+    networks:
+      - event-planner-network
+
+  ai-service:
+    build:
+      context: ./ai-service
+    image: shade-ai-service:local
+    container_name: shade-ai-service
+    expose:
+      - "8000"
+    environment:
+      PORT: "8000"
+      AI_SERVICE_SECRET: ${AI_SERVICE_SECRET}
+      EXTERNAL_AI_SERVICE_SECRET: ${EXTERNAL_AI_SERVICE_SECRET}
+      RETURN_BASE64: "false"
+      AI_COGNITO_ISSUER: ""
+      AI_COGNITO_AUDIENCE: ""
+    env_file:
+      - ./ai-service/.env
+    restart: unless-stopped
+    networks:
+      - event-planner-network
+
   # Java Spring Boot Application
   java-app:
     build: .
     container_name: event-planner-app
-    ports:
-      - "8080:8080"
-      - "5005:5005"  # Debug port for IDE attachment
+    depends_on:
+      - email-service
+      - push-service
+      - ai-service
+    expose:
+      - "8080"
+    # Allow container to connect to services on host machine (local Redis, Postgres, etc.)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # DNS servers for resolving external hostnames (AWS RDS, etc.)
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     volumes:
       # Mount source code for hot-reload (changes reflect immediately!)
       - ./src:/app/src
       - ./pom.xml:/app/pom.xml
     env_file:
-      - .env
+      - ${ENV_FILE:-.env.prod}
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       # Enable Spring Boot DevTools for hot-reload
       SPRING_DEVTOOLS_RESTART_ENABLED: "true"
       SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "true"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: "2s"
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: "1s"
-
-      # Database — uses Railway's DATABASE_URL or external database
-      # Railway/external services will provide these via environment variables
-      DATABASE_URL: ${DATABASE_URL:-}
-      DB_HOST: ${DB_HOST:-}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${DB_NAME:-}
-      DB_USERNAME: ${DB_USERNAME:-}
-      DB_PASSWORD: ${DB_PASSWORD:-}
-      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-20}
-      DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-5}
-      DB_CONNECTION_TIMEOUT: ${DB_CONNECTION_TIMEOUT:-30000}
-      DB_IDLE_TIMEOUT: ${DB_IDLE_TIMEOUT:-600000}
-      DB_MAX_LIFETIME: ${DB_MAX_LIFETIME:-1800000}
-
-      # Redis — uses Railway's REDIS_URL or external Redis
-      # Railway/external services will provide these via environment variables
-      REDIS_URL: ${REDIS_URL:-}
-      SPRING_REDIS_HOST: ${SPRING_REDIS_HOST:-}
-      SPRING_REDIS_PORT: ${SPRING_REDIS_PORT:-6379}
-      SPRING_REDIS_PASSWORD: ${SPRING_REDIS_PASSWORD:-}
-
-      # MongoDB — uses MONGODB_URL or external MongoDB
-      MONGODB_URL: ${MONGODB_URL:-}
-
-      # JWT + Logging
-      JWT_SECRET: ${JWT_SECRET}
-      LOG_PATTERN: ${LOG_PATTERN:-%d{yyyy-MM-dd HH:mm:ss} - %msg%n}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
-      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-604800000}
-      AUTH_SESSION_MAX_CONCURRENT: ${AUTH_SESSION_MAX_CONCURRENT:-5}
-      CACHE_MAX_SIZE: ${CACHE_MAX_SIZE:-1000}
-      CACHE_EXPIRE_AFTER_WRITE: ${CACHE_EXPIRE_AFTER_WRITE:-300s}
-
-      FIREBASE_SERVICE_ACCOUNT_KEY_PATH: ${FIREBASE_SERVICE_ACCOUNT_KEY_PATH:-}
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
-      # Public URL configuration
-      # Railway automatically provides RAILWAY_PUBLIC_DOMAIN and sets APP_BASE_URL
-      # For local development: defaults to http://localhost:8080
-      # Can be overridden via APP_BASE_URL environment variable in .env files
-      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
-      # CORS origins - should be set in .env.prod for Railway deployment
-      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-}
-      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
-      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
-      SWAGGER_UI_PATH: ${SWAGGER_UI_PATH:-/swagger-ui}
-      API_DOCS_PATH: ${API_DOCS_PATH:-/v3/api-docs}
-      API_TITLE: ${API_TITLE:-Event Planner API}
-      API_DESCRIPTION: ${API_DESCRIPTION:-AI-powered event planning platform}
-      API_VERSION: ${API_VERSION:-1.0.0}
-      WEATHER_BASE_URL: ${WEATHER_BASE_URL:-http://localhost:8089}
+      # Note: All other environment variables are loaded from env_file (.env.prod)
 
     # Extended startup time for Maven build on first run
     healthcheck:
@@ -83,6 +119,42 @@ services:
     restart: unless-stopped
     networks:
       - event-planner-network
+
+  kong:
+    image: kong:3.7
+    container_name: shade-api-gateway
+    depends_on:
+      - java-app
+      - ai-service
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_LOG_LEVEL: notice
+      KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl
+      # Admin API: Only listen on localhost in production, or use KONG_ADMIN_LISTEN=off
+      KONG_ADMIN_LISTEN: 127.0.0.1:8001
+      # Environment variables for secrets (used in kong.yml)
+      # IMPORTANT: Set secure values in production .env files
+      GATEWAY_SERVICE_API_KEY: ${GATEWAY_SERVICE_API_KEY}
+      AI_GATEWAY_SHARED_SECRET: ${AI_GATEWAY_SHARED_SECRET}
+      # CORS origins for production
+      KONG_CORS_ORIGINS: ${KONG_CORS_ORIGINS}
+    volumes:
+      - ./infra/kong/kong.yml:/kong/kong.yml:ro
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+      # Admin port only exposed in development - remove in production
+      - "8001:8001"
+    networks:
+      - event-planner-network
+
+volumes:
+  maven_cache:  # Cache Maven dependencies for faster builds
 
 networks:
   event-planner-network:

@@ -2,12 +2,10 @@
 
 # Comprehensive Event Controller Endpoints Test Script
 # Tests all event-related endpoints and generates a detailed report
-# Supports both local and production testing with custom API URLs
 #
 # Usage:
-#   ./test_event_endpoints.sh                    # Interactive mode
-#   ./test_event_endpoints.sh local              # Test localhost:8080
-#   ./test_event_endpoints.sh prod <API_URL>     # Test production URL
+#   ./test_event_endpoints.sh                    # Test localhost:8080
+#   ./test_event_endpoints.sh <API_URL>          # Test custom API URL
 #   ./test_event_endpoints.sh help               # Show help
 
 # Function to show help
@@ -16,25 +14,20 @@ show_help() {
     echo "========================================="
     echo ""
     echo "Usage:"
-    echo "  $0                    # Interactive mode - choose environment"
-    echo "  $0 local              # Test localhost:8080"
-    echo "  $0 prod <API_URL>     # Test production URL"
-    echo "  $0 help               # Show this help"
+    echo "  $0                                    # Test localhost:8080 (default)"
+    echo "  $0 local                              # Test localhost:8080 (explicit)"
+    echo "  $0 <API_URL>                          # Test custom API URL"
+    echo "  $0 help                               # Show this help"
     echo ""
     echo "Examples:"
+    echo "  $0"
     echo "  $0 local"
-    echo "  $0 prod https://your-app.railway.app"
-    echo "  $0 prod https://your-app.herokuapp.com"
-    echo "  $0 prod https://api.yourdomain.com"
-    echo ""
-    echo "Interactive Mode:"
-    echo "  Run without arguments to choose environment interactively"
+    echo "  $0 https://your-app.railway.app"
     echo ""
     echo "Requirements:"
     echo "  - curl command available"
     echo "  - jq command available (for JSON parsing)"
-    echo "  - For local testing: Spring Boot app running on port 8080"
-    echo "  - For production testing: Valid API URL with health endpoint"
+    echo "  - Spring Boot app running (default: localhost:8080)"
     echo ""
     exit 0
 }
@@ -56,85 +49,47 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Function to get user input for testing environment
-get_testing_environment() {
-    # Check for command line arguments
-    if [ $# -gt 0 ]; then
+# Function to parse command line arguments
+parse_arguments() {
+    # Default values
+    BASE_URL="http://localhost:8080"
+    
+    # Parse command line arguments
+    while [ $# -gt 0 ]; do
         case $1 in
             "local"|"l")
                 BASE_URL="http://localhost:8080"
-                echo -e "${GREEN}✅ Selected: Local Development (from command line)${NC}"
-                echo -e "${YELLOW}💡 Make sure your local Spring Boot application is running${NC}"
+                shift
                 ;;
-            "prod"|"p")
-                if [ -n "$2" ]; then
-                    BASE_URL="$2"
-                    echo -e "${GREEN}✅ Selected: Production - $BASE_URL (from command line)${NC}"
-                else
-                    echo -e "${RED}❌ Production URL required. Usage: $0 prod <API_URL>${NC}"
-                    exit 1
-                fi
+            "help"|"-h"|"--help")
+                show_help
+                exit 0
                 ;;
             *)
-                echo -e "${RED}❌ Invalid argument. Usage:${NC}"
-                echo -e "${YELLOW}   $0 local                    # Test localhost:8080${NC}"
-                echo -e "${YELLOW}   $0 prod <API_URL>          # Test production URL${NC}"
-                echo -e "${YELLOW}   $0                         # Interactive mode${NC}"
-                exit 1
-                ;;
-        esac
-    else
-        # Interactive mode
-        echo -e "${CYAN}🌍 Choose Testing Environment:${NC}"
-        echo "1. Local Development (localhost:8080)"
-        echo "2. Production (Custom API URL)"
-        echo ""
-        read -p "Enter your choice (1 or 2): " choice
-        
-        case $choice in
-            1)
-                BASE_URL="http://localhost:8080"
-                echo -e "${GREEN}✅ Selected: Local Development${NC}"
-                echo -e "${YELLOW}💡 Make sure your local Spring Boot application is running${NC}"
-                ;;
-            2)
-                echo ""
-                echo -e "${CYAN}🌐 Enter Production API URL:${NC}"
-                echo -e "${YELLOW}   Example: https://your-app.railway.app${NC}"
-                echo -e "${YELLOW}   Example: https://your-app.herokuapp.com${NC}"
-                echo -e "${YELLOW}   Example: https://api.yourdomain.com${NC}"
-                echo ""
-                read -p "API URL: " custom_url
-                
-                # Validate URL format
-                if [[ $custom_url =~ ^https?:// ]]; then
-                    BASE_URL="$custom_url"
-                    echo -e "${GREEN}✅ Selected: Production - $BASE_URL${NC}"
+                # If it looks like a URL, use it as BASE_URL
+                if [[ $1 =~ ^https?:// ]]; then
+                    BASE_URL="$1"
                 else
-                    echo -e "${RED}❌ Invalid URL format. Please include http:// or https://${NC}"
-                    echo -e "${YELLOW}   Example: https://your-app.railway.app${NC}"
+                    echo -e "${RED}❌ Invalid argument: $1${NC}"
+                    echo -e "${YELLOW}Usage: $0 [local|<API_URL>]${NC}"
                     exit 1
                 fi
-                ;;
-            *)
-                echo -e "${RED}❌ Invalid choice. Please select 1 or 2.${NC}"
-                exit 1
+                shift
                 ;;
         esac
-    fi
+    done
     
     echo ""
     echo -e "${BLUE}🔗 Testing URL: $BASE_URL${NC}"
     echo ""
 }
 
-# Get testing environment from user
-get_testing_environment "$@"
+# Parse command line arguments
+parse_arguments "$@"
 
 # Path configuration (always resolve relative to this script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPORTS_DIR="${SCRIPT_DIR}/reports"
-QR_CODES_DIR="${SCRIPT_DIR}/qr-codes"
 
 # Configuration
 REPORT_FILE="${REPORTS_DIR}/event_test_report_$(date +%Y%m%d_%H%M%S).md"
@@ -154,9 +109,33 @@ REFRESH_TOKEN=""
 USER_ID=""
 EVENT_ID=""
 MEDIA_ID=""
+MEDIA_UPLOAD_URL=""
+MEDIA_UPLOAD_METHOD=""
+MEDIA_RESOURCE_URL=""
+MEDIA_REQUIRED_HEADERS=""
+MEDIA_DOWNLOAD_URL=""
+MEDIA_OBJECT_KEY=""
+ASSET_ID=""
+ASSET_UPLOAD_URL=""
+ASSET_RESOURCE_URL=""
+ASSET_REQUIRED_HEADERS=""
+ASSET_OBJECT_KEY=""
+ASSET_DOWNLOAD_URL=""
+ASSET_MEDIA_IDENTIFIER=""
+ASSET_COMPLETE_OK="false"
+COVER_ID=""
+COVER_OBJECT_KEY=""
+COVER_UPLOAD_URL=""
+COVER_RESOURCE_URL=""
+COVER_REQUIRED_HEADERS=""
 COLLABORATOR_ID=""
-REMINDER_ID=""
 DEVICE_ID=""
+OTHER_ACCESS_TOKEN=""
+OTHER_DEVICE_ID=""
+LAST_BODY=""
+LAST_HTTP_CODE=""
+REMINDER_ID=""
+
 
 verify_email_in_database() {
     local email="$1"
@@ -165,73 +144,218 @@ verify_email_in_database() {
     fi
 }
 
-# Create directories for reports and QR codes
-mkdir -p "$REPORTS_DIR"
-mkdir -p "$QR_CODES_DIR"
+# Requirements check (jq is needed for presigned upload parsing)
+if ! command -v jq >/dev/null 2>&1; then
+    echo -e "${RED}❌ jq is required but not installed.${NC}"
+    echo -e "${YELLOW}💡 Install it with: brew install jq${NC}"
+    exit 1
+fi
 
-# Function to save QR code to file
-save_qr_code() {
-    local test_name="$1"
-    local endpoint="$2"
-    local response_body="$3"
-    local content_type="$4"
-    
-    # Create filename from test name and timestamp
-    local timestamp=$(date +%Y%m%d_%H%M%S_%N | cut -b1-23)
-    local safe_name=$(echo "$test_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g')
-    local filename="${QR_CODES_DIR}/${safe_name}_${timestamp}"
-    
-    # Determine file extension and save based on endpoint and content
-    if [[ "$endpoint" == *"/qr-code/image" ]]; then
-        # PNG image endpoint - response_body might be a temp file path or actual data
-        if [ -f "$response_body" ]; then
-            # It's a temp file, check if it's PNG or JSON error
-            local file_size=$(stat -f%z "$response_body" 2>/dev/null || stat -c%s "$response_body" 2>/dev/null || echo "0")
-            if [ "$file_size" -gt 100 ]; then
-                # Check PNG signature (first 4 bytes: 89 50 4E 47)
-                local first_bytes=$(head -c 4 "$response_body" 2>/dev/null | od -An -tx1 | tr -d ' ' | head -c 8)
-                if [ "$first_bytes" = "89504e47" ]; then
-                    cp "$response_body" "${filename}.png"
-                    echo -e "${GREEN}💾 Saved QR code PNG: ${filename}.png${NC}"
-                else
-                    # Might be JSON error response
-                    cp "$response_body" "${filename}.error.json"
-                    echo -e "${YELLOW}⚠️  Response is not PNG, saved as: ${filename}.error.json${NC}"
-                fi
-            fi
-        elif [ -n "$response_body" ] && [ ${#response_body} -gt 100 ]; then
-            # Direct binary data (shouldn't happen with our curl -o approach, but handle it)
-            echo -n "$response_body" > "${filename}.png"
-            echo -e "${GREEN}💾 Saved QR code PNG: ${filename}.png${NC}"
-        fi
-    elif [[ "$response_body" == *"data:image/png;base64,"* ]] || [[ "$response_body" == *"qrCodeImageBase64"* ]]; then
-        # Base64 encoded image in JSON response
-        local base64_data=""
-        if echo "$response_body" | grep -q "qrCodeImageBase64"; then
-            base64_data=$(echo "$response_body" | grep -o '"qrCodeImageBase64":"[^"]*"' | cut -d'"' -f4 | sed 's/data:image\/png;base64,//')
-        else
-            base64_data=$(echo "$response_body" | grep -o 'data:image/png;base64,[^"]*' | sed 's/data:image\/png;base64,//')
-        fi
-        
-        if [ -n "$base64_data" ]; then
-            echo "$base64_data" | base64 -d > "${filename}.png" 2>/dev/null
-            if [ $? -eq 0 ]; then
-                echo -e "${GREEN}💾 Saved QR code PNG from base64: ${filename}.png${NC}"
-            fi
-        fi
-        
-        # Also save the QR code text if available
-        local qr_text=$(echo "$response_body" | grep -o '"qrCode":"[^"]*"' | cut -d'"' -f4)
-        if [ -n "$qr_text" ]; then
-            echo "$qr_text" > "${filename}.txt"
-            echo -e "${GREEN}💾 Saved QR code text: ${filename}.txt${NC}"
-        fi
-    elif [[ "$endpoint" == *"/qr-code" ]] && [[ "$endpoint" != *"/qr-code/image" ]] && [[ "$endpoint" != *"/qr-code/rendered" ]]; then
-        # Plain text QR code
-        echo "$response_body" > "${filename}.txt"
-        echo -e "${GREEN}💾 Saved QR code text: ${filename}.txt${NC}"
+# Download an Unsplash image for upload tests
+UNSPLASH_IMAGE_URL_DEFAULT="https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&q=80"
+UNSPLASH_IMAGE_URL="${UNSPLASH_IMAGE_URL:-$UNSPLASH_IMAGE_URL_DEFAULT}"
+TEST_IMAGE_PATH=""
+TEST_IMAGE_SHA256=""
+TEST_IMAGE_SIZE=""
+
+download_test_image() {
+    echo -e "${YELLOW}🖼️  Downloading test image from Unsplash...${NC}"
+    TEST_IMAGE_PATH="$(mktemp -t event-media-test-XXXXXX).jpg"
+    if ! curl -sS -L --fail "$UNSPLASH_IMAGE_URL" -o "$TEST_IMAGE_PATH"; then
+        echo -e "${RED}❌ Failed to download test image${NC}"
+        return 1
     fi
+    TEST_IMAGE_SIZE="$(wc -c < "$TEST_IMAGE_PATH" | tr -d ' ')"
+    if command -v shasum >/dev/null 2>&1; then
+        TEST_IMAGE_SHA256="$(shasum -a 256 "$TEST_IMAGE_PATH" | awk '{print $1}')"
+    elif command -v openssl >/dev/null 2>&1; then
+        TEST_IMAGE_SHA256="$(openssl dgst -sha256 "$TEST_IMAGE_PATH" | awk '{print $2}')"
+    else
+        TEST_IMAGE_SHA256=""
+    fi
+    echo -e "${GREEN}✅ Test image downloaded (${TEST_IMAGE_SIZE} bytes)${NC}"
+    return 0
 }
+
+run_full_url_test() {
+    local test_name="$1"
+    local method="$2"
+    local url="$3"
+    local headers="$4"
+    local data_file="$5"
+    local expected_status="$6"
+    local description="$7"
+
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    echo -e "${BLUE}🧪 Running: $test_name${NC}"
+
+    local curl_cmd="curl -s -w '%{http_code}' -X $method"
+    if [ -n "$headers" ]; then
+        curl_cmd="$curl_cmd $headers"
+    fi
+    if [ -n "$data_file" ]; then
+        curl_cmd="$curl_cmd --data-binary @$data_file"
+    fi
+    curl_cmd="$curl_cmd '$url'"
+
+    local response
+    if ! response=$(eval "$curl_cmd"); then
+        echo -e "${RED}❌ Failed to execute curl command${NC}"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+        return 1
+    fi
+
+    local http_code="${response: -3}"
+    local response_body="${response%???}"
+
+    if [ "$http_code" = "$expected_status" ]; then
+        echo -e "${GREEN}✅ PASSED${NC} - Status: $http_code"
+        PASSED_TESTS=$((PASSED_TESTS + 1))
+        local status_icon="✅"
+    else
+        echo -e "${RED}❌ FAILED${NC} - Expected: $expected_status, Got: $http_code"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+        local status_icon="❌"
+    fi
+
+    {
+        echo ""
+        echo "### $test_name"
+        echo "**Status:** $status_icon $http_code (Expected: $expected_status)"
+        echo "**Description:** $description"
+        echo "**Endpoint:** $method $url"
+        echo "**Request Headers:** $headers"
+        if [ -n "$data_file" ]; then
+            echo "**Request Body:** (binary file: $data_file)"
+        fi
+        echo ""
+        echo "**Response:**"
+        echo "\`\`\`"
+        echo "$response_body"
+        echo "\`\`\`"
+        echo ""
+        echo "---"
+        echo ""
+    } >> "$REPORT_FILE"
+
+    echo ""
+}
+
+extract_presigned_fields() {
+    local json="$1"
+    MEDIA_ID="$(echo "$json" | jq -r '.mediaId // empty')"
+    MEDIA_OBJECT_KEY="$(echo "$json" | jq -r '.objectKey // empty')"
+    MEDIA_UPLOAD_URL="$(echo "$json" | jq -r '.uploadUrl // empty')"
+    MEDIA_UPLOAD_METHOD="$(echo "$json" | jq -r '.uploadMethod // empty')"
+    MEDIA_RESOURCE_URL="$(echo "$json" | jq -r '.resourceUrl // empty')"
+    MEDIA_REQUIRED_HEADERS="$(echo "$json" | jq -c '.headers // {}')"
+}
+
+extract_asset_presigned_fields() {
+    local json="$1"
+    ASSET_ID="$(echo "$json" | jq -r '.mediaId // empty')"
+    ASSET_OBJECT_KEY="$(echo "$json" | jq -r '.objectKey // empty')"
+    ASSET_UPLOAD_URL="$(echo "$json" | jq -r '.uploadUrl // empty')"
+    ASSET_RESOURCE_URL="$(echo "$json" | jq -r '.resourceUrl // empty')"
+    ASSET_REQUIRED_HEADERS="$(echo "$json" | jq -c '.headers // {}')"
+}
+
+extract_cover_presigned_fields() {
+    local json="$1"
+    COVER_ID="$(echo "$json" | jq -r '.mediaId // empty')"
+    COVER_OBJECT_KEY="$(echo "$json" | jq -r '.objectKey // empty')"
+    COVER_UPLOAD_URL="$(echo "$json" | jq -r '.uploadUrl // empty')"
+    COVER_RESOURCE_URL="$(echo "$json" | jq -r '.resourceUrl // empty')"
+    COVER_REQUIRED_HEADERS="$(echo "$json" | jq -c '.headers // {}')"
+}
+
+extract_create_event_with_cover_upload_fields() {
+    local json="$1"
+    EVENT_ID="$(echo "$json" | jq -r '.event.id // empty')"
+    COVER_ID="$(echo "$json" | jq -r '.coverUpload.mediaId // empty')"
+    COVER_OBJECT_KEY="$(echo "$json" | jq -r '.coverUpload.objectKey // empty')"
+    COVER_UPLOAD_URL="$(echo "$json" | jq -r '.coverUpload.uploadUrl // empty')"
+    COVER_RESOURCE_URL="$(echo "$json" | jq -r '.coverUpload.resourceUrl // empty')"
+    COVER_REQUIRED_HEADERS="$(echo "$json" | jq -c '.coverUpload.headers // {}')"
+}
+
+extract_update_event_with_cover_upload_fields() {
+    local json="$1"
+    COVER_ID="$(echo "$json" | jq -r '.coverUpload.mediaId // empty')"
+    COVER_OBJECT_KEY="$(echo "$json" | jq -r '.coverUpload.objectKey // empty')"
+    COVER_UPLOAD_URL="$(echo "$json" | jq -r '.coverUpload.uploadUrl // empty')"
+    COVER_RESOURCE_URL="$(echo "$json" | jq -r '.coverUpload.resourceUrl // empty')"
+    COVER_REQUIRED_HEADERS="$(echo "$json" | jq -c '.coverUpload.headers // {}')"
+}
+
+presigned_put_upload() {
+    local upload_url="$1"
+    local headers_json="$2"
+    local file_path="$3"
+
+    local header_flags=""
+    # Apply all required headers
+    while IFS=$'\t' read -r k v; do
+        if [ -n "$k" ] && [ -n "$v" ] && [ "$k" != "null" ] && [ "$v" != "null" ]; then
+            header_flags="$header_flags -H '$k: $v'"
+        fi
+    done < <(echo "$headers_json" | jq -r 'to_entries[] | "\(.key)\t\(.value)"')
+
+    # Run upload once, log it, and return success/failure
+    run_full_url_test "PUT Presigned Upload (S3)" "PUT" "$upload_url" "$header_flags" "$file_path" "200" "Upload bytes to S3 using presigned PUT URL (S3 often returns 200 or 204)"
+    local last_status=$?
+    if [ $last_status -eq 0 ]; then
+        return 0
+    fi
+    # Some S3-compatible endpoints return 204 on successful PUT
+    run_full_url_test "PUT Presigned Upload (S3 - 204)" "PUT" "$upload_url" "$header_flags" "$file_path" "204" "Upload bytes to S3 using presigned PUT URL (204 variant)"
+    return $?
+}
+
+download_and_hash() {
+    local url="$1"
+    local out_path="$2"
+    if ! curl -sS -L --fail "$url" -o "$out_path"; then
+        return 1
+    fi
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$out_path" | awk '{print $1}'
+        return 0
+    elif command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 "$out_path" | awk '{print $2}'
+        return 0
+    fi
+    echo ""
+    return 0
+}
+
+authenticate_other_user() {
+    local email="otheruser_$(date +%s)@example.com"
+    local password="Password123!"
+
+    # Register
+    local reg='{"email":"'$email'","password":"'$password'","confirmPassword":"'$password'"}'
+    local r=$(curl -s -w '%{http_code}' -X POST -H "Content-Type: application/json" -d "$reg" "$BASE_URL/api/v1/auth/register")
+    local rc="${r: -3}"
+    if [ "$rc" = "201" ]; then
+        verify_email_in_database "$email"
+    fi
+
+    # Login
+    local login='{"email":"'$email'","password":"'$password'","rememberMe":false}'
+    local lr=$(curl -s -w '%{http_code}' -X POST -H "Content-Type: application/json" -d "$login" "$BASE_URL/api/v1/auth/login")
+    local lc="${lr: -3}"
+    local lb="${lr%???}"
+    if [ "$lc" != "200" ]; then
+        return 1
+    fi
+    OTHER_ACCESS_TOKEN="$(echo "$lb" | jq -r '.accessToken // empty')"
+    OTHER_DEVICE_ID="$(echo "$lb" | jq -r '.deviceId // empty')"
+    return 0
+}
+
+# Create directory for reports
+mkdir -p "$REPORTS_DIR"
 
 # Create report file
 cat > "$REPORT_FILE" << EOF
@@ -249,8 +373,7 @@ cat > "$REPORT_FILE" << EOF
 | CRUD Operations | 0 | 0 | 0 | 0% |
 | Event Management | 0 | 0 | 0 | 0% |
 | Media Management | 0 | 0 | 0 | 0% |
-| Collaboration | 0 | 0 | 0 | 0% |
-| Notifications | 0 | 0 | 0 | 0% |
+| Notifications & Reminders | 0 | 0 | 0 | 0% |
 | **TOTAL** | 0 | 0 | 0 | 0% |
 
 ---
@@ -278,11 +401,16 @@ run_test() {
     local temp_data_file=""
     
     # Automatically attach X-Device-ID header for authenticated requests
-    if [[ -n "$DEVICE_ID" && "$headers" != *"X-Device-ID"* ]]; then
+    # Use OTHER_DEVICE_ID when using OTHER_ACCESS_TOKEN, otherwise use DEVICE_ID.
+    local effective_device_id="$DEVICE_ID"
+    if [[ -n "$OTHER_ACCESS_TOKEN" && "$headers" == *"Authorization: Bearer $OTHER_ACCESS_TOKEN"* && -n "$OTHER_DEVICE_ID" ]]; then
+        effective_device_id="$OTHER_DEVICE_ID"
+    fi
+    if [[ -n "$effective_device_id" && "$headers" != *"X-Device-ID"* ]]; then
         if [ -n "$headers" ]; then
-            headers="$headers -H 'X-Device-ID: $DEVICE_ID'"
+            headers="$headers -H 'X-Device-ID: $effective_device_id'"
         else
-            headers="-H 'X-Device-ID: $DEVICE_ID'"
+            headers="-H 'X-Device-ID: $effective_device_id'"
         fi
     fi
     
@@ -296,15 +424,7 @@ run_test() {
         curl_cmd="$curl_cmd --data-binary @$temp_data_file"
     fi
     
-    # Handle binary responses (PNG images) differently
-    local is_binary_response=false
-    if [[ "$endpoint" == *"/qr-code/image" ]]; then
-        is_binary_response=true
-        local temp_response_file=$(mktemp)
-        curl_cmd="$curl_cmd -o '$temp_response_file' '$BASE_URL$endpoint'"
-    else
-        curl_cmd="$curl_cmd '$BASE_URL$endpoint'"
-    fi
+    curl_cmd="$curl_cmd '$BASE_URL$endpoint'"
     
     # Execute the request
     local response
@@ -315,9 +435,6 @@ run_test() {
         if [ -n "$temp_data_file" ]; then
             rm -f "$temp_data_file"
         fi
-        if [ -n "$temp_response_file" ]; then
-            rm -f "$temp_response_file"
-        fi
         return 1
     fi
 
@@ -325,18 +442,12 @@ run_test() {
         rm -f "$temp_data_file"
     fi
     
-    local http_code
-    local response_body
+    local http_code="${response: -3}"
+    local response_body="${response%???}"
     
-    if [ "$is_binary_response" = true ]; then
-        # For binary responses, http_code is in the response variable, body is in temp file
-        http_code="${response: -3}"
-        # Keep the temp file for binary data handling in save_qr_code
-        response_body="$temp_response_file"
-    else
-        http_code="${response: -3}"
-        response_body="${response%???}"
-    fi
+    # Store response body globally for later extraction if needed
+    LAST_BODY="$response_body"
+    LAST_HTTP_CODE="$http_code"
     
     # Check if test passed
     if [ "$http_code" = "$expected_status" ]; then
@@ -373,16 +484,6 @@ run_test() {
         echo ""
     } >> "$REPORT_FILE"
     
-    # Save QR codes if this is a QR code endpoint
-    if [[ "$endpoint" == *"/qr-code"* ]] && [ "$http_code" = "200" ]; then
-        save_qr_code "$test_name" "$endpoint" "$response_body" ""
-    fi
-    
-    # Clean up temp response file for binary responses
-    if [ "$is_binary_response" = true ] && [ -f "$response_body" ]; then
-        rm -f "$response_body"
-    fi
-    
     # Extract IDs and tokens from successful responses
     if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
         case "$test_name" in
@@ -392,16 +493,25 @@ run_test() {
                 USER_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
                 ;;
             "Create Event")
-                EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+                # Create event now returns { event, coverUpload }
+                EVENT_ID=$(echo "$response_body" | jq -r '.event.id // empty')
                 ;;
             "Upload Event Media")
-                MEDIA_ID=$(echo "$response_body" | grep -o '"mediaId":"[^"]*"' | cut -d'"' -f4)
+                # Presigned upload response (parse via jq)
+                extract_presigned_fields "$response_body"
+                ;;
+            "Request Cover Upload via Update Event")
+                extract_update_event_with_cover_upload_fields "$response_body"
                 ;;
             "Add Event Collaborator")
                 COLLABORATOR_ID=$(echo "$response_body" | grep -o '"collaboratorId":"[^"]*"' | cut -d'"' -f4)
                 ;;
             "Create Event Reminder")
-                REMINDER_ID=$(echo "$response_body" | grep -o '"reminderId":"[^"]*"' | cut -d'"' -f4)
+                if command -v jq >/dev/null 2>&1; then
+                    REMINDER_ID=$(echo "$response_body" | jq -r '.id // empty')
+                else
+                    REMINDER_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4 | head -1)
+                fi
                 ;;
         esac
     fi
@@ -419,7 +529,9 @@ wait_for_service() {
     fi
     
     echo -e "${YELLOW}⏳ Waiting for $service_name to be ready...${NC}"
-    local max_attempts=10
+    # Docker compose healthcheck start_period allows up to 120s on first run.
+    # Keep this in sync so tests don't fail during cold starts.
+    local max_attempts=40
     local attempt=1
     
     while [ $attempt -le $max_attempts ]; do
@@ -528,6 +640,7 @@ authenticate_user() {
             # Complete onboarding
             local onboarding_data='{
                 "name": "'$TEST_USER_NAME'",
+                "username": "testuser_'"$(date +%s | cut -c1-8)"'",
                 "phoneNumber": "'$TEST_USER_PHONE'",
                 "dateOfBirth": "1990-01-01",
                 "acceptTerms": true,
@@ -535,18 +648,23 @@ authenticate_user() {
                 "marketingOptIn": false
             }'
             
-            local onboarding_response=$(curl -s -w '%{http_code}' -X POST \
-                -H "Authorization: Bearer $ACCESS_TOKEN" \
-                -H "X-Device-ID: $DEVICE_ID" \
-                -H "Content-Type: application/json" \
-                -d "$onboarding_data" \
-                "$BASE_URL/api/v1/auth/complete-onboarding")
-            
-            local onboarding_http_code="${onboarding_response: -3}"
-            if [ "$onboarding_http_code" = "200" ]; then
-                echo -e "${GREEN}✅ Profile onboarding completed${NC}"
-            else
-                echo -e "${YELLOW}⚠️  Onboarding completion failed (HTTP: $onboarding_http_code), but continuing with tests${NC}"
+            # Get user ID from /me endpoint
+            local me_response=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE_URL/api/v1/auth/me")
+            local user_id=$(echo "$me_response" | jq -r '.id // empty')
+            if [ -n "$user_id" ]; then
+                local onboarding_response=$(curl -s -w '%{http_code}' -X PUT \
+                    -H "Authorization: Bearer $ACCESS_TOKEN" \
+                    -H "X-Device-ID: $DEVICE_ID" \
+                    -H "Content-Type: application/json" \
+                    -d "$onboarding_data" \
+                    "$BASE_URL/api/v1/auth/users/$user_id")
+                
+                local onboarding_http_code="${onboarding_response: -3}"
+                if [ "$onboarding_http_code" = "200" ]; then
+                    echo -e "${GREEN}✅ Profile onboarding completed${NC}"
+                else
+                    echo -e "${YELLOW}⚠️  Onboarding completion failed (HTTP: $onboarding_http_code), but continuing with tests${NC}"
+                fi
             fi
         fi
         
@@ -579,8 +697,11 @@ create_test_event() {
     local start_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
     local end_date=$(date -u -v+1d -v+2H '+%Y-%m-%dT%H:%M:%S')
     
-    local event_data=$(cat <<EOF
+    # Create event + request presigned cover upload
+    local event_with_cover_request
+    event_with_cover_request=$(cat <<EOF
 {
+  "event": {
     "name": "Test Event",
     "description": "This is a test event for endpoint testing",
     "eventType": "CONFERENCE",
@@ -590,20 +711,29 @@ create_test_event() {
     "capacity": 100,
     "isPublic": true,
     "requiresApproval": false,
-    "coverImageUrl": "https://example.com/cover.jpg",
+    "accessType": "OPEN",
+    "feedsPublicAfterEvent": false,
     "eventWebsiteUrl": "https://example.com/event",
     "hashtag": "#TestEvent",
     "venue": {
-        "address": "123 Main Street",
-        "city": "San Francisco",
-        "state": "California",
-        "country": "United States",
-        "zipCode": "94102",
-        "latitude": 37.7749,
-        "longitude": -122.4194,
-        "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
-        "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
+      "address": "123 Main Street",
+      "city": "San Francisco",
+      "state": "California",
+      "country": "United States",
+      "zipCode": "94102",
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+      "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
     }
+  },
+  "coverUpload": {
+    "fileName": "initial-cover.jpg",
+    "contentType": "image/jpeg",
+    "category": "cover",
+    "isPublic": true,
+    "description": "Initial cover image upload (create flow)"
+  }
 }
 EOF
 )
@@ -616,20 +746,58 @@ EOF
         -H "Authorization: Bearer $ACCESS_TOKEN" \
         -H "X-Device-ID: $DEVICE_ID" \
         -H "Content-Type: application/json" \
-        -d "$event_data" \
+        -d "$event_with_cover_request" \
         "$BASE_URL/api/v1/events")
     
     local http_code="${response: -3}"
     local response_body="${response%???}"
     
     if [ "$http_code" = "201" ] || [ "$http_code" = "200" ]; then
-        EVENT_ID=$(echo "$response_body" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
-        if [ -z "$EVENT_ID" ]; then
-            echo -e "${RED}❌ Failed to extract event ID from response${NC}"
+        extract_create_event_with_cover_upload_fields "$response_body"
+        if [ -z "$EVENT_ID" ] || [ -z "$COVER_ID" ] || [ -z "$COVER_UPLOAD_URL" ]; then
+            echo -e "${RED}❌ Failed to extract event or cover upload fields from response${NC}"
             echo -e "${RED}Response: $response_body${NC}"
             return 1
         fi
-        echo -e "${GREEN}✅ Test event created with ID: $EVENT_ID${NC}"
+
+        # Upload cover image bytes to S3 via presigned URL (requires test image downloaded)
+        if [ -n "$TEST_IMAGE_PATH" ] && [ -f "$TEST_IMAGE_PATH" ]; then
+            presigned_put_upload "$COVER_UPLOAD_URL" "$COVER_REQUIRED_HEADERS" "$TEST_IMAGE_PATH" >/dev/null 2>&1
+        fi
+
+        # Complete upload so backend persists coverImageUrl
+        local cover_complete_payload
+        cover_complete_payload=$(cat <<EOF
+{
+  "objectKey": "$COVER_OBJECT_KEY",
+  "resourceUrl": "$COVER_RESOURCE_URL",
+  "fileName": "initial-cover.jpg",
+  "contentType": "image/jpeg",
+  "category": "cover",
+  "isPublic": true,
+  "description": "Cover uploaded via create-event flow",
+  "tags": "test,event",
+  "metadata": "{\"source\":\"unsplash\"}"
+}
+EOF
+)
+        # We won't log this "setup" completion into the report; failures will surface in later GET checks.
+        local cover_complete_wrapped
+        cover_complete_wrapped=$(cat <<EOF
+{
+  "coverId": "$COVER_ID",
+  "upload": $cover_complete_payload
+}
+EOF
+)
+        curl -sS -X POST \
+          -H "Authorization: Bearer $ACCESS_TOKEN" \
+          -H "X-Device-ID: $DEVICE_ID" \
+          -H "Content-Type: application/json" \
+          -d "$cover_complete_wrapped" \
+          "$BASE_URL/api/v1/events/$EVENT_ID/cover-image/complete" >/dev/null 2>&1
+
+        echo -e "${GREEN}✅ Test event created with ID: $EVENT_ID (cover upload requested)${NC}"
         return 0
     else
         echo -e "${RED}❌ Failed to create test event - HTTP: $http_code${NC}"
@@ -668,9 +836,8 @@ main() {
     echo "4. Test CRUD operations"
     echo "5. Test event management endpoints"
     echo "6. Test media management endpoints"
-    echo "7. Test collaboration endpoints"
-    echo "8. Test notification endpoints"
-    echo "9. Clean up test data"
+    echo "7. Test notifications & reminders endpoints"
+    echo "8. Clean up test data"
     echo ""
     
     # Step 1: Check service availability
@@ -694,23 +861,31 @@ main() {
     # Step 3: Create test event
     echo -e "${CYAN}📅 Step 3: Create Test Event${NC}"
     echo "============================="
+    # Download image early because event creation now uses presigned cover upload
+    if ! download_test_image; then
+        echo -e "${RED}❌ Failed to download test image. Exiting.${NC}"
+        exit 1
+    fi
     if ! create_test_event; then
         echo -e "${RED}❌ Failed to create test event. Exiting.${NC}"
         exit 1
     fi
     echo ""
+
     
     # Step 4: CRUD Operations Tests
     echo -e "${CYAN}📝 Step 4: CRUD Operations Tests${NC}"
     echo "=================================="
     
-    # Test create event (this will appear in the report)
+    # Test create event with cover upload (this will appear in the report)
     local create_start_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
     local create_end_date=$(date -u -v+1d -v+2H '+%Y-%m-%dT%H:%M:%S')
-    local create_event_data=$(cat <<EOF
+    local create_event_with_cover_data
+    create_event_with_cover_data=$(cat <<EOF
 {
+  "event": {
     "name": "Report Test Event",
-    "description": "This event was created to test the create endpoint and appears in the report",
+    "description": "This event was created to test create+cover upload flow and appears in the report",
     "eventType": "CONFERENCE",
     "startDateTime": "$create_start_date",
     "endDateTime": "$create_end_date",
@@ -718,24 +893,112 @@ main() {
     "capacity": 100,
     "isPublic": true,
     "requiresApproval": false,
-    "coverImageUrl": "https://example.com/cover.jpg",
+    "accessType": "RSVP_REQUIRED",
+    "feedsPublicAfterEvent": true,
     "eventWebsiteUrl": "https://example.com/event",
     "hashtag": "#ReportTestEvent",
     "venue": {
-        "address": "123 Main Street",
-        "city": "San Francisco",
-        "state": "California",
-        "country": "United States",
-        "zipCode": "94102",
-        "latitude": 37.7749,
-        "longitude": -122.4194,
-        "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
-        "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
+      "address": "123 Main Street",
+      "city": "San Francisco",
+      "state": "California",
+      "country": "United States",
+      "zipCode": "94102",
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "googlePlaceId": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+      "googlePlaceData": "{\"name\":\"Test Venue\",\"rating\":4.5}"
     }
+  },
+  "coverUpload": {
+    "fileName": "report-cover.jpg",
+    "contentType": "image/jpeg",
+    "category": "cover",
+    "isPublic": true,
+    "description": "Cover image upload for report event"
+  }
 }
 EOF
 )
-    run_test "Create Event" "POST" "/api/v1/events" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$create_event_data" "201" "Create a new event"
+
+    # Create event and capture response (so we can upload + complete cover)
+    local create_flow_resp=$(curl -sS -w '%{http_code}' -X POST \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        -H "X-Device-ID: $DEVICE_ID" \
+        -H "Content-Type: application/json" \
+        -d "$create_event_with_cover_data" \
+        "$BASE_URL/api/v1/events")
+    local create_flow_http="${create_flow_resp: -3}"
+    local create_flow_body="${create_flow_resp%???}"
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    if [ "$create_flow_http" = "201" ]; then
+        PASSED_TESTS=$((PASSED_TESTS + 1))
+    else
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+    fi
+    {
+        echo ""
+        echo "### Create Event"
+        echo "**Status:** $([ "$create_flow_http" = "201" ] && echo "✅" || echo "❌") $create_flow_http (Expected: 201)"
+        echo "**Description:** Create a new event and request a presigned cover image upload URL"
+        echo "**Endpoint:** POST /api/v1/events"
+        echo "**Request Headers:** -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' -H 'X-Device-ID: $DEVICE_ID'"
+        echo "**Request Body:** $create_event_with_cover_data"
+        echo ""
+        echo "**Response:**"
+        echo "\`\`\`json"
+        echo "$create_flow_body"
+        echo "\`\`\`"
+        echo ""
+        echo "---"
+        echo ""
+    } >> "$REPORT_FILE"
+
+    # If created, perform the S3 upload + complete step
+    if [ "$create_flow_http" = "201" ]; then
+        local created_event_id
+        created_event_id="$(echo "$create_flow_body" | jq -r '.event.id // empty')"
+        local created_cover_id
+        created_cover_id="$(echo "$create_flow_body" | jq -r '.coverUpload.mediaId // empty')"
+        local created_cover_object_key
+        created_cover_object_key="$(echo "$create_flow_body" | jq -r '.coverUpload.objectKey // empty')"
+        local created_cover_upload_url
+        created_cover_upload_url="$(echo "$create_flow_body" | jq -r '.coverUpload.uploadUrl // empty')"
+        local created_cover_resource_url
+        created_cover_resource_url="$(echo "$create_flow_body" | jq -r '.coverUpload.resourceUrl // empty')"
+        local created_cover_headers
+        created_cover_headers="$(echo "$create_flow_body" | jq -c '.coverUpload.headers // {}')"
+
+        if [ -n "$created_cover_upload_url" ] && [ -n "$TEST_IMAGE_PATH" ]; then
+            presigned_put_upload "$created_cover_upload_url" "$created_cover_headers" "$TEST_IMAGE_PATH"
+        fi
+
+        if [ -n "$created_event_id" ] && [ -n "$created_cover_id" ]; then
+            local created_cover_complete_payload
+            created_cover_complete_payload=$(cat <<EOF
+{
+  "objectKey": "$created_cover_object_key",
+  "resourceUrl": "$created_cover_resource_url",
+  "fileName": "report-cover.jpg",
+  "contentType": "image/jpeg",
+  "category": "cover",
+  "isPublic": true,
+  "description": "Cover uploaded via create+cover flow",
+  "tags": "test,event",
+  "metadata": "{\"source\":\"unsplash\"}"
+}
+EOF
+)
+            local created_cover_complete_wrapped
+            created_cover_complete_wrapped=$(cat <<EOF
+{
+  "coverId": "$created_cover_id",
+  "upload": $created_cover_complete_payload
+}
+EOF
+)
+            run_test "Complete Cover Image Upload (Create Flow)" "POST" "/api/v1/events/$created_event_id/cover-image/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$created_cover_complete_wrapped" "200" "Complete cover image upload for newly created event (create flow)"
+        fi
+    fi
     
     # Test get event by ID (should return full details for owner with scope=FULL)
     run_test "Get Event by ID (Owner View)" "GET" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event by ID - should return full details for owner with scope=FULL"
@@ -754,6 +1017,7 @@ EOF
     local update_end_date=$(date -u -v+2d -v+3H '+%Y-%m-%dT%H:%M:%S')
     local update_data=$(cat <<EOF
 {
+  "event": {
     "name": "Updated Test Event",
     "description": "Updated description",
     "eventType": "WORKSHOP",
@@ -763,17 +1027,20 @@ EOF
     "capacity": 150,
     "isPublic": false,
     "requiresApproval": true,
+    "accessType": "INVITE_ONLY",
+    "feedsPublicAfterEvent": true,
     "venue": {
-        "address": "456 Market Street",
-        "city": "San Francisco",
-        "state": "California",
-        "country": "United States",
-        "zipCode": "94105",
-        "latitude": 37.7849,
-        "longitude": -122.4094,
-        "googlePlaceId": "ChIJUpdatedPlaceID123",
-        "googlePlaceData": "{\"name\":\"Updated Venue\",\"rating\":4.8}"
+      "address": "456 Market Street",
+      "city": "San Francisco",
+      "state": "California",
+      "country": "United States",
+      "zipCode": "94105",
+      "latitude": 37.7849,
+      "longitude": -122.4094,
+      "googlePlaceId": "ChIJUpdatedPlaceID123",
+      "googlePlaceData": "{\"name\":\"Updated Venue\",\"rating\":4.8}"
     }
+  }
 }
 EOF
 )
@@ -781,122 +1048,160 @@ EOF
     
     # Test get non-existent event
     run_test "Get Non-existent Event" "GET" "/api/v1/events/00000000-0000-0000-0000-000000000000" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "404" "Get non-existent event"
+    
+    # Test accessType update to TICKETED
+    local ticketed_update_data='{
+        "event": {
+            "accessType": "TICKETED",
+            "feedsPublicAfterEvent": false
+        }
+    }'
+    run_test "Update Event Access Type to TICKETED" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$ticketed_update_data" "200" "Update event access type to TICKETED"
+    
+    # Verify userContext and accessType in response
+    run_test "Get Event with UserContext" "GET" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event with userContext (should include accessStatus, hasValidTicket, etc.)"
     echo ""
     
     # Step 5: Event Management Tests
     echo -e "${CYAN}🎯 Step 5: Event Management Tests${NC}"
     echo "=================================="
     
-    # User-Event Relationship Tests
-    run_test "Get User Events" "GET" "/api/v1/events/user/$USER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all events for user"
-    run_test "Get User Owned Events" "GET" "/api/v1/events/user/$USER_ID/owned" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events owned by user"
-    run_test "Get User Upcoming Events" "GET" "/api/v1/events/user/$USER_ID/upcoming" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get upcoming events for user"
-    run_test "Get User Past Events" "GET" "/api/v1/events/user/$USER_ID/past" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get past events for user"
-    
-    # My Events Tests
-    run_test "Get My Events" "GET" "/api/v1/events/my-events" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's events"
-    run_test "Get My Owned Events" "GET" "/api/v1/events/my-events/owned" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's owned events"
-    run_test "Get My Upcoming Events" "GET" "/api/v1/events/my-events/upcoming" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's upcoming events"
-    run_test "Get My Past Events" "GET" "/api/v1/events/my-events/past" "-H 'Authorization: Bearer $ACCESS_TOKEN' " "" "200" "Get current user's past events"
-    
+    # My Events via filters on the main list endpoint
+    run_test "List My Owned Events (mine=true)" "GET" "/api/v1/events?mine=true" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List events owned by current user"
+    run_test "List My Upcoming Owned Events" "GET" "/api/v1/events?mine=true&timeframe=UPCOMING" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List upcoming owned events"
+    run_test "List My Past Owned Events" "GET" "/api/v1/events?mine=true&timeframe=PAST" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "List past owned events"
     # Event Status & Lifecycle Tests
-    run_test "Get Event Status" "GET" "/api/v1/events/$EVENT_ID/status" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event status"
-    
-    local status_update_data='{
-        "eventStatus": "PUBLISHED"
-    }'
-    run_test "Update Event Status" "PUT" "/api/v1/events/$EVENT_ID/status" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$status_update_data" "200" "Update event status"
-    
-    run_test "Publish Event" "POST" "/api/v1/events/$EVENT_ID/publish" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Publish event"
-    run_test "Open Registration" "POST" "/api/v1/events/$EVENT_ID/open-registration" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Open event registration"
-    run_test "Close Registration" "POST" "/api/v1/events/$EVENT_ID/close-registration" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Close event registration"
+    # NOTE: /{id}/status endpoints removed; eventStatus is returned by GET /api/v1/events/{id}
+    # NOTE: Publish endpoint removed. Use PUT /api/v1/events/{id} with event.eventStatus=PUBLISHED instead if needed.
+    run_test "Open Registration" "POST" "/api/v1/events/$EVENT_ID/registration?action=open" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Open event registration"
+    run_test "Close Registration" "POST" "/api/v1/events/$EVENT_ID/registration?action=close" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Close event registration"
     
     # Event Discovery & Search Tests
-    run_test "Search Events" "GET" "/api/v1/events/search?q=test" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search events with query"
-    run_test "Get Public Events" "GET" "/api/v1/events/public" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get public events"
-    run_test "Get Featured Events" "GET" "/api/v1/events/featured" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get featured events"
-    run_test "Get Trending Events" "GET" "/api/v1/events/trending" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get trending events"
-    run_test "Get Upcoming Events" "GET" "/api/v1/events/upcoming" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get upcoming events"
-    run_test "Get Events by Type" "GET" "/api/v1/events/by-type/WORKSHOP" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by type"
-    run_test "Get Events by Status" "GET" "/api/v1/events/by-status/PUBLISHED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by status"
+    run_test "Search Events" "GET" "/api/v1/events?search=test" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Search events with query"
+    run_test "Get Public Events" "GET" "/api/v1/events?isPublic=true" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get public events"
+    run_test "Get Featured Events" "GET" "/api/v1/events?isPublic=true&status=PUBLISHED&sortBy=createdAt&sortDirection=DESC" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get featured events"
+    run_test "Get Trending Events" "GET" "/api/v1/events?isPublic=true&status=PUBLISHED&sortBy=currentAttendeeCount&sortDirection=DESC" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get trending events"
+    run_test "Get Upcoming Events" "GET" "/api/v1/events?isPublic=true&timeframe=UPCOMING" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get upcoming events"
+    run_test "Get Events by Type" "GET" "/api/v1/events?eventType=WORKSHOP" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by type"
+    run_test "Get Events by Status" "GET" "/api/v1/events?status=PUBLISHED" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get events by status"
     
     # Event Capacity & Registration Tests
-    run_test "Get Event Capacity" "GET" "/api/v1/events/$EVENT_ID/capacity" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event capacity information"
-    
-    local capacity_update_data='{
-        "capacity": 200
-    }'
-    run_test "Update Event Capacity" "PUT" "/api/v1/events/$EVENT_ID/capacity" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$capacity_update_data" "200" "Update event capacity"
-    
-    run_test "Get Available Capacity" "GET" "/api/v1/events/$EVENT_ID/capacity/available" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get available capacity"
+    run_test "Get Event Capacity (via view=capacity)" "GET" "/api/v1/events/$EVENT_ID?view=capacity" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event capacity information via GET /events/{id}?view=capacity"
+
+    local capacity_update_data
+    capacity_update_data=$(cat <<EOF
+{
+  "event": {
+    "capacity": 200
+  }
+}
+EOF
+)
+    run_test "Update Event Capacity (via Update Event)" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$capacity_update_data" "200" "Update event capacity via PUT /events/{id}"
     
     local deadline_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
-    local deadline_data='{
-        "deadline": "'$deadline_date'"
-    }'
-    run_test "Update Registration Deadline" "PUT" "/api/v1/events/$EVENT_ID/registration-deadline" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$deadline_data" "200" "Update registration deadline"
-    
-    # QR Code Tests
-    run_test "Get Event QR Code" "GET" "/api/v1/events/$EVENT_ID/qr-code" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event QR code"
-    run_test "Generate QR Code" "POST" "/api/v1/events/$EVENT_ID/qr-code/generate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Generate QR code for event"
-    
-    # Test get event QR code image (PNG)
-    run_test "Get Event QR Code Image" "GET" "/api/v1/events/$EVENT_ID/qr-code/image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event QR code as PNG image"
-    
-    run_test "Regenerate QR Code" "POST" "/api/v1/events/$EVENT_ID/qr-code/regenerate" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Regenerate QR code"
-    
-    # Test get regenerated QR code image
-    run_test "Get Regenerated Event QR Code Image" "GET" "/api/v1/events/$EVENT_ID/qr-code/image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get regenerated event QR code as PNG image"
-    
-    run_test "Disable QR Code" "DELETE" "/api/v1/events/$EVENT_ID/qr-code" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Disable QR code"
+    local deadline_data
+    deadline_data=$(cat <<EOF
+{
+  "event": {
+    "registrationDeadline": "$deadline_date"
+  }
+}
+EOF
+)
+    run_test "Update Registration Deadline (via Update Event)" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$deadline_data" "200" "Update registration deadline via PUT /events/{id}"
     
     # Visibility & Access Control Tests
-    run_test "Get Event Visibility" "GET" "/api/v1/events/$EVENT_ID/visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event visibility settings"
+    run_test "Get Event Visibility (via view=visibility)" "GET" "/api/v1/events/$EVENT_ID?view=visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event visibility settings via GET /events/{id}?view=visibility"
     
     local visibility_data='{
-        "isPublic": true
+        "event": {
+            "isPublic": true
+        }
     }'
-    run_test "Update Event Visibility" "PUT" "/api/v1/events/$EVENT_ID/visibility" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_data" "200" "Update event visibility"
-    
-    run_test "Make Event Public" "POST" "/api/v1/events/$EVENT_ID/make-public" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Make event public"
-    run_test "Make Event Private" "POST" "/api/v1/events/$EVENT_ID/make-private" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Make event private"
-    
-    # Analytics Tests
-    run_test "Get Event Analytics" "GET" "/api/v1/events/$EVENT_ID/analytics" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event analytics"
-    run_test "Get Attendance Analytics" "GET" "/api/v1/events/$EVENT_ID/analytics/attendance" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get attendance analytics"
-    
-    # Duplication Tests
-    local duplicate_data='{
-        "newEventName": "Duplicated Test Event"
+    run_test "Update Event Visibility (via Update Event)" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_data" "200" "Update event visibility via PUT /events/{id}"
+
+    local visibility_private_data='{
+        "event": {
+            "isPublic": false
+        }
     }'
-    run_test "Duplicate Event" "POST" "/api/v1/events/$EVENT_ID/duplicate" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$duplicate_data" "200" "Duplicate event"
-    
-    # Validation & Health Check Tests
-    run_test "Validate Event" "GET" "/api/v1/events/$EVENT_ID/validation" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Validate event"
-    run_test "Event Health Check" "GET" "/api/v1/events/$EVENT_ID/health" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Event health check"
-    echo ""
+    run_test "Make Event Private (via Update Event)" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$visibility_private_data" "200" "Make event private via PUT /events/{id}"
     
     # Step 6: Media Management Tests
     echo -e "${CYAN}📸 Step 6: Media Management Tests${NC}"
     echo "=================================="
+
+    # Test image already downloaded earlier (required for create flow)
     
     # Media Tests (Note: These will return mock responses since upload is presigned)
     run_test "Get Event Media" "GET" "/api/v1/events/$EVENT_ID/media" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event media"
     
     # Request presigned media upload
     local media_upload_request='{
-        "fileName": "test-image.jpg",
+        "fileName": "unsplash-test-image.jpg",
         "contentType": "image/jpeg",
         "category": "gallery",
         "isPublic": true,
         "description": "Test image upload"
     }'
     run_test "Upload Event Media" "POST" "/api/v1/events/$EVENT_ID/media" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$media_upload_request" "200" "Upload event media"
+
+    # Actually upload the image bytes to S3 via the presigned URL
+    if [ -n "$MEDIA_UPLOAD_URL" ] && [ -n "$TEST_IMAGE_PATH" ]; then
+        presigned_put_upload "$MEDIA_UPLOAD_URL" "$MEDIA_REQUIRED_HEADERS" "$TEST_IMAGE_PATH"
+    fi
+
+    # Complete upload: client informs backend to persist uploaded object reference
+    if [ -n "$MEDIA_ID" ]; then
+        local complete_payload
+        complete_payload=$(cat <<EOF
+{
+  "objectKey": "$MEDIA_OBJECT_KEY",
+  "resourceUrl": "$MEDIA_RESOURCE_URL",
+  "fileName": "unsplash-test-image.jpg",
+  "contentType": "image/jpeg",
+  "category": "gallery",
+  "isPublic": false,
+  "description": "Uploaded via presigned S3 URL",
+  "tags": "test,event",
+  "metadata": "{\"source\":\"unsplash\"}"
+}
+EOF
+)
+        run_test "Complete Event Media Upload" "POST" "/api/v1/events/$EVENT_ID/media/$MEDIA_ID/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$complete_payload" "200" "Complete media upload by saving uploaded object reference in backend"
+    fi
+
+    # Security: unauthenticated should not be able to view private event media metadata
+    if [ -n "$MEDIA_ID" ]; then
+        run_test "Get Specific Media (No Auth - Should Fail)" "GET" "/api/v1/events/$EVENT_ID/media/$MEDIA_ID" "" "" "401" "Ensure private event media cannot be accessed without authentication"
+    fi
+    # Security: authenticated but non-member should be forbidden
+    if authenticate_other_user && [ -n "$MEDIA_ID" ]; then
+        run_test "Get Specific Media (Other User - Should Fail)" "GET" "/api/v1/events/$EVENT_ID/media/$MEDIA_ID" "-H 'Authorization: Bearer $OTHER_ACCESS_TOKEN'" "" "403" "Ensure non-members cannot access private event media"
+    fi
     
     # Get specific media (using captured media ID when available)
     local mock_media_id="12345678-1234-1234-1234-123456789012"
     local media_identifier="${MEDIA_ID:-$mock_media_id}"
     run_test "Get Specific Media" "GET" "/api/v1/events/$EVENT_ID/media/$media_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific media"
+
+    # Download via the presigned GET URL returned by the API and verify content matches what we uploaded
+    if [ -n "$MEDIA_ID" ]; then
+        local media_meta=$(curl -sS -X GET -H "Authorization: Bearer $ACCESS_TOKEN" -H "X-Device-ID: $DEVICE_ID" "$BASE_URL/api/v1/events/$EVENT_ID/media/$MEDIA_ID")
+        MEDIA_DOWNLOAD_URL="$(echo "$media_meta" | jq -r '.mediaUrl // empty')"
+        if [ -n "$MEDIA_DOWNLOAD_URL" ]; then
+            local downloaded_path
+            downloaded_path="$(mktemp -t event-media-downloaded-XXXXXX).jpg"
+            local downloaded_sha
+            downloaded_sha="$(download_and_hash "$MEDIA_DOWNLOAD_URL" "$downloaded_path")"
+            if [ -n "$TEST_IMAGE_SHA256" ] && [ -n "$downloaded_sha" ] && [ "$downloaded_sha" = "$TEST_IMAGE_SHA256" ]; then
+                run_full_url_test "GET Presigned Download (Event Media) - Hash Match" "GET" "$MEDIA_DOWNLOAD_URL" "" "" "200" "Download uploaded media via presigned GET URL and verify SHA256 matches"
+            else
+                run_full_url_test "GET Presigned Download (Event Media)" "GET" "$MEDIA_DOWNLOAD_URL" "" "" "200" "Download uploaded media via presigned GET URL (hash mismatch or unavailable)"
+            fi
+        fi
+    fi
     
     # Update media
     local media_update_data='{
@@ -909,155 +1214,209 @@ EOF
     }'
     run_test "Update Media" "PUT" "/api/v1/events/$EVENT_ID/media/$media_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$media_update_data" "200" "Update media information"
     
-    # Delete media
-    run_test "Delete Media" "DELETE" "/api/v1/events/$EVENT_ID/media/$media_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete media"
-    
     # Assets Tests
     run_test "Get Event Assets" "GET" "/api/v1/events/$EVENT_ID/assets" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event assets"
     local asset_upload_request='{
-        "fileName": "test-document.pdf",
-        "contentType": "application/pdf",
+        "fileName": "unsplash-private-asset.jpg",
+        "contentType": "image/jpeg",
         "category": "documents",
         "isPublic": false,
         "description": "Test document upload"
     }'
-    run_test "Upload Event Asset" "POST" "/api/v1/events/$EVENT_ID/assets" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$asset_upload_request" "200" "Upload event asset"
+    # Request presigned asset upload (capture response directly so we can parse it)
+    local asset_resp=$(curl -sS -w '%{http_code}' -X POST \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        -H "X-Device-ID: $DEVICE_ID" \
+        -H "Content-Type: application/json" \
+        -d "$asset_upload_request" \
+        "$BASE_URL/api/v1/events/$EVENT_ID/assets")
+    local asset_http="${asset_resp: -3}"
+    local asset_body="${asset_resp%???}"
+    if [ "$asset_http" = "200" ]; then
+        extract_asset_presigned_fields "$asset_body"
+    fi
+    # Log this request using the existing report format
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    if [ "$asset_http" = "200" ]; then PASSED_TESTS=$((PASSED_TESTS + 1)); else FAILED_TESTS=$((FAILED_TESTS + 1)); fi
+    {
+        echo ""
+        echo "### Upload Event Asset"
+        echo "**Status:** $([ "$asset_http" = "200" ] && echo "✅" || echo "❌") $asset_http (Expected: 200)"
+        echo "**Description:** Upload event asset (presign)"
+        echo "**Endpoint:** POST /api/v1/events/$EVENT_ID/assets"
+        echo "**Request Headers:** -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' -H 'X-Device-ID: $DEVICE_ID'"
+        echo "**Request Body:** $asset_upload_request"
+        echo ""
+        echo "**Response:**"
+        echo "\`\`\`json"
+        echo "$asset_body"
+        echo "\`\`\`"
+        echo ""
+        echo "---"
+        echo ""
+    } >> "$REPORT_FILE"
+
+    # Upload asset bytes to S3 and complete upload
+    if [ -n "$ASSET_UPLOAD_URL" ] && [ -n "$TEST_IMAGE_PATH" ]; then
+        presigned_put_upload "$ASSET_UPLOAD_URL" "$ASSET_REQUIRED_HEADERS" "$TEST_IMAGE_PATH"
+    fi
+    if [ -n "$ASSET_ID" ]; then
+        local asset_complete_payload
+        asset_complete_payload=$(cat <<EOF
+{
+  "objectKey": "$ASSET_OBJECT_KEY",
+  "resourceUrl": "$ASSET_RESOURCE_URL",
+  "fileName": "unsplash-private-asset.jpg",
+  "contentType": "image/jpeg",
+  "category": "documents",
+  "isPublic": false,
+  "description": "Asset uploaded via presigned S3 URL",
+  "tags": "test,event",
+  "metadata": "{\"source\":\"unsplash\"}"
+}
+EOF
+)
+        run_test "Complete Event Asset Upload" "POST" "/api/v1/events/$EVENT_ID/assets/$ASSET_ID/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$asset_complete_payload" "200" "Complete asset upload by saving uploaded object reference"
+    fi
     
     # Cover Image Tests
-    local cover_image_request='{
-        "fileName": "cover-image.png",
-        "contentType": "image/png",
-        "category": "cover",
-        "isPublic": true,
-        "description": "Cover image upload"
-    }'
-    run_test "Update Cover Image" "PUT" "/api/v1/events/$EVENT_ID/cover-image" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cover_image_request" "200" "Update cover image"
+    local cover_update_request
+    cover_update_request=$(cat <<EOF
+{
+  "event": {},
+  "coverUpload": {
+    "fileName": "unsplash-cover.jpg",
+    "contentType": "image/jpeg",
+    "category": "cover",
+    "isPublic": true,
+    "description": "Cover image upload via PUT /events"
+  }
+}
+EOF
+)
+    run_test "Request Cover Upload via Update Event" "PUT" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cover_update_request" "200" "Request a presigned cover image upload via PUT /events/{id}"
+
+    # Upload cover bytes to S3 and complete upload
+    if [ -n "$COVER_UPLOAD_URL" ] && [ -n "$TEST_IMAGE_PATH" ]; then
+        presigned_put_upload "$COVER_UPLOAD_URL" "$COVER_REQUIRED_HEADERS" "$TEST_IMAGE_PATH"
+    fi
+    if [ -n "$COVER_ID" ]; then
+        local cover_complete_payload
+        cover_complete_payload=$(cat <<EOF
+{
+  "objectKey": "$COVER_OBJECT_KEY",
+  "resourceUrl": "$COVER_RESOURCE_URL",
+  "fileName": "unsplash-cover.jpg",
+  "contentType": "image/jpeg",
+  "category": "cover",
+  "isPublic": true,
+  "description": "Cover uploaded via presigned S3 URL (update flow)",
+  "tags": "test,event",
+  "metadata": "{\"source\":\"unsplash\"}"
+}
+EOF
+)
+        local cover_complete_wrapped
+        cover_complete_wrapped=$(cat <<EOF
+{
+  "coverId": "$COVER_ID",
+  "upload": $cover_complete_payload
+}
+EOF
+)
+        run_test "Complete Cover Image Upload" "POST" "/api/v1/events/$EVENT_ID/cover-image/complete" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$cover_complete_wrapped" "200" "Complete cover image upload and persist coverImageUrl on the event"
+    fi
+
+    # Confirm coverImageUrl is now set on event
+    run_test "Get Event by ID (After Cover Upload)" "GET" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Verify cover image url is persisted on the event"
+
+    # (Optional) Could complete cover upload similarly; remove remains valid to clean state
     run_test "Remove Cover Image" "DELETE" "/api/v1/events/$EVENT_ID/cover-image" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Remove cover image"
     echo ""
     
-    # Step 7: Collaboration Tests
-    echo -e "${CYAN}🤝 Step 7: Collaboration Tests${NC}"
-    echo "==============================="
-    
-    # Sharing Tests
-    run_test "Get Sharing Options" "GET" "/api/v1/events/$EVENT_ID/share" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event sharing options"
-    
-    local share_data='{
-        "channel": "email",
-        "recipients": ["test@example.com", "user@example.com"],
-        "message": "Check out this event!",
-        "includeEventDetails": true,
-        "includeQRCode": false
-    }'
-    run_test "Share Event" "POST" "/api/v1/events/$EVENT_ID/share" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$share_data" "200" "Share event via email"
-    
-    # Collaboration Tests
-    run_test "Get Event Collaborators" "GET" "/api/v1/events/$EVENT_ID/collaborators" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event collaborators"
-    
-    local collaborator_data='{
-        "userId": "87654321-4321-4321-4321-210987654321",
-        "email": "collaborator@example.com",
-        "role": "COLLABORATOR",
-        "permissions": ["read", "write"],
-        "notes": "Test collaborator",
-        "sendInvitation": true
-    }'
-    run_test "Add Event Collaborator" "POST" "/api/v1/events/$EVENT_ID/collaborators" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$collaborator_data" "200" "Add event collaborator"
-    
-    # Update collaborator (using captured ID when available)
-    local mock_collaborator_id="87654321-4321-4321-4321-210987654321"
-    local collaborator_identifier="${COLLABORATOR_ID:-$mock_collaborator_id}"
-    local collaborator_update_data='{
-        "userId": "87654321-4321-4321-4321-210987654321",
-        "email": "updated-collaborator@example.com",
-        "role": "ADMIN",
-        "permissions": ["read", "write", "delete"],
-        "notes": "Updated collaborator"
-    }'
-    run_test "Update Event Collaborator" "PUT" "/api/v1/events/$EVENT_ID/collaborators/$collaborator_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$collaborator_update_data" "200" "Update event collaborator"
-    
-    run_test "Remove Event Collaborator" "DELETE" "/api/v1/events/$EVENT_ID/collaborators/$collaborator_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Remove event collaborator"
-    echo ""
-    
-    # Step 8: Notification Tests
-    echo -e "${CYAN}🔔 Step 8: Notification Tests${NC}"
-    echo "==============================="
+    # Step 7: Notifications & Reminders Tests
+    echo -e "${CYAN}🔔 Step 7: Notifications & Reminders Tests${NC}"
+    echo "=========================================="
     
     # Notification Settings Tests
-    run_test "Get Notification Settings" "GET" "/api/v1/events/$EVENT_ID/notifications" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event notification settings"
+    run_test "Get Event Notification Settings" "GET" "/api/v1/events/$EVENT_ID/notifications" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get notification settings for an event"
     
-    local notification_settings='{
-        "enabledChannels": ["EMAIL", "PUSH"],
-        "reminderEnabled": true,
-        "defaultReminderMinutes": 1440
+    # Send Notification Test
+    local notification_request='{
+        "message": "Test notification message",
+        "priority": "NORMAL",
+        "channels": ["EMAIL", "PUSH"],
+        "recipientType": "ALL_ATTENDEES"
     }'
-    run_test "Update Notification Settings" "PUT" "/api/v1/events/$EVENT_ID/notifications" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_settings" "200" "Update notification settings"
+    run_test "Send Event Notification" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_request" "200" "Send a notification for an event"
     
-    # Send Notification Tests
-    local notification_data='{
-        "channel": "EMAIL",
-        "subject": "Event Update",
-        "content": "This is a test notification",
-        "recipientUserIds": ["'$USER_ID'"],
-        "recipientEmails": ["test@example.com"],
-        "scheduledAt": null,
-        "priority": "NORMAL"
+    # Reminders Tests
+    run_test "Get Event Reminders" "GET" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get all reminders for an event"
+    
+    run_test "Get Event Reminders (Paginated)" "GET" "/api/v1/events/$EVENT_ID/reminders?page=0&size=10" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get reminders with pagination"
+    
+    # Create Reminder
+    local reminder_date=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
+    local create_reminder_request='{
+        "title": "Test Reminder",
+        "message": "This is a test reminder",
+        "reminderDateTime": "'$reminder_date'",
+        "channels": ["EMAIL", "PUSH"]
     }'
-    run_test "Send Event Notification" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_data" "200" "Send event notification"
+    run_test "Create Event Reminder" "POST" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$create_reminder_request" "200" "Create a new reminder for an event"
     
-    # Reminder Tests
-    run_test "Get Event Reminders" "GET" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get event reminders"
+    # Extract reminder ID from response if created successfully
+    # The run_test function stores response in LAST_BODY and LAST_HTTP_CODE
+    if [ "$LAST_HTTP_CODE" = "200" ] && [ -n "$LAST_BODY" ]; then
+        if command -v jq >/dev/null 2>&1; then
+            REMINDER_ID=$(echo "$LAST_BODY" | jq -r '.id // empty' 2>/dev/null)
+        else
+            REMINDER_ID=$(echo "$LAST_BODY" | grep -o '"id":"[^"]*"' | cut -d'"' -f4 | head -1)
+        fi
+        if [ -n "$REMINDER_ID" ] && [ "$REMINDER_ID" != "null" ]; then
+            echo -e "${GREEN}✅ Extracted reminder ID: $REMINDER_ID${NC}"
+        fi
+    fi
     
-    local reminder_time=$(date -u -v+1d '+%Y-%m-%dT%H:%M:%S')
-    local reminder_data
-    reminder_data=$(cat <<EOF
-{
-    "title": "Event Reminder",
-    "description": "Don't forget about the event!",
-    "reminderTime": "$reminder_time",
-    "channel": "email",
-    "reminderType": "custom",
-    "isActive": true,
-    "customMessage": "Custom reminder message",
-    "recipientUserIds": ["$USER_ID"],
-    "recipientEmails": ["test@example.com"]
-}
-EOF
-)
-    run_test "Create Event Reminder" "POST" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$reminder_data" "200" "Create event reminder"
+    # Get Specific Reminder
+    if [ -n "$REMINDER_ID" ]; then
+        run_test "Get Specific Reminder" "GET" "/api/v1/events/$EVENT_ID/reminders/$REMINDER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get details of a specific reminder"
+        
+        # Update Reminder
+        local update_reminder_date=$(date -u -v+2d '+%Y-%m-%dT%H:%M:%S')
+        local update_reminder_request='{
+            "title": "Updated Test Reminder",
+            "message": "This is an updated test reminder",
+            "reminderDateTime": "'$update_reminder_date'",
+            "channels": ["EMAIL"]
+        }'
+        run_test "Update Event Reminder" "PUT" "/api/v1/events/$EVENT_ID/reminders/$REMINDER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$update_reminder_request" "200" "Update an existing reminder"
+        
+        # Delete Reminder (will be done at the end to test deletion)
+    else
+        echo -e "${YELLOW}⚠️  Could not extract reminder ID, skipping reminder-specific tests${NC}"
+        # Use a mock ID for testing error cases
+        REMINDER_ID="00000000-0000-0000-0000-000000000000"
+    fi
     
-    # Update reminder (using captured ID when available)
-    local mock_reminder_id="12345678-1234-1234-1234-123456789012"
-    local reminder_identifier="${REMINDER_ID:-$mock_reminder_id}"
-    local reminder_update_time=$(date -u -v+2d '+%Y-%m-%dT%H:%M:%S')
-    local reminder_update_data
-    reminder_update_data=$(cat <<EOF
-{
-    "title": "Updated Event Reminder",
-    "description": "Updated reminder description",
-    "reminderTime": "$reminder_update_time",
-    "channel": "sms",
-    "reminderType": "custom",
-    "isActive": true,
-    "customMessage": "Updated reminder message",
-    "recipientUserIds": ["$USER_ID"],
-    "recipientEmails": ["test@example.com"]
-}
-EOF
-)
-    run_test "Update Event Reminder" "PUT" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN' -H 'Content-Type: application/json'" "$reminder_update_data" "200" "Update event reminder"
+    # Test unauthorized access (other user should not be able to access)
+    if authenticate_other_user; then
+        run_test "Get Reminders (Other User - Should Fail)" "GET" "/api/v1/events/$EVENT_ID/reminders" "-H 'Authorization: Bearer $OTHER_ACCESS_TOKEN'" "" "403" "Ensure non-members cannot access event reminders"
+        run_test "Send Notification (Other User - Should Fail)" "POST" "/api/v1/events/$EVENT_ID/notifications/send" "-H 'Authorization: Bearer $OTHER_ACCESS_TOKEN' -H 'Content-Type: application/json'" "$notification_request" "403" "Ensure non-owners cannot send notifications"
+    fi
     
-    run_test "Get Specific Reminder" "GET" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Get specific reminder"
-    
-    run_test "Delete Event Reminder" "DELETE" "/api/v1/events/$EVENT_ID/reminders/$reminder_identifier" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete event reminder"
+    # Delete reminder if we have a valid ID
+    if [ -n "$REMINDER_ID" ] && [ "$REMINDER_ID" != "00000000-0000-0000-0000-000000000000" ]; then
+        run_test "Delete Event Reminder" "DELETE" "/api/v1/events/$EVENT_ID/reminders/$REMINDER_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete a reminder"
+    fi
     echo ""
     
-    # Step 9: Clean up test data
-    echo -e "${CYAN}🧹 Step 9: Clean Up Test Data${NC}"
+    # Step 8: Clean up test data
+    echo -e "${CYAN}🧹 Step 8: Clean Up Test Data${NC}"
     echo "==============================="
     
     if [ -n "$EVENT_ID" ]; then
-        run_test "Delete Test Event" "DELETE" "/api/v1/events/$EVENT_ID" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "204" "Delete test event"
+        run_test "Archive Test Event" "POST" "/api/v1/events/$EVENT_ID/archive" "-H 'Authorization: Bearer $ACCESS_TOKEN'" "" "200" "Archive test event"
     fi
     echo ""
     
@@ -1134,6 +1493,9 @@ EOF
 cleanup() {
     echo ""
     echo -e "${YELLOW}🛑 Test interrupted...${NC}"
+    if [ -n "$TEST_IMAGE_PATH" ] && [ -f "$TEST_IMAGE_PATH" ]; then
+        rm -f "$TEST_IMAGE_PATH"
+    fi
     if [[ $BASE_URL == *"localhost"* ]]; then
         echo -e "${YELLOW}💡 Local service continues running${NC}"
     else

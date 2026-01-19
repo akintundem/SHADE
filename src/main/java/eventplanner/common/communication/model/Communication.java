@@ -1,9 +1,8 @@
 package eventplanner.common.communication.model;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import eventplanner.common.domain.enums.CommunicationStatus;
-import eventplanner.common.domain.enums.CommunicationType;
-import eventplanner.common.domain.enums.RecipientType;
+import eventplanner.common.communication.enums.CommunicationStatus;
+import eventplanner.common.communication.enums.CommunicationType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -33,16 +32,13 @@ public class Communication extends BaseEntity {
     
     @Enumerated(EnumType.STRING)
     @Column(name = "recipient_type")
-    private RecipientType recipientType;
+    private CommunicationRecipientType recipientType;
     
     @Column(name = "recipient_id")
     private UUID recipientId;
     
     @Column(name = "recipient_email")
     private String recipientEmail;
-    
-    @Column(name = "recipient_phone")
-    private String recipientPhone;
     
     @Column(name = "subject")
     private String subject;
@@ -54,20 +50,8 @@ public class Communication extends BaseEntity {
     @Column(name = "status")
     private CommunicationStatus status = CommunicationStatus.PENDING;
     
-    @Column(name = "scheduled_at")
-    private LocalDateTime scheduledAt;
-    
     @Column(name = "sent_at")
     private LocalDateTime sentAt;
-    
-    @Column(name = "delivered_at")
-    private LocalDateTime deliveredAt;
-    
-    @Column(name = "opened_at")
-    private LocalDateTime openedAt;
-    
-    @Column(name = "clicked_at")
-    private LocalDateTime clickedAt;
     
     @Column(name = "failed_at")
     private LocalDateTime failedAt;
@@ -81,16 +65,10 @@ public class Communication extends BaseEntity {
     @Column(name = "template_id")
     private String templateId;
     
-    @Column(name = "campaign_id")
-    private String campaignId;
-    
-    @Column(name = "metadata", columnDefinition = "TEXT")
-    private String metadata;
-    
     @Column(name = "channel")
     private String channel; // For logging: "email", "push", "sms"
     
-    public Communication(UUID eventId, CommunicationType communicationType, RecipientType recipientType, String subject, String content) {
+    public Communication(UUID eventId, CommunicationType communicationType, CommunicationRecipientType recipientType, String subject, String content) {
         this.eventId = eventId;
         this.communicationType = communicationType;
         this.recipientType = recipientType;

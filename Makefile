@@ -1,6 +1,6 @@
 .PHONY: help build run start stop restart logs clean test postman \
 	compose-up compose-up-build compose-down compose-build compose-rebuild compose-rebuild-up \
-	compose-logs compose-logs-tail compose-ps compose-restart compose-clean compose-recreate \
+	compose-logs compose-logs-tail compose-ps compose-restart compose-clean compose-clean-all compose-reset compose-recreate \
 	service-rebuild service-recreate service-logs service-stop service-start service-restart \
 	dev-up dev-down dev-logs dev-restart \
 	compose-up-dev compose-up-prod compose-down-dev compose-down-prod
@@ -42,6 +42,8 @@ help:
 	@echo "  make compose-logs        - Show logs from all services"
 	@echo "  make compose-ps          - Show status of all services"
 	@echo "  make compose-clean       - Stop containers and remove volumes"
+	@echo "  make compose-clean-all   - Stop containers, remove volumes, networks, and orphaned containers"
+	@echo "  make compose-reset       - Clean everything and restart the gateway (Kong)"
 	@echo "  make compose-recreate    - Recreate all containers"
 	@echo ""
 	@echo "$(YELLOW)Service Management:$(NC)"
@@ -54,6 +56,10 @@ help:
 	@echo ""
 	@echo "$(YELLOW)Available Services:$(NC)"
 	@echo "  - java-app"
+	@echo "  - email-service"
+	@echo "  - push-service"
+	@echo "  - ai-service"
+	@echo "  - kong (API Gateway)"
 	@echo ""
 	@echo "$(YELLOW)Legacy Commands:$(NC)"
 	@echo "  make build              - Build the application with Maven"
@@ -70,9 +76,15 @@ help:
 	@echo "  make compose-up                    # Start services (auto-detects branch: dev/prod)"
 	@echo "  make compose-up-dev                # Start services with .env.dev (force dev)"
 	@echo "  make compose-up-prod               # Start services with .env.prod (force prod)"
+	@echo "  make compose-reset                 # Clean everything and restart the gateway (Kong)"
 	@echo "  make compose-rebuild-up            # Rebuild (no cache) then start all"
 	@echo "  make service-rebuild SERVICE=java-app  # Rebuild then restart Java app"
 	@echo "  make service-logs SERVICE=java-app     # View Java app logs"
+	@echo ""
+	@echo "$(YELLOW)Gateway:$(NC)"
+	@echo "  - Kong Gateway: http://localhost:8000"
+	@echo "  - Kong Admin: http://localhost:8001 (Admin API)"
+	@echo "  - Java App (direct): http://localhost:8080"
 	@echo ""
 	@echo "$(YELLOW)Environment Detection:$(NC)"
 	@echo "  - On 'development' branch: automatically uses .env.dev"
@@ -92,7 +104,10 @@ compose-up:
 	fi
 	ENV_FILE=$(ENV_FILE) docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up -d
 	@echo "$(GREEN)Services started with $(ENV_NAME) configuration!$(NC)"
-	@echo "$(YELLOW)Java App: http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Kong Gateway: http://localhost:8000$(NC)"
+	@echo "$(YELLOW)Kong Admin: http://localhost:8001$(NC)"
+	@echo "$(YELLOW)Java App (direct): http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Push Service: http://localhost:${PUSH_SERVICE_PORT:-3100}$(NC)"
 	@make compose-ps
 
 compose-up-dev:
@@ -104,7 +119,10 @@ compose-up-dev:
 	@echo "$(GREEN)Starting all services with Docker Compose (DEV environment)...$(NC)"
 	ENV_FILE=.env.dev docker-compose -f $(COMPOSE_FILE) --env-file .env.dev up -d
 	@echo "$(GREEN)Services started with DEV configuration!$(NC)"
-	@echo "$(YELLOW)Java App: http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Kong Gateway: http://localhost:8000$(NC)"
+	@echo "$(YELLOW)Kong Admin: http://localhost:8001$(NC)"
+	@echo "$(YELLOW)Java App (direct): http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Push Service: http://localhost:${PUSH_SERVICE_PORT:-3100}$(NC)"
 	@make compose-ps
 
 compose-up-prod:
@@ -117,7 +135,10 @@ compose-up-prod:
 	@echo "$(YELLOW)Starting all services with Docker Compose (PROD environment)...$(NC)"
 	ENV_FILE=.env.prod docker-compose -f $(COMPOSE_FILE) --env-file .env.prod up -d
 	@echo "$(GREEN)Services started with PROD configuration!$(NC)"
-	@echo "$(YELLOW)Java App: http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Kong Gateway: http://localhost:8000$(NC)"
+	@echo "$(YELLOW)Kong Admin: http://localhost:8001$(NC)"
+	@echo "$(YELLOW)Java App (direct): http://localhost:8080$(NC)"
+	@echo "$(YELLOW)Push Service: http://localhost:${PUSH_SERVICE_PORT:-3100}$(NC)"
 	@make compose-ps
 
 compose-up-build:
@@ -211,6 +232,35 @@ compose-clean:
 	docker-compose -f $(COMPOSE_FILE) down -v
 	@echo "$(GREEN)Clean completed!$(NC)"
 
+compose-clean-all:
+	@echo "$(RED)WARNING: This will stop containers, remove volumes, networks, and orphaned containers!$(NC)"
+	@echo "$(YELLOW)Stopping all containers...$(NC)"
+	@docker stop $$(docker ps -aq --filter "name=shade" --filter "name=event-planner" --filter "name=kong") 2>/dev/null || true
+	@echo "$(YELLOW)Removing all containers...$(NC)"
+	@docker rm -f $$(docker ps -aq --filter "name=shade" --filter "name=event-planner" --filter "name=kong") 2>/dev/null || true
+	@echo "$(YELLOW)Removing volumes and networks...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) down -v --remove-orphans 2>/dev/null || true
+	@docker volume prune -f
+	@docker network prune -f
+	@echo "$(GREEN)All containers, volumes, and networks cleaned!$(NC)"
+
+compose-reset: compose-clean-all
+	@echo "$(GREEN)Preparing fresh start with Kong...$(NC)"
+	@echo "$(YELLOW)Creating placeholder .env files if needed...$(NC)"
+	@touch email/.env ai-service/.env .env 2>/dev/null || true
+	@echo "$(GREEN)Building and starting all services with Kong...$(NC)"
+	@echo "$(YELLOW)Detected branch: $(GIT_BRANCH) - Using $(ENV_FILE) ($(ENV_NAME))$(NC)"
+	@if [ -f $(ENV_FILE) ]; then \
+		ENV_FILE=$(ENV_FILE) docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up -d --build; \
+	else \
+		docker-compose -f $(COMPOSE_FILE) up -d --build; \
+	fi
+	@echo "$(GREEN)Services restarted with Kong!$(NC)"
+	@echo "$(YELLOW)Kong Gateway: http://localhost:8000$(NC)"
+	@echo "$(YELLOW)Kong Admin: http://localhost:8001$(NC)"
+	@echo "$(YELLOW)Java App (direct): http://localhost:8080$(NC)"
+	@make compose-ps
+
 compose-recreate:
 	@echo "$(GREEN)Recreating all containers...$(NC)"
 	docker-compose -f $(COMPOSE_FILE) up -d --force-recreate
@@ -224,7 +274,7 @@ service-rebuild:
 	@if [ -z "$(SERVICE)" ]; then \
 		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
 		echo "Usage: make service-rebuild SERVICE=<service-name>"; \
-		echo "Available services: java-app"; \
+		echo "Available services: java-app, email-service, push-service, ai-service, kong"; \
 		exit 1; \
 	fi
 	@echo "$(GREEN)Rebuilding service: $(SERVICE)$(NC)"
@@ -237,7 +287,7 @@ service-recreate:
 	@if [ -z "$(SERVICE)" ]; then \
 		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
 		echo "Usage: make service-recreate SERVICE=<service-name>"; \
-		echo "Available services: java-app"; \
+		echo "Available services: java-app, email-service, push-service, ai-service, kong"; \
 		exit 1; \
 	fi
 	@echo "$(GREEN)Recreating service: $(SERVICE)$(NC)"
@@ -248,7 +298,7 @@ service-logs:
 	@if [ -z "$(SERVICE)" ]; then \
 		echo "$(RED)ERROR: SERVICE parameter is required$(NC)"; \
 		echo "Usage: make service-logs SERVICE=<service-name>"; \
-		echo "Available services: java-app"; \
+		echo "Available services: java-app, email-service, push-service, ai-service, kong"; \
 		exit 1; \
 	fi
 	@echo "$(GREEN)Showing logs for service: $(SERVICE)$(NC)"
@@ -298,7 +348,6 @@ build:
 start:
 	@echo "$(GREEN)Starting Event Planner Monolith...$(NC)"
 	@echo "$(YELLOW)Application will be available at: http://localhost:8080$(NC)"
-	@echo "$(YELLOW)Auth health check: http://localhost:8080/api/v1/auth/health$(NC)"
 	@echo "$(YELLOW)Press Ctrl+C to stop the application$(NC)"
 	@echo ""
 	@if [ -f .env ]; then \

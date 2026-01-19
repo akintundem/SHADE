@@ -2,12 +2,33 @@ package eventplanner.features.budget.repository;
 
 import eventplanner.features.budget.entity.BudgetLineItem;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
 public interface BudgetLineItemRepository extends JpaRepository<BudgetLineItem, UUID> {
-    List<BudgetLineItem> findByBudgetId(UUID budgetId);
+    // UUID-based query with eager fetch of budgetCategory to avoid lazy loading issues
+    @Query("SELECT li FROM BudgetLineItem li LEFT JOIN FETCH li.budgetCategory WHERE li.budget.id = :budgetId")
+    List<BudgetLineItem> findByBudgetId(@Param("budgetId") UUID budgetId);
+    
+    // Fetch line item with category for update operations
+    @Query("SELECT li FROM BudgetLineItem li LEFT JOIN FETCH li.budgetCategory WHERE li.id = :id")
+    java.util.Optional<BudgetLineItem> findByIdWithCategory(@Param("id") UUID id);
+
+    @Query("SELECT SUM(li.estimatedCost) FROM BudgetLineItem li WHERE li.budget.id = :budgetId AND li.isDraft = false")
+    BigDecimal sumEstimatedCostByBudgetId(@Param("budgetId") UUID budgetId);
+
+    @Query("SELECT SUM(li.actualCost) FROM BudgetLineItem li WHERE li.budget.id = :budgetId AND li.isDraft = false")
+    BigDecimal sumActualCostByBudgetId(@Param("budgetId") UUID budgetId);
+
+    @Query("SELECT SUM(li.estimatedCost) FROM BudgetLineItem li WHERE li.budgetCategory.id = :categoryId AND li.isDraft = false")
+    BigDecimal sumEstimatedCostByCategoryId(@Param("categoryId") UUID categoryId);
+
+    @Query("SELECT SUM(li.actualCost) FROM BudgetLineItem li WHERE li.budgetCategory.id = :categoryId AND li.isDraft = false")
+    BigDecimal sumActualCostByCategoryId(@Param("categoryId") UUID categoryId);
 }
 
 

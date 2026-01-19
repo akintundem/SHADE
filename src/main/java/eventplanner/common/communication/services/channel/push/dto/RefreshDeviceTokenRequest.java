@@ -22,11 +22,11 @@ import java.util.UUID;
 public class RefreshDeviceTokenRequest {
     
     @NotNull(message = "User ID is required")
-    @Schema(description = "User ID associated with the device token", required = true, example = "123e4567-e89b-12d3-a456-426614174000")
+    @Schema(description = "User ID associated with the device token", requiredMode = Schema.RequiredMode.REQUIRED, example = "123e4567-e89b-12d3-a456-426614174000")
     private UUID userId;
     
     @NotBlank(message = "Device token is required")
-    @Schema(description = "New device token to refresh", required = true, example = "fcm_token_string_here")
+    @Schema(description = "New device token to refresh", requiredMode = Schema.RequiredMode.REQUIRED, example = "fcm_token_string_here")
     private String deviceToken;
     
     @Schema(description = "Platform of the device (iOS, ANDROID)", example = "IOS")

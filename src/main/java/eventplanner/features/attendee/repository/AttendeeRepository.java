@@ -1,7 +1,8 @@
 package eventplanner.features.attendee.repository;
 
+import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.features.attendee.entity.Attendee;
-import eventplanner.features.attendee.entity.AttendeeStatus;
+import eventplanner.features.attendee.enums.AttendeeStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,55 +15,69 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Repository for Attendee entity with pagination and filtering support
+ * Repository for Attendee entity with pagination and filtering support.
  */
 @Repository
 public interface AttendeeRepository extends JpaRepository<Attendee, UUID> {
-    
-    // Basic queries
-    List<Attendee> findByEventId(UUID eventId);
-    
-    Optional<Attendee> findByIdAndEventId(UUID id, UUID eventId);
-    
-    // Pagination support
-    Page<Attendee> findByEventId(UUID eventId, Pageable pageable);
-    
-    // Filtering by status
-    List<Attendee> findByEventIdAndRsvpStatus(UUID eventId, AttendeeStatus status);
-    
-    Page<Attendee> findByEventIdAndRsvpStatus(UUID eventId, AttendeeStatus status, Pageable pageable);
-    
-    // Filtering by multiple statuses
-    @Query("SELECT a FROM Attendee a WHERE a.eventId = :eventId AND a.rsvpStatus IN :statuses")
-    Page<Attendee> findByEventIdAndRsvpStatusIn(@Param("eventId") UUID eventId, 
-                                                  @Param("statuses") List<AttendeeStatus> statuses, 
-                                                  Pageable pageable);
-    
-    // Check-in filtering
-    @Query("SELECT a FROM Attendee a WHERE a.eventId = :eventId AND a.checkedInAt IS NOT NULL")
+
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId")
+    List<Attendee> findByEventId(@Param("eventId") UUID eventId);
+
+    @Query("SELECT a FROM Attendee a WHERE a.id = :id AND a.event.id = :eventId")
+    Optional<Attendee> findByIdAndEventId(@Param("id") UUID id, @Param("eventId") UUID eventId);
+
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId")
+    Page<Attendee> findByEventId(@Param("eventId") UUID eventId, Pageable pageable);
+
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.rsvpStatus IN :statuses")
+    Page<Attendee> findByEventIdAndRsvpStatusIn(@Param("eventId") UUID eventId,
+                                                 @Param("statuses") List<AttendeeStatus> statuses,
+                                                 Pageable pageable);
+
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.checkedInAt IS NOT NULL")
     Page<Attendee> findCheckedInByEventId(@Param("eventId") UUID eventId, Pageable pageable);
-    
-    @Query("SELECT a FROM Attendee a WHERE a.eventId = :eventId AND a.checkedInAt IS NULL")
+
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.checkedInAt IS NULL")
     Page<Attendee> findNotCheckedInByEventId(@Param("eventId") UUID eventId, Pageable pageable);
-    
-    // Email/phone search
-    @Query("SELECT a FROM Attendee a WHERE a.eventId = :eventId AND (LOWER(a.email) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(a.name) LIKE LOWER(CONCAT('%', :search, '%')))")
-    Page<Attendee> searchByEventIdAndEmailOrName(@Param("eventId") UUID eventId, 
-                                                   @Param("search") String search, 
-                                                   Pageable pageable);
-    
-    // Count queries
-    Long countByEventId(UUID eventId);
-    
-    Long countByEventIdAndRsvpStatus(UUID eventId, AttendeeStatus status);
-    
-    @Query("SELECT COUNT(a) FROM Attendee a WHERE a.eventId = :eventId AND a.checkedInAt IS NOT NULL")
-    Long countCheckedInByEventId(@Param("eventId") UUID eventId);
-    
-    // Duplicate detection
-    Optional<Attendee> findByEventIdAndEmail(UUID eventId, String email);
-    
-    List<Attendee> findByEventIdAndEmailIn(UUID eventId, List<String> emails);
+
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND (LOWER(a.email) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(a.name) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Attendee> searchByEventIdAndEmailOrName(@Param("eventId") UUID eventId,
+                                                  @Param("search") String search,
+                                                  Pageable pageable);
+
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.email = :email")
+    Optional<Attendee> findByEventIdAndEmail(@Param("eventId") UUID eventId, @Param("email") String email);
+
+    /**
+     * Case-insensitive lookup by email to prevent duplicate attendees with different casing.
+     */
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND LOWER(a.email) = LOWER(:email)")
+    Optional<Attendee> findByEventIdAndEmailIgnoreCase(@Param("eventId") UUID eventId, @Param("email") String email);
+
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.user.id = :userId")
+    Optional<Attendee> findByEventIdAndUserId(@Param("eventId") UUID eventId, @Param("userId") UUID userId);
+
+    /**
+     * Find all attendees for an event with PUBLIC participation visibility.
+     * Used for public-facing attendee lists where users want to hide their participation.
+     */
+    @Query("SELECT a FROM Attendee a WHERE a.event.id = :eventId AND a.participationVisibility = :visibility")
+    Page<Attendee> findByEventIdAndParticipationVisibility(@Param("eventId") UUID eventId,
+                                                           @Param("visibility") VisibilityLevel visibility,
+                                                           Pageable pageable);
+
+    /**
+     * Find all attendees for a specific user across all events.
+     * Used for showing a user's event history/participation.
+     */
+    @Query("SELECT a FROM Attendee a WHERE a.user.id = :userId")
+    List<Attendee> findByUserId(@Param("userId") UUID userId);
+
+    /**
+     * Find all PUBLIC attendees for a specific user across all events.
+     * Used for showing a user's public event history.
+     */
+    @Query("SELECT a FROM Attendee a WHERE a.user.id = :userId AND a.participationVisibility = :visibility")
+    List<Attendee> findByUserIdAndParticipationVisibility(@Param("userId") UUID userId,
+                                                          @Param("visibility") VisibilityLevel visibility);
 }
-
-
