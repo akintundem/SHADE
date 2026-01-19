@@ -4,6 +4,8 @@ import eventplanner.features.ticket.dto.request.CreateTicketCheckoutRequest;
 import eventplanner.features.ticket.dto.response.TicketCheckoutResponse;
 import eventplanner.features.ticket.dto.response.TicketPaymentInitResponse;
 import eventplanner.features.ticket.service.TicketCheckoutService;
+import eventplanner.features.attendee.enums.AttendeeInviteStatus;
+import eventplanner.features.attendee.repository.AttendeeInviteRepository;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
@@ -37,6 +39,7 @@ public class TicketCheckoutController {
 
     private final TicketCheckoutService checkoutService;
     private final AuthorizationService authorizationService;
+    private final AttendeeInviteRepository attendeeInviteRepository;
 
     @PostMapping
     @Operation(summary = "Start ticket checkout", description = "Create a checkout session, reserve tickets, and return a cost breakdown.")
@@ -46,7 +49,7 @@ public class TicketCheckoutController {
             @Valid @RequestBody CreateTicketCheckoutRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
+            if (!canAccessCheckout(principal, eventId)) {
                 throw new ForbiddenException("Access denied to event: " + eventId);
             }
             TicketCheckoutResponse response = checkoutService.createCheckout(eventId, request, principal);
@@ -66,7 +69,7 @@ public class TicketCheckoutController {
             @PathVariable UUID checkoutId,
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
+            if (!canAccessCheckout(principal, eventId)) {
                 throw new ForbiddenException("Access denied to event: " + eventId);
             }
             TicketPaymentInitResponse response = checkoutService.startPayment(checkoutId, eventId, principal);
@@ -86,7 +89,7 @@ public class TicketCheckoutController {
             @PathVariable UUID checkoutId,
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
+            if (!canAccessCheckout(principal, eventId)) {
                 throw new ForbiddenException("Access denied to event: " + eventId);
             }
             TicketCheckoutResponse response = checkoutService.getCheckout(checkoutId, eventId);
@@ -106,7 +109,7 @@ public class TicketCheckoutController {
             @PathVariable UUID checkoutId,
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
+            if (!canAccessCheckout(principal, eventId)) {
                 throw new ForbiddenException("Access denied to event: " + eventId);
             }
             TicketCheckoutResponse response = checkoutService.cancelCheckout(checkoutId, eventId);
@@ -116,5 +119,22 @@ public class TicketCheckoutController {
         } catch (IllegalArgumentException e) {
             throw new BadRequestException(e.getMessage());
         }
+    }
+
+    private boolean canAccessCheckout(UserPrincipal principal, UUID eventId) {
+        if (principal == null || eventId == null) {
+            return false;
+        }
+        if (authorizationService.canAccessEvent(principal, eventId)) {
+            return true;
+        }
+        UUID userId = principal.getId();
+        if (userId != null && attendeeInviteRepository.existsByEventIdAndInviteeIdAndStatus(
+                eventId, userId, AttendeeInviteStatus.ACCEPTED)) {
+            return true;
+        }
+        String email = principal.getUser() != null ? principal.getUser().getEmail() : null;
+        return email != null && attendeeInviteRepository.existsByEventIdAndInviteeEmailIgnoreCaseAndStatus(
+                eventId, email, AttendeeInviteStatus.ACCEPTED);
     }
 }

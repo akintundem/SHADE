@@ -1,6 +1,8 @@
 import * as React from 'react'
 import { render } from '@react-email/render'
 import { AttendeeWelcome } from './AttendeeWelcome'
+import { AttendeeInvite } from './AttendeeInvite'
+import { AttendeeInviteResponse } from './AttendeeInviteResponse'
 import { CollaboratorInvite } from './CollaboratorInvite'
 import { CollaboratorWelcome } from './CollaboratorWelcome'
 import { EventAnnouncement } from './EventAnnouncement'
@@ -38,6 +40,29 @@ export const EMAIL_TEMPLATES = {
     subject: ({ eventName }: { eventName: string }) =>
       `You’re attending: ${eventName}`,
     component: AttendeeWelcome,
+  },
+  ATTENDEE_INVITE: {
+    id: 'attendee-invite',
+    subject: ({ eventName }: { eventName: string }) =>
+      `You're invited: ${eventName}`,
+    component: AttendeeInvite,
+  },
+  ATTENDEE_INVITE_RESPONSE: {
+    id: 'attendee-invite-response',
+    subject: ({
+      eventName,
+      inviteeName,
+      status,
+    }: {
+      eventName: string
+      inviteeName?: string
+      status?: string
+    }) => {
+      const normalized = status ? status.toLowerCase() : 'updated'
+      const name = inviteeName || 'An attendee'
+      return `${name} ${normalized} the invite to ${eventName}`
+    },
+    component: AttendeeInviteResponse,
   },
   TICKET_CONFIRMATION: {
     id: 'ticket-confirmation',
@@ -84,6 +109,8 @@ export async function renderEmailTemplate<K extends EmailTemplateKey>(
 }
 
 export {
+  AttendeeInvite,
+  AttendeeInviteResponse,
   AttendeeWelcome,
   CollaboratorInvite,
   CollaboratorWelcome,

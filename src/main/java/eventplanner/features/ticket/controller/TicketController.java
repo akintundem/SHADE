@@ -1,7 +1,12 @@
 package eventplanner.features.ticket.controller;
 
 import eventplanner.features.ticket.dto.request.IssueTicketRequest;
+import eventplanner.features.ticket.dto.request.BulkTicketActionRequest;
+import eventplanner.features.ticket.dto.request.ResendTicketRequest;
+import eventplanner.features.ticket.dto.request.UpdateTicketRequest;
+import eventplanner.features.ticket.dto.request.TransferTicketRequest;
 import eventplanner.features.ticket.dto.request.ValidateTicketRequest;
+import eventplanner.features.ticket.dto.response.BulkTicketActionResponse;
 import eventplanner.features.ticket.dto.response.TicketResponse;
 import eventplanner.features.ticket.dto.response.TicketValidationResponse;
 import eventplanner.features.ticket.dto.response.TicketWalletResponse;
@@ -199,6 +204,116 @@ public class TicketController {
         } catch (Exception e) {
             throw new ApiException(ErrorCode.INTERNAL_ERROR, 
                 "An error occurred while canceling the ticket");
+        }
+    }
+
+    @PostMapping("/{id}/refund")
+    @Operation(summary = "Refund ticket", description = "Refund a ticket and update inventory counts.")
+    @RequiresPermission(value = RbacPermissions.TICKET_CANCEL, resources = {"ticket_id=#id"})
+    public ResponseEntity<TicketResponse> refundTicket(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String reason,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            Ticket ticket = ticketService.refundTicket(id, reason, principal);
+            return ResponseEntity.ok(TicketResponse.from(ticket));
+        } catch (ConflictException e) {
+            throw e;
+        } catch (ResourceNotFoundException e) {
+            throw e;
+        } catch (eventplanner.common.exception.exceptions.ApiException e) {
+            throw e;
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new BadRequestException(e.getMessage());
+        }
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Update ticket", description = "Update ticket holder details for email-based tickets.")
+    @RequiresPermission(value = RbacPermissions.TICKET_CREATE, resources = {"ticket_id=#id"})
+    public ResponseEntity<TicketResponse> updateTicket(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateTicketRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            Ticket ticket = ticketService.updateTicket(id, request, principal);
+            return ResponseEntity.ok(TicketResponse.from(ticket));
+        } catch (ConflictException e) {
+            throw e;
+        } catch (ResourceNotFoundException e) {
+            throw e;
+        } catch (eventplanner.common.exception.exceptions.ApiException e) {
+            throw e;
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new BadRequestException(e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/transfer")
+    @Operation(summary = "Transfer ticket", description = "Transfer ticket ownership to another attendee or email.")
+    @RequiresPermission(value = RbacPermissions.TICKET_CREATE, resources = {"ticket_id=#id"})
+    public ResponseEntity<TicketResponse> transferTicket(
+            @PathVariable UUID id,
+            @Valid @RequestBody TransferTicketRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            Ticket ticket = ticketService.transferTicket(id, request, principal);
+            return ResponseEntity.ok(TicketResponse.from(ticket));
+        } catch (ConflictException e) {
+            throw e;
+        } catch (ResourceNotFoundException e) {
+            throw e;
+        } catch (eventplanner.common.exception.exceptions.ApiException e) {
+            throw e;
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new BadRequestException(e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/resend")
+    @Operation(summary = "Resend ticket notifications", description = "Resend ticket email and/or push notification.")
+    @RequiresPermission(value = RbacPermissions.TICKET_READ, resources = {"ticket_id=#id"})
+    public ResponseEntity<TicketResponse> resendTicket(
+            @PathVariable UUID id,
+            @RequestBody(required = false) ResendTicketRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            Ticket ticket = ticketService.resendTicket(id, request, principal);
+            return ResponseEntity.ok(TicketResponse.from(ticket));
+        } catch (ConflictException e) {
+            throw e;
+        } catch (ResourceNotFoundException e) {
+            throw e;
+        } catch (eventplanner.common.exception.exceptions.ApiException e) {
+            throw e;
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new BadRequestException(e.getMessage());
+        }
+    }
+
+    @PostMapping("/bulk")
+    @Operation(summary = "Bulk ticket actions", description = "Cancel, refund, or resend tickets in bulk.")
+    @RequiresPermission(value = RbacPermissions.TICKET_CANCEL, resources = {"event_id=#request.eventId"})
+    public ResponseEntity<BulkTicketActionResponse> bulkAction(
+            @Valid @RequestBody BulkTicketActionRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (request == null || request.getEventId() == null) {
+                throw new BadRequestException("Event ID is required");
+            }
+            if (!authorizationService.canAccessEvent(principal, request.getEventId())) {
+                throw new ForbiddenException("Access denied to event: " + request.getEventId());
+            }
+            BulkTicketActionResponse response = ticketService.bulkAction(request, principal);
+            return ResponseEntity.ok(response);
+        } catch (BadRequestException e) {
+            throw e;
+        } catch (ForbiddenException e) {
+            throw e;
+        } catch (eventplanner.common.exception.exceptions.ApiException e) {
+            throw e;
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new BadRequestException(e.getMessage());
         }
     }
 

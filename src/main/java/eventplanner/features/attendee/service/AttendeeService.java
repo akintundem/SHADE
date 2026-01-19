@@ -4,17 +4,22 @@ import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.enums.CommunicationType;
 import eventplanner.features.event.enums.EventAccessType;
+import eventplanner.features.event.enums.EventStatus;
 import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.features.attendee.dto.request.AttendeeInfo;
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
 import eventplanner.features.attendee.entity.Attendee;
+import eventplanner.features.attendee.enums.AttendeeInviteStatus;
 import eventplanner.features.attendee.enums.AttendeeStatus;
+import eventplanner.features.attendee.repository.AttendeeInviteRepository;
 import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.common.config.ExternalServicesProperties;
+import eventplanner.security.authorization.service.AuthorizationService;
+import eventplanner.security.auth.service.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -26,6 +31,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 
 /**
@@ -39,10 +46,12 @@ import java.util.*;
 public class AttendeeService {
     
     private final AttendeeRepository repository;
+    private final AttendeeInviteRepository inviteRepository;
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
     private final ExternalServicesProperties externalServicesProperties;
+    private final AuthorizationService authorizationService;
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
         "name", "email", "rsvpStatus", "checkedInAt", "createdAt"
@@ -419,15 +428,18 @@ public class AttendeeService {
 
     /**
      * RSVP to an event that requires RSVP.
-     * Creates or updates an attendee record with CONFIRMED status.
-     * 
+     * Creates or updates an attendee record with CONFIRMED or PENDING status.
+     *
      * @param eventId The event ID
-     * @param userId The user ID RSVPing
+     * @param principal The authenticated user
      * @return The created or updated attendee
      */
-    public Attendee rsvpToEvent(UUID eventId, UUID userId) {
-        if (eventId == null || userId == null) {
-            throw new IllegalArgumentException("Event ID and User ID are required");
+    public Attendee rsvpToEvent(UUID eventId, UserPrincipal principal) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID is required");
+        }
+        if (principal == null || principal.getId() == null) {
+            throw new IllegalArgumentException("Authentication required");
         }
 
         Event event = eventRepository.findById(eventId)
@@ -438,37 +450,124 @@ public class AttendeeService {
             throw new IllegalArgumentException("Event does not require RSVP");
         }
 
-        UserAccount user = userAccountRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+        ensureEventOpenForRsvp(event);
+        ensurePrivateEventAccess(event, principal);
 
-        // Check if user is already an attendee
-        Optional<Attendee> existingAttendee = repository.findByEventIdAndUserId(eventId, userId);
+        UserAccount user = userAccountRepository.findById(principal.getId())
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + principal.getId()));
 
+        AttendeeStatus targetStatus = Boolean.TRUE.equals(event.getRequiresApproval())
+                ? AttendeeStatus.PENDING
+                : AttendeeStatus.CONFIRMED;
+
+        Optional<Attendee> existingAttendee = repository.findByEventIdAndUserId(eventId, principal.getId());
         if (existingAttendee.isPresent()) {
-            // Update existing attendee to CONFIRMED
             Attendee attendee = existingAttendee.get();
-            attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
-            return repository.save(attendee);
-        } else {
-            // Create new attendee with CONFIRMED status
-            Attendee attendee = new Attendee();
-            attendee.setEvent(event);
-            attendee.setUser(user);
-            attendee.setName(user.getName());
-            attendee.setEmail(user.getEmail());
-            attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
-            
-            Attendee saved = repository.save(attendee);
-            
-            // Update event attendee count
-            if (event.getCurrentAttendeeCount() == null) {
-                event.setCurrentAttendeeCount(0);
+            AttendeeStatus previousStatus = attendee.getRsvpStatus();
+            AttendeeStatus resolvedStatus = resolveApprovalStatus(event, previousStatus, targetStatus);
+            if (resolvedStatus == AttendeeStatus.CONFIRMED && previousStatus != AttendeeStatus.CONFIRMED) {
+                ensureCapacityAvailable(event);
             }
-            event.setCurrentAttendeeCount(event.getCurrentAttendeeCount() + 1);
-            eventRepository.save(event);
-            
+            attendee.setRsvpStatus(resolvedStatus);
+            Attendee saved = repository.save(attendee);
+            updateEventAttendeeCount(event, previousStatus, resolvedStatus);
             return saved;
         }
+
+        ensureCapacityAvailable(event);
+
+        Attendee attendee = new Attendee();
+        attendee.setEvent(event);
+        attendee.setUser(user);
+        attendee.setName(user.getName());
+        attendee.setEmail(user.getEmail());
+        attendee.setRsvpStatus(targetStatus);
+
+        Attendee saved = repository.save(attendee);
+        updateEventAttendeeCount(event, null, targetStatus);
+        return saved;
+    }
+
+    /**
+     * Update RSVP status for the authenticated user.
+     */
+    public Attendee updateRsvpStatus(UUID eventId, AttendeeStatus status, UserPrincipal principal) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID is required");
+        }
+        if (principal == null || principal.getId() == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        if (status == null) {
+            throw new IllegalArgumentException("RSVP status is required");
+        }
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        ensureEventOpenForRsvp(event);
+        ensurePrivateEventAccess(event, principal);
+
+        Attendee attendee = repository.findByEventIdAndUserId(eventId, principal.getId())
+                .orElseThrow(() -> new IllegalArgumentException("RSVP not found for event: " + eventId));
+
+        AttendeeStatus previousStatus = attendee.getRsvpStatus();
+        AttendeeStatus resolvedStatus = resolveApprovalStatus(event, previousStatus, status);
+        if (resolvedStatus == AttendeeStatus.CONFIRMED && previousStatus != AttendeeStatus.CONFIRMED) {
+            ensureCapacityAvailable(event);
+        }
+
+        attendee.setRsvpStatus(resolvedStatus);
+        Attendee saved = repository.save(attendee);
+        updateEventAttendeeCount(event, previousStatus, resolvedStatus);
+        return saved;
+    }
+
+    /**
+     * Cancel RSVP for the authenticated user.
+     */
+    public Attendee cancelRsvp(UUID eventId, UserPrincipal principal) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID is required");
+        }
+        if (principal == null || principal.getId() == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        ensurePrivateEventAccess(event, principal);
+
+        Attendee attendee = repository.findByEventIdAndUserId(eventId, principal.getId())
+                .orElseThrow(() -> new IllegalArgumentException("RSVP not found for event: " + eventId));
+
+        AttendeeStatus previousStatus = attendee.getRsvpStatus();
+        if (previousStatus == AttendeeStatus.DECLINED) {
+            return attendee;
+        }
+
+        attendee.setRsvpStatus(AttendeeStatus.DECLINED);
+        Attendee saved = repository.save(attendee);
+        updateEventAttendeeCount(event, previousStatus, AttendeeStatus.DECLINED);
+        return saved;
+    }
+
+    /**
+     * Get RSVP status for the authenticated user.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Attendee> getRsvpStatus(UUID eventId, UserPrincipal principal) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID is required");
+        }
+        if (principal == null || principal.getId() == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        ensurePrivateEventAccess(event, principal);
+
+        return repository.findByEventIdAndUserId(eventId, principal.getId());
     }
 
     /**
@@ -491,6 +590,119 @@ public class AttendeeService {
             log.warn("Failed to get attendee count for event {}: {}", eventId, e.getMessage());
             return 0;
         }
+    }
+
+    private void ensureEventOpenForRsvp(Event event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Event not found");
+        }
+        if (event.getEventStatus() == EventStatus.CANCELLED) {
+            throw new IllegalArgumentException("Event has been cancelled");
+        }
+        if (event.getEventStatus() == EventStatus.REGISTRATION_CLOSED) {
+            throw new IllegalArgumentException("Event registration is closed");
+        }
+        if (event.getEventStatus() == EventStatus.COMPLETED) {
+            throw new IllegalArgumentException("Event has ended");
+        }
+        if (isEventPast(event)) {
+            throw new IllegalArgumentException("Event has ended");
+        }
+        if (event.getRegistrationDeadline() != null &&
+                LocalDateTime.now(ZoneOffset.UTC).isAfter(event.getRegistrationDeadline())) {
+            throw new IllegalArgumentException("Registration deadline has passed");
+        }
+    }
+
+    private void ensurePrivateEventAccess(Event event, UserPrincipal principal) {
+        if (Boolean.TRUE.equals(event.getIsPublic())) {
+            return;
+        }
+        if (principal == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        if (authorizationService.isAdmin(principal) ||
+                authorizationService.isEventOwner(principal, event.getId()) ||
+                authorizationService.hasEventMembership(principal, event.getId())) {
+            return;
+        }
+        if (hasAcceptedInvite(event, principal)) {
+            return;
+        }
+        throw new IllegalArgumentException("Access denied for private event");
+    }
+
+    private boolean hasAcceptedInvite(Event event, UserPrincipal principal) {
+        if (event == null || principal == null) {
+            return false;
+        }
+        UUID userId = principal.getId();
+        if (userId != null && inviteRepository.existsByEventIdAndInviteeIdAndStatus(
+                event.getId(), userId, AttendeeInviteStatus.ACCEPTED)) {
+            return true;
+        }
+        String email = principal.getUser() != null ? principal.getUser().getEmail() : null;
+        return email != null && inviteRepository.existsByEventIdAndInviteeEmailIgnoreCaseAndStatus(
+                event.getId(), email, AttendeeInviteStatus.ACCEPTED);
+    }
+
+    private void ensureCapacityAvailable(Event event) {
+        if (event == null) {
+            return;
+        }
+        Integer capacity = event.getCapacity();
+        if (capacity == null || capacity <= 0) {
+            return;
+        }
+        Integer current = event.getCurrentAttendeeCount();
+        if (current == null) {
+            current = 0;
+        }
+        if (current >= capacity) {
+            throw new IllegalArgumentException("Event is at capacity");
+        }
+    }
+
+    private AttendeeStatus resolveApprovalStatus(Event event, AttendeeStatus previousStatus, AttendeeStatus requestedStatus) {
+        if (!Boolean.TRUE.equals(event.getRequiresApproval())) {
+            return requestedStatus;
+        }
+        if (previousStatus == AttendeeStatus.CONFIRMED) {
+            return AttendeeStatus.CONFIRMED;
+        }
+        if (requestedStatus == AttendeeStatus.CONFIRMED) {
+            return AttendeeStatus.PENDING;
+        }
+        return requestedStatus;
+    }
+
+    private void updateEventAttendeeCount(Event event, AttendeeStatus previousStatus, AttendeeStatus nextStatus) {
+        if (event == null) {
+            return;
+        }
+        if (event.getCurrentAttendeeCount() == null) {
+            event.setCurrentAttendeeCount(0);
+        }
+        boolean wasConfirmed = previousStatus == AttendeeStatus.CONFIRMED;
+        boolean isConfirmed = nextStatus == AttendeeStatus.CONFIRMED;
+        if (!wasConfirmed && isConfirmed) {
+            event.setCurrentAttendeeCount(event.getCurrentAttendeeCount() + 1);
+            eventRepository.save(event);
+        } else if (wasConfirmed && !isConfirmed) {
+            event.setCurrentAttendeeCount(Math.max(0, event.getCurrentAttendeeCount() - 1));
+            eventRepository.save(event);
+        }
+    }
+
+    private boolean isEventPast(Event event) {
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        if (event.getEndDateTime() != null) {
+            return now.isAfter(event.getEndDateTime());
+        }
+        if (event.getStartDateTime() != null) {
+            return now.isAfter(event.getStartDateTime().plusDays(1));
+        }
+        return false;
     }
 
     // ==================== Event Queries ====================

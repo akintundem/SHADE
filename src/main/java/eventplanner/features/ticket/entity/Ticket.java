@@ -248,6 +248,28 @@ public class Ticket extends BaseEntity {
     }
 
     /**
+     * Refund this ticket.
+     *
+     * @param reason Reason for refund (optional)
+     * @throws IllegalStateException if ticket is already validated or refunded
+     */
+    public void refund(String reason) {
+        if (status == TicketStatus.VALIDATED) {
+            throw new IllegalStateException("Cannot refund a validated ticket");
+        }
+        if (status == TicketStatus.REFUNDED) {
+            throw new IllegalStateException("Ticket is already refunded");
+        }
+        if (status == TicketStatus.CANCELLED) {
+            throw new IllegalStateException("Cannot refund a cancelled ticket");
+        }
+
+        this.status = TicketStatus.REFUNDED;
+        this.cancelledAt = LocalDateTime.now();
+        this.cancellationReason = reason;
+    }
+
+    /**
      * Check if ticket can be validated.
      * 
      * @return true if ticket is in ISSUED status and not expired

@@ -38,6 +38,10 @@ public interface TicketTypeRepository extends JpaRepository<TicketType, UUID> {
     int incrementQuantitySold(@Param("id") UUID id, @Param("quantity") int quantity);
 
     @Modifying
+    @Query("UPDATE TicketType t SET t.quantitySold = t.quantitySold - :quantity WHERE t.id = :id AND t.quantitySold >= :quantity")
+    int decrementQuantitySold(@Param("id") UUID id, @Param("quantity") int quantity);
+
+    @Modifying
     @Query("UPDATE TicketType t SET t.quantityReserved = t.quantityReserved + :quantity WHERE t.id = :id")
     int incrementQuantityReserved(@Param("id") UUID id, @Param("quantity") int quantity);
 

@@ -1,9 +1,15 @@
 package eventplanner.features.attendee.controller;
 
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
+import eventplanner.features.attendee.dto.request.CreateAttendeeInviteRequest;
+import eventplanner.features.attendee.dto.request.ListAttendeeInvitesRequest;
 import eventplanner.features.attendee.dto.request.ListAttendeesRequest;
+import eventplanner.features.attendee.dto.request.UpdateRsvpStatusRequest;
+import eventplanner.features.attendee.dto.response.AttendeeInviteResponse;
 import eventplanner.features.attendee.dto.response.AttendeeResponse;
+import eventplanner.features.attendee.dto.response.RsvpStatusResponse;
 import eventplanner.features.attendee.entity.Attendee;
+import eventplanner.features.attendee.entity.AttendeeInvite;
 import eventplanner.features.attendee.enums.AttendeeInviteStatus;
 import eventplanner.features.attendee.service.AttendeeInviteService;
 import eventplanner.features.attendee.service.AttendeeService;
@@ -191,6 +197,126 @@ public class AttendeeController {
 		}
 	}
 
+	// ==================== Attendee Invite Management ====================
+
+	@PostMapping("/events/{eventId}/invites")
+	@Operation(summary = "Create attendee invite", description = "Invite a user (by userId/email) to attend an event.")
+	@RequiresPermission(value = RbacPermissions.ATTENDEE_CREATE, resources = {"event_id=#eventId"})
+	public ResponseEntity<AttendeeInviteResponse> createInvite(
+			@PathVariable UUID eventId,
+			@Valid @RequestBody CreateAttendeeInviteRequest request,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			if (principal == null) {
+				throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+			}
+			if (!canManageInvites(principal, eventId)) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			}
+
+			AttendeeInvite invite = inviteService.createInvite(eventId, principal, request);
+			return ResponseEntity.status(HttpStatus.CREATED).body(AttendeeInviteResponse.from(invite));
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+		}
+	}
+
+	@GetMapping("/events/{eventId}/invites")
+	@Operation(summary = "List attendee invites", description = "List attendee invites for an event with pagination.")
+	@RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId"})
+	public ResponseEntity<Page<AttendeeInviteResponse>> listInvites(
+			@PathVariable UUID eventId,
+			@Valid @ModelAttribute ListAttendeeInvitesRequest request,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			if (principal == null) {
+				throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+			}
+			if (!canManageInvites(principal, eventId)) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			}
+
+			int page = request.getPage() != null ? request.getPage() : 0;
+			int size = request.getSize() != null ? request.getSize() : 20;
+			Page<AttendeeInviteResponse> response = inviteService
+					.listEventInvites(eventId, request.getStatus(), page, size)
+					.map(AttendeeInviteResponse::from);
+			return ResponseEntity.ok(response);
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+		}
+	}
+
+	@GetMapping("/events/{eventId}/invites/{inviteId}")
+	@Operation(summary = "Get attendee invite", description = "Get a single attendee invite by ID.")
+	@RequiresPermission(value = RbacPermissions.ATTENDEE_READ, resources = {"event_id=#eventId", "invite_id=#inviteId"})
+	public ResponseEntity<AttendeeInviteResponse> getInvite(
+			@PathVariable UUID eventId,
+			@PathVariable UUID inviteId,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			if (principal == null) {
+				throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+			}
+			if (!canManageInvites(principal, eventId)) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			}
+
+			AttendeeInvite invite = inviteService.getInviteById(eventId, inviteId);
+			return ResponseEntity.ok(AttendeeInviteResponse.from(invite));
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+		}
+	}
+
+	@DeleteMapping("/events/{eventId}/invites/{inviteId}")
+	@Operation(summary = "Revoke attendee invite", description = "Revoke a pending attendee invite.")
+	@RequiresPermission(value = RbacPermissions.ATTENDEE_DELETE, resources = {"event_id=#eventId", "invite_id=#inviteId"})
+	public ResponseEntity<Void> revokeInvite(
+			@PathVariable UUID eventId,
+			@PathVariable UUID inviteId,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			if (principal == null) {
+				throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+			}
+			if (!canManageInvites(principal, eventId)) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			}
+
+			inviteService.revokeInvite(eventId, inviteId);
+			return ResponseEntity.noContent().build();
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+		}
+	}
+
+	@PostMapping("/events/{eventId}/invites/{inviteId}/resend")
+	@Operation(summary = "Resend attendee invite", description = "Resend a pending or expired attendee invite.")
+	@RequiresPermission(value = RbacPermissions.ATTENDEE_CREATE, resources = {"event_id=#eventId", "invite_id=#inviteId"})
+	public ResponseEntity<AttendeeInviteResponse> resendInvite(
+			@PathVariable UUID eventId,
+			@PathVariable UUID inviteId,
+			@RequestParam(required = false) Boolean sendEmail,
+			@RequestParam(required = false) Boolean sendPush,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			if (principal == null) {
+				throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+			}
+			if (!canManageInvites(principal, eventId)) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			}
+
+			Boolean emailFlag = sendEmail != null ? sendEmail : Boolean.TRUE;
+			Boolean pushFlag = sendPush != null ? sendPush : Boolean.TRUE;
+			AttendeeInvite invite = inviteService.resendInvite(eventId, inviteId, emailFlag, pushFlag);
+			return ResponseEntity.ok(AttendeeInviteResponse.from(invite));
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+		}
+	}
+
     // ==================== Update Invite RSVP Status ====================
 
     @PostMapping("/invites")
@@ -336,7 +462,7 @@ public class AttendeeController {
 			}
 			
 			// Use AttendeeService directly
-			attendeeService.rsvpToEvent(id, principal.getId());
+			attendeeService.rsvpToEvent(id, principal);
 			
 			// Return updated event
 			Optional<Event> eventOpt = eventService.getById(id);
@@ -348,6 +474,72 @@ public class AttendeeController {
 		} catch (IllegalArgumentException ex) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
 		}
+	}
+
+	@GetMapping("/events/{id}/rsvp")
+	@RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+	@Operation(summary = "Get RSVP status", description = "Get the authenticated user's RSVP status for an event.")
+	public ResponseEntity<RsvpStatusResponse> getRsvpStatus(
+			@PathVariable UUID id,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			if (principal == null) {
+				throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+			}
+			Attendee attendee = attendeeService.getRsvpStatus(id, principal).orElse(null);
+			RsvpStatusResponse response = RsvpStatusResponse.from(attendee);
+			if (response.getStatus() == null) {
+				response.setEventId(id);
+			}
+			return ResponseEntity.ok(response);
+		} catch (IllegalArgumentException ex) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+		}
+	}
+
+	@PutMapping("/events/{id}/rsvp")
+	@RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+	@Operation(summary = "Update RSVP status", description = "Update the authenticated user's RSVP status for an event.")
+	public ResponseEntity<RsvpStatusResponse> updateRsvpStatus(
+			@PathVariable UUID id,
+			@Valid @RequestBody UpdateRsvpStatusRequest request,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			if (principal == null) {
+				throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+			}
+			Attendee attendee = attendeeService.updateRsvpStatus(id, request.getStatus(), principal);
+			return ResponseEntity.ok(RsvpStatusResponse.from(attendee));
+		} catch (IllegalArgumentException ex) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+		}
+	}
+
+	@DeleteMapping("/events/{id}/rsvp")
+	@RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+	@Operation(summary = "Cancel RSVP", description = "Cancel or withdraw RSVP for the authenticated user.")
+	public ResponseEntity<RsvpStatusResponse> cancelRsvp(
+			@PathVariable UUID id,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			if (principal == null) {
+				throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+			}
+			Attendee attendee = attendeeService.cancelRsvp(id, principal);
+			return ResponseEntity.ok(RsvpStatusResponse.from(attendee));
+		} catch (IllegalArgumentException ex) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+		}
+	}
+
+	private boolean canManageInvites(UserPrincipal principal, UUID eventId) {
+		if (principal == null || eventId == null) {
+			return false;
+		}
+		if (authorizationService.isAdmin(principal) || authorizationService.isEventOwner(principal, eventId)) {
+			return true;
+		}
+		return authorizationService.hasEventMembership(principal, eventId);
 	}
 
 }

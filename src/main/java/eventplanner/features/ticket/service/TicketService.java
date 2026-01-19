@@ -9,7 +9,13 @@ import eventplanner.common.exception.exceptions.ConflictException;
 import eventplanner.common.exception.exceptions.ErrorCode;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.ticket.dto.request.IssueTicketRequest;
+import eventplanner.features.ticket.dto.request.BulkTicketActionRequest;
+import eventplanner.features.ticket.dto.request.ResendTicketRequest;
+import eventplanner.features.ticket.dto.request.UpdateTicketRequest;
+import eventplanner.features.ticket.dto.request.TransferTicketRequest;
 import eventplanner.features.ticket.dto.request.ValidateTicketRequest;
+import eventplanner.features.ticket.dto.response.BulkTicketActionResponse;
+import eventplanner.features.ticket.dto.response.BulkTicketActionResult;
 import eventplanner.features.ticket.dto.response.TicketResponse;
 import eventplanner.features.ticket.dto.response.TicketWalletResponse;
 import eventplanner.features.attendee.entity.Attendee;
@@ -17,6 +23,7 @@ import eventplanner.features.ticket.entity.Ticket;
 import eventplanner.features.ticket.entity.TicketType;
 import eventplanner.features.attendee.enums.AttendeeStatus;
 import eventplanner.features.ticket.enums.TicketStatus;
+import eventplanner.features.ticket.enums.BulkTicketAction;
 import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.features.ticket.repository.TicketRepository;
 import eventplanner.features.ticket.repository.TicketTypeRepository;
@@ -25,6 +32,7 @@ import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.util.AuthValidationUtil;
 import eventplanner.common.config.ExternalServicesProperties;
 import eventplanner.features.config.AppProperties;
 import org.springframework.data.domain.Page;
@@ -97,7 +105,7 @@ public class TicketService {
      * Accepts a list of ticket requests - each request can issue multiple tickets (quantity) to a single attendee/email.
      */
     public List<Ticket> issueTickets(List<IssueTicketRequest> requests, UserPrincipal principal) {
-        return issueTickets(requests, principal, true);
+        return issueTickets(requests, principal, true, false);
     }
 
     /**
@@ -105,6 +113,15 @@ public class TicketService {
      * When finalizeFreeTickets is false, free tickets are reserved and left in PENDING status (used for checkout flows).
      */
     public List<Ticket> issueTickets(List<IssueTicketRequest> requests, UserPrincipal principal, boolean finalizeFreeTickets) {
+        return issueTickets(requests, principal, finalizeFreeTickets, false);
+    }
+
+    /**
+     * Issue tickets with explicit control over free-ticket finalization and paid-ticket issuance.
+     * When forceIssue is true, paid tickets are issued immediately and inventory is marked sold.
+     */
+    public List<Ticket> issueTickets(List<IssueTicketRequest> requests, UserPrincipal principal,
+                                     boolean finalizeFreeTickets, boolean forceIssue) {
         if (requests == null || requests.isEmpty()) {
             throw new IllegalArgumentException("At least one ticket request is required");
         }
@@ -119,7 +136,7 @@ public class TicketService {
                 throw new IllegalArgumentException("All ticket requests must be for the same event");
             }
 
-            List<Ticket> tickets = issueSingleTicketRequest(request, principal, finalizeFreeTickets);
+            List<Ticket> tickets = issueSingleTicketRequest(request, principal, finalizeFreeTickets, forceIssue);
             allTickets.addAll(tickets);
         }
 
@@ -130,6 +147,11 @@ public class TicketService {
      * Issue one or more tickets to an attendee (internal method).
      */
     private List<Ticket> issueSingleTicketRequest(IssueTicketRequest request, UserPrincipal principal, boolean finalizeFreeTickets) {
+        return issueSingleTicketRequest(request, principal, finalizeFreeTickets, false);
+    }
+
+    private List<Ticket> issueSingleTicketRequest(IssueTicketRequest request, UserPrincipal principal,
+                                                  boolean finalizeFreeTickets, boolean forceIssue) {
         if (request == null) {
             throw new IllegalArgumentException("Request cannot be null");
         }
@@ -165,6 +187,7 @@ public class TicketService {
         }
 
         boolean freeTicket = isFreeTicket(ticketType);
+        boolean shouldIssue = (freeTicket && finalizeFreeTickets) || forceIssue;
 
         // Validate ticket type availability
         if (!ticketType.canPurchase(request.getQuantity())) {
@@ -199,8 +222,9 @@ public class TicketService {
             }
         }
 
-        // Reserve inventory with a pessimistic lock to avoid overselling
-        if (!(freeTicket && finalizeFreeTickets)) {
+        if (shouldIssue) {
+            incrementSoldOrThrow(ticketType.getId(), request.getQuantity());
+        } else {
             reserveTicketsOrThrow(ticketType.getId(), request.getQuantity());
         }
 
@@ -218,27 +242,16 @@ public class TicketService {
         // Save all tickets
         List<Ticket> savedTickets = ticketRepository.saveAll(tickets);
 
-        // Update ticket type quantities
-        if (freeTicket && finalizeFreeTickets) {
-            // Free ticket (price is null or zero) - immediately mark as sold
-            ticketTypeRepository.incrementQuantitySold(request.getTicketTypeId(), request.getQuantity());
-        }
-
         // For free tickets, update attendee RSVP status (only if attendee exists)
         if (freeTicket && finalizeFreeTickets && attendee != null) {
             attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
             attendeeRepository.save(attendee);
         }
 
-        // Issue tickets (set status to ISSUED for free tickets, PENDING for paid)
-        for (Ticket ticket : savedTickets) {
-            if (freeTicket && finalizeFreeTickets) {
+        if (shouldIssue) {
+            for (Ticket ticket : savedTickets) {
                 ticket.issue(issuedBy);
             }
-        }
-        
-        // Save any status changes
-        if (freeTicket && finalizeFreeTickets) {
             savedTickets = ticketRepository.saveAll(savedTickets);
         }
 
@@ -315,6 +328,13 @@ public class TicketService {
      * Cancel a ticket.
      */
     public Ticket cancelTicket(UUID ticketId, UserPrincipal principal) {
+        return cancelTicket(ticketId, null, principal);
+    }
+
+    /**
+     * Cancel a ticket with an optional reason.
+     */
+    public Ticket cancelTicket(UUID ticketId, String reason, UserPrincipal principal) {
         // Load ticket with relationships to avoid lazy loading issues
         Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
@@ -340,7 +360,7 @@ public class TicketService {
 
         TicketStatus previousStatus = ticket.getStatus();
         try {
-            ticket.cancel(null);
+            ticket.cancel(reason);
         } catch (IllegalStateException e) {
             throw new ConflictException(e.getMessage());
         }
@@ -363,6 +383,274 @@ public class TicketService {
         }
 
         return saved;
+    }
+
+    /**
+     * Refund a ticket.
+     */
+    public Ticket refundTicket(UUID ticketId, String reason, UserPrincipal principal) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
+
+        if (ticket.getStatus() == TicketStatus.PENDING) {
+            throw new ConflictException("Cannot refund a pending ticket");
+        }
+
+        TicketStatus previousStatus = ticket.getStatus();
+        try {
+            ticket.refund(reason);
+        } catch (IllegalStateException e) {
+            throw new ConflictException(e.getMessage());
+        }
+
+        Ticket saved;
+        try {
+            saved = ticketRepository.save(ticket);
+        } catch (Exception e) {
+            throw new ApiException(ErrorCode.TICKET_CANCEL_SAVE_FAILED,
+                "Failed to save ticket refund", e);
+        }
+
+        if (previousStatus == TicketStatus.ISSUED && ticket.getTicketType() != null) {
+            try {
+                int updated = ticketTypeRepository.decrementQuantitySold(ticket.getTicketType().getId(), 1);
+                if (updated == 0) {
+                    throw new ApiException(ErrorCode.TICKET_TYPE_NOT_AVAILABLE,
+                        "Failed to update ticket inventory for refund");
+                }
+            } catch (ApiException e) {
+                throw e;
+            } catch (Exception e) {
+                // Best-effort; do not fail refund if inventory update fails
+            }
+        }
+
+        return saved;
+    }
+
+    /**
+     * Update ticket holder details for email-based tickets.
+     */
+    public Ticket updateTicket(UUID ticketId, UpdateTicketRequest request, UserPrincipal principal) {
+        if (request == null) {
+            throw new IllegalArgumentException("Request cannot be null");
+        }
+        Ticket ticket = ticketRepository.findById(ticketId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
+
+        if (ticket.getStatus() == TicketStatus.CANCELLED || ticket.getStatus() == TicketStatus.REFUNDED) {
+            throw new ConflictException("Cannot update a cancelled or refunded ticket");
+        }
+        if (ticket.getStatus() == TicketStatus.VALIDATED) {
+            throw new ConflictException("Cannot update a validated ticket");
+        }
+        if (ticket.getAttendee() != null) {
+            throw new IllegalArgumentException("Use transfer to update attendee-based tickets");
+        }
+
+        String ownerEmail = request.getOwnerEmail() != null
+            ? AuthValidationUtil.normalizeEmail(request.getOwnerEmail())
+            : null;
+        String ownerName = request.getOwnerName() != null ? request.getOwnerName().trim() : null;
+
+        if ((ownerEmail == null || ownerEmail.isBlank()) && (ownerName == null || ownerName.isBlank())) {
+            throw new IllegalArgumentException("At least one field must be provided");
+        }
+        if (ownerEmail != null && (ownerName == null || ownerName.isBlank()) &&
+            (ticket.getOwnerName() == null || ticket.getOwnerName().isBlank())) {
+            throw new IllegalArgumentException("Owner name is required when updating owner email");
+        }
+
+        if (ownerEmail != null) {
+            ticket.setOwnerEmail(ownerEmail);
+        }
+        if (ownerName != null && !ownerName.isBlank()) {
+            ticket.setOwnerName(ownerName);
+        }
+
+        return ticketRepository.save(ticket);
+    }
+
+    /**
+     * Transfer ticket ownership to another attendee or email address.
+     */
+    public Ticket transferTicket(UUID ticketId, TransferTicketRequest request, UserPrincipal principal) {
+        if (request == null) {
+            throw new IllegalArgumentException("Request cannot be null");
+        }
+        Ticket ticket = ticketRepository.findById(ticketId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
+
+        if (ticket.getStatus() == TicketStatus.CANCELLED || ticket.getStatus() == TicketStatus.REFUNDED) {
+            throw new ConflictException("Cannot transfer a cancelled or refunded ticket");
+        }
+        if (ticket.getStatus() == TicketStatus.VALIDATED) {
+            throw new ConflictException("Cannot transfer a validated ticket");
+        }
+        if (ticket.getStatus() == TicketStatus.PENDING) {
+            throw new ConflictException("Cannot transfer a pending ticket");
+        }
+
+        if (request.getNewAttendeeId() == null &&
+            (request.getNewOwnerEmail() == null || request.getNewOwnerName() == null)) {
+            throw new IllegalArgumentException("New attendeeId or ownerEmail/ownerName is required");
+        }
+
+        Attendee newAttendee = null;
+        String newOwnerEmail = null;
+        String newOwnerName = null;
+
+        if (request.getNewAttendeeId() != null) {
+            newAttendee = attendeeRepository.findById(request.getNewAttendeeId())
+                .orElseThrow(() -> new ResourceNotFoundException("Attendee not found: " + request.getNewAttendeeId()));
+            if (ticket.getEvent() == null || newAttendee.getEvent() == null ||
+                !ticket.getEvent().getId().equals(newAttendee.getEvent().getId())) {
+                throw new IllegalArgumentException("Attendee does not belong to this event");
+            }
+            enforceTransferLimit(ticket, newAttendee.getId(), null);
+            ticket.setAttendee(newAttendee);
+            ticket.setOwnerEmail(null);
+            ticket.setOwnerName(null);
+        } else {
+            newOwnerEmail = AuthValidationUtil.normalizeEmail(request.getNewOwnerEmail());
+            newOwnerName = request.getNewOwnerName() != null ? request.getNewOwnerName().trim() : null;
+            if (newOwnerName == null || newOwnerName.isBlank()) {
+                throw new IllegalArgumentException("New owner name is required");
+            }
+            enforceTransferLimit(ticket, null, newOwnerEmail);
+            ticket.setAttendee(null);
+            ticket.setOwnerEmail(newOwnerEmail);
+            ticket.setOwnerName(newOwnerName);
+        }
+
+        Ticket saved = ticketRepository.save(ticket);
+
+        if (Boolean.TRUE.equals(request.getSendEmail()) || Boolean.TRUE.equals(request.getSendPush())) {
+            Event event = saved.getEvent();
+            if (event != null) {
+                sendTicketNotifications(event, List.of(saved), request.getSendEmail(), request.getSendPush());
+            }
+        }
+
+        return saved;
+    }
+
+    /**
+     * Resend ticket notifications.
+     */
+    public Ticket resendTicket(UUID ticketId, ResendTicketRequest request, UserPrincipal principal) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
+
+        if (ticket.getStatus() == TicketStatus.PENDING) {
+            throw new ConflictException("Ticket has not been issued yet");
+        }
+        if (ticket.getStatus() == TicketStatus.CANCELLED || ticket.getStatus() == TicketStatus.REFUNDED) {
+            throw new ConflictException("Cannot resend a cancelled or refunded ticket");
+        }
+
+        ResendTicketRequest resolved = request != null ? request : new ResendTicketRequest();
+        boolean sendEmail = Boolean.TRUE.equals(resolved.getSendEmail());
+        boolean sendPush = Boolean.TRUE.equals(resolved.getSendPush());
+        if (!sendEmail && !sendPush) {
+            return ticket;
+        }
+
+        Event event = ticket.getEvent();
+        if (event == null) {
+            throw new BadRequestException("Ticket is not associated with an event");
+        }
+
+        sendTicketNotifications(event, List.of(ticket), sendEmail, sendPush);
+        return ticket;
+    }
+
+    /**
+     * Run a bulk action against multiple tickets.
+     */
+    public BulkTicketActionResponse bulkAction(BulkTicketActionRequest request, UserPrincipal principal) {
+        if (request == null) {
+            throw new IllegalArgumentException("Request cannot be null");
+        }
+        if (request.getTicketIds() == null || request.getTicketIds().isEmpty()) {
+            throw new IllegalArgumentException("At least one ticket ID is required");
+        }
+        if (request.getEventId() == null) {
+            throw new IllegalArgumentException("Event ID is required");
+        }
+
+        List<Ticket> found = ticketRepository.findAllById(request.getTicketIds());
+        Map<UUID, Ticket> ticketsById = found.stream()
+            .collect(Collectors.toMap(Ticket::getId, t -> t));
+
+        List<BulkTicketActionResult> results = new ArrayList<>();
+        int successCount = 0;
+
+        for (UUID ticketId : request.getTicketIds()) {
+            Ticket ticket = ticketsById.get(ticketId);
+            if (ticket == null) {
+                results.add(BulkTicketActionResult.builder()
+                    .ticketId(ticketId)
+                    .success(false)
+                    .message("Ticket not found")
+                    .build());
+                continue;
+            }
+
+            if (ticket.getEvent() == null || ticket.getEvent().getId() == null ||
+                !ticket.getEvent().getId().equals(request.getEventId())) {
+                results.add(BulkTicketActionResult.builder()
+                    .ticketId(ticketId)
+                    .success(false)
+                    .message("Ticket does not belong to event")
+                    .status(ticket.getStatus())
+                    .build());
+                continue;
+            }
+
+            try {
+                Ticket updated;
+                switch (request.getAction()) {
+                    case CANCEL:
+                        updated = cancelTicket(ticketId, request.getReason(), principal);
+                        break;
+                    case REFUND:
+                        updated = refundTicket(ticketId, request.getReason(), principal);
+                        break;
+                    case RESEND:
+                        ResendTicketRequest resend = new ResendTicketRequest(
+                            request.getSendEmail(), request.getSendPush());
+                        updated = resendTicket(ticketId, resend, principal);
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Unsupported action: " + request.getAction());
+                }
+
+                results.add(BulkTicketActionResult.builder()
+                    .ticketId(ticketId)
+                    .success(true)
+                    .status(updated.getStatus())
+                    .message("Success")
+                    .build());
+                successCount++;
+            } catch (Exception e) {
+                results.add(BulkTicketActionResult.builder()
+                    .ticketId(ticketId)
+                    .success(false)
+                    .status(ticket.getStatus())
+                    .message(e.getMessage())
+                    .build());
+            }
+        }
+
+        return BulkTicketActionResponse.builder()
+            .eventId(request.getEventId())
+            .action(request.getAction())
+            .total(results.size())
+            .successCount(successCount)
+            .failureCount(results.size() - successCount)
+            .results(results)
+            .build();
     }
 
     /**
@@ -547,6 +835,39 @@ public class TicketService {
         }
     }
 
+    private void enforceTransferLimit(Ticket ticket, UUID attendeeId, String ownerEmail) {
+        if (ticket == null || ticket.getTicketType() == null || ticket.getEvent() == null) {
+            return;
+        }
+        Integer configuredMax = ticket.getTicketType().getMaxTicketsPerPerson();
+        int maxTicketsPerPerson = configuredMax == null ? Integer.MAX_VALUE : configuredMax;
+        if (configuredMax != null && configuredMax <= 0) {
+            maxTicketsPerPerson = DEFAULT_MAX_TICKETS_PER_PERSON;
+        }
+        if (maxTicketsPerPerson == Integer.MAX_VALUE) {
+            return;
+        }
+
+        UUID eventId = ticket.getEvent().getId();
+        long existingTickets = 0;
+        if (attendeeId != null) {
+            existingTickets = ticketRepository.findByAttendeeIdAndEventId(attendeeId, eventId).size();
+            if (ticket.getAttendee() != null && attendeeId.equals(ticket.getAttendee().getId())) {
+                existingTickets = Math.max(0, existingTickets - 1);
+            }
+        } else if (ownerEmail != null) {
+            existingTickets = ticketRepository.findByOwnerEmailAndEventId(ownerEmail, eventId).size();
+            if (ticket.getOwnerEmail() != null &&
+                ownerEmail.equalsIgnoreCase(ticket.getOwnerEmail())) {
+                existingTickets = Math.max(0, existingTickets - 1);
+            }
+        }
+
+        if (existingTickets + 1 > maxTicketsPerPerson) {
+            throw new ApiException(ErrorCode.MAX_TICKETS_EXCEEDED,
+                "Cannot issue more than " + maxTicketsPerPerson + " tickets per person");
+        }
+    }
 
     /**
      * Convert bytes to hex string.
@@ -569,6 +890,22 @@ public class TicketService {
         }
 
         ticketTypeRepository.incrementQuantityReserved(ticketTypeId, quantity);
+    }
+
+    private void incrementSoldOrThrow(UUID ticketTypeId, int quantity) {
+        TicketType lockedType = ticketTypeRepository.findByIdForUpdate(ticketTypeId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + ticketTypeId));
+
+        if (!lockedType.canPurchase(quantity)) {
+            throw new ApiException(ErrorCode.TICKET_TYPE_SOLD_OUT,
+                "Not enough tickets available");
+        }
+
+        int updated = ticketTypeRepository.incrementQuantitySold(ticketTypeId, quantity);
+        if (updated == 0) {
+            throw new ApiException(ErrorCode.TICKET_TYPE_NOT_AVAILABLE,
+                "Failed to update ticket inventory");
+        }
     }
 
     private TicketWalletResponse buildWalletResponse(Ticket ticket) {

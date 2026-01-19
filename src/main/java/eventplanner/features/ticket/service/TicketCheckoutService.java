@@ -63,6 +63,7 @@ public class TicketCheckoutService {
     private final UserAccountRepository userAccountRepository;
     private final TicketPromotionRepository ticketPromotionRepository;
     private final LocationRepository locationRepository;
+    private final TicketingPolicyService ticketingPolicyService;
 
     /**
      * Start a new checkout session and reserve tickets.
@@ -85,6 +86,7 @@ public class TicketCheckoutService {
 
         Event event = eventRepository.findById(eventId)
             .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
+        ticketingPolicyService.ensureEventOpenForTicketing(event);
 
         List<TicketCheckoutItemRequest> normalizedItems = normalizeItems(request.getItems());
         Map<UUID, TicketType> ticketTypes = loadTicketTypes(normalizedItems, event.getId());
@@ -96,6 +98,9 @@ public class TicketCheckoutService {
 
         for (TicketCheckoutItemRequest item : normalizedItems) {
             TicketType ticketType = ticketTypes.get(item.getTicketTypeId());
+            if (Boolean.TRUE.equals(ticketType.getRequiresApproval())) {
+                throw new IllegalArgumentException("Ticket type requires approval");
+            }
 
             IssueTicketRequest issueRequest =
                 new IssueTicketRequest(
@@ -478,6 +483,7 @@ public class TicketCheckoutService {
         }
         return principal.getUser();
     }
+
 
     private int resolveTaxRateBps(Event event) {
         if (event == null || event.getVenue() == null) {
