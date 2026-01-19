@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -38,6 +39,12 @@ public class TicketTypeResponse {
     private Boolean isOnSale; // Computed: checks if currently on sale
     private Integer maxTicketsPerPerson;
     private Boolean requiresApproval;
+    private Long earlyBirdPriceMinor;
+    private LocalDateTime earlyBirdEndDate;
+    private Integer groupDiscountMinQuantity;
+    private Integer groupDiscountPercentBps;
+    private List<TicketPriceTierResponse> priceTiers;
+    private List<TicketTypeDependencyResponse> dependencies;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -63,6 +70,10 @@ public class TicketTypeResponse {
                 .isOnSale(ticketType.isOnSale())
                 .maxTicketsPerPerson(ticketType.getMaxTicketsPerPerson())
                 .requiresApproval(ticketType.getRequiresApproval())
+                .earlyBirdPriceMinor(ticketType.getEarlyBirdPriceMinor())
+                .earlyBirdEndDate(ticketType.getEarlyBirdEndDate())
+                .groupDiscountMinQuantity(ticketType.getGroupDiscountMinQuantity())
+                .groupDiscountPercentBps(ticketType.getGroupDiscountPercentBps())
                 .createdAt(ticketType.getCreatedAt())
                 .updatedAt(ticketType.getUpdatedAt())
                 .build();

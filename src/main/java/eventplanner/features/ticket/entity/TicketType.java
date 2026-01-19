@@ -108,6 +108,21 @@ public class TicketType extends BaseEntity {
     @Column(name = "requires_approval", nullable = false)
     private Boolean requiresApproval = false;
 
+    @Min(value = 0, message = "Early bird price must be greater than or equal to 0")
+    @Column(name = "early_bird_price_minor")
+    private Long earlyBirdPriceMinor;
+
+    @Column(name = "early_bird_end_date")
+    private LocalDateTime earlyBirdEndDate;
+
+    @Min(value = 1, message = "Group discount minimum quantity must be at least 1")
+    @Column(name = "group_discount_min_qty")
+    private Integer groupDiscountMinQuantity;
+
+    @Min(value = 1, message = "Group discount percent must be at least 1")
+    @Column(name = "group_discount_percent_bps")
+    private Integer groupDiscountPercentBps;
+
     /**
      * Metadata stored as JSON string for extensibility.
      */
@@ -143,6 +158,22 @@ public class TicketType extends BaseEntity {
         // Validate price
         if (priceMinor != null && priceMinor < 0) {
             throw new IllegalArgumentException("Price must be greater than or equal to 0");
+        }
+
+        if (earlyBirdPriceMinor != null && earlyBirdPriceMinor < 0) {
+            throw new IllegalArgumentException("Early bird price must be greater than or equal to 0");
+        }
+        if (earlyBirdPriceMinor != null && earlyBirdEndDate == null) {
+            throw new IllegalArgumentException("Early bird end date is required when early bird price is set");
+        }
+        if (groupDiscountMinQuantity != null && groupDiscountMinQuantity < 1) {
+            throw new IllegalArgumentException("Group discount minimum quantity must be at least 1");
+        }
+        if (groupDiscountPercentBps != null && (groupDiscountPercentBps < 1 || groupDiscountPercentBps > 10_000)) {
+            throw new IllegalArgumentException("Group discount percent must be between 1 and 10000 basis points");
+        }
+        if (groupDiscountMinQuantity != null && (groupDiscountPercentBps == null || groupDiscountPercentBps <= 0)) {
+            throw new IllegalArgumentException("Group discount percent is required when minimum quantity is set");
         }
         
         // Validate currency code using JavaMoney (JSR 354) - ISO 4217 standard

@@ -9,10 +9,12 @@ import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.features.attendee.dto.request.AttendeeInfo;
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
 import eventplanner.features.attendee.entity.Attendee;
-import eventplanner.features.attendee.enums.AttendeeInviteStatus;
+import eventplanner.features.attendee.entity.AttendeeRsvpHistory;
 import eventplanner.features.attendee.enums.AttendeeStatus;
-import eventplanner.features.attendee.repository.AttendeeInviteRepository;
+import eventplanner.features.attendee.enums.RsvpChangeSource;
+import eventplanner.features.attendee.dto.request.BulkRsvpUpdateItem;
 import eventplanner.features.attendee.repository.AttendeeRepository;
+import eventplanner.features.attendee.repository.AttendeeRsvpHistoryRepository;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.auth.entity.UserAccount;
@@ -20,6 +22,7 @@ import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.common.config.ExternalServicesProperties;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.util.AuthValidationUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -46,12 +49,12 @@ import java.util.*;
 public class AttendeeService {
     
     private final AttendeeRepository repository;
-    private final AttendeeInviteRepository inviteRepository;
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
     private final ExternalServicesProperties externalServicesProperties;
     private final AuthorizationService authorizationService;
+    private final AttendeeRsvpHistoryRepository rsvpHistoryRepository;
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
         "name", "email", "rsvpStatus", "checkedInAt", "createdAt"
@@ -109,7 +112,7 @@ public class AttendeeService {
             Attendee attendee = new Attendee();
             attendee.setEvent(event);
 
-            String trimmedEmail = attendeeInfo.getEmail() != null ? attendeeInfo.getEmail().trim() : null;
+            String trimmedEmail = AuthValidationUtil.safeTrim(attendeeInfo.getEmail());
             UserAccount resolvedUser = null;
 
             // If userId is provided, fetch user account and auto-fill info
@@ -122,9 +125,10 @@ public class AttendeeService {
                 attendee.setName(StringUtils.hasText(attendeeInfo.getName())
                     ? attendeeInfo.getName().trim()
                     : resolvedUser.getName());
-                attendee.setEmail(StringUtils.hasText(trimmedEmail)
-                    ? trimmedEmail
-                    : resolvedUser.getEmail());
+                String resolvedEmail = StringUtils.hasText(trimmedEmail)
+                    ? AuthValidationUtil.normalizeEmail(trimmedEmail)
+                    : AuthValidationUtil.normalizeEmail(resolvedUser.getEmail());
+                attendee.setEmail(resolvedEmail);
             } else {
                 // Use email - validate that either userId or email is provided
                 if (!StringUtils.hasText(trimmedEmail)) {
@@ -140,7 +144,7 @@ public class AttendeeService {
                     attendee.setName(StringUtils.hasText(attendeeInfo.getName())
                         ? attendeeInfo.getName().trim()
                         : resolvedUser.getName());
-                    attendee.setEmail(trimmedEmail);
+                    attendee.setEmail(AuthValidationUtil.normalizeEmail(trimmedEmail));
                 } else {
                     // User doesn't exist - use provided info, no user link
                     attendee.setUser(null);
@@ -149,12 +153,12 @@ public class AttendeeService {
                             "Name is required when email is provided and user doesn't exist in directory");
                     }
                     attendee.setName(attendeeInfo.getName().trim());
-                    attendee.setEmail(trimmedEmail);
+                    attendee.setEmail(AuthValidationUtil.normalizeEmail(trimmedEmail));
                 }
             }
 
             UUID resolvedUserId = resolvedUser != null ? resolvedUser.getId() : null;
-            String normalizedEmail = normalizeEmail(attendee.getEmail());
+            String normalizedEmail = attendee.getEmail();
 
             // Prevent duplicates within the same request (user or email)
             if (resolvedUserId != null && !seenUserIds.add(resolvedUserId)) {
@@ -315,24 +319,8 @@ public class AttendeeService {
         }
         // Validate email when provided
         if (attendee.getEmail() != null && !attendee.getEmail().isEmpty()) {
-            if (!isValidEmail(attendee.getEmail())) {
-                throw new IllegalArgumentException("Invalid email format");
-            }
+            AuthValidationUtil.normalizeEmail(attendee.getEmail());
         }
-    }
-
-    /**
-     * Validate email format
-     */
-    private boolean isValidEmail(String email) {
-        return email != null && email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
-    }
-
-    /**
-     * Normalize email for duplicate detection.
-     */
-    private String normalizeEmail(String email) {
-        return StringUtils.hasText(email) ? email.trim().toLowerCase() : null;
     }
 
     /**
@@ -471,6 +459,7 @@ public class AttendeeService {
             attendee.setRsvpStatus(resolvedStatus);
             Attendee saved = repository.save(attendee);
             updateEventAttendeeCount(event, previousStatus, resolvedStatus);
+            recordRsvpHistory(saved, previousStatus, resolvedStatus, principal, RsvpChangeSource.USER, null);
             return saved;
         }
 
@@ -485,6 +474,7 @@ public class AttendeeService {
 
         Attendee saved = repository.save(attendee);
         updateEventAttendeeCount(event, null, targetStatus);
+        recordRsvpHistory(saved, null, targetStatus, principal, RsvpChangeSource.USER, null);
         return saved;
     }
 
@@ -519,6 +509,7 @@ public class AttendeeService {
         attendee.setRsvpStatus(resolvedStatus);
         Attendee saved = repository.save(attendee);
         updateEventAttendeeCount(event, previousStatus, resolvedStatus);
+        recordRsvpHistory(saved, previousStatus, resolvedStatus, principal, RsvpChangeSource.USER, null);
         return saved;
     }
 
@@ -548,7 +539,56 @@ public class AttendeeService {
         attendee.setRsvpStatus(AttendeeStatus.DECLINED);
         Attendee saved = repository.save(attendee);
         updateEventAttendeeCount(event, previousStatus, AttendeeStatus.DECLINED);
+        recordRsvpHistory(saved, previousStatus, AttendeeStatus.DECLINED, principal, RsvpChangeSource.USER, null);
         return saved;
+    }
+
+    /**
+     * Bulk update RSVP statuses for an event (organizer/admin use).
+     */
+    public List<Attendee> bulkUpdateRsvpStatus(UUID eventId, List<BulkRsvpUpdateItem> updates, String note, UserPrincipal principal) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID is required");
+        }
+        if (principal == null || principal.getId() == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        if (updates == null || updates.isEmpty()) {
+            throw new IllegalArgumentException("At least one RSVP update is required");
+        }
+
+        Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        if (event.getAccessType() != EventAccessType.RSVP_REQUIRED) {
+            throw new IllegalArgumentException("Event does not require RSVP");
+        }
+
+        ensureEventManagerAccess(event, principal);
+        ensureEventOpenForRsvp(event);
+
+        boolean canOverrideApproval = canManageEvent(event, principal);
+
+        List<Attendee> updated = new ArrayList<>();
+        for (BulkRsvpUpdateItem item : updates) {
+            Attendee attendee = repository.findByIdAndEventId(item.getAttendeeId(), eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Attendee not found: " + item.getAttendeeId()));
+
+            AttendeeStatus previousStatus = attendee.getRsvpStatus();
+            AttendeeStatus resolvedStatus = canOverrideApproval
+                ? item.getStatus()
+                : resolveApprovalStatus(event, previousStatus, item.getStatus());
+
+            if (resolvedStatus == AttendeeStatus.CONFIRMED && previousStatus != AttendeeStatus.CONFIRMED) {
+                ensureCapacityAvailable(event);
+            }
+            attendee.setRsvpStatus(resolvedStatus);
+            Attendee saved = repository.save(attendee);
+            updateEventAttendeeCount(event, previousStatus, resolvedStatus);
+            recordRsvpHistory(saved, previousStatus, resolvedStatus, principal, RsvpChangeSource.ORGANIZER, note);
+            updated.add(saved);
+        }
+
+        return updated;
     }
 
     /**
@@ -615,35 +655,30 @@ public class AttendeeService {
     }
 
     private void ensurePrivateEventAccess(Event event, UserPrincipal principal) {
-        if (Boolean.TRUE.equals(event.getIsPublic())) {
-            return;
-        }
-        if (principal == null) {
-            throw new IllegalArgumentException("Authentication required");
-        }
-        if (authorizationService.isAdmin(principal) ||
-                authorizationService.isEventOwner(principal, event.getId()) ||
-                authorizationService.hasEventMembership(principal, event.getId())) {
-            return;
-        }
-        if (hasAcceptedInvite(event, principal)) {
+        if (authorizationService.canAccessEventWithInvite(principal, event)) {
             return;
         }
         throw new IllegalArgumentException("Access denied for private event");
     }
 
-    private boolean hasAcceptedInvite(Event event, UserPrincipal principal) {
+    private void ensureEventManagerAccess(Event event, UserPrincipal principal) {
+        if (event == null || principal == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        if (canManageEvent(event, principal)) {
+            return;
+        }
+        throw new IllegalArgumentException("Access denied to manage RSVP");
+    }
+
+    private boolean canManageEvent(Event event, UserPrincipal principal) {
         if (event == null || principal == null) {
             return false;
         }
-        UUID userId = principal.getId();
-        if (userId != null && inviteRepository.existsByEventIdAndInviteeIdAndStatus(
-                event.getId(), userId, AttendeeInviteStatus.ACCEPTED)) {
+        if (authorizationService.isAdmin(principal) || authorizationService.isEventOwner(principal, event.getId())) {
             return true;
         }
-        String email = principal.getUser() != null ? principal.getUser().getEmail() : null;
-        return email != null && inviteRepository.existsByEventIdAndInviteeEmailIgnoreCaseAndStatus(
-                event.getId(), email, AttendeeInviteStatus.ACCEPTED);
+        return authorizationService.hasEventMembership(principal, event.getId());
     }
 
     private void ensureCapacityAvailable(Event event) {
@@ -692,6 +727,27 @@ public class AttendeeService {
             event.setCurrentAttendeeCount(Math.max(0, event.getCurrentAttendeeCount() - 1));
             eventRepository.save(event);
         }
+    }
+
+    private void recordRsvpHistory(Attendee attendee, AttendeeStatus previousStatus, AttendeeStatus newStatus,
+                                   UserPrincipal principal, RsvpChangeSource source, String note) {
+        if (attendee == null || attendee.getEvent() == null || newStatus == null) {
+            return;
+        }
+        if (previousStatus == newStatus) {
+            return;
+        }
+        AttendeeRsvpHistory history = new AttendeeRsvpHistory();
+        history.setEvent(attendee.getEvent());
+        history.setAttendee(attendee);
+        history.setPreviousStatus(previousStatus);
+        history.setNewStatus(newStatus);
+        history.setSource(source != null ? source : RsvpChangeSource.USER);
+        history.setNote(note != null && !note.isBlank() ? note.trim() : null);
+        if (principal != null && principal.getUser() != null) {
+            history.setChangedBy(principal.getUser());
+        }
+        rsvpHistoryRepository.save(history);
     }
 
     private boolean isEventPast(Event event) {

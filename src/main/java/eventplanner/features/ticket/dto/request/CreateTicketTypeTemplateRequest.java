@@ -3,50 +3,37 @@ package eventplanner.features.ticket.dto.request;
 import eventplanner.features.ticket.enums.TicketTypeCategory;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
-import java.util.List;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.Map;
 
-/**
- * DTO for updating an existing ticket type.
- * All fields are optional - only provided fields will be updated.
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class UpdateTicketTypeRequest {
+public class CreateTicketTypeTemplateRequest {
 
-    @Size(min = 1, max = 100, message = "Ticket type name must be between 1 and 100 characters")
+    @NotBlank(message = "Template name is required")
+    @Size(min = 1, max = 100, message = "Template name must be between 1 and 100 characters")
     private String name;
 
-    /**
-     * Category of the ticket type (VIP, General Admission, etc.).
-     */
     private TicketTypeCategory category;
 
     @Size(max = 2000, message = "Description must not exceed 2000 characters")
     private String description;
 
-    /**
-     * Price per ticket in the smallest currency unit (e.g., cents).
-     * NULL indicates a free ticket.
-     */
     @Min(value = 0, message = "Price must be greater than or equal to 0")
     private Long priceMinor;
 
-    /**
-     * ISO 4217 currency code (e.g., "USD", "EUR", "GBP").
-     * Must be a valid currency code supported by payment gateways.
-     * Validated using JavaMoney (JSR 354) for ISO 4217 compliance.
-     */
     @Size(max = 3, message = "Currency code must be 3 characters")
-    private String currency;
+    private String currency = "USD";
 
+    @NotNull(message = "Quantity available is required")
     @Min(value = 0, message = "Quantity available must be greater than or equal to 0")
     @Max(value = 1000000, message = "Quantity available must not exceed 1,000,000")
     private Integer quantityAvailable;
@@ -59,9 +46,7 @@ public class UpdateTicketTypeRequest {
     @Max(value = 100, message = "Max tickets per person must not exceed 100")
     private Integer maxTicketsPerPerson;
 
-    private Boolean isActive;
-
-    private Boolean requiresApproval;
+    private Boolean requiresApproval = false;
 
     @Min(value = 0, message = "Early bird price must be greater than or equal to 0")
     private Long earlyBirdPriceMinor;
@@ -74,23 +59,5 @@ public class UpdateTicketTypeRequest {
     @Min(value = 1, message = "Group discount percent must be at least 1")
     private Integer groupDiscountPercentBps;
 
-    /**
-     * Metadata as a map (will be serialized to JSON string).
-     */
     private Map<String, Object> metadata;
-
-    /**
-     * Optional promotion adjustments for this ticket type.
-     */
-    private List<PromotionDetails> promotions;
-
-    /**
-     * Optional dynamic pricing tiers.
-     */
-    private List<TicketPriceTierRequest> priceTiers;
-
-    /**
-     * Optional ticket type dependencies (requires other ticket types).
-     */
-    private List<TicketTypeDependencyRequest> dependencies;
 }

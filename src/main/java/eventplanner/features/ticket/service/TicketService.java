@@ -8,6 +8,7 @@ import eventplanner.common.exception.exceptions.BadRequestException;
 import eventplanner.common.exception.exceptions.ConflictException;
 import eventplanner.common.exception.exceptions.ErrorCode;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.features.ticket.dto.request.IssueTicketRequest;
 import eventplanner.features.ticket.dto.request.BulkTicketActionRequest;
 import eventplanner.features.ticket.dto.request.ResendTicketRequest;
@@ -29,6 +30,7 @@ import eventplanner.features.ticket.repository.TicketRepository;
 import eventplanner.features.ticket.repository.TicketTypeRepository;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
+import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -65,6 +67,7 @@ public class TicketService {
     private final NotificationService notificationService;
     private final ExternalServicesProperties externalServicesProperties;
     private final String qrSecretKey;
+    private final AuthorizationService authorizationService;
 
     private static final int DEFAULT_MAX_TICKETS_PER_PERSON = 5;
 
@@ -75,6 +78,7 @@ public class TicketService {
                          UserAccountRepository userAccountRepository,
                          NotificationService notificationService,
                          ExternalServicesProperties externalServicesProperties,
+                         AuthorizationService authorizationService,
                          AppProperties appProperties) {
         this.ticketRepository = ticketRepository;
         this.ticketTypeRepository = ticketTypeRepository;
@@ -83,6 +87,7 @@ public class TicketService {
         this.userAccountRepository = userAccountRepository;
         this.notificationService = notificationService;
         this.externalServicesProperties = externalServicesProperties;
+        this.authorizationService = authorizationService;
         this.qrSecretKey = requireConfigured(appProperties.getTicket().getQrSecret(), "app.ticket.qr-secret");
     }
 
@@ -159,6 +164,7 @@ public class TicketService {
         // Fetch entities
         Event event = eventRepository.findById(request.getEventId())
             .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + request.getEventId()));
+        ensureTicketIssuanceAccess(event, principal);
 
         TicketType ticketType = ticketTypeRepository.findById(request.getTicketTypeId())
             .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + request.getTicketTypeId()));
@@ -890,6 +896,16 @@ public class TicketService {
         }
 
         ticketTypeRepository.incrementQuantityReserved(ticketTypeId, quantity);
+    }
+
+    private void ensureTicketIssuanceAccess(Event event, UserPrincipal principal) {
+        if (event == null) {
+            throw new BadRequestException("Event not found");
+        }
+        if (authorizationService.canAccessEventWithInvite(principal, event)) {
+            return;
+        }
+        throw new ForbiddenException("Access denied to private event");
     }
 
     private void incrementSoldOrThrow(UUID ticketTypeId, int quantity) {

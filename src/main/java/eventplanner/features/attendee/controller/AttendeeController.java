@@ -2,9 +2,11 @@ package eventplanner.features.attendee.controller;
 
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
 import eventplanner.features.attendee.dto.request.CreateAttendeeInviteRequest;
+import eventplanner.features.attendee.dto.request.BulkAttendeeInviteRequest;
 import eventplanner.features.attendee.dto.request.ListAttendeeInvitesRequest;
 import eventplanner.features.attendee.dto.request.ListAttendeesRequest;
 import eventplanner.features.attendee.dto.request.UpdateRsvpStatusRequest;
+import eventplanner.features.attendee.dto.request.BulkRsvpUpdateRequest;
 import eventplanner.features.attendee.dto.response.AttendeeInviteResponse;
 import eventplanner.features.attendee.dto.response.AttendeeResponse;
 import eventplanner.features.attendee.dto.response.RsvpStatusResponse;
@@ -216,6 +218,31 @@ public class AttendeeController {
 
 			AttendeeInvite invite = inviteService.createInvite(eventId, principal, request);
 			return ResponseEntity.status(HttpStatus.CREATED).body(AttendeeInviteResponse.from(invite));
+		} catch (IllegalArgumentException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+		}
+	}
+
+	@PostMapping("/events/{eventId}/invites/bulk")
+	@Operation(summary = "Bulk create attendee invites", description = "Create multiple attendee invites in one request.")
+	@RequiresPermission(value = RbacPermissions.ATTENDEE_CREATE, resources = {"event_id=#eventId"})
+	public ResponseEntity<List<AttendeeInviteResponse>> createInvitesBulk(
+			@PathVariable UUID eventId,
+			@Valid @RequestBody BulkAttendeeInviteRequest request,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			if (principal == null) {
+				throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+			}
+			if (!canManageInvites(principal, eventId)) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			}
+
+			List<AttendeeInviteResponse> responses = inviteService
+					.createInvitesBulk(eventId, principal, request.getInvites()).stream()
+					.map(AttendeeInviteResponse::from)
+					.toList();
+			return ResponseEntity.status(HttpStatus.CREATED).body(responses);
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
 		}
@@ -527,6 +554,31 @@ public class AttendeeController {
 			}
 			Attendee attendee = attendeeService.cancelRsvp(id, principal);
 			return ResponseEntity.ok(RsvpStatusResponse.from(attendee));
+		} catch (IllegalArgumentException ex) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+		}
+	}
+
+	@PostMapping("/events/{id}/rsvp/bulk")
+	@RequiresPermission(RbacPermissions.ATTENDEE_READ)
+	@Operation(summary = "Bulk update RSVPs", description = "Bulk update RSVP statuses for attendees (organizer/admin).")
+	public ResponseEntity<List<RsvpStatusResponse>> bulkUpdateRsvpStatus(
+			@PathVariable UUID id,
+			@Valid @RequestBody BulkRsvpUpdateRequest request,
+			@AuthenticationPrincipal UserPrincipal principal) {
+		try {
+			if (principal == null) {
+				throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+			}
+			List<Attendee> updated = attendeeService.bulkUpdateRsvpStatus(
+					id,
+					request.getUpdates(),
+					request.getNote(),
+					principal);
+			List<RsvpStatusResponse> responses = updated.stream()
+					.map(RsvpStatusResponse::from)
+					.toList();
+			return ResponseEntity.ok(responses);
 		} catch (IllegalArgumentException ex) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
 		}

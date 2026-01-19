@@ -4,8 +4,6 @@ import eventplanner.features.ticket.dto.request.CreateTicketCheckoutRequest;
 import eventplanner.features.ticket.dto.response.TicketCheckoutResponse;
 import eventplanner.features.ticket.dto.response.TicketPaymentInitResponse;
 import eventplanner.features.ticket.service.TicketCheckoutService;
-import eventplanner.features.attendee.enums.AttendeeInviteStatus;
-import eventplanner.features.attendee.repository.AttendeeInviteRepository;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.service.AuthorizationService;
@@ -39,7 +37,6 @@ public class TicketCheckoutController {
 
     private final TicketCheckoutService checkoutService;
     private final AuthorizationService authorizationService;
-    private final AttendeeInviteRepository attendeeInviteRepository;
 
     @PostMapping
     @Operation(summary = "Start ticket checkout", description = "Create a checkout session, reserve tickets, and return a cost breakdown.")
@@ -122,19 +119,6 @@ public class TicketCheckoutController {
     }
 
     private boolean canAccessCheckout(UserPrincipal principal, UUID eventId) {
-        if (principal == null || eventId == null) {
-            return false;
-        }
-        if (authorizationService.canAccessEvent(principal, eventId)) {
-            return true;
-        }
-        UUID userId = principal.getId();
-        if (userId != null && attendeeInviteRepository.existsByEventIdAndInviteeIdAndStatus(
-                eventId, userId, AttendeeInviteStatus.ACCEPTED)) {
-            return true;
-        }
-        String email = principal.getUser() != null ? principal.getUser().getEmail() : null;
-        return email != null && attendeeInviteRepository.existsByEventIdAndInviteeEmailIgnoreCaseAndStatus(
-                eventId, email, AttendeeInviteStatus.ACCEPTED);
+        return authorizationService.canAccessEventWithInvite(principal, eventId);
     }
 }

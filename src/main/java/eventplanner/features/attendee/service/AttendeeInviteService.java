@@ -31,6 +31,9 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 
 @Service
@@ -97,6 +100,7 @@ public class AttendeeInviteService {
 
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        ensureInvitesAllowed(event);
 
         if (isAtCapacity(event)) {
             throw new IllegalArgumentException("Event is at capacity");
@@ -175,6 +179,53 @@ public class AttendeeInviteService {
         }
 
         return saved;
+    }
+
+    public List<AttendeeInvite> createInvitesBulk(UUID eventId, UserPrincipal inviter, List<CreateAttendeeInviteRequest> requests) {
+        if (inviter == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        if (requests == null || requests.isEmpty()) {
+            throw new IllegalArgumentException("At least one invite request is required");
+        }
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        ensureInvitesAllowed(event);
+
+        Set<UUID> seenUserIds = new HashSet<>();
+        Set<String> seenEmails = new HashSet<>();
+
+        List<AttendeeInvite> results = new java.util.ArrayList<>();
+        for (CreateAttendeeInviteRequest request : requests) {
+            if (request == null) {
+                throw new IllegalArgumentException("Invite request cannot be null");
+            }
+
+            UUID inviteeUserId = request.getInviteeUserId();
+            String inviteeEmail = AuthValidationUtil.safeTrim(request.getInviteeEmail());
+            if (inviteeEmail != null && !inviteeEmail.isBlank()) {
+                inviteeEmail = AuthValidationUtil.normalizeEmail(inviteeEmail);
+            } else {
+                inviteeEmail = null;
+            }
+
+            if (inviteeUserId == null && (inviteeEmail == null || inviteeEmail.isBlank())) {
+                throw new IllegalArgumentException("Either inviteeUserId or inviteeEmail must be provided");
+            }
+            if (inviteeUserId != null && !seenUserIds.add(inviteeUserId)) {
+                throw new IllegalArgumentException("Duplicate invitee userId in request: " + inviteeUserId);
+            }
+            if (inviteeEmail != null && !seenEmails.add(inviteeEmail)) {
+                throw new IllegalArgumentException("Duplicate invitee email in request: " + inviteeEmail);
+            }
+        }
+
+        for (CreateAttendeeInviteRequest request : requests) {
+            results.add(createInvite(eventId, inviter, request));
+        }
+
+        return results;
     }
 
     @Transactional(readOnly = true)
@@ -545,6 +596,19 @@ public class AttendeeInviteService {
             current = 0;
         }
         return current >= capacity;
+    }
+
+    private void ensureInvitesAllowed(Event event) {
+        if (event == null || event.getAccessType() == null) {
+            return;
+        }
+        switch (event.getAccessType()) {
+            case INVITE_ONLY:
+            case TICKETED:
+                return;
+            default:
+                throw new IllegalArgumentException("Invitations are only supported for invite-only or ticketed events");
+        }
     }
 
     private void verifyInviteBelongsToPrincipal(AttendeeInvite invite, UserPrincipal principal) {

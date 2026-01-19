@@ -110,4 +110,22 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
      */
     @Query("SELECT t FROM Ticket t WHERE t.checkout.id = :checkoutId")
     List<Ticket> findByCheckoutId(@Param("checkoutId") UUID checkoutId);
+
+    @Query("SELECT COUNT(t) FROM Ticket t " +
+           "WHERE t.event.id = :eventId " +
+           "AND t.attendee.user.id = :userId " +
+           "AND t.ticketType.id = :ticketTypeId " +
+           "AND t.status IN ('ISSUED', 'VALIDATED')")
+    long countValidTicketsByUserIdAndTicketTypeId(@Param("eventId") UUID eventId,
+                                                  @Param("userId") UUID userId,
+                                                  @Param("ticketTypeId") UUID ticketTypeId);
+
+    @Query("SELECT COUNT(t) FROM Ticket t " +
+           "WHERE t.event.id = :eventId " +
+           "AND LOWER(t.ownerEmail) = LOWER(:email) " +
+           "AND t.ticketType.id = :ticketTypeId " +
+           "AND t.status IN ('ISSUED', 'VALIDATED')")
+    long countValidTicketsByEmailAndTicketTypeId(@Param("eventId") UUID eventId,
+                                                 @Param("email") String email,
+                                                 @Param("ticketTypeId") UUID ticketTypeId);
 }

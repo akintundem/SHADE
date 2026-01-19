@@ -65,6 +65,17 @@ public class CreateTicketTypeRequest {
 
     private Boolean requiresApproval = false;
 
+    @Min(value = 0, message = "Early bird price must be greater than or equal to 0")
+    private Long earlyBirdPriceMinor;
+
+    private LocalDateTime earlyBirdEndDate;
+
+    @Min(value = 1, message = "Group discount minimum quantity must be at least 1")
+    private Integer groupDiscountMinQuantity;
+
+    @Min(value = 1, message = "Group discount percent must be at least 1")
+    private Integer groupDiscountPercentBps;
+
     /**
      * Metadata as a map (will be serialized to JSON string).
      */
@@ -74,4 +85,14 @@ public class CreateTicketTypeRequest {
      * Optional promotions to create alongside the ticket type.
      */
     private List<PromotionDetails> promotions;
+
+    /**
+     * Optional dynamic pricing tiers.
+     */
+    private List<TicketPriceTierRequest> priceTiers;
+
+    /**
+     * Optional ticket type dependencies (requires other ticket types).
+     */
+    private List<TicketTypeDependencyRequest> dependencies;
 }

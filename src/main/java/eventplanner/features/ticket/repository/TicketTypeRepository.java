@@ -53,6 +53,10 @@ public interface TicketTypeRepository extends JpaRepository<TicketType, UUID> {
     @Query("UPDATE TicketType t SET t.quantityReserved = t.quantityReserved - :quantity, t.quantitySold = t.quantitySold + :quantity WHERE t.id = :id")
     int moveReservedToSold(@Param("id") UUID id, @Param("quantity") int quantity);
 
+    @Modifying
+    @Query("DELETE FROM TicketType t WHERE t.id = :id AND t.event.id = :eventId")
+    int hardDeleteByIdAndEventId(@Param("id") UUID id, @Param("eventId") UUID eventId);
+
     @Query("SELECT t FROM TicketType t WHERE t.event.id = :eventId AND t.category = :category")
     List<TicketType> findByEventIdAndCategory(@Param("eventId") UUID eventId, @Param("category") TicketTypeCategory category);
 

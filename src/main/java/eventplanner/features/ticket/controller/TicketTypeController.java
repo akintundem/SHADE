@@ -1,6 +1,7 @@
 package eventplanner.features.ticket.controller;
 
 import eventplanner.features.ticket.dto.request.CreateTicketTypeRequest;
+import eventplanner.features.ticket.dto.request.CloneTicketTypeRequest;
 import eventplanner.features.ticket.dto.request.UpdateTicketTypeRequest;
 import eventplanner.features.ticket.dto.response.TicketTypeResponse;
 import eventplanner.features.ticket.entity.TicketType;
@@ -69,7 +70,9 @@ public class TicketTypeController {
 
             // Ensure eventId in request matches path variable
             TicketType newTicketType = ticketTypeService.createTicketType(eventId, request, principal);
-            return new ResponseEntity<>(TicketTypeResponse.from(newTicketType), HttpStatus.CREATED);
+            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, newTicketType.getId(), null, null, null)
+                .stream().findFirst().orElse(TicketTypeResponse.from(newTicketType));
+            return new ResponseEntity<>(response, HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (AccessDeniedException e) {
@@ -103,7 +106,7 @@ public class TicketTypeController {
         @AuthenticationPrincipal UserPrincipal principal) {
         try {
             // Verify user can access the event
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
+            if (!authorizationService.canAccessEventWithInvite(principal, eventId)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
                     "Access denied to event: " + eventId);
             }
@@ -144,9 +147,11 @@ public class TicketTypeController {
             }
 
             TicketType updatedTicketType = ticketTypeService.updateTicketType(ticketTypeId, eventId, request, ifMatch, principal);
+            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, updatedTicketType.getId(), null, null, null)
+                .stream().findFirst().orElse(TicketTypeResponse.from(updatedTicketType));
             return ResponseEntity.ok()
                 .eTag(String.valueOf(updatedTicketType.getVersion())) // Return ETag with current version
-                .body(TicketTypeResponse.from(updatedTicketType));
+                .body(response);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (org.springframework.dao.OptimisticLockingFailureException e) {
@@ -154,6 +159,79 @@ public class TicketTypeController {
                 "Ticket type has been modified by another user. Please refresh and try again.", e);
         } catch (AccessDeniedException e) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
+        }
+    }
+
+    /**
+     * Clone a ticket type.
+     */
+    @PostMapping("/{ticketTypeId}/clone")
+    @Operation(summary = "Clone ticket type", description = "Clone an existing ticket type within the same event.")
+    @RequiresPermission(value = RbacPermissions.TICKET_TYPE_CREATE, resources = {"event_id=#eventId", "ticket_type_id=#ticketTypeId"})
+    public ResponseEntity<TicketTypeResponse> cloneTicketType(
+        @PathVariable UUID eventId,
+        @PathVariable UUID ticketTypeId,
+        @RequestBody(required = false) CloneTicketTypeRequest request,
+        @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (!authorizationService.canAccessEvent(principal, eventId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access denied to event: " + eventId);
+            }
+            TicketType cloned = ticketTypeService.cloneTicketType(ticketTypeId, eventId, request, principal);
+            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, cloned.getId(), null, null, null)
+                .stream().findFirst().orElse(TicketTypeResponse.from(cloned));
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    /**
+     * Archive a ticket type (mark inactive).
+     */
+    @PostMapping("/{ticketTypeId}/archive")
+    @Operation(summary = "Archive ticket type", description = "Archive a ticket type (mark inactive).")
+    @RequiresPermission(value = RbacPermissions.TICKET_TYPE_UPDATE, resources = {"event_id=#eventId", "ticket_type_id=#ticketTypeId"})
+    public ResponseEntity<TicketTypeResponse> archiveTicketType(
+        @PathVariable UUID eventId,
+        @PathVariable UUID ticketTypeId,
+        @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (!authorizationService.canAccessEvent(principal, eventId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access denied to event: " + eventId);
+            }
+            TicketType archived = ticketTypeService.archiveTicketType(ticketTypeId, eventId, principal);
+            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, archived.getId(), null, null, null)
+                .stream().findFirst().orElse(TicketTypeResponse.from(archived));
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    /**
+     * Restore a ticket type (mark active).
+     */
+    @PostMapping("/{ticketTypeId}/restore")
+    @Operation(summary = "Restore ticket type", description = "Restore a ticket type (mark active).")
+    @RequiresPermission(value = RbacPermissions.TICKET_TYPE_UPDATE, resources = {"event_id=#eventId", "ticket_type_id=#ticketTypeId"})
+    public ResponseEntity<TicketTypeResponse> restoreTicketType(
+        @PathVariable UUID eventId,
+        @PathVariable UUID ticketTypeId,
+        @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (!authorizationService.canAccessEvent(principal, eventId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access denied to event: " + eventId);
+            }
+            TicketType restored = ticketTypeService.restoreTicketType(ticketTypeId, eventId, principal);
+            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, restored.getId(), null, null, null)
+                .stream().findFirst().orElse(TicketTypeResponse.from(restored));
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -185,6 +263,28 @@ public class TicketTypeController {
             return ResponseEntity.noContent().build();
         } catch (AccessDeniedException e) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
+        }
+    }
+
+    /**
+     * Hard delete a ticket type (permanent).
+     */
+    @DeleteMapping("/{ticketTypeId}/hard-delete")
+    @Operation(summary = "Hard delete ticket type", description = "Permanently delete a ticket type (no issued tickets allowed).")
+    @RequiresPermission(value = RbacPermissions.TICKET_TYPE_DELETE, resources = {"event_id=#eventId", "ticket_type_id=#ticketTypeId"})
+    public ResponseEntity<Void> hardDeleteTicketType(
+        @PathVariable UUID eventId,
+        @PathVariable UUID ticketTypeId,
+        @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (!authorizationService.canAccessEvent(principal, eventId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access denied to event: " + eventId);
+            }
+            ticketTypeService.hardDeleteTicketType(ticketTypeId, eventId, principal);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 }

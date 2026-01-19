@@ -1,6 +1,8 @@
 package eventplanner.security.authorization.service;
 
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.features.attendee.enums.AttendeeInviteStatus;
+import eventplanner.features.attendee.repository.AttendeeInviteRepository;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.event.entity.EventRole;
@@ -23,6 +25,7 @@ public class AuthorizationService {
 
     private final EventRoleRepository eventRoleRepository;
     private final EventRepository eventRepository;
+    private final AttendeeInviteRepository attendeeInviteRepository;
 
     /**
      * Check if a user is the owner of an event.
@@ -124,6 +127,38 @@ public class AuthorizationService {
     }
 
     /**
+     * Check if a user can access a private event when accepted invites should be honored.
+     * This is intended for read-only flows such as ticket type listing or ticket issuance.
+     */
+    public boolean canAccessEventWithInvite(UserPrincipal user, UUID eventId) {
+        if (eventId == null) {
+            return false;
+        }
+        Event event = eventRepository.findById(eventId).orElse(null);
+        return canAccessEventWithInvite(user, event);
+    }
+
+    public boolean canAccessEventWithInvite(UserPrincipal user, Event event) {
+        if (event == null) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(event.getIsPublic())) {
+            return true;
+        }
+        if (user == null) {
+            return false;
+        }
+        UUID eventId = event.getId();
+        if (isAdmin(user) || isEventOwner(user.getId(), eventId)) {
+            return true;
+        }
+        if (hasEventMembership(user, eventId)) {
+            return true;
+        }
+        return hasAcceptedInvite(user, eventId);
+    }
+
+    /**
      * Determine if the user has an active event role for the provided event.
      */
     public boolean hasEventMembership(UserPrincipal user, UUID eventId) {
@@ -132,5 +167,19 @@ public class AuthorizationService {
         }
         return eventRoleRepository.findByEventIdAndUserId(eventId, user.getId()).stream()
             .anyMatch(EventRole::getIsActive);
+    }
+
+    private boolean hasAcceptedInvite(UserPrincipal user, UUID eventId) {
+        if (user == null || eventId == null) {
+            return false;
+        }
+        UUID userId = user.getId();
+        if (userId != null && attendeeInviteRepository.existsByEventIdAndInviteeIdAndStatus(
+                eventId, userId, AttendeeInviteStatus.ACCEPTED)) {
+            return true;
+        }
+        String email = user.getUser() != null ? user.getUser().getEmail() : null;
+        return email != null && attendeeInviteRepository.existsByEventIdAndInviteeEmailIgnoreCaseAndStatus(
+            eventId, email, AttendeeInviteStatus.ACCEPTED);
     }
 }

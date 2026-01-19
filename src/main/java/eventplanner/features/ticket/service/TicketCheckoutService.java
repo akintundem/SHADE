@@ -16,6 +16,8 @@ import eventplanner.features.ticket.entity.TicketCheckout;
 import eventplanner.features.ticket.entity.TicketCheckoutItem;
 import eventplanner.features.ticket.entity.TicketType;
 import eventplanner.features.ticket.entity.TicketPromotion;
+import eventplanner.features.ticket.entity.TicketPriceTier;
+import eventplanner.features.ticket.entity.TicketTypeDependency;
 import eventplanner.features.ticket.enums.TicketCheckoutStatus;
 import eventplanner.features.ticket.enums.TicketStatus;
 import eventplanner.features.ticket.repository.TicketCheckoutItemRepository;
@@ -23,6 +25,8 @@ import eventplanner.features.ticket.repository.TicketCheckoutRepository;
 import eventplanner.features.ticket.repository.TicketRepository;
 import eventplanner.features.ticket.repository.TicketTypeRepository;
 import eventplanner.features.ticket.repository.TicketPromotionRepository;
+import eventplanner.features.ticket.repository.TicketPriceTierRepository;
+import eventplanner.features.ticket.repository.TicketTypeDependencyRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -62,6 +66,8 @@ public class TicketCheckoutService {
     private final TicketTypeService ticketTypeService;
     private final UserAccountRepository userAccountRepository;
     private final TicketPromotionRepository ticketPromotionRepository;
+    private final TicketPriceTierRepository ticketPriceTierRepository;
+    private final TicketTypeDependencyRepository ticketTypeDependencyRepository;
     private final LocationRepository locationRepository;
     private final TicketingPolicyService ticketingPolicyService;
 
@@ -91,6 +97,9 @@ public class TicketCheckoutService {
         List<TicketCheckoutItemRequest> normalizedItems = normalizeItems(request.getItems());
         Map<UUID, TicketType> ticketTypes = loadTicketTypes(normalizedItems, event.getId());
         String currency = determineCurrency(ticketTypes.values());
+        Map<UUID, List<TicketPriceTier>> activeTiers = loadActivePriceTiers(ticketTypes.values());
+
+        validateDependencies(event, purchaser, normalizedItems, ticketTypes);
 
         // Build issue requests; keep free tickets pending so checkout can finalize later.
         List<TicketCheckoutItem> checkoutItems = new ArrayList<>();
@@ -134,7 +143,7 @@ public class TicketCheckoutService {
         checkout.setEvent(event);
         checkout.setCurrency(currency);
         checkout.setPurchaser(purchaser);
-        repriceCheckout(checkout, checkoutItems, ticketTypes, appliedPromotion, taxRateBps);
+        repriceCheckout(checkout, checkoutItems, ticketTypes, activeTiers, appliedPromotion, taxRateBps);
         checkout.setStatus(checkout.getTotalMinor() != null && checkout.getTotalMinor() > 0
             ? TicketCheckoutStatus.PENDING_PAYMENT
             : TicketCheckoutStatus.COMPLETED);
@@ -197,7 +206,8 @@ public class TicketCheckoutService {
         Map<UUID, TicketType> ticketTypes = loadTicketTypesForCheckoutItems(items, eventId);
         TicketPromotion appliedPromotion = resolvePromotion(eventId, checkout.getAppliedPromotionCode(), items);
         int taxRateBps = resolveTaxRateBps(checkout.getEvent());
-        repriceCheckout(checkout, items, ticketTypes, appliedPromotion, taxRateBps);
+        Map<UUID, List<TicketPriceTier>> activeTiers = loadActivePriceTiers(ticketTypes.values());
+        repriceCheckout(checkout, items, ticketTypes, activeTiers, appliedPromotion, taxRateBps);
         checkoutItemRepository.saveAll(items);
         checkoutRepository.save(checkout);
 
@@ -271,7 +281,8 @@ public class TicketCheckoutService {
         Map<UUID, TicketType> ticketTypes = loadTicketTypesForCheckoutItems(items, eventId);
         TicketPromotion appliedPromotion = resolvePromotion(eventId, checkout.getAppliedPromotionCode(), items);
         int taxRateBps = resolveTaxRateBps(checkout.getEvent());
-        repriceCheckout(checkout, items, ticketTypes, appliedPromotion, taxRateBps);
+        Map<UUID, List<TicketPriceTier>> activeTiers = loadActivePriceTiers(ticketTypes.values());
+        repriceCheckout(checkout, items, ticketTypes, activeTiers, appliedPromotion, taxRateBps);
         checkoutRepository.save(checkout);
         checkoutItemRepository.saveAll(items);
 
@@ -401,16 +412,25 @@ public class TicketCheckoutService {
         return types.stream().collect(Collectors.toMap(TicketType::getId, t -> t));
     }
 
-    private void repriceCheckout(TicketCheckout checkout, List<TicketCheckoutItem> items, Map<UUID, TicketType> ticketTypes, TicketPromotion promotion, int taxRateBps) {
+    private void repriceCheckout(TicketCheckout checkout, List<TicketCheckoutItem> items, Map<UUID, TicketType> ticketTypes,
+                                 Map<UUID, List<TicketPriceTier>> activeTiers, TicketPromotion promotion, int taxRateBps) {
         long subtotalMinor = 0L;
+        long groupDiscountMinor = 0L;
         for (TicketCheckoutItem item : items) {
             UUID ticketTypeId = item.getTicketType() != null ? item.getTicketType().getId() : null;
             TicketType ticketType = ticketTypes.get(ticketTypeId);
             if (ticketType == null) {
                 throw new IllegalArgumentException("Ticket type not found for checkout item");
             }
-            long unitPriceMinor = ticketType.getPriceMinor() != null ? ticketType.getPriceMinor() : 0L;
+            long unitPriceMinor = resolveUnitPrice(ticketType, activeTiers != null ? activeTiers.get(ticketTypeId) : null);
             long lineTotalMinor = Math.multiplyExact(unitPriceMinor, item.getQuantity());
+
+            long lineDiscount = resolveGroupDiscount(ticketType, item.getQuantity(), lineTotalMinor);
+            if (lineDiscount > 0) {
+                groupDiscountMinor = Math.addExact(groupDiscountMinor, lineDiscount);
+                lineTotalMinor = Math.max(0, lineTotalMinor - lineDiscount);
+            }
+
             item.setUnitPriceMinor(unitPriceMinor);
             item.setSubtotalMinor(lineTotalMinor);
             item.setCurrency(checkout.getCurrency());
@@ -435,8 +455,9 @@ public class TicketCheckoutService {
             checkout.setAppliedPromotionCode(null);
             checkout.setAppliedDiscountMinor(0L);
         }
-        checkout.setDiscountMinor(discountMinor);
-        long totalMinor = subtotalMinor + checkout.getFeesMinor() + checkout.getTaxMinor() - discountMinor;
+        long totalDiscountMinor = Math.addExact(discountMinor, groupDiscountMinor);
+        checkout.setDiscountMinor(totalDiscountMinor);
+        long totalMinor = subtotalMinor + checkout.getFeesMinor() + checkout.getTaxMinor() - totalDiscountMinor;
         checkout.setTotalMinor(totalMinor);
     }
 
@@ -453,6 +474,52 @@ public class TicketCheckoutService {
         return currency != null ? currency : "USD";
     }
 
+    private Map<UUID, List<TicketPriceTier>> loadActivePriceTiers(Iterable<TicketType> types) {
+        List<UUID> typeIds = new ArrayList<>();
+        for (TicketType type : types) {
+            if (type != null && type.getId() != null) {
+                typeIds.add(type.getId());
+            }
+        }
+        if (typeIds.isEmpty()) {
+            return Map.of();
+        }
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        List<TicketPriceTier> tiers = ticketPriceTierRepository.findActiveByTicketTypeIds(typeIds, now);
+        return tiers.stream()
+            .collect(Collectors.groupingBy(t -> t.getTicketType().getId()));
+    }
+
+    private long resolveUnitPrice(TicketType ticketType, List<TicketPriceTier> activeTiers) {
+        if (activeTiers != null && !activeTiers.isEmpty()) {
+            TicketPriceTier tier = activeTiers.get(0);
+            return tier.getPriceMinor() != null ? tier.getPriceMinor() : 0L;
+        }
+        if (ticketType.getEarlyBirdPriceMinor() != null && ticketType.getEarlyBirdEndDate() != null) {
+            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+            if (!now.isAfter(ticketType.getEarlyBirdEndDate())) {
+                return ticketType.getEarlyBirdPriceMinor();
+            }
+        }
+        return ticketType.getPriceMinor() != null ? ticketType.getPriceMinor() : 0L;
+    }
+
+    private long resolveGroupDiscount(TicketType ticketType, int quantity, long lineTotalMinor) {
+        if (ticketType == null) {
+            return 0L;
+        }
+        Integer minQty = ticketType.getGroupDiscountMinQuantity();
+        Integer percentBps = ticketType.getGroupDiscountPercentBps();
+        if (minQty == null || percentBps == null || minQty <= 0 || percentBps <= 0) {
+            return 0L;
+        }
+        if (quantity < minQty) {
+            return 0L;
+        }
+        long discount = (lineTotalMinor * percentBps) / 10_000;
+        return Math.min(lineTotalMinor, Math.max(0L, discount));
+    }
+
     private List<TicketCheckoutItemRequest> normalizeItems(List<TicketCheckoutItemRequest> items) {
         Map<UUID, Integer> aggregated = new LinkedHashMap<>();
         for (TicketCheckoutItemRequest item : items) {
@@ -465,6 +532,61 @@ public class TicketCheckoutService {
         return aggregated.entrySet().stream()
             .map(entry -> new TicketCheckoutItemRequest(entry.getKey(), entry.getValue()))
             .toList();
+    }
+
+    private void validateDependencies(Event event, UserAccount purchaser, List<TicketCheckoutItemRequest> items,
+                                      Map<UUID, TicketType> ticketTypes) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        Map<UUID, Integer> quantitiesByType = new HashMap<>();
+        for (TicketCheckoutItemRequest item : items) {
+            quantitiesByType.merge(item.getTicketTypeId(), item.getQuantity(), Integer::sum);
+        }
+        List<TicketTypeDependency> dependencies = ticketTypeDependencyRepository
+            .findByTicketTypeIdIn(new ArrayList<>(quantitiesByType.keySet()));
+        if (dependencies.isEmpty()) {
+            return;
+        }
+
+        UUID purchaserId = purchaser != null ? purchaser.getId() : null;
+        String purchaserEmail = purchaser != null ? purchaser.getEmail() : null;
+
+        for (TicketTypeDependency dependency : dependencies) {
+            if (dependency.getTicketType() == null || dependency.getRequiredTicketType() == null) {
+                continue;
+            }
+            UUID dependentTypeId = dependency.getTicketType().getId();
+            UUID requiredTypeId = dependency.getRequiredTicketType().getId();
+            int dependentQty = quantitiesByType.getOrDefault(dependentTypeId, 0);
+            if (dependentQty <= 0) {
+                continue;
+            }
+
+            int minQty = dependency.getMinQuantity() != null ? dependency.getMinQuantity() : 1;
+            int requiredQty = Math.max(1, minQty) * dependentQty;
+
+            int providedQty = quantitiesByType.getOrDefault(requiredTypeId, 0);
+            if (providedQty >= requiredQty) {
+                continue;
+            }
+
+            long ownedQty = 0;
+            if (purchaserId != null) {
+                ownedQty = ticketRepository.countValidTicketsByUserIdAndTicketTypeId(event.getId(), purchaserId, requiredTypeId);
+            } else if (purchaserEmail != null) {
+                ownedQty = ticketRepository.countValidTicketsByEmailAndTicketTypeId(event.getId(), purchaserEmail, requiredTypeId);
+            }
+
+            if (providedQty + ownedQty < requiredQty) {
+                TicketType dependentType = dependency.getTicketType();
+                TicketType requiredType = dependency.getRequiredTicketType();
+                String dependentName = dependentType != null ? dependentType.getName() : dependentTypeId.toString();
+                String requiredName = requiredType != null ? requiredType.getName() : requiredTypeId.toString();
+                throw new IllegalArgumentException("Ticket type " + dependentName + " requires " +
+                    requiredQty + " of " + requiredName);
+            }
+        }
     }
 
     private List<TicketResponse> mapTickets(List<Ticket> tickets) {

@@ -8,14 +8,23 @@ import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.ticket.dto.request.CreateTicketTypeRequest;
+import eventplanner.features.ticket.dto.request.CloneTicketTypeRequest;
 import eventplanner.features.ticket.dto.request.PromotionDetails;
+import eventplanner.features.ticket.dto.request.TicketPriceTierRequest;
+import eventplanner.features.ticket.dto.request.TicketTypeDependencyRequest;
 import eventplanner.features.ticket.dto.request.UpdateTicketTypeRequest;
 import eventplanner.features.ticket.dto.response.TicketTypeResponse;
+import eventplanner.features.ticket.dto.response.TicketPriceTierResponse;
+import eventplanner.features.ticket.dto.response.TicketTypeDependencyResponse;
 import eventplanner.features.ticket.entity.TicketPromotion;
 import eventplanner.features.ticket.entity.TicketType;
+import eventplanner.features.ticket.entity.TicketPriceTier;
+import eventplanner.features.ticket.entity.TicketTypeDependency;
 import eventplanner.features.ticket.enums.TicketTypeCategory;
 import eventplanner.features.ticket.repository.TicketPromotionRepository;
 import eventplanner.features.ticket.repository.TicketTypeRepository;
+import eventplanner.features.ticket.repository.TicketPriceTierRepository;
+import eventplanner.features.ticket.repository.TicketTypeDependencyRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -41,6 +50,8 @@ public class TicketTypeService {
     private final EventRepository eventRepository;
     private final ObjectMapper objectMapper;
     private final TicketPromotionRepository ticketPromotionRepository;
+    private final TicketPriceTierRepository ticketPriceTierRepository;
+    private final TicketTypeDependencyRepository ticketTypeDependencyRepository;
 
     /**
      * Create a new ticket type for an event.
@@ -76,6 +87,10 @@ public class TicketTypeService {
         ticketType.setSaleEndDate(request.getSaleEndDate());
         ticketType.setMaxTicketsPerPerson(request.getMaxTicketsPerPerson());
         ticketType.setRequiresApproval(request.getRequiresApproval() != null ? request.getRequiresApproval() : false);
+        ticketType.setEarlyBirdPriceMinor(request.getEarlyBirdPriceMinor());
+        ticketType.setEarlyBirdEndDate(request.getEarlyBirdEndDate());
+        ticketType.setGroupDiscountMinQuantity(request.getGroupDiscountMinQuantity());
+        ticketType.setGroupDiscountPercentBps(request.getGroupDiscountPercentBps());
 
         // Serialize metadata if provided
         if (request.getMetadata() != null) {
@@ -90,6 +105,8 @@ public class TicketTypeService {
         TicketType saved = repository.save(ticketType);
 
         handlePromotionCreate(request, saved, principal);
+        upsertPriceTiers(request.getPriceTiers(), saved);
+        upsertDependencies(request.getDependencies(), saved);
         
         return saved;
     }
@@ -154,6 +171,18 @@ public class TicketTypeService {
         if (request.getRequiresApproval() != null) {
             ticketType.setRequiresApproval(request.getRequiresApproval());
         }
+        if (request.getEarlyBirdPriceMinor() != null) {
+            ticketType.setEarlyBirdPriceMinor(request.getEarlyBirdPriceMinor());
+        }
+        if (request.getEarlyBirdEndDate() != null) {
+            ticketType.setEarlyBirdEndDate(request.getEarlyBirdEndDate());
+        }
+        if (request.getGroupDiscountMinQuantity() != null) {
+            ticketType.setGroupDiscountMinQuantity(request.getGroupDiscountMinQuantity());
+        }
+        if (request.getGroupDiscountPercentBps() != null) {
+            ticketType.setGroupDiscountPercentBps(request.getGroupDiscountPercentBps());
+        }
         if (request.getMetadata() != null) {
             try {
                 ticketType.setMetadata(objectMapper.writeValueAsString(request.getMetadata()));
@@ -166,6 +195,8 @@ public class TicketTypeService {
         TicketType saved = repository.save(ticketType);
 
         handlePromotionUpdate(request, saved, principal);
+        upsertPriceTiers(request.getPriceTiers(), saved);
+        upsertDependencies(request.getDependencies(), saved);
         
         return saved;
     }
@@ -190,6 +221,104 @@ public class TicketTypeService {
     }
 
     /**
+     * Archive a ticket type (mark inactive).
+     */
+    @Transactional
+    public TicketType archiveTicketType(UUID id, UUID eventId, UserPrincipal principal) {
+        TicketType ticketType = repository.findByIdAndEventId(id, eventId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + id + " for event: " + eventId));
+        ticketType.setIsActive(false);
+        return repository.save(ticketType);
+    }
+
+    /**
+     * Restore a previously archived ticket type (mark active).
+     */
+    @Transactional
+    public TicketType restoreTicketType(UUID id, UUID eventId, UserPrincipal principal) {
+        TicketType ticketType = repository.findByIdAndEventId(id, eventId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + id + " for event: " + eventId));
+        ticketType.setIsActive(true);
+        return repository.save(ticketType);
+    }
+
+    /**
+     * Permanently delete a ticket type (hard delete).
+     */
+    @Transactional
+    public void hardDeleteTicketType(UUID id, UUID eventId, UserPrincipal principal) {
+        long issuedCount = repository.countTicketsByTicketTypeId(id);
+        if (issuedCount > 0) {
+            throw new IllegalArgumentException("Cannot hard delete ticket type with issued tickets: " + issuedCount);
+        }
+        int deleted = repository.hardDeleteByIdAndEventId(id, eventId);
+        if (deleted == 0) {
+            throw new ResourceNotFoundException("Ticket type not found: " + id + " for event: " + eventId);
+        }
+    }
+
+    /**
+     * Clone a ticket type within the same event.
+     */
+    @Transactional
+    public TicketType cloneTicketType(UUID id, UUID eventId, CloneTicketTypeRequest request, UserPrincipal principal) {
+        TicketType source = repository.findByIdAndEventId(id, eventId)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + id + " for event: " + eventId));
+
+        TicketType clone = new TicketType();
+        clone.setEvent(source.getEvent());
+        String cloneName = request != null && request.getName() != null && !request.getName().isBlank()
+            ? request.getName().trim()
+            : source.getName() + " (Copy)";
+        clone.setName(cloneName);
+        clone.setCategory(source.getCategory());
+        clone.setDescription(source.getDescription());
+        clone.setPriceMinor(source.getPriceMinor());
+        clone.setCurrency(source.getCurrency());
+        clone.setQuantityAvailable(source.getQuantityAvailable());
+        clone.setQuantitySold(0);
+        clone.setQuantityReserved(0);
+        clone.setSaleStartDate(source.getSaleStartDate());
+        clone.setSaleEndDate(source.getSaleEndDate());
+        clone.setMaxTicketsPerPerson(source.getMaxTicketsPerPerson());
+        clone.setRequiresApproval(source.getRequiresApproval());
+        clone.setEarlyBirdPriceMinor(source.getEarlyBirdPriceMinor());
+        clone.setEarlyBirdEndDate(source.getEarlyBirdEndDate());
+        clone.setGroupDiscountMinQuantity(source.getGroupDiscountMinQuantity());
+        clone.setGroupDiscountPercentBps(source.getGroupDiscountPercentBps());
+        clone.setMetadata(source.getMetadata());
+        boolean active = request != null && request.getIsActive() != null ? request.getIsActive() : false;
+        clone.setIsActive(active);
+
+        TicketType saved = repository.save(clone);
+        List<TicketPriceTier> tiers = ticketPriceTierRepository.findByTicketTypeIdIn(List.of(source.getId()));
+        if (!tiers.isEmpty()) {
+            for (TicketPriceTier tier : tiers) {
+                TicketPriceTier clonedTier = new TicketPriceTier();
+                clonedTier.setTicketType(saved);
+                clonedTier.setName(tier.getName());
+                clonedTier.setStartsAt(tier.getStartsAt());
+                clonedTier.setEndsAt(tier.getEndsAt());
+                clonedTier.setPriceMinor(tier.getPriceMinor());
+                clonedTier.setPriority(tier.getPriority());
+                ticketPriceTierRepository.save(clonedTier);
+            }
+        }
+        List<TicketTypeDependency> deps = ticketTypeDependencyRepository.findByTicketTypeIdIn(List.of(source.getId()));
+        if (!deps.isEmpty()) {
+            for (TicketTypeDependency dep : deps) {
+                TicketTypeDependency clonedDep = new TicketTypeDependency();
+                clonedDep.setTicketType(saved);
+                clonedDep.setRequiredTicketType(dep.getRequiredTicketType());
+                clonedDep.setMinQuantity(dep.getMinQuantity());
+                ticketTypeDependencyRepository.save(clonedDep);
+            }
+        }
+
+        return saved;
+    }
+
+    /**
      * Get ticket types for an event with optional filters.
      * Supports filtering by ID, category, active status, and name.
      * 
@@ -209,7 +338,18 @@ public class TicketTypeService {
         if (id != null) {
             TicketType ticketType = repository.findByIdAndEventId(id, eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + id + " for event: " + eventId));
-            return List.of(TicketTypeResponse.from(ticketType));
+            TicketTypeResponse response = TicketTypeResponse.from(ticketType);
+            List<TicketPriceTierResponse> tierResponses = ticketPriceTierRepository
+                .findByTicketTypeIdIn(List.of(ticketType.getId())).stream()
+                .map(TicketPriceTierResponse::from)
+                .collect(Collectors.toList());
+            List<TicketTypeDependencyResponse> dependencyResponses = ticketTypeDependencyRepository
+                .findByTicketTypeIdIn(List.of(ticketType.getId())).stream()
+                .map(TicketTypeDependencyResponse::from)
+                .collect(Collectors.toList());
+            response.setPriceTiers(tierResponses);
+            response.setDependencies(dependencyResponses);
+            return List.of(response);
         }
         
         // Build query based on filters
@@ -231,9 +371,40 @@ public class TicketTypeService {
                 .collect(Collectors.toList());
         }
         
-        return ticketTypes.stream()
+        List<TicketTypeResponse> responses = ticketTypes.stream()
             .map(TicketTypeResponse::from)
             .collect(Collectors.toList());
+
+        if (!responses.isEmpty()) {
+            List<UUID> ids = ticketTypes.stream()
+                .map(TicketType::getId)
+                .toList();
+            var tiers = ticketPriceTierRepository.findByTicketTypeIdIn(ids);
+            var deps = ticketTypeDependencyRepository.findByTicketTypeIdIn(ids);
+
+            var tiersByType = tiers.stream()
+                .collect(Collectors.groupingBy(t -> t.getTicketType().getId()));
+            var depsByType = deps.stream()
+                .collect(Collectors.groupingBy(d -> d.getTicketType().getId()));
+
+            for (TicketTypeResponse response : responses) {
+                if (response.getId() == null) {
+                    continue;
+                }
+                List<TicketPriceTierResponse> tierResponses = tiersByType
+                    .getOrDefault(response.getId(), List.of()).stream()
+                    .map(TicketPriceTierResponse::from)
+                    .collect(Collectors.toList());
+                List<TicketTypeDependencyResponse> dependencyResponses = depsByType
+                    .getOrDefault(response.getId(), List.of()).stream()
+                    .map(TicketTypeDependencyResponse::from)
+                    .collect(Collectors.toList());
+                response.setPriceTiers(tierResponses);
+                response.setDependencies(dependencyResponses);
+            }
+        }
+
+        return responses;
     }
 
     /**
@@ -379,6 +550,69 @@ public class TicketTypeService {
                 continue;
             }
             ticketPromotionRepository.save(target);
+        }
+    }
+
+    private void upsertPriceTiers(List<TicketPriceTierRequest> tiers, TicketType ticketType) {
+        if (ticketType == null) {
+            return;
+        }
+        if (tiers == null) {
+            return;
+        }
+        ticketPriceTierRepository.deleteByTicketTypeId(ticketType.getId());
+        if (tiers.isEmpty()) {
+            return;
+        }
+        for (TicketPriceTierRequest request : tiers) {
+            if (request == null || request.getPriceMinor() == null) {
+                continue;
+            }
+            TicketPriceTier tier = new TicketPriceTier();
+            tier.setTicketType(ticketType);
+            tier.setName(request.getName() != null ? request.getName().trim() : null);
+            tier.setStartsAt(request.getStartsAt());
+            tier.setEndsAt(request.getEndsAt());
+            if (request.getStartsAt() != null && request.getEndsAt() != null &&
+                request.getEndsAt().isBefore(request.getStartsAt())) {
+                throw new IllegalArgumentException("Tier end date must be after start date");
+            }
+            tier.setPriceMinor(request.getPriceMinor());
+            tier.setPriority(request.getPriority() != null ? request.getPriority() : 0);
+            ticketPriceTierRepository.save(tier);
+        }
+    }
+
+    private void upsertDependencies(List<TicketTypeDependencyRequest> dependencies, TicketType ticketType) {
+        if (ticketType == null) {
+            return;
+        }
+        if (dependencies == null) {
+            return;
+        }
+        ticketTypeDependencyRepository.deleteByTicketTypeId(ticketType.getId());
+        if (dependencies.isEmpty()) {
+            return;
+        }
+        for (TicketTypeDependencyRequest request : dependencies) {
+            if (request == null || request.getRequiredTicketTypeId() == null) {
+                continue;
+            }
+            if (request.getRequiredTicketTypeId().equals(ticketType.getId())) {
+                throw new IllegalArgumentException("Ticket type cannot depend on itself");
+            }
+            TicketType required = repository.findById(request.getRequiredTicketTypeId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                    "Required ticket type not found: " + request.getRequiredTicketTypeId()));
+            if (required.getEvent() == null || ticketType.getEvent() == null ||
+                !required.getEvent().getId().equals(ticketType.getEvent().getId())) {
+                throw new IllegalArgumentException("Required ticket type must belong to the same event");
+            }
+            TicketTypeDependency dependency = new TicketTypeDependency();
+            dependency.setTicketType(ticketType);
+            dependency.setRequiredTicketType(required);
+            dependency.setMinQuantity(request.getMinQuantity() != null ? request.getMinQuantity() : 1);
+            ticketTypeDependencyRepository.save(dependency);
         }
     }
 

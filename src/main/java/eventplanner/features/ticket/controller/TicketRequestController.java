@@ -2,8 +2,6 @@ package eventplanner.features.ticket.controller;
 
 import eventplanner.common.exception.exceptions.BadRequestException;
 import eventplanner.common.exception.exceptions.ForbiddenException;
-import eventplanner.features.attendee.enums.AttendeeInviteStatus;
-import eventplanner.features.attendee.repository.AttendeeInviteRepository;
 import eventplanner.features.ticket.dto.request.CreateTicketApprovalRequest;
 import eventplanner.features.ticket.dto.request.CreateTicketWaitlistRequest;
 import eventplanner.features.ticket.dto.request.TicketApprovalDecisionRequest;
@@ -50,7 +48,6 @@ public class TicketRequestController {
     private final TicketApprovalService approvalService;
     private final TicketWaitlistService waitlistService;
     private final AuthorizationService authorizationService;
-    private final AttendeeInviteRepository attendeeInviteRepository;
 
     // ==================== Approval Requests ====================
 
@@ -296,19 +293,6 @@ public class TicketRequestController {
     }
 
     private boolean canAccessTicketing(UserPrincipal principal, UUID eventId) {
-        if (principal == null || eventId == null) {
-            return false;
-        }
-        if (authorizationService.canAccessEvent(principal, eventId)) {
-            return true;
-        }
-        UUID userId = principal.getId();
-        if (userId != null && attendeeInviteRepository.existsByEventIdAndInviteeIdAndStatus(
-                eventId, userId, AttendeeInviteStatus.ACCEPTED)) {
-            return true;
-        }
-        String email = principal.getUser() != null ? principal.getUser().getEmail() : null;
-        return email != null && attendeeInviteRepository.existsByEventIdAndInviteeEmailIgnoreCaseAndStatus(
-            eventId, email, AttendeeInviteStatus.ACCEPTED);
+        return authorizationService.canAccessEventWithInvite(principal, eventId);
     }
 }
