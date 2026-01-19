@@ -11,10 +11,10 @@
 # Docker Compose file
 COMPOSE_FILE := docker-compose.yml
 
-# Auto-detect environment based on git branch
+# Default environment (override with `ENV_FILE=...` when invoking make)
 GIT_BRANCH := $(shell git branch --show-current 2>/dev/null || echo "main")
-ENV_FILE := $(if $(filter development,$(GIT_BRANCH)),.env.dev,.env.prod)
-ENV_NAME := $(if $(filter development,$(GIT_BRANCH)),DEV,PROD)
+ENV_FILE := .env.prod
+ENV_NAME := PROD
 
 # Colors for output
 GREEN := \033[0;32m
@@ -73,7 +73,7 @@ help:
 	@echo "  make postman            - Alias for make test"
 	@echo ""
 	@echo "$(YELLOW)Examples:$(NC)"
-	@echo "  make compose-up                    # Start services (auto-detects branch: dev/prod)"
+	@echo "  make compose-up                    # Start services with .env.prod (override with ENV_FILE=...)"
 	@echo "  make compose-up-dev                # Start services with .env.dev (force dev)"
 	@echo "  make compose-up-prod               # Start services with .env.prod (force prod)"
 	@echo "  make compose-reset                 # Clean everything and restart the gateway (Kong)"
@@ -86,9 +86,9 @@ help:
 	@echo "  - Kong Admin: http://localhost:8001 (Admin API)"
 	@echo "  - Java App (direct): http://localhost:8080"
 	@echo ""
-	@echo "$(YELLOW)Environment Detection:$(NC)"
-	@echo "  - On 'development' branch: automatically uses .env.dev"
-	@echo "  - On 'main' branch: automatically uses .env.prod"
+	@echo "$(YELLOW)Environment Defaults:$(NC)"
+	@echo "  - compose-up uses .env.prod by default"
+	@echo "  - Override with: make compose-up ENV_FILE=.env.dev"
 
 # ============================================================================
 # Docker Compose Commands
