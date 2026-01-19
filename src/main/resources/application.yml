@@ -100,13 +100,13 @@ spring:
     locations: classpath:db/migration
     check-location: true
 
+rabbitmq:
+  url: ${RABBITMQ_URL}
+  exchange: ${RABBITMQ_EXCHANGE}
+  email-routing-key: ${RABBITMQ_EMAIL_ROUTING_KEY}
+  push-routing-key: ${RABBITMQ_PUSH_ROUTING_KEY}
+
 external:
-  email-service:
-    url: ${EXTERNAL_EMAIL_SERVICE_URL}
-    secret: ${EXTERNAL_EMAIL_SERVICE_SECRET}
-  push-service:
-    url: ${EXTERNAL_PUSH_SERVICE_URL}
-    secret: ${EXTERNAL_PUSH_SERVICE_SECRET}
   email:
     from: ${EXTERNAL_EMAIL_FROM}
     from-events: ${EXTERNAL_EMAIL_FROM_EVENTS}

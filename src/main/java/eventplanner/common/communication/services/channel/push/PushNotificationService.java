@@ -1,70 +1,60 @@
 package eventplanner.common.communication.services.channel.push;
 
-import eventplanner.common.communication.services.channel.push.dto.RefreshDeviceTokenRequest;
-import eventplanner.common.communication.services.channel.push.dto.RegisterDeviceTokenRequest;
-import eventplanner.common.communication.services.core.dto.PushResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.common.communication.model.DeviceToken;
 import eventplanner.common.communication.repository.DeviceTokenRepository;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import eventplanner.common.config.ExternalServicesProperties;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
+import eventplanner.common.communication.services.channel.push.dto.RefreshDeviceTokenRequest;
+import eventplanner.common.communication.services.channel.push.dto.RegisterDeviceTokenRequest;
+import eventplanner.common.communication.services.channel.push.dto.PushJobRequest;
+import eventplanner.common.communication.services.core.dto.PushResult;
+import eventplanner.common.config.RabbitMqProperties;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
-import java.util.ArrayList;
-import java.util.Set;
-import java.util.HashSet;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.type.TypeReference;
 
 /**
- * Service for managing device tokens and proxying push notifications to the external push microservice.
+ * Service for managing device tokens and publishing push jobs to RabbitMQ.
  */
 @Service
 @Transactional
 public class PushNotificationService {
 
     private final DeviceTokenRepository deviceTokenRepository;
-    private final RestTemplate restTemplate;
-    private final String pushServiceUrl;
-    private final String sharedSecret;
+    private final RabbitTemplate rabbitTemplate;
+    private final String exchange;
+    private final String routingKey;
     private final ObjectMapper objectMapper;
-    
+
     // Configuration for token invalidation
     private static final int MAX_TOKEN_FAILURES = 3;
     private static final int BATCH_SIZE = 1000; // Max tokens per batch to avoid payload size limits
 
     public PushNotificationService(DeviceTokenRepository deviceTokenRepository,
-                                   ExternalServicesProperties properties,
+                                   RabbitTemplate rabbitTemplate,
+                                   RabbitMqProperties rabbitMqProperties,
                                    ObjectMapper objectMapper) {
-        this.deviceTokenRepository = deviceTokenRepository;
-        this.restTemplate = createRestTemplate();
-        String pushServiceUrl = properties.getPushService().getUrl();
-        String sharedSecret = properties.getPushService().getSecret();
-        if (pushServiceUrl == null || pushServiceUrl.isBlank()) {
-            throw new IllegalStateException("external.push-service.url must be configured");
+        String exchange = rabbitMqProperties.getExchange();
+        String routingKey = rabbitMqProperties.getPushRoutingKey();
+        if (exchange == null || exchange.isBlank()) {
+            throw new IllegalStateException("rabbitmq.exchange must be configured");
         }
-        this.pushServiceUrl = pushServiceUrl.endsWith("/") ? pushServiceUrl.substring(0, pushServiceUrl.length() - 1) : pushServiceUrl;
-        this.sharedSecret = sharedSecret;
+        if (routingKey == null || routingKey.isBlank()) {
+            throw new IllegalStateException("rabbitmq.push-routing-key must be configured");
+        }
+        this.deviceTokenRepository = deviceTokenRepository;
+        this.rabbitTemplate = rabbitTemplate;
+        this.exchange = exchange;
+        this.routingKey = routingKey;
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
-    }
-
-    private RestTemplate createRestTemplate() {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(5000);
-        factory.setReadTimeout(5000);
-        return new RestTemplate(factory);
     }
 
     /**
@@ -179,76 +169,20 @@ public class PushNotificationService {
         }
         
         try {
+            List<String> recipients = tokens.stream().map(DeviceToken::getDeviceToken).toList();
+            String messageId = publishPushJob(recipients, title, body, data);
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            if (sharedSecret != null && !sharedSecret.isBlank()) {
-                headers.add("x-push-secret", sharedSecret);
-            }
-
-            var bodyPayload = new java.util.HashMap<String, Object>();
-            bodyPayload.put("to", tokens.stream().map(DeviceToken::getDeviceToken).toList());
-            bodyPayload.put("title", title);
-            bodyPayload.put("body", body != null ? body : "");
-            bodyPayload.put("data", data != null ? data : Map.of());
-
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(bodyPayload, headers);
-
-            ResponseEntity<String> response = restTemplate.exchange(
-                    pushServiceUrl + "/send-push",
-                    HttpMethod.POST,
-                    request,
-                    String.class
-            );
-
-            if (response.getStatusCode().is2xxSuccessful()) {
-                // Parse response to check for invalid tokens
-                String responseBody = response.getBody();
-                handlePushResponse(tokens, responseBody);
-                
-                tokens.forEach(token -> {
-                    token.markAsUsed();
-                    token.resetFailureCount();
-                    deviceTokenRepository.save(token);
-                });
-                
-                return PushResult.builder()
-                    .success(true)
-                    .messageId(extractMessageId(responseBody))
-                    .build();
-            } else {
-                String errorMessage = "HTTP " + response.getStatusCode() + ": " + response.getBody();
-                // Record failures for all tokens
-                tokens.forEach(token -> {
-                    token.recordFailure(errorMessage);
-                    if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
-                        token.markAsInvalid("Max failures reached: " + errorMessage);
-                    }
-                    deviceTokenRepository.save(token);
-                });
-                
-                return PushResult.builder()
-                        .success(false)
-                        .errorMessage(errorMessage)
-                        .build();
-            }
-
-        } catch (RestClientException e) {
-            // Record failures for all tokens
             tokens.forEach(token -> {
-                token.recordFailure(e.getMessage());
-                if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
-                    token.markAsInvalid("Max failures reached: " + e.getMessage());
-                }
+                token.markAsUsed();
+                token.resetFailureCount();
                 deviceTokenRepository.save(token);
             });
-            
+
             return PushResult.builder()
-                    .success(false)
-                    .errorMessage(e.getMessage())
-                    .build();
+                .success(true)
+                .messageId(messageId)
+                .build();
         } catch (Exception e) {
-            // Record failures for all tokens
             tokens.forEach(token -> {
                 token.recordFailure(e.getMessage());
                 if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
@@ -256,11 +190,11 @@ public class PushNotificationService {
                 }
                 deviceTokenRepository.save(token);
             });
-            
+
             return PushResult.builder()
-                    .success(false)
-                    .errorMessage(e.getMessage())
-                    .build();
+                .success(false)
+                .errorMessage(e.getMessage())
+                .build();
         }
     }
     
@@ -286,7 +220,7 @@ public class PushNotificationService {
         }
         
         // Group tokens by user for tracking
-        Map<UUID, List<DeviceToken>> tokensByUser = new java.util.HashMap<>();
+        Map<UUID, List<DeviceToken>> tokensByUser = new HashMap<>();
         for (DeviceToken token : allTokens) {
             tokensByUser.computeIfAbsent(token.getUserId(), k -> new ArrayList<>()).add(token);
         }
@@ -296,50 +230,16 @@ public class PushNotificationService {
         
         for (List<DeviceToken> batch : batches) {
             try {
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_JSON);
-                if (sharedSecret != null && !sharedSecret.isBlank()) {
-                    headers.add("x-push-secret", sharedSecret);
-                }
-                
-                var bodyPayload = new java.util.HashMap<String, Object>();
-                bodyPayload.put("to", batch.stream().map(DeviceToken::getDeviceToken).toList());
-                bodyPayload.put("title", title);
-                bodyPayload.put("body", body != null ? body : "");
-                bodyPayload.put("data", data != null ? data : Map.of());
-                
-                HttpEntity<Map<String, Object>> request = new HttpEntity<>(bodyPayload, headers);
-                
-                ResponseEntity<String> response = restTemplate.exchange(
-                        pushServiceUrl + "/send-push",
-                        HttpMethod.POST,
-                        request,
-                        String.class
-                );
-                
-                if (response.getStatusCode().is2xxSuccessful()) {
-                    String responseBody = response.getBody();
-                    handlePushResponse(batch, responseBody);
-                    
-                    batch.forEach(token -> {
-                        token.markAsUsed();
-                        token.resetFailureCount();
-                        deviceTokenRepository.save(token);
-                    });
-                    
-                    result.incrementSuccess(batch.size());
-                } else {
-                    String errorMessage = "HTTP " + response.getStatusCode() + ": " + response.getBody();
-                    batch.forEach(token -> {
-                        token.recordFailure(errorMessage);
-                        if (token.shouldBeInvalidated(MAX_TOKEN_FAILURES)) {
-                            token.markAsInvalid("Max failures reached: " + errorMessage);
-                        }
-                        deviceTokenRepository.save(token);
-                    });
-                    
-                    result.incrementFailure(batch.size());
-                }
+                List<String> recipients = batch.stream().map(DeviceToken::getDeviceToken).toList();
+                publishPushJob(recipients, title, body, data);
+
+                batch.forEach(token -> {
+                    token.markAsUsed();
+                    token.resetFailureCount();
+                    deviceTokenRepository.save(token);
+                });
+
+                result.incrementSuccess(batch.size());
             } catch (Exception e) {
                 batch.forEach(token -> {
                     token.recordFailure(e.getMessage());
@@ -356,51 +256,25 @@ public class PushNotificationService {
         result.setTotalRecipients(tokensByUser.size());
         return result;
     }
-    
-    /**
-     * Handle push service response and invalidate tokens if needed
-     * In a real implementation, the push service should return invalid token IDs
-     */
-    private void handlePushResponse(List<DeviceToken> tokens, String responseBody) {
-        if (responseBody == null || responseBody.isBlank()) {
-            return;
-        }
-        
-        try {
-            // Parse response to check for invalid tokens
-            // Expected format: {"success": true, "messageId": "...", "invalidTokens": ["token1", "token2"], ...}
-            Map<String, Object> response = objectMapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
-            
-            @SuppressWarnings("unchecked")
-            List<String> invalidTokens = (List<String>) response.get("invalidTokens");
-            
-            if (invalidTokens != null && !invalidTokens.isEmpty()) {
-                Set<String> invalidTokenSet = new HashSet<>(invalidTokens);
-                tokens.forEach(token -> {
-                    if (invalidTokenSet.contains(token.getDeviceToken())) {
-                        token.markAsInvalid("Token reported as invalid by push service");
-                        deviceTokenRepository.save(token);
-                    }
-                });
-            }
-        } catch (Exception e) {
-            // Log but don't fail - response parsing is best effort
-            // In production, you'd want proper logging here
-        }
-    }
-    
-    private String extractMessageId(String responseBody) {
-        if (responseBody == null || responseBody.isBlank()) {
-            return null;
-        }
-        
-        try {
-            Map<String, Object> response = objectMapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
-            Object messageId = response.get("messageId");
-            return messageId != null ? messageId.toString() : null;
-        } catch (Exception e) {
-            return null;
-        }
+
+    private String publishPushJob(List<String> recipients, String title, String body, Map<String, String> data) throws Exception {
+        PushJobRequest payload = PushJobRequest.builder()
+                .to(recipients)
+                .title(title)
+                .body(body != null ? body : "")
+                .data(data != null ? data : Map.of())
+                .build();
+
+        String payloadJson = objectMapper.writeValueAsString(payload);
+        String messageId = UUID.randomUUID().toString();
+
+        rabbitTemplate.convertAndSend(exchange, routingKey, payloadJson, message -> {
+            message.getMessageProperties().setContentType(MediaType.APPLICATION_JSON_VALUE);
+            message.getMessageProperties().setMessageId(messageId);
+            return message;
+        });
+
+        return messageId;
     }
     
     private List<List<DeviceToken>> batchTokens(List<DeviceToken> tokens, int batchSize) {
