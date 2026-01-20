@@ -4,6 +4,7 @@ import eventplanner.features.event.dto.request.CreateEventWithCoverUploadRequest
 import eventplanner.features.event.dto.request.EventListRequest;
 import eventplanner.features.event.dto.request.UpdateEventWithCoverUploadRequest;
 import eventplanner.features.event.dto.request.EventFeedRequest;
+import eventplanner.features.event.dto.request.CloneEventRequest;
 import eventplanner.features.event.dto.response.CreateEventWithCoverUploadResponse;
 import eventplanner.features.event.dto.response.EventCapacityResponse;
 import eventplanner.features.event.dto.response.EventVisibilityResponse;
@@ -340,6 +341,45 @@ public class EventCrudController {
             }
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
+    }
+
+    @PostMapping("/{id}/clone")
+    @RequiresPermission(value = RbacPermissions.EVENT_CREATE, resources = {"event_id=#id"})
+    @Operation(summary = "Clone event", 
+            description = "Clone an existing event to create a new event with copied settings. " +
+                         "Optionally clone ticket types, venue, and other configurations.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Event cloned successfully",
+                content = @Content(schema = @Schema(implementation = EventResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid request data"),
+        @ApiResponse(responseCode = "404", description = "Source event not found"),
+        @ApiResponse(responseCode = "403", description = "Access denied to source event"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    public ResponseEntity<EventResponse> cloneEvent(
+            @Parameter(description = "ID of the event to clone") @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody(required = false) CloneEventRequest request) {
+        try {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            }
+
+            // Verify user can access the source event
+            if (!authorizationService.canAccessEvent(principal, id)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                    "Access denied to event: " + id);
+            }
+
+            Event cloned = eventService.cloneEvent(id, request, principal);
+            EventResponse response = eventService.toResponse(cloned, principal);
+            URI location = URI.create("/api/v1/events/" + cloned.getId());
+            return ResponseEntity.created(location).body(response);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        } catch (AccessDeniedException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
         }
     }
 

@@ -332,7 +332,19 @@ public class TicketCheckoutService {
         checkout.setStatus(TicketCheckoutStatus.COMPLETED);
         checkout.setCompletedAt(LocalDateTime.now());
         checkout.setExpiresAt(null);
-        return checkoutRepository.save(checkout);
+        TicketCheckout savedCheckout = checkoutRepository.save(checkout);
+        
+        // Sync attendees and event count after checkout completion
+        // Only sync tickets that were successfully issued
+        List<Ticket> issuedTickets = tickets.stream()
+            .filter(t -> t.getStatus() == TicketStatus.ISSUED)
+            .collect(Collectors.toList());
+        
+        if (checkout.getEvent() != null && !issuedTickets.isEmpty()) {
+            ticketService.syncAttendeesAndEventCount(checkout.getEvent(), issuedTickets, true);
+        }
+        
+        return savedCheckout;
     }
 
     private boolean shouldExpire(TicketCheckout checkout) {

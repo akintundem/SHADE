@@ -4,6 +4,7 @@ import eventplanner.features.event.dto.VenueDTO;
 import eventplanner.features.event.dto.request.CreateEventRequest;
 import eventplanner.features.event.dto.request.UpdateEventRequest;
 import eventplanner.features.event.dto.request.EventListRequest;
+import eventplanner.features.event.dto.request.CloneEventRequest;
 import eventplanner.features.event.dto.response.EventResponse;
 import eventplanner.features.event.dto.response.TicketTypeSummary;
 import eventplanner.features.event.dto.response.UserEventContext;
@@ -45,6 +46,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -61,6 +63,7 @@ import java.util.Objects;
 
 @Service
 @Transactional
+@Slf4j
 public class EventService {
 
     @Autowired
@@ -92,6 +95,12 @@ public class EventService {
 
     @Autowired(required = false)
     private TicketTypeRepository ticketTypeRepository;
+    
+    @Autowired(required = false)
+    private eventplanner.features.ticket.service.TicketTypeService ticketTypeService;
+    
+    @Autowired(required = false)
+    private eventplanner.features.event.service.EventWaitlistService eventWaitlistService;
     
     @Autowired
     private NotificationTargetResolver notificationTargetResolver;
@@ -200,11 +209,28 @@ public class EventService {
             event.setRegistrationDeadline(request.getRegistrationDeadline());
         }
         if (request.getCapacity() != null) {
-            if (!Objects.equals(event.getCapacity(), request.getCapacity())) {
+            Integer oldCapacity = event.getCapacity();
+            Integer newCapacity = request.getCapacity();
+            if (!Objects.equals(oldCapacity, newCapacity)) {
                 importantChange = true;
                 changeSummary.add("Capacity");
             }
-            event.setCapacity(request.getCapacity());
+            event.setCapacity(newCapacity);
+            
+            // Promote waitlist entries if capacity increased
+            if (eventWaitlistService != null && oldCapacity != null && newCapacity != null && newCapacity > oldCapacity) {
+                try {
+                    Integer currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
+                    int spotsAvailable = newCapacity - Math.max(currentCount, oldCapacity);
+                    if (spotsAvailable > 0) {
+                        eventWaitlistService.promoteWaitlistEntries(event.getId(), spotsAvailable);
+                    }
+                } catch (Exception e) {
+                    // Log but don't fail the update
+                    log.warn("Failed to promote waitlist entries when capacity increased for event {}: {}", 
+                            event.getId(), e.getMessage());
+                }
+            }
         }
         if (request.getCurrentAttendeeCount() != null) {
             event.setCurrentAttendeeCount(request.getCurrentAttendeeCount());
@@ -412,6 +438,137 @@ public class EventService {
         budgetService.createInitialBudget(savedEvent, owner);
         
         return savedEvent;
+    }
+
+    /**
+     * Clone an existing event.
+     * Creates a new event with copied settings from the source event.
+     * 
+     * @param sourceEventId The ID of the event to clone
+     * @param request Clone request with optional overrides
+     * @param principal User principal for access control and ownership
+     * @return Cloned event
+     */
+    @Transactional
+    public Event cloneEvent(UUID sourceEventId, CloneEventRequest request, UserPrincipal principal) {
+        if (principal == null || principal.getId() == null) {
+            throw new IllegalArgumentException("Authentication required to clone events");
+        }
+
+        // Fetch source event
+        Event source = eventRepository.findById(sourceEventId)
+            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + sourceEventId));
+
+        // Check access - user must be able to access the source event
+        if (authorizationService != null && !authorizationService.canAccessEvent(principal, sourceEventId)) {
+            throw new IllegalArgumentException("Access denied to event: " + sourceEventId);
+        }
+
+        // Create new event
+        Event clone = new Event();
+        
+        // Set owner to current user
+        UserAccount owner = userAccountRepository.findById(principal.getId())
+            .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        clone.setOwner(owner);
+
+        // Set name
+        String cloneName = request != null && request.getName() != null && !request.getName().isBlank()
+            ? request.getName().trim()
+            : source.getName() + " (Copy)";
+        clone.setName(cloneName);
+
+        // Copy basic event information
+        clone.setDescription(source.getDescription());
+        clone.setEventType(source.getEventType());
+        clone.setEventStatus(request != null && request.getEventStatus() != null 
+            ? request.getEventStatus() 
+            : EventStatus.DRAFT);
+        clone.setHashtag(source.getHashtag());
+        clone.setTheme(source.getTheme());
+        clone.setObjectives(source.getObjectives());
+        clone.setTargetAudience(source.getTargetAudience());
+        clone.setSuccessMetrics(source.getSuccessMetrics());
+        clone.setBrandingGuidelines(source.getBrandingGuidelines());
+        clone.setTechnicalRequirements(source.getTechnicalRequirements());
+        clone.setAccessibilityFeatures(source.getAccessibilityFeatures());
+        clone.setEmergencyPlan(source.getEmergencyPlan());
+        clone.setBackupPlan(source.getBackupPlan());
+        clone.setPostEventTasks(source.getPostEventTasks());
+        clone.setMetadata(source.getMetadata());
+        clone.setVenueRequirements(source.getVenueRequirements());
+        clone.setEventWebsiteUrl(source.getEventWebsiteUrl());
+
+        // Set dates (use provided or original)
+        clone.setStartDateTime(request != null && request.getStartDateTime() != null
+            ? request.getStartDateTime()
+            : source.getStartDateTime());
+        clone.setEndDateTime(request != null && request.getEndDateTime() != null
+            ? request.getEndDateTime()
+            : source.getEndDateTime());
+        clone.setRegistrationDeadline(source.getRegistrationDeadline());
+
+        // Copy access control settings
+        clone.setAccessType(source.getAccessType());
+        clone.setIsPublic(source.getIsPublic());
+        clone.setRequiresApproval(source.getRequiresApproval());
+        clone.setFeedsPublicAfterEvent(source.getFeedsPublicAfterEvent());
+
+        // Copy capacity (reset attendee count)
+        clone.setCapacity(source.getCapacity());
+        clone.setCurrentAttendeeCount(0);
+
+        // Copy venue if requested
+        if (request == null || Boolean.TRUE.equals(request.getCloneVenue())) {
+            if (source.getVenue() != null) {
+                Venue venue = new Venue();
+                venue.setAddress(source.getVenue().getAddress());
+                venue.setCity(source.getVenue().getCity());
+                venue.setState(source.getVenue().getState());
+                venue.setCountry(source.getVenue().getCountry());
+                venue.setZipCode(source.getVenue().getZipCode());
+                venue.setLatitude(source.getVenue().getLatitude());
+                venue.setLongitude(source.getVenue().getLongitude());
+                venue.setGooglePlaceId(source.getVenue().getGooglePlaceId());
+                venue.setGooglePlaceData(source.getVenue().getGooglePlaceData());
+                clone.setVenue(venue);
+            }
+            clone.setVenueId(source.getVenueId());
+        }
+
+        // Copy cover image URL (not the actual file, just the reference)
+        clone.setCoverImageUrl(source.getCoverImageUrl());
+
+        // Save the cloned event
+        Event savedClone = eventRepository.save(clone);
+
+        // Assign owner as organizer
+        assignOwnerOrganizerRole(savedClone.getId(), principal.getId());
+
+        // Auto-create budget for the cloned event
+        budgetService.createInitialBudget(savedClone, owner);
+
+        // Clone ticket types if requested
+        if (request != null && Boolean.TRUE.equals(request.getCloneTicketTypes()) && ticketTypeService != null) {
+            List<TicketType> sourceTicketTypes = ticketTypeRepository.findByEventIdAndIsActiveTrue(sourceEventId);
+            for (TicketType sourceTicketType : sourceTicketTypes) {
+                try {
+                    eventplanner.features.ticket.dto.request.CloneTicketTypeRequest cloneTicketRequest = 
+                        new eventplanner.features.ticket.dto.request.CloneTicketTypeRequest();
+                    cloneTicketRequest.setName(null); // Use default naming
+                    cloneTicketRequest.setIsActive(false); // Start inactive
+                    ticketTypeService.cloneTicketType(sourceTicketType.getId(), savedClone.getId(), cloneTicketRequest, principal);
+                } catch (Exception e) {
+                    // Log but don't fail the entire clone operation
+                    // Ticket type cloning is best-effort
+                }
+            }
+        }
+
+        // Note: Media/assets cloning is not implemented as it would require copying S3 objects
+        // Users can manually upload media to the cloned event if needed
+
+        return savedClone;
     }
 
     /**

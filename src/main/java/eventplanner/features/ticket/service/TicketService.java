@@ -23,6 +23,8 @@ import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.ticket.entity.Ticket;
 import eventplanner.features.ticket.entity.TicketType;
 import eventplanner.features.attendee.enums.AttendeeStatus;
+import eventplanner.security.auth.enums.VisibilityLevel;
+import lombok.extern.slf4j.Slf4j;
 import eventplanner.features.ticket.enums.TicketStatus;
 import eventplanner.features.ticket.enums.BulkTicketAction;
 import eventplanner.features.attendee.repository.AttendeeRepository;
@@ -57,6 +59,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @Transactional
+@Slf4j
 public class TicketService {
 
     private final TicketRepository ticketRepository;
@@ -248,17 +251,24 @@ public class TicketService {
         // Save all tickets
         List<Ticket> savedTickets = ticketRepository.saveAll(tickets);
 
-        // For free tickets, update attendee RSVP status (only if attendee exists)
-        if (freeTicket && finalizeFreeTickets && attendee != null) {
-            attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
-            attendeeRepository.save(attendee);
-        }
-
+        // Sync attendee and event count when tickets are issued
         if (shouldIssue) {
             for (Ticket ticket : savedTickets) {
                 ticket.issue(issuedBy);
             }
             savedTickets = ticketRepository.saveAll(savedTickets);
+            
+            // Sync attendees and event count for issued tickets
+            syncAttendeesAndEventCount(event, savedTickets, true);
+        } else if (freeTicket && finalizeFreeTickets) {
+            // For free tickets that are finalized, also sync
+            syncAttendeesAndEventCount(event, savedTickets, true);
+        }
+
+        // For free tickets, update attendee RSVP status (only if attendee exists)
+        if (freeTicket && finalizeFreeTickets && attendee != null) {
+            attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
+            attendeeRepository.save(attendee);
         }
 
         // Send notifications if requested
@@ -388,6 +398,11 @@ public class TicketService {
             }
         }
 
+        // Sync event attendee count when issued ticket is cancelled
+        if (previousStatus == TicketStatus.ISSUED && ticket.getEvent() != null) {
+            syncEventCountOnTicketCancellation(ticket.getEvent(), saved);
+        }
+
         return saved;
     }
 
@@ -429,6 +444,11 @@ public class TicketService {
             } catch (Exception e) {
                 // Best-effort; do not fail refund if inventory update fails
             }
+        }
+
+        // Sync event attendee count when ticket is refunded
+        if (previousStatus == TicketStatus.ISSUED && ticket.getEvent() != null) {
+            syncEventCountOnTicketCancellation(ticket.getEvent(), saved);
         }
 
         return saved;
@@ -530,6 +550,18 @@ public class TicketService {
         }
 
         Ticket saved = ticketRepository.save(ticket);
+
+        // Sync attendee if ticket was transferred to a new attendee/email
+        // This ensures the new attendee exists and is confirmed
+        if (saved.getEvent() != null && saved.getStatus() == TicketStatus.ISSUED) {
+            try {
+                syncAttendeesAndEventCount(saved.getEvent(), List.of(saved), true);
+            } catch (Exception e) {
+                // Log but don't fail transfer
+                log.warn("Failed to sync attendee on ticket transfer for ticket {}: {}", 
+                        saved.getId(), e.getMessage());
+            }
+        }
 
         if (Boolean.TRUE.equals(request.getSendEmail()) || Boolean.TRUE.equals(request.getSendPush())) {
             Event event = saved.getEvent();
@@ -921,6 +953,167 @@ public class TicketService {
         if (updated == 0) {
             throw new ApiException(ErrorCode.TICKET_TYPE_NOT_AVAILABLE,
                 "Failed to update ticket inventory");
+        }
+    }
+
+    /**
+     * Sync attendees and event count when tickets are issued.
+     * Creates attendees if they don't exist and updates event attendee count.
+     * Package-private so TicketCheckoutService can call it.
+     */
+    void syncAttendeesAndEventCount(Event event, List<Ticket> tickets, boolean increment) {
+        if (event == null || tickets == null || tickets.isEmpty()) {
+            return;
+        }
+
+        try {
+            int countDelta = 0;
+            java.util.Set<UUID> processedUserIds = new java.util.HashSet<>();
+            java.util.Set<String> processedEmails = new java.util.HashSet<>();
+
+            for (Ticket ticket : tickets) {
+                if (ticket.getStatus() != TicketStatus.ISSUED && ticket.getStatus() != TicketStatus.PENDING) {
+                    continue; // Only sync issued/pending tickets
+                }
+
+                Attendee attendee = null;
+                boolean createdNew = false;
+
+                // Try to find or create attendee
+                if (ticket.getAttendee() != null) {
+                    attendee = ticket.getAttendee();
+                } else if (ticket.getOwnerEmail() != null) {
+                    // Look up by email or user ID
+                    String normalizedEmail = AuthValidationUtil.normalizeEmail(ticket.getOwnerEmail());
+                    
+                    // Try to find existing attendee by email
+                    List<Attendee> existingByEmail = attendeeRepository.findByEventId(event.getId()).stream()
+                        .filter(a -> a.getEmail() != null && 
+                                     AuthValidationUtil.normalizeEmail(a.getEmail()).equals(normalizedEmail))
+                        .collect(Collectors.toList());
+                    
+                    if (!existingByEmail.isEmpty()) {
+                        attendee = existingByEmail.get(0);
+                    } else {
+                        // Try to find user by email
+                        UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
+                        if (user != null) {
+                            // Try to find attendee by user ID
+                            attendee = attendeeRepository.findByEventIdAndUserId(event.getId(), user.getId()).orElse(null);
+                        }
+                    }
+
+                    // Create new attendee if not found
+                    if (attendee == null) {
+                        attendee = new Attendee();
+                        attendee.setEvent(event);
+                        if (ticket.getOwnerEmail() != null) {
+                            attendee.setEmail(AuthValidationUtil.normalizeEmail(ticket.getOwnerEmail()));
+                        }
+                        if (ticket.getOwnerName() != null) {
+                            attendee.setName(ticket.getOwnerName());
+                        }
+                        
+                        // Try to link to user account if email matches
+                        if (normalizedEmail != null) {
+                            UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
+                            if (user != null) {
+                                attendee.setUser(user);
+                            }
+                        }
+                        
+                        attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
+                        attendee.setParticipationVisibility(VisibilityLevel.PUBLIC);
+                        attendee = attendeeRepository.save(attendee);
+                        createdNew = true;
+                        
+                        // Link ticket to attendee
+                        ticket.setAttendee(attendee);
+                    }
+                }
+
+                // Update event count if attendee status changed to CONFIRMED
+                if (attendee != null && increment) {
+                    AttendeeStatus previousStatus = attendee.getRsvpStatus();
+                    boolean statusChanged = false;
+                    
+                    if (previousStatus != AttendeeStatus.CONFIRMED) {
+                        attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
+                        attendeeRepository.save(attendee);
+                        statusChanged = true;
+                    }
+                    
+                    // Count if status changed to CONFIRMED or if new attendee was created
+                    if (statusChanged || createdNew) {
+                        // Only count once per unique attendee
+                        UUID userId = attendee.getUser() != null ? attendee.getUser().getId() : null;
+                        String email = attendee.getEmail();
+                        
+                        if (userId != null && !processedUserIds.contains(userId)) {
+                            processedUserIds.add(userId);
+                            countDelta++;
+                        } else if (email != null && !processedEmails.contains(email)) {
+                            processedEmails.add(email);
+                            countDelta++;
+                        }
+                    }
+                }
+            }
+
+            // Update event attendee count
+            if (countDelta != 0) {
+                Integer currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
+                event.setCurrentAttendeeCount(Math.max(0, currentCount + countDelta));
+                eventRepository.save(event);
+            }
+
+            // Save tickets with updated attendee links
+            if (tickets.stream().anyMatch(t -> t.getAttendee() != null && t.getId() != null)) {
+                ticketRepository.saveAll(tickets);
+            }
+        } catch (Exception e) {
+            // Log but don't fail ticket issuance
+            log.warn("Failed to sync attendees and event count for event {}: {}", 
+                    event.getId(), e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Sync event attendee count when tickets are cancelled or refunded.
+     */
+    private void syncEventCountOnTicketCancellation(Event event, Ticket ticket) {
+        if (event == null || ticket == null) {
+            return;
+        }
+
+        try {
+            // Only decrease count if ticket was issued and had an attendee
+            if (ticket.getAttendee() != null) {
+                Attendee attendee = ticket.getAttendee();
+                
+                // Check if attendee has other valid tickets for this event
+                long otherValidTickets = ticketRepository.findByAttendeeIdAndEventId(
+                    attendee.getId(), event.getId()).stream()
+                    .filter(t -> t.getId() != null && !t.getId().equals(ticket.getId()))
+                    .filter(t -> t.getStatus() == TicketStatus.ISSUED || t.getStatus() == TicketStatus.PENDING)
+                    .count();
+                
+                // Only decrease count if no other valid tickets exist
+                if (otherValidTickets == 0 && attendee.getRsvpStatus() == AttendeeStatus.CONFIRMED) {
+                    // Update attendee status to declined
+                    attendee.setRsvpStatus(AttendeeStatus.DECLINED);
+                    attendeeRepository.save(attendee);
+                    
+                    // Decrease event count
+                    Integer currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
+                    event.setCurrentAttendeeCount(Math.max(0, currentCount - 1));
+                    eventRepository.save(event);
+                }
+            }
+        } catch (Exception e) {
+            // Log but don't fail ticket cancellation
+            log.warn("Failed to sync event count on ticket cancellation for event {}: {}", 
+                    event.getId(), e.getMessage(), e);
         }
     }
 

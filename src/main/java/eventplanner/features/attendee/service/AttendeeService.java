@@ -17,6 +17,7 @@ import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.features.attendee.repository.AttendeeRsvpHistoryRepository;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
+import eventplanner.features.event.service.EventWaitlistService;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.common.config.ExternalServicesProperties;
@@ -25,6 +26,7 @@ import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.util.AuthValidationUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -55,6 +57,9 @@ public class AttendeeService {
     private final ExternalServicesProperties externalServicesProperties;
     private final AuthorizationService authorizationService;
     private final AttendeeRsvpHistoryRepository rsvpHistoryRepository;
+    
+    @Autowired(required = false)
+    private EventWaitlistService eventWaitlistService;
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
         "name", "email", "rsvpStatus", "checkedInAt", "createdAt"
@@ -75,12 +80,42 @@ public class AttendeeService {
      * Delete attendee
      */
     public boolean delete(UUID attendeeId) {
-        if (repository.existsById(attendeeId)) {
-            repository.deleteById(attendeeId);
-            log.info("Deleted attendee {}", attendeeId);
-            return true;
+        Attendee attendee = repository.findById(attendeeId).orElse(null);
+        if (attendee == null) {
+            return false;
         }
-        return false;
+
+        Event event = attendee.getEvent();
+        AttendeeStatus previousStatus = attendee.getRsvpStatus();
+        
+        // Delete the attendee
+        repository.deleteById(attendeeId);
+        log.info("Deleted attendee {}", attendeeId);
+        
+        // Update event attendee count if attendee was confirmed
+        if (event != null && previousStatus == AttendeeStatus.CONFIRMED) {
+            try {
+                Integer currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
+                event.setCurrentAttendeeCount(Math.max(0, currentCount - 1));
+                eventRepository.save(event);
+                
+                // Promote waitlist entries when capacity becomes available
+                if (eventWaitlistService != null && event.getCapacity() != null) {
+                    try {
+                        int spotsAvailable = 1; // One attendee deleted
+                        eventWaitlistService.promoteWaitlistEntries(event.getId(), spotsAvailable);
+                    } catch (Exception e) {
+                        log.warn("Failed to promote waitlist entries after attendee deletion for event {}: {}", 
+                                event.getId(), e.getMessage());
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to update event count after attendee deletion for event {}: {}", 
+                        event != null ? event.getId() : null, e.getMessage());
+            }
+        }
+        
+        return true;
     }
 
     // ==================== Create Operations ====================
@@ -726,6 +761,19 @@ public class AttendeeService {
         } else if (wasConfirmed && !isConfirmed) {
             event.setCurrentAttendeeCount(Math.max(0, event.getCurrentAttendeeCount() - 1));
             eventRepository.save(event);
+            
+            // Promote waitlist entries when capacity becomes available
+            if (eventWaitlistService != null && event.getCapacity() != null) {
+                try {
+                    // Calculate how many spots became available
+                    int spotsAvailable = 1; // One attendee cancelled
+                    eventWaitlistService.promoteWaitlistEntries(event.getId(), spotsAvailable);
+                } catch (Exception e) {
+                    // Log but don't fail the attendee update
+                    log.warn("Failed to promote waitlist entries for event {}: {}", 
+                            event.getId(), e.getMessage());
+                }
+            }
         }
     }
 
