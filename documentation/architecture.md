@@ -7,7 +7,7 @@ flowchart LR
   subgraph N["Docker network: event-planner-network"]
     subgraph EP_APP["Event Planner Monolith (Spring Boot)"]
       EP_API[REST API]
-      EP_AUTH[Auth & RBAC]
+      EP_AUTH[Auth & Access (RBAC, invites)]
       EP_EVENTS[Events]
       EP_TICKETS[Tickets]
       EP_BUDGET[Budget]

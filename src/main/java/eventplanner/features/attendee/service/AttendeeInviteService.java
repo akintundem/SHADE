@@ -128,8 +128,10 @@ public class AttendeeInviteService {
 
         UserAccount inviteeUser = null;
         if (inviteeUserId != null) {
-            inviteeUser = userAccountRepository.findById(inviteeUserId)
-                    .orElseThrow(() -> new IllegalArgumentException("Invitee user not found: " + inviteeUserId));
+            inviteeUser = userAccountRepository.findById(inviteeUserId).orElse(null);
+            if (inviteeUser == null) {
+                throw new IllegalArgumentException("Invitee user not found: " + inviteeUserId);
+            }
             if (inviteeEmail != null && inviteeUser.getEmail() != null &&
                     !inviteeEmail.equalsIgnoreCase(inviteeUser.getEmail())) {
                 throw new IllegalArgumentException("inviteeEmail does not match inviteeUserId");

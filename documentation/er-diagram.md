@@ -78,12 +78,51 @@ erDiagram
   TICKET_TYPES {
     UUID id PK
     UUID event_id FK
+    bigint early_bird_price_minor
+    datetime early_bird_end_date
+    int group_discount_min_qty
+    int group_discount_percent_bps
   }
 
   TICKET_PROMOTIONS {
     UUID id PK
     UUID event_id FK
     UUID ticket_type_id FK
+  }
+
+  TICKET_PRICE_TIERS {
+    UUID id PK
+    UUID ticket_type_id FK
+    string name
+    datetime starts_at
+    datetime ends_at
+    bigint price_minor
+    int priority
+  }
+
+  TICKET_TYPE_DEPENDENCIES {
+    UUID id PK
+    UUID ticket_type_id FK
+    UUID required_ticket_type_id FK
+    int min_quantity
+  }
+
+  TICKET_TYPE_TEMPLATES {
+    UUID id PK
+    UUID created_by FK
+    string name
+    string category
+    string currency
+    int quantity_available
+    bigint price_minor
+    datetime sale_start_date
+    datetime sale_end_date
+    int max_tickets_per_person
+    boolean requires_approval
+    bigint early_bird_price_minor
+    datetime early_bird_end_date
+    int group_discount_min_qty
+    int group_discount_percent_bps
   }
 
   TICKET_CHECKOUTS {
@@ -119,6 +158,17 @@ erDiagram
     UUID event_id FK
     UUID inviter_user_id FK
     UUID invitee_user_id FK
+  }
+
+  ATTENDEE_RSVP_HISTORY {
+    UUID id PK
+    UUID event_id FK
+    UUID attendee_id FK
+    UUID changed_by FK
+    string previous_status
+    string new_status
+    string source
+    string note
   }
 
   EVENT_USERS {
@@ -204,6 +254,9 @@ erDiagram
   EVENTS ||--o{ TICKET_TYPES : ticket_types
   EVENTS ||--o{ TICKET_PROMOTIONS : promotions
   TICKET_TYPES ||--o{ TICKET_PROMOTIONS : applies_to
+  TICKET_TYPES ||--o{ TICKET_PRICE_TIERS : pricing_tiers
+  TICKET_TYPES ||--o{ TICKET_TYPE_DEPENDENCIES : dependent
+  TICKET_TYPES ||--o{ TICKET_TYPE_DEPENDENCIES : required
   EVENTS ||--o{ TICKET_CHECKOUTS : checkouts
   AUTH_USERS ||--o{ TICKET_CHECKOUTS : purchases
   TICKET_CHECKOUTS ||--o{ TICKET_CHECKOUT_ITEMS : items
@@ -221,6 +274,9 @@ erDiagram
   EVENTS ||--o{ ATTENDEE_INVITES : invites
   AUTH_USERS ||--o{ ATTENDEE_INVITES : inviter
   AUTH_USERS ||--o{ ATTENDEE_INVITES : invitee
+  EVENTS ||--o{ ATTENDEE_RSVP_HISTORY : rsvp_history
+  ATTENDEES ||--o{ ATTENDEE_RSVP_HISTORY : rsvp_history
+  AUTH_USERS ||--o{ ATTENDEE_RSVP_HISTORY : changes
 
   EVENTS ||--o{ EVENT_USERS : members
   AUTH_USERS ||--o{ EVENT_USERS : members
@@ -235,3 +291,4 @@ erDiagram
 
   AUTH_USERS ||--o{ DEVICE_TOKENS : devices
   EVENTS ||--o{ COMMUNICATIONS : communications
+  AUTH_USERS ||--o{ TICKET_TYPE_TEMPLATES : templates
