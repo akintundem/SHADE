@@ -4,9 +4,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.common.exception.exceptions.ApiException;
 import eventplanner.common.exception.exceptions.ErrorCode;
+import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
+import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.features.ticket.dto.request.CreateTicketTypeRequest;
 import eventplanner.features.ticket.dto.request.CloneTicketTypeRequest;
 import eventplanner.features.ticket.dto.request.PromotionDetails;
@@ -52,6 +54,7 @@ public class TicketTypeService {
     private final TicketPromotionRepository ticketPromotionRepository;
     private final TicketPriceTierRepository ticketPriceTierRepository;
     private final TicketTypeDependencyRepository ticketTypeDependencyRepository;
+    private final AuthorizationService authorizationService;
 
     /**
      * Create a new ticket type for an event.
@@ -321,17 +324,34 @@ public class TicketTypeService {
     /**
      * Get ticket types for an event with optional filters.
      * Supports filtering by ID, category, active status, and name.
+     * Enforces access control for private events.
      * 
      * @param eventId Event ID (required)
      * @param id Optional ticket type ID to get a specific ticket type
      * @param category Optional category filter
      * @param activeOnly Filter to only active ticket types
      * @param name Optional name filter (partial match)
+     * @param principal User principal for access control (required for private events)
      * @return List of ticket type responses (single item if ID is provided)
+     * @throws ForbiddenException if user doesn't have access to private event
      */
     @Transactional(readOnly = true)
     public List<TicketTypeResponse> getTicketTypes(UUID eventId, UUID id, TicketTypeCategory category, 
-                                                    Boolean activeOnly, String name) {
+                                                    Boolean activeOnly, String name, UserPrincipal principal) {
+        // Fetch event to check access control
+        Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
+        
+        // Enforce access control for private events
+        if (!Boolean.TRUE.equals(event.getIsPublic())) {
+            if (principal == null) {
+                throw new ForbiddenException("Authentication required to access private event ticket types");
+            }
+            if (!authorizationService.canAccessEventWithInvite(principal, event)) {
+                throw new ForbiddenException("Access denied to private event ticket types");
+            }
+        }
+        
         List<TicketType> ticketTypes;
         
         // If ID is provided, get specific ticket type
@@ -409,10 +429,15 @@ public class TicketTypeService {
 
     /**
      * Get all ticket types for an event (backward compatibility).
+     * 
+     * @param eventId Event ID (required)
+     * @param activeOnly Filter to only active ticket types
+     * @param principal User principal for access control (required for private events)
+     * @return List of ticket type responses
      */
     @Transactional(readOnly = true)
-    public List<TicketTypeResponse> getTicketTypesByEventId(UUID eventId, boolean activeOnly) {
-        return getTicketTypes(eventId, null, null, activeOnly, null);
+    public List<TicketTypeResponse> getTicketTypesByEventId(UUID eventId, boolean activeOnly, UserPrincipal principal) {
+        return getTicketTypes(eventId, null, null, activeOnly, null, principal);
     }
 
     /**

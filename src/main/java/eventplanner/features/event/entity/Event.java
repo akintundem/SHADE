@@ -199,6 +199,46 @@ public class Event extends BaseEntity {
     @JoinColumn(name = "restored_by")
     private UserAccount restoredBy;
 
+    // ==================== EVENT SERIES FIELDS ====================
+
+    /**
+     * Many-to-one relationship with the parent event series.
+     * If null, this is a standalone event (not part of a series).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_series_id")
+    private EventSeries parentSeries;
+
+    /**
+     * Occurrence number within the series (1, 2, 3...).
+     * Only set if event is part of a series.
+     */
+    @Column(name = "series_occurrence_number")
+    private Integer seriesOccurrenceNumber;
+
+    /**
+     * Whether this event is the master/template event for the series.
+     * The master event's settings are used as defaults for new occurrences.
+     */
+    @Column(name = "is_series_master", nullable = false)
+    private Boolean isSeriesMaster = false;
+
+    /**
+     * Whether this occurrence has been modified from the series defaults.
+     * Used to track individual customizations.
+     */
+    @Column(name = "is_series_exception", nullable = false)
+    private Boolean isSeriesException = false;
+
+    /**
+     * Original scheduled date before any rescheduling.
+     * Useful for tracking rescheduled occurrences.
+     */
+    @Column(name = "original_start_date_time")
+    private LocalDateTime originalStartDateTime;
+
+    // ==================== RELATIONSHIPS ====================
+
     /**
      * One-to-many relationship with stored objects (media, assets, etc.).
      * Lazy loaded to avoid N+1 queries.
@@ -230,5 +270,42 @@ public class Event extends BaseEntity {
         this.name = name;
         this.eventType = eventType;
         this.owner = owner;
+    }
+
+    // ==================== SERIES HELPER METHODS ====================
+
+    /**
+     * Check if this event is part of a series.
+     */
+    public boolean isPartOfSeries() {
+        return parentSeries != null;
+    }
+
+    /**
+     * Check if this event is the master event for its series.
+     */
+    public boolean isMasterEvent() {
+        return Boolean.TRUE.equals(isSeriesMaster);
+    }
+
+    /**
+     * Check if this occurrence has been customized from series defaults.
+     */
+    public boolean hasSeriesException() {
+        return Boolean.TRUE.equals(isSeriesException);
+    }
+
+    /**
+     * Mark this occurrence as having an exception (customized).
+     */
+    public void markAsSeriesException() {
+        this.isSeriesException = true;
+    }
+
+    /**
+     * Get the series ID if this event is part of a series.
+     */
+    public UUID getSeriesId() {
+        return parentSeries != null ? parentSeries.getId() : null;
     }
 }

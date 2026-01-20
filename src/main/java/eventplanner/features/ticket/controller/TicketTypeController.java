@@ -70,7 +70,7 @@ public class TicketTypeController {
 
             // Ensure eventId in request matches path variable
             TicketType newTicketType = ticketTypeService.createTicketType(eventId, request, principal);
-            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, newTicketType.getId(), null, null, null)
+            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, newTicketType.getId(), null, null, null, principal)
                 .stream().findFirst().orElse(TicketTypeResponse.from(newTicketType));
             return new ResponseEntity<>(response, HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {
@@ -111,7 +111,7 @@ public class TicketTypeController {
                     "Access denied to event: " + eventId);
             }
 
-            List<TicketTypeResponse> ticketTypes = ticketTypeService.getTicketTypes(eventId, id, category, activeOnly, name);
+            List<TicketTypeResponse> ticketTypes = ticketTypeService.getTicketTypes(eventId, id, category, activeOnly, name, principal);
             return ResponseEntity.ok(ticketTypes);
         } catch (AccessDeniedException e) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
@@ -147,7 +147,7 @@ public class TicketTypeController {
             }
 
             TicketType updatedTicketType = ticketTypeService.updateTicketType(ticketTypeId, eventId, request, ifMatch, principal);
-            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, updatedTicketType.getId(), null, null, null)
+            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, updatedTicketType.getId(), null, null, null, principal)
                 .stream().findFirst().orElse(TicketTypeResponse.from(updatedTicketType));
             return ResponseEntity.ok()
                 .eTag(String.valueOf(updatedTicketType.getVersion())) // Return ETag with current version
@@ -179,7 +179,7 @@ public class TicketTypeController {
                     "Access denied to event: " + eventId);
             }
             TicketType cloned = ticketTypeService.cloneTicketType(ticketTypeId, eventId, request, principal);
-            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, cloned.getId(), null, null, null)
+            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, cloned.getId(), null, null, null, principal)
                 .stream().findFirst().orElse(TicketTypeResponse.from(cloned));
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (IllegalArgumentException e) {
@@ -203,7 +203,7 @@ public class TicketTypeController {
                     "Access denied to event: " + eventId);
             }
             TicketType archived = ticketTypeService.archiveTicketType(ticketTypeId, eventId, principal);
-            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, archived.getId(), null, null, null)
+            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, archived.getId(), null, null, null, principal)
                 .stream().findFirst().orElse(TicketTypeResponse.from(archived));
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
@@ -227,7 +227,7 @@ public class TicketTypeController {
                     "Access denied to event: " + eventId);
             }
             TicketType restored = ticketTypeService.restoreTicketType(ticketTypeId, eventId, principal);
-            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, restored.getId(), null, null, null)
+            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, restored.getId(), null, null, null, principal)
                 .stream().findFirst().orElse(TicketTypeResponse.from(restored));
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
