@@ -19,7 +19,6 @@ import eventplanner.features.feeds.dto.request.FeedPostMediaUploadRequest;
 import eventplanner.features.feeds.dto.response.CreateFeedPostResponse;
 import eventplanner.features.feeds.dto.response.FeedPostResponse;
 import eventplanner.features.feeds.dto.response.PostListResponse;
-import eventplanner.features.feeds.dto.response.PresignedUploadResponse;
 import eventplanner.features.feeds.entity.EventFeedPost;
 import eventplanner.features.feeds.repository.FeedPostRepository;
 import eventplanner.features.config.FeedsCleanupProperties;
@@ -143,7 +142,7 @@ public class FeedPostService {
             post.setMediaUploadStatus(MediaUploadStatus.PENDING);
         }
 
-        PresignedUploadResponse upload = null;
+        eventplanner.common.storage.s3.dto.PresignedUploadResponse upload = null;
 
         if (type == EventFeedPost.PostType.IMAGE || type == EventFeedPost.PostType.VIDEO) {
             FeedPostMediaUploadRequest mediaUpload = request != null ? request.getMediaUpload() : null;
@@ -159,27 +158,16 @@ public class FeedPostService {
             uploadRequest.setCategory("post");
             uploadRequest.setIsPublic(mediaUpload.getIsPublic());
             uploadRequest.setDescription(mediaUpload.getDescription());
-            
-            eventplanner.common.storage.s3.dto.PresignedUploadResponse genericResponse = presignedUploadService.generatePresignedUpload(
+
+            upload = presignedUploadService.generatePresignedUpload(
                     uploadRequest,
                     mediaId -> buildObjectKey(event.getId(), mediaId),
                     EVENT_BUCKET_ALIAS,
                     UPLOAD_URL_TTL
             );
 
-            post.setMediaObjectId(genericResponse.getMediaId());
+            post.setMediaObjectId(upload.getMediaId());
             EventFeedPost saved = postRepository.save(post);
-
-            // Convert to feed-specific response DTO (they have the same structure)
-            upload = PresignedUploadResponse.builder()
-                    .mediaId(genericResponse.getMediaId())
-                    .objectKey(genericResponse.getObjectKey())
-                    .uploadMethod(genericResponse.getUploadMethod())
-                    .uploadUrl(genericResponse.getUploadUrl())
-                    .headers(genericResponse.getHeaders())
-                    .resourceUrl(genericResponse.getResourceUrl())
-                    .expiresAt(genericResponse.getExpiresAt())
-                    .build();
 
             return CreateFeedPostResponse.builder()
                     .post(enrichPostsWithEngagement(List.of(saved), eventId, principal).get(0))
