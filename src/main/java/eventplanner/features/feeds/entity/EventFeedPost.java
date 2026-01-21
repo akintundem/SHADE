@@ -61,13 +61,35 @@ public class EventFeedPost extends BaseEntity {
      * Status of media upload for IMAGE/VIDEO posts.
      * TEXT posts are always COMPLETED.
      * IMAGE/VIDEO posts start as PENDING until media upload completes.
-     * 
+     *
      * Note: Initially nullable to allow Hibernate to add the column to existing tables.
      * Existing rows will be updated to COMPLETED on first access.
      */
     @Enumerated(EnumType.STRING)
     @Column(name = "media_upload_status")
     private MediaUploadStatus mediaUploadStatus = MediaUploadStatus.COMPLETED;
+
+    /**
+     * Reference to the original post if this is a repost.
+     * Null for original posts.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reposted_from_id")
+    private EventFeedPost repostedFrom;
+
+    /**
+     * Additional text when quote-posting (reposting with comment).
+     * Null for simple reposts.
+     */
+    @Column(name = "quote_text", columnDefinition = "TEXT")
+    private String quoteText;
+
+    /**
+     * Number of times this post has been reposted.
+     * Denormalized for performance.
+     */
+    @Column(name = "repost_count")
+    private Long repostCount = 0L;
 
     /**
      * One-to-many relationship with post likes.
@@ -92,6 +114,9 @@ public class EventFeedPost extends BaseEntity {
         if (mediaUploadStatus == null) {
             // Backfill to COMPLETED for legacy rows; new posts set this in the service.
             mediaUploadStatus = MediaUploadStatus.COMPLETED;
+        }
+        if (repostCount == null) {
+            repostCount = 0L;
         }
     }
 }

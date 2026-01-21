@@ -51,6 +51,15 @@ public interface FeedPostRepository extends JpaRepository<EventFeedPost, UUID> {
             @Param("status") MediaUploadStatus status,
             Pageable pageable
     );
+
+    /**
+     * Check if user has already reposted a specific post
+     */
+    @Query("SELECT COUNT(p) > 0 FROM EventFeedPost p WHERE p.createdBy.id = :userId AND p.repostedFrom.id = :originalPostId")
+    boolean existsByCreatedByIdAndRepostedFromId(
+            @Param("userId") UUID userId,
+            @Param("originalPostId") UUID originalPostId
+    );
 }
 
 

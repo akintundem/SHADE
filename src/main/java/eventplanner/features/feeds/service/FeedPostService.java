@@ -402,7 +402,7 @@ public class FeedPostService {
         return toResponse(post, eventId, Map.of(), Map.of(), Map.of(), Map.of());
     }
 
-    private FeedPostResponse toResponse(EventFeedPost post, UUID eventId, 
+    private FeedPostResponse toResponse(EventFeedPost post, UUID eventId,
                                         Map<UUID, UserAccount> authorsById,
                                         Map<UUID, Long> likeCounts,
                                         Map<UUID, Long> commentCounts,
@@ -429,6 +429,38 @@ public class FeedPostService {
         resp.setLikeCount(likeCounts.getOrDefault(post.getId(), 0L));
         resp.setCommentCount(commentCounts.getOrDefault(post.getId(), 0L));
         resp.setIsLiked(likedByUser.getOrDefault(post.getId(), false));
+        resp.setRepostCount(post.getRepostCount() != null ? post.getRepostCount() : 0L);
+
+        // Set repost information
+        if (post.getRepostedFrom() != null) {
+            EventFeedPost originalPost = post.getRepostedFrom();
+            resp.setRepostedFromId(originalPost.getId());
+            resp.setQuoteText(post.getQuoteText());
+
+            // Build original post info
+            FeedPostResponse.OriginalPost originalPostInfo = new FeedPostResponse.OriginalPost();
+            originalPostInfo.setId(originalPost.getId());
+            originalPostInfo.setType(originalPost.getPostType() != null ? originalPost.getPostType().name() : "TEXT");
+            originalPostInfo.setContent(originalPost.getContent());
+            originalPostInfo.setCreatedAt(originalPost.getCreatedAt());
+
+            if (originalPost.getCreatedBy() != null) {
+                originalPostInfo.setAuthorId(originalPost.getCreatedBy().getId());
+                originalPostInfo.setAuthorName(originalPost.getCreatedBy().getName());
+                originalPostInfo.setAuthorAvatarUrl(originalPost.getCreatedBy().getProfilePictureUrl());
+            }
+
+            // Add media URL for original post if it has media
+            if (originalPost.getMediaObjectId() != null) {
+                EventStoredObject obj = storedObjectRepository.findById(originalPost.getMediaObjectId()).orElse(null);
+                if (obj != null && obj.getEvent() != null && PURPOSE_POST_MEDIA.equals(obj.getPurpose())) {
+                    URL presignedGet = storageService.generatePresignedGetUrl(EVENT_BUCKET_ALIAS, obj.getObjectKey(), DOWNLOAD_URL_TTL);
+                    originalPostInfo.setMediaUrl(presignedGet.toString());
+                }
+            }
+
+            resp.setOriginalPost(originalPostInfo);
+        }
 
         if (post.getMediaObjectId() != null) {
             EventStoredObject obj = storedObjectRepository.findById(post.getMediaObjectId()).orElse(null);
@@ -544,44 +576,71 @@ public class FeedPostService {
      * @param eventId The event ID
      * @param postId The original post ID
      * @param principal The user principal
+     * @param quoteText Optional quote text for quote posts
      * @return The reposted post response
      */
-    public FeedPostResponse repost(UUID eventId, UUID postId, UserPrincipal principal) {
+    public FeedPostResponse repost(UUID eventId, UUID postId, UserPrincipal principal, String quoteText) {
         if (principal == null) {
             throw new IllegalArgumentException("Authentication required");
         }
-        
+
         // Get the original post
         EventFeedPost originalPost = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
-        
+
         // Verify the post belongs to the event
         if (!originalPost.getEvent().getId().equals(eventId)) {
             throw new IllegalArgumentException("Post does not belong to this event");
         }
-        
+
         // Verify access to the event (requireMediaView checks access and throws if denied)
         accessControlService.requireMediaView(principal, eventId);
-        
+
+        // Check if user already reposted this post
+        boolean alreadyReposted = postRepository.existsByCreatedByIdAndRepostedFromId(
+                principal.getId(), originalPost.getId());
+        if (alreadyReposted) {
+            throw new IllegalArgumentException("You have already reposted this post");
+        }
+
         // Create a new post that references the original
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found"));
-        
+
         UserAccount author = userAccountRepository.findById(principal.getId())
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        
+
         EventFeedPost repost = new EventFeedPost();
         repost.setEvent(event);
         repost.setCreatedBy(author);
         repost.setPostType(EventFeedPost.PostType.TEXT);
-        String originalContent = originalPost.getContent() != null ? originalPost.getContent() : "";
-        repost.setContent("Reposted: " + originalContent);
+        repost.setRepostedFrom(originalPost);
         repost.setMediaUploadStatus(MediaUploadStatus.COMPLETED);
-        
+
+        // Handle quote text
+        if (quoteText != null && !quoteText.trim().isEmpty()) {
+            String trimmedQuote = quoteText.trim();
+            if (trimmedQuote.length() > 4000) {
+                throw new IllegalArgumentException("Quote text too long (max 4000 characters)");
+            }
+            repost.setQuoteText(trimmedQuote);
+        }
+
+        // Increment repost count on original post
+        originalPost.setRepostCount((originalPost.getRepostCount() != null ? originalPost.getRepostCount() : 0) + 1);
+        postRepository.save(originalPost);
+
         EventFeedPost saved = postRepository.save(repost);
-        
+
         // Convert to response
-        return toResponse(saved, eventId);
+        return enrichPostsWithEngagement(List.of(saved), eventId, principal).get(0);
+    }
+
+    /**
+     * Simple repost without quote text
+     */
+    public FeedPostResponse repost(UUID eventId, UUID postId, UserPrincipal principal) {
+        return repost(eventId, postId, principal, null);
     }
 
     /**

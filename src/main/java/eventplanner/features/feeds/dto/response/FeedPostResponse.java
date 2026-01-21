@@ -39,9 +39,35 @@ public class FeedPostResponse {
     
     @Schema(description = "Whether the current user has liked this post")
     private Boolean isLiked;
-    
+
+    @Schema(description = "Number of reposts")
+    private Long repostCount;
+
+    @Schema(description = "ID of the original post if this is a repost")
+    private UUID repostedFromId;
+
+    @Schema(description = "Quote text if this is a quote post")
+    private String quoteText;
+
+    @Schema(description = "Original post details if this is a repost")
+    private OriginalPost originalPost;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    @Getter
+    @Setter
+    @Schema(description = "Original post information for reposts")
+    public static class OriginalPost {
+        private UUID id;
+        private UUID authorId;
+        private String authorName;
+        private String authorAvatarUrl;
+        private String type;
+        private String content;
+        private String mediaUrl;
+        private LocalDateTime createdAt;
+    }
 }
 
 
