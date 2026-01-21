@@ -3,6 +3,23 @@
 -- between events, tickets, ticket types, attendees, and related entities.
 
 -- =============================================================================
+-- CREATE EVENT WAITLIST ENTRIES TABLE (if not exists)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS event_waitlist_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id UUID NOT NULL,
+    requester_user_id UUID,
+    requester_email VARCHAR(180),
+    requester_name VARCHAR(200),
+    status VARCHAR(30) NOT NULL DEFAULT 'WAITING',
+    promoted_by UUID,
+    promoted_at TIMESTAMP,
+    cancelled_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =============================================================================
 -- TICKETS -> EVENT
 -- =============================================================================
 -- Add foreign key constraint for tickets to events
