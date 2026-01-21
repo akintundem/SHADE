@@ -264,7 +264,7 @@ CREATE INDEX IF NOT EXISTS idx_checkout_items_ticket_type_id ON ticket_checkout_
 
 -- Waitlist indexes
 CREATE INDEX IF NOT EXISTS idx_waitlist_event_id ON event_waitlist_entries(event_id);
-CREATE INDEX IF NOT EXISTS idx_waitlist_user_id ON event_waitlist_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_waitlist_user_id ON event_waitlist_entries(requester_user_id);
 CREATE INDEX IF NOT EXISTS idx_waitlist_status ON event_waitlist_entries(status);
 
 -- Attendee invites indexes
