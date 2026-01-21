@@ -61,36 +61,28 @@ public class TicketController {
     public ResponseEntity<List<TicketResponse>> issueTickets(
             @Valid @RequestBody List<IssueTicketRequest> requests,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (requests == null || requests.isEmpty()) {
-                throw new BadRequestException(
-                    "At least one ticket request is required");
-            }
-
-            // Verify all requests are for the same event (for permission check)
-            UUID eventId = requests.get(0).getEventId();
-            for (IssueTicketRequest req : requests) {
-                if (req.getEventId() == null || !req.getEventId().equals(eventId)) {
-                    throw new BadRequestException(
-                        "All ticket requests must be for the same event");
-                }
-            }
-
-            // Verify user can access the event
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ForbiddenException(
-                    "Access denied to event: " + eventId);
-            }
-
-            List<Ticket> allTickets = ticketService.issueTickets(requests, principal);
-            List<TicketResponse> responses = allTickets.stream()
-                .map(TicketResponse::from)
-                .collect(Collectors.toList());
-
-            return ResponseEntity.status(HttpStatus.CREATED).body(responses);
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        if (requests == null || requests.isEmpty()) {
+            throw new BadRequestException(
+                "At least one ticket request is required");
         }
+        // Verify all requests are for the same event (for permission check)
+        UUID eventId = requests.get(0).getEventId();
+        for (IssueTicketRequest req : requests) {
+            if (req.getEventId() == null || !req.getEventId().equals(eventId)) {
+                throw new BadRequestException(
+                    "All ticket requests must be for the same event");
+            }
+        }
+        // Verify user can access the event
+        if (!authorizationService.canAccessEvent(principal, eventId)) {
+            throw new ForbiddenException(
+                "Access denied to event: " + eventId);
+        }
+        List<Ticket> allTickets = ticketService.issueTickets(requests, principal);
+        List<TicketResponse> responses = allTickets.stream()
+            .map(TicketResponse::from)
+            .collect(Collectors.toList());
+        return ResponseEntity.status(HttpStatus.CREATED).body(responses);
     }
 
     @GetMapping("/events/{eventId}")
@@ -109,29 +101,21 @@ public class TicketController {
             @RequestParam(required = false, defaultValue = "createdAt") String sortBy,
             @RequestParam(required = false, defaultValue = "DESC") String sortDirection,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            // Verify user can access the event
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ForbiddenException(
-                    "Access denied to event: " + eventId);
-            }
-
-            // Validate pagination
-            if (page < 0) page = 0;
-            if (size < 1) size = 20;
-            if (size > 100) size = 100;
-
-            Sort.Direction direction = "ASC".equalsIgnoreCase(sortDirection) 
-                ? Sort.Direction.ASC : Sort.Direction.DESC;
-            Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
-
-            Page<TicketResponse> tickets = ticketService.getTicketsByEventId(
-                eventId, ticketId, status, ticketTypeId, pageable);
-
-            return ResponseEntity.ok(tickets);
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        // Verify user can access the event
+        if (!authorizationService.canAccessEvent(principal, eventId)) {
+            throw new ForbiddenException(
+                "Access denied to event: " + eventId);
         }
+        // Validate pagination
+        if (page < 0) page = 0;
+        if (size < 1) size = 20;
+        if (size > 100) size = 100;
+        Sort.Direction direction = "ASC".equalsIgnoreCase(sortDirection) 
+            ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
+        Page<TicketResponse> tickets = ticketService.getTicketsByEventId(
+            eventId, ticketId, status, ticketTypeId, pageable);
+        return ResponseEntity.ok(tickets);
     }
 
     @PostMapping("/validate")
@@ -141,36 +125,18 @@ public class TicketController {
     public ResponseEntity<TicketValidationResponse> validateTicket(
             @Valid @RequestBody ValidateTicketRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            // Verify user can access the event
-            if (!authorizationService.canAccessEvent(principal, request.getEventId())) {
-                throw new ForbiddenException(
-                    "Access denied to event: " + request.getEventId());
-            }
-
-            Ticket ticket = ticketService.validateTicket(request, principal);
-            
-            TicketValidationResponse response = TicketValidationResponse.builder()
-                .valid(true)
-                .ticket(TicketResponse.from(ticket))
-                .message("Ticket validated successfully")
-                .build();
-
-            return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            TicketValidationResponse response = TicketValidationResponse.builder()
-                .valid(false)
-                .message(e.getMessage())
-                .errorCode(e.getCode())
-                .build();
-            return ResponseEntity.status(e.getStatus()).body(response);
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            TicketValidationResponse response = TicketValidationResponse.builder()
-                .valid(false)
-                .message(e.getMessage())
-                .build();
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        // Verify user can access the event
+        if (!authorizationService.canAccessEvent(principal, request.getEventId())) {
+            throw new ForbiddenException(
+                "Access denied to event: " + request.getEventId());
         }
+        Ticket ticket = ticketService.validateTicket(request, principal);
+        TicketValidationResponse response = TicketValidationResponse.builder()
+            .valid(true)
+            .ticket(TicketResponse.from(ticket))
+            .message("Ticket validated successfully")
+            .build();
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{id}/cancel")
@@ -180,31 +146,10 @@ public class TicketController {
     public ResponseEntity<TicketResponse> cancelTicket(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            Ticket ticket = ticketService.cancelTicket(id, principal);
-            TicketResponse response;
-            try {
-                response = TicketResponse.from(ticket);
-            } catch (Exception e) {
-                // Return a minimal response if conversion fails
-                response = TicketResponse.builder()
-                    .id(ticket.getId())
-                    .status(ticket.getStatus())
-                    .build();
-            }
-            return ResponseEntity.ok(response);
-        } catch (ConflictException e) {
-            throw e;
-        } catch (ResourceNotFoundException e) {
-            throw e;
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            throw new BadRequestException(e.getMessage());
-        } catch (Exception e) {
-            throw new ApiException(ErrorCode.INTERNAL_ERROR, 
-                "An error occurred while canceling the ticket");
-        }
+        Ticket ticket = ticketService.cancelTicket(id, principal);
+        TicketResponse response;
+        response = TicketResponse.from(ticket);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{id}/refund")
@@ -214,18 +159,8 @@ public class TicketController {
             @PathVariable UUID id,
             @RequestParam(required = false) String reason,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            Ticket ticket = ticketService.refundTicket(id, reason, principal);
-            return ResponseEntity.ok(TicketResponse.from(ticket));
-        } catch (ConflictException e) {
-            throw e;
-        } catch (ResourceNotFoundException e) {
-            throw e;
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        Ticket ticket = ticketService.refundTicket(id, reason, principal);
+        return ResponseEntity.ok(TicketResponse.from(ticket));
     }
 
     @PutMapping("/{id}")
@@ -235,18 +170,8 @@ public class TicketController {
             @PathVariable UUID id,
             @Valid @RequestBody UpdateTicketRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            Ticket ticket = ticketService.updateTicket(id, request, principal);
-            return ResponseEntity.ok(TicketResponse.from(ticket));
-        } catch (ConflictException e) {
-            throw e;
-        } catch (ResourceNotFoundException e) {
-            throw e;
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        Ticket ticket = ticketService.updateTicket(id, request, principal);
+        return ResponseEntity.ok(TicketResponse.from(ticket));
     }
 
     @PostMapping("/{id}/transfer")
@@ -256,18 +181,8 @@ public class TicketController {
             @PathVariable UUID id,
             @Valid @RequestBody TransferTicketRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            Ticket ticket = ticketService.transferTicket(id, request, principal);
-            return ResponseEntity.ok(TicketResponse.from(ticket));
-        } catch (ConflictException e) {
-            throw e;
-        } catch (ResourceNotFoundException e) {
-            throw e;
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        Ticket ticket = ticketService.transferTicket(id, request, principal);
+        return ResponseEntity.ok(TicketResponse.from(ticket));
     }
 
     @PostMapping("/{id}/resend")
@@ -277,18 +192,8 @@ public class TicketController {
             @PathVariable UUID id,
             @RequestBody(required = false) ResendTicketRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            Ticket ticket = ticketService.resendTicket(id, request, principal);
-            return ResponseEntity.ok(TicketResponse.from(ticket));
-        } catch (ConflictException e) {
-            throw e;
-        } catch (ResourceNotFoundException e) {
-            throw e;
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        Ticket ticket = ticketService.resendTicket(id, request, principal);
+        return ResponseEntity.ok(TicketResponse.from(ticket));
     }
 
     @PostMapping("/bulk")
@@ -297,24 +202,14 @@ public class TicketController {
     public ResponseEntity<BulkTicketActionResponse> bulkAction(
             @Valid @RequestBody BulkTicketActionRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (request == null || request.getEventId() == null) {
-                throw new BadRequestException("Event ID is required");
-            }
-            if (!authorizationService.canAccessEvent(principal, request.getEventId())) {
-                throw new ForbiddenException("Access denied to event: " + request.getEventId());
-            }
-            BulkTicketActionResponse response = ticketService.bulkAction(request, principal);
-            return ResponseEntity.ok(response);
-        } catch (BadRequestException e) {
-            throw e;
-        } catch (ForbiddenException e) {
-            throw e;
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            throw new BadRequestException(e.getMessage());
+        if (request == null || request.getEventId() == null) {
+            throw new BadRequestException("Event ID is required");
         }
+        if (!authorizationService.canAccessEvent(principal, request.getEventId())) {
+            throw new ForbiddenException("Access denied to event: " + request.getEventId());
+        }
+        BulkTicketActionResponse response = ticketService.bulkAction(request, principal);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}/wallet-pass")
@@ -324,12 +219,8 @@ public class TicketController {
     public ResponseEntity<TicketWalletResponse> getWalletPass(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            TicketWalletResponse wallet = ticketService.getTicketWallet(id);
-            return ResponseEntity.ok(wallet);
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        TicketWalletResponse wallet = ticketService.getTicketWallet(id);
+        return ResponseEntity.ok(wallet);
     }
 
 }

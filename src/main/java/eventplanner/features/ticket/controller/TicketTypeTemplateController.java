@@ -45,12 +45,8 @@ public class TicketTypeTemplateController {
     public ResponseEntity<TicketTypeTemplateResponse> createTemplate(
             @Valid @RequestBody CreateTicketTypeTemplateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            TicketTypeTemplate template = templateService.createTemplate(request, principal);
-            return ResponseEntity.status(HttpStatus.CREATED).body(TicketTypeTemplateResponse.from(template));
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        TicketTypeTemplate template = templateService.createTemplate(request, principal);
+        return ResponseEntity.status(HttpStatus.CREATED).body(TicketTypeTemplateResponse.from(template));
     }
 
     @GetMapping
@@ -58,14 +54,10 @@ public class TicketTypeTemplateController {
     @RequiresPermission(RbacPermissions.TICKET_TYPE_READ)
     public ResponseEntity<List<TicketTypeTemplateResponse>> listTemplates(
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            List<TicketTypeTemplateResponse> responses = templateService.listTemplates(principal).stream()
-                .map(TicketTypeTemplateResponse::from)
-                .toList();
-            return ResponseEntity.ok(responses);
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        List<TicketTypeTemplateResponse> responses = templateService.listTemplates(principal).stream()
+            .map(TicketTypeTemplateResponse::from)
+            .toList();
+        return ResponseEntity.ok(responses);
     }
 
     @PutMapping("/{templateId}")
@@ -75,12 +67,8 @@ public class TicketTypeTemplateController {
             @PathVariable UUID templateId,
             @Valid @RequestBody UpdateTicketTypeTemplateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            TicketTypeTemplate template = templateService.updateTemplate(templateId, request, principal);
-            return ResponseEntity.ok(TicketTypeTemplateResponse.from(template));
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        TicketTypeTemplate template = templateService.updateTemplate(templateId, request, principal);
+        return ResponseEntity.ok(TicketTypeTemplateResponse.from(template));
     }
 
     @DeleteMapping("/{templateId}")
@@ -89,12 +77,8 @@ public class TicketTypeTemplateController {
     public ResponseEntity<Void> deleteTemplate(
             @PathVariable UUID templateId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            templateService.deleteTemplate(templateId, principal);
-            return ResponseEntity.noContent().build();
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        templateService.deleteTemplate(templateId, principal);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{templateId}/apply/events/{eventId}")
@@ -105,11 +89,7 @@ public class TicketTypeTemplateController {
             @PathVariable UUID eventId,
             @RequestBody(required = false) ApplyTicketTypeTemplateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            TicketType ticketType = templateService.applyTemplate(templateId, eventId, request, principal);
-            return ResponseEntity.status(HttpStatus.CREATED).body(TicketTypeResponse.from(ticketType));
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        TicketType ticketType = templateService.applyTemplate(templateId, eventId, request, principal);
+        return ResponseEntity.status(HttpStatus.CREATED).body(TicketTypeResponse.from(ticketType));
     }
 }

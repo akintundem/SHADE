@@ -58,13 +58,9 @@ public class EventCollaboratorInviteController {
         }
         if (!authorizationService.isEventOwner(principal, eventId) && !authorizationService.isAdmin(principal)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can invite collaborators");
-        }
-        try {
-            CollaboratorInviteResponse response = inviteService.createInvite(eventId, principal, request);
+        }            CollaboratorInviteResponse response = inviteService.createInvite(eventId, principal, request);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
-        }
+
     }
 
     @GetMapping("/api/v1/events/{eventId}/collaborator-invites")
@@ -98,13 +94,9 @@ public class EventCollaboratorInviteController {
         }
         if (!authorizationService.isEventOwner(principal, eventId) && !authorizationService.isAdmin(principal)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can revoke invites");
-        }
-        try {
-            inviteService.revokeInvite(inviteId);
+        }            inviteService.revokeInvite(inviteId);
             return ResponseEntity.noContent().build();
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
-        }
+
     }
 
     @GetMapping("/api/v1/collaborator-invites/incoming")
@@ -113,12 +105,8 @@ public class EventCollaboratorInviteController {
     public ResponseEntity<List<CollaboratorInviteResponse>> myInvites(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        try {
-            return ResponseEntity.ok(inviteService.listMyPendingInvites(principal));
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
-        }
+        }            return ResponseEntity.ok(inviteService.listMyPendingInvites(principal));
+
     }
 
     @PostMapping("/api/v1/collaborator-invites/{inviteId}/accept")
@@ -131,9 +119,7 @@ public class EventCollaboratorInviteController {
     ) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        try {
-            var membership = inviteService.acceptInviteById(inviteId, principal);
+        }            var membership = inviteService.acceptInviteById(inviteId, principal);
             EventCollaboratorResponse response = new EventCollaboratorResponse();
             response.setCollaboratorId(membership.getId());
             response.setEventId(membership.getEvent() != null ? membership.getEvent().getId() : null);
@@ -145,9 +131,7 @@ public class EventCollaboratorInviteController {
             response.setAddedAt(membership.getCreatedAt());
             response.setUpdatedAt(membership.getUpdatedAt());
             return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
-        }
+
     }
 
     @PostMapping("/api/v1/collaborator-invites/accept")
@@ -159,9 +143,7 @@ public class EventCollaboratorInviteController {
     ) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        try {
-            var membership = inviteService.acceptInviteByToken(token, principal);
+        }            var membership = inviteService.acceptInviteByToken(token, principal);
             EventCollaboratorResponse r = new EventCollaboratorResponse();
             r.setCollaboratorId(membership.getId());
             r.setEventId(membership.getEvent() != null ? membership.getEvent().getId() : null);
@@ -173,9 +155,7 @@ public class EventCollaboratorInviteController {
             r.setAddedAt(membership.getCreatedAt());
             r.setUpdatedAt(membership.getUpdatedAt());
             return ResponseEntity.ok(r);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
-        }
+
     }
 
     @PostMapping("/api/v1/collaborator-invites/{inviteId}/decline")
@@ -188,13 +168,9 @@ public class EventCollaboratorInviteController {
     ) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        try {
-            inviteService.declineInvite(inviteId, principal);
+        }            inviteService.declineInvite(inviteId, principal);
             return ResponseEntity.noContent().build();
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request parameters");
-        }
+
     }
 }
 

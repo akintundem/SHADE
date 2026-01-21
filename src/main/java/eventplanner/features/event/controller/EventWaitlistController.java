@@ -60,19 +60,11 @@ public class EventWaitlistController {
             @Parameter(description = "Event ID") @PathVariable UUID eventId,
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody(required = false) CreateEventWaitlistRequest request) {
-        try {
-            CreateEventWaitlistRequest req = request != null ? request : new CreateEventWaitlistRequest();
-            EventWaitlistEntry entry = waitlistService.createEntry(eventId, req, principal);
-            EventWaitlistEntryResponse response = EventWaitlistEntryResponse.from(entry);
-            URI location = URI.create("/api/v1/events/" + eventId + "/waitlist/" + entry.getId());
-            return ResponseEntity.created(location).body(response);
-        } catch (IllegalArgumentException | eventplanner.common.exception.exceptions.BadRequestException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-        } catch (eventplanner.common.exception.exceptions.ConflictException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
-        } catch (eventplanner.common.exception.exceptions.ResourceNotFoundException e) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
-        }
+        CreateEventWaitlistRequest req = request != null ? request : new CreateEventWaitlistRequest();
+        EventWaitlistEntry entry = waitlistService.createEntry(eventId, req, principal);
+        EventWaitlistEntryResponse response = EventWaitlistEntryResponse.from(entry);
+        URI location = URI.create("/api/v1/events/" + eventId + "/waitlist/" + entry.getId());
+        return ResponseEntity.created(location).body(response);
     }
 
     @GetMapping
@@ -88,16 +80,10 @@ public class EventWaitlistController {
             @Parameter(description = "Filter by status") @RequestParam(required = false) EventWaitlistStatus status,
             @Parameter(description = "Page number (0-indexed)") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
-        try {
-            Pageable pageable = PageRequest.of(page, size);
-            Page<EventWaitlistEntry> entries = waitlistService.listEntries(eventId, status, pageable, principal);
-            Page<EventWaitlistEntryResponse> responses = entries.map(EventWaitlistEntryResponse::from);
-            return ResponseEntity.ok(responses);
-        } catch (eventplanner.common.exception.exceptions.ForbiddenException e) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
-        } catch (eventplanner.common.exception.exceptions.ResourceNotFoundException e) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
-        }
+        Pageable pageable = PageRequest.of(page, size);
+        Page<EventWaitlistEntry> entries = waitlistService.listEntries(eventId, status, pageable, principal);
+        Page<EventWaitlistEntryResponse> responses = entries.map(EventWaitlistEntryResponse::from);
+        return ResponseEntity.ok(responses);
     }
 
     @GetMapping("/my-entries")
@@ -113,15 +99,11 @@ public class EventWaitlistController {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
-        try {
-            List<EventWaitlistEntry> entries = waitlistService.listEntriesForUser(eventId, principal);
-            List<EventWaitlistEntryResponse> responses = entries.stream()
-                .map(EventWaitlistEntryResponse::from)
-                .collect(Collectors.toList());
-            return ResponseEntity.ok(responses);
-        } catch (eventplanner.common.exception.exceptions.BadRequestException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-        }
+        List<EventWaitlistEntry> entries = waitlistService.listEntriesForUser(eventId, principal);
+        List<EventWaitlistEntryResponse> responses = entries.stream()
+            .map(EventWaitlistEntryResponse::from)
+            .collect(Collectors.toList());
+        return ResponseEntity.ok(responses);
     }
 
     @DeleteMapping("/{entryId}")
@@ -139,15 +121,7 @@ public class EventWaitlistController {
             @Parameter(description = "Event ID") @PathVariable UUID eventId,
             @Parameter(description = "Waitlist entry ID") @PathVariable UUID entryId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            waitlistService.cancelEntry(eventId, entryId, principal);
-            return ResponseEntity.noContent().build();
-        } catch (eventplanner.common.exception.exceptions.ForbiddenException e) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
-        } catch (eventplanner.common.exception.exceptions.ResourceNotFoundException e) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
-        } catch (eventplanner.common.exception.exceptions.ConflictException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
-        }
+        waitlistService.cancelEntry(eventId, entryId, principal);
+        return ResponseEntity.noContent().build();
     }
 }

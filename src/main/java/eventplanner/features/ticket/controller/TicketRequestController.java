@@ -58,18 +58,12 @@ public class TicketRequestController {
             @PathVariable UUID eventId,
             @Valid @RequestBody CreateTicketApprovalRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!canAccessTicketing(principal, eventId)) {
-                throw new ForbiddenException("Access denied to event: " + eventId);
-            }
-            return ResponseEntity.status(HttpStatus.CREATED)
-                .body(TicketApprovalRequestResponse.from(
-                    approvalService.createRequest(eventId, request, principal)));
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        if (!canAccessTicketing(principal, eventId)) {
+            throw new ForbiddenException("Access denied to event: " + eventId);
         }
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(TicketApprovalRequestResponse.from(
+                approvalService.createRequest(eventId, request, principal)));
     }
 
     @GetMapping("/requests")
@@ -83,23 +77,17 @@ public class TicketRequestController {
             @RequestParam(required = false, defaultValue = "createdAt") String sortBy,
             @RequestParam(required = false, defaultValue = "DESC") String sortDirection,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ForbiddenException("Access denied to event: " + eventId);
-            }
-            Sort.Direction direction = "ASC".equalsIgnoreCase(sortDirection)
-                ? Sort.Direction.ASC : Sort.Direction.DESC;
-            Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
-                Sort.by(direction, sortBy));
-            Page<TicketApprovalRequestResponse> responses = approvalService
-                .listRequests(eventId, status, pageable)
-                .map(TicketApprovalRequestResponse::from);
-            return ResponseEntity.ok(responses);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        if (!authorizationService.canAccessEvent(principal, eventId)) {
+            throw new ForbiddenException("Access denied to event: " + eventId);
         }
+        Sort.Direction direction = "ASC".equalsIgnoreCase(sortDirection)
+            ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+            Sort.by(direction, sortBy));
+        Page<TicketApprovalRequestResponse> responses = approvalService
+            .listRequests(eventId, status, pageable)
+            .map(TicketApprovalRequestResponse::from);
+        return ResponseEntity.ok(responses);
     }
 
     @GetMapping("/requests/mine")
@@ -108,20 +96,14 @@ public class TicketRequestController {
     public ResponseEntity<List<TicketApprovalRequestResponse>> listMyApprovalRequests(
             @PathVariable UUID eventId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!canAccessTicketing(principal, eventId)) {
-                throw new ForbiddenException("Access denied to event: " + eventId);
-            }
-            List<TicketApprovalRequestResponse> responses = approvalService
-                .listRequestsForUser(eventId, principal).stream()
-                .map(TicketApprovalRequestResponse::from)
-                .toList();
-            return ResponseEntity.ok(responses);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        if (!canAccessTicketing(principal, eventId)) {
+            throw new ForbiddenException("Access denied to event: " + eventId);
         }
+        List<TicketApprovalRequestResponse> responses = approvalService
+            .listRequestsForUser(eventId, principal).stream()
+            .map(TicketApprovalRequestResponse::from)
+            .toList();
+        return ResponseEntity.ok(responses);
     }
 
     @PostMapping("/requests/{requestId}/approve")
@@ -132,15 +114,9 @@ public class TicketRequestController {
             @PathVariable UUID requestId,
             @RequestBody(required = false) TicketApprovalDecisionRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            TicketApprovalRequestResponse response = TicketApprovalRequestResponse.from(
-                approvalService.approveRequest(eventId, requestId, request, principal));
-            return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        TicketApprovalRequestResponse response = TicketApprovalRequestResponse.from(
+            approvalService.approveRequest(eventId, requestId, request, principal));
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/requests/{requestId}/reject")
@@ -151,15 +127,9 @@ public class TicketRequestController {
             @PathVariable UUID requestId,
             @RequestBody(required = false) TicketApprovalDecisionRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            TicketApprovalRequestResponse response = TicketApprovalRequestResponse.from(
-                approvalService.rejectRequest(eventId, requestId, request, principal));
-            return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        TicketApprovalRequestResponse response = TicketApprovalRequestResponse.from(
+            approvalService.rejectRequest(eventId, requestId, request, principal));
+        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/requests/{requestId}")
@@ -169,15 +139,9 @@ public class TicketRequestController {
             @PathVariable UUID eventId,
             @PathVariable UUID requestId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            TicketApprovalRequestResponse response = TicketApprovalRequestResponse.from(
-                approvalService.cancelRequest(eventId, requestId, principal));
-            return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        TicketApprovalRequestResponse response = TicketApprovalRequestResponse.from(
+            approvalService.cancelRequest(eventId, requestId, principal));
+        return ResponseEntity.ok(response);
     }
 
     // ==================== Waitlist ====================
@@ -189,18 +153,12 @@ public class TicketRequestController {
             @PathVariable UUID eventId,
             @Valid @RequestBody CreateTicketWaitlistRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!canAccessTicketing(principal, eventId)) {
-                throw new ForbiddenException("Access denied to event: " + eventId);
-            }
-            TicketWaitlistEntryResponse response = TicketWaitlistEntryResponse.from(
-                waitlistService.createEntry(eventId, request, principal));
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        if (!canAccessTicketing(principal, eventId)) {
+            throw new ForbiddenException("Access denied to event: " + eventId);
         }
+        TicketWaitlistEntryResponse response = TicketWaitlistEntryResponse.from(
+            waitlistService.createEntry(eventId, request, principal));
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/waitlist")
@@ -214,23 +172,17 @@ public class TicketRequestController {
             @RequestParam(required = false, defaultValue = "createdAt") String sortBy,
             @RequestParam(required = false, defaultValue = "ASC") String sortDirection,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ForbiddenException("Access denied to event: " + eventId);
-            }
-            Sort.Direction direction = "DESC".equalsIgnoreCase(sortDirection)
-                ? Sort.Direction.DESC : Sort.Direction.ASC;
-            Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
-                Sort.by(direction, sortBy));
-            Page<TicketWaitlistEntryResponse> responses = waitlistService
-                .listEntries(eventId, status, pageable)
-                .map(TicketWaitlistEntryResponse::from);
-            return ResponseEntity.ok(responses);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        if (!authorizationService.canAccessEvent(principal, eventId)) {
+            throw new ForbiddenException("Access denied to event: " + eventId);
         }
+        Sort.Direction direction = "DESC".equalsIgnoreCase(sortDirection)
+            ? Sort.Direction.DESC : Sort.Direction.ASC;
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+            Sort.by(direction, sortBy));
+        Page<TicketWaitlistEntryResponse> responses = waitlistService
+            .listEntries(eventId, status, pageable)
+            .map(TicketWaitlistEntryResponse::from);
+        return ResponseEntity.ok(responses);
     }
 
     @GetMapping("/waitlist/mine")
@@ -239,20 +191,14 @@ public class TicketRequestController {
     public ResponseEntity<List<TicketWaitlistEntryResponse>> listMyWaitlist(
             @PathVariable UUID eventId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!canAccessTicketing(principal, eventId)) {
-                throw new ForbiddenException("Access denied to event: " + eventId);
-            }
-            List<TicketWaitlistEntryResponse> responses = waitlistService
-                .listEntriesForUser(eventId, principal).stream()
-                .map(TicketWaitlistEntryResponse::from)
-                .toList();
-            return ResponseEntity.ok(responses);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        if (!canAccessTicketing(principal, eventId)) {
+            throw new ForbiddenException("Access denied to event: " + eventId);
         }
+        List<TicketWaitlistEntryResponse> responses = waitlistService
+            .listEntriesForUser(eventId, principal).stream()
+            .map(TicketWaitlistEntryResponse::from)
+            .toList();
+        return ResponseEntity.ok(responses);
     }
 
     @PostMapping("/waitlist/{entryId}/fulfill")
@@ -263,15 +209,9 @@ public class TicketRequestController {
             @PathVariable UUID entryId,
             @RequestBody(required = false) TicketWaitlistFulfillRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            TicketWaitlistEntryResponse response = TicketWaitlistEntryResponse.from(
-                waitlistService.fulfillEntry(eventId, entryId, request, principal));
-            return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        TicketWaitlistEntryResponse response = TicketWaitlistEntryResponse.from(
+            waitlistService.fulfillEntry(eventId, entryId, request, principal));
+        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/waitlist/{entryId}")
@@ -281,15 +221,9 @@ public class TicketRequestController {
             @PathVariable UUID eventId,
             @PathVariable UUID entryId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            TicketWaitlistEntryResponse response = TicketWaitlistEntryResponse.from(
-                waitlistService.cancelEntry(eventId, entryId, principal));
-            return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
-        }
+        TicketWaitlistEntryResponse response = TicketWaitlistEntryResponse.from(
+            waitlistService.cancelEntry(eventId, entryId, principal));
+        return ResponseEntity.ok(response);
     }
 
     private boolean canAccessTicketing(UserPrincipal principal, UUID eventId) {

@@ -59,18 +59,14 @@ public class EventSeriesController {
     })
     public ResponseEntity<EventSeriesResponse> createSeries(
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody CreateEventSeriesRequest request) {
-        try {
-            if (principal == null) {
+            @Valid @RequestBody CreateEventSeriesRequest request) {            if (principal == null) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
             }
 
             EventSeriesResponse response = seriesService.createSeries(request, principal);
             URI location = URI.create("/api/v1/event-series/" + response.getId());
             return ResponseEntity.created(location).body(response);
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+
     }
 
     // ==================== READ ====================
@@ -152,17 +148,13 @@ public class EventSeriesController {
     public ResponseEntity<EventSeriesResponse> updateSeries(
             @Parameter(description = "Series ID") @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody UpdateEventSeriesRequest request) {
-        try {
-            if (principal == null) {
+            @Valid @RequestBody UpdateEventSeriesRequest request) {            if (principal == null) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
             }
 
             EventSeriesResponse response = seriesService.updateSeries(id, request, principal);
             return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+
     }
 
     // ==================== GENERATE OCCURRENCES ====================
@@ -181,18 +173,14 @@ public class EventSeriesController {
     public ResponseEntity<GenerateOccurrencesResponse> generateOccurrences(
             @Parameter(description = "Series ID") @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody(required = false) GenerateOccurrencesRequest request) {
-        try {
-            if (principal == null) {
+            @Valid @RequestBody(required = false) GenerateOccurrencesRequest request) {            if (principal == null) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
             }
 
             GenerateOccurrencesRequest req = request != null ? request : new GenerateOccurrencesRequest();
             GenerateOccurrencesResponse response = seriesService.generateOccurrences(id, req, principal);
             return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
-        }
+
     }
 
     // ==================== CANCEL / DELETE ====================

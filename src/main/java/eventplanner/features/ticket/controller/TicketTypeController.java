@@ -61,23 +61,17 @@ public class TicketTypeController {
         @Parameter(description = "ID of the event") @PathVariable UUID eventId,
         @Valid @RequestBody CreateTicketTypeRequest request,
         @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            // Verify user can access the event
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-                    "Access denied to event: " + eventId);
-            }
-
-            // Ensure eventId in request matches path variable
-            TicketType newTicketType = ticketTypeService.createTicketType(eventId, request, principal);
-            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, newTicketType.getId(), null, null, null, principal)
-                .stream().findFirst().orElse(TicketTypeResponse.from(newTicketType));
-            return new ResponseEntity<>(response, HttpStatus.CREATED);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-        } catch (AccessDeniedException e) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
+        // Verify user can access the event
+        if (!authorizationService.canAccessEvent(principal, eventId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Access denied to event: " + eventId);
         }
+
+        // Ensure eventId in request matches path variable
+        TicketType newTicketType = ticketTypeService.createTicketType(eventId, request, principal);
+        TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, newTicketType.getId(), null, null, null, principal)
+            .stream().findFirst().orElse(TicketTypeResponse.from(newTicketType));
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
     /**
@@ -104,18 +98,13 @@ public class TicketTypeController {
         @Parameter(description = "Filter to only active ticket types") @RequestParam(required = false) Boolean activeOnly,
         @Parameter(description = "Filter by name (partial match, case-insensitive)") @RequestParam(required = false) String name,
         @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            // Verify user can access the event
-            if (!authorizationService.canAccessEventWithInvite(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-                    "Access denied to event: " + eventId);
-            }
-
-            List<TicketTypeResponse> ticketTypes = ticketTypeService.getTicketTypes(eventId, id, category, activeOnly, name, principal);
-            return ResponseEntity.ok(ticketTypes);
-        } catch (AccessDeniedException e) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
+        // Verify user can access the event
+        if (!authorizationService.canAccessEventWithInvite(principal, eventId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                "Access denied to event: " + eventId);
         }
+        List<TicketTypeResponse> ticketTypes = ticketTypeService.getTicketTypes(eventId, id, category, activeOnly, name, principal);
+        return ResponseEntity.ok(ticketTypes);
     }
 
     /**
@@ -139,27 +128,17 @@ public class TicketTypeController {
         @Valid @RequestBody UpdateTicketTypeRequest request,
         @RequestHeader(value = "If-Match", required = false) Long ifMatch, // For optimistic locking
         @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            // Verify user can access the event
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-                    "Access denied to event: " + eventId);
-            }
-
-            TicketType updatedTicketType = ticketTypeService.updateTicketType(ticketTypeId, eventId, request, ifMatch, principal);
-            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, updatedTicketType.getId(), null, null, null, principal)
-                .stream().findFirst().orElse(TicketTypeResponse.from(updatedTicketType));
-            return ResponseEntity.ok()
-                .eTag(String.valueOf(updatedTicketType.getVersion())) // Return ETag with current version
-                .body(response);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-        } catch (org.springframework.dao.OptimisticLockingFailureException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, 
-                "Ticket type has been modified by another user. Please refresh and try again.", e);
-        } catch (AccessDeniedException e) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
+        // Verify user can access the event
+        if (!authorizationService.canAccessEvent(principal, eventId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                "Access denied to event: " + eventId);
         }
+        TicketType updatedTicketType = ticketTypeService.updateTicketType(ticketTypeId, eventId, request, ifMatch, principal);
+        TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, updatedTicketType.getId(), null, null, null, principal)
+            .stream().findFirst().orElse(TicketTypeResponse.from(updatedTicketType));
+        return ResponseEntity.ok()
+            .eTag(String.valueOf(updatedTicketType.getVersion())) // Return ETag with current version
+            .body(response);
     }
 
     /**
@@ -173,97 +152,74 @@ public class TicketTypeController {
         @PathVariable UUID ticketTypeId,
         @RequestBody(required = false) CloneTicketTypeRequest request,
         @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Access denied to event: " + eventId);
-            }
-            TicketType cloned = ticketTypeService.cloneTicketType(ticketTypeId, eventId, request, principal);
-            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, cloned.getId(), null, null, null, principal)
-                .stream().findFirst().orElse(TicketTypeResponse.from(cloned));
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        if (!authorizationService.canAccessEvent(principal, eventId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Access denied to event: " + eventId);
         }
-    }
-
-    /**
-     * Archive a ticket type (mark inactive).
-     */
-    @PostMapping("/{ticketTypeId}/archive")
-    @Operation(summary = "Archive ticket type", description = "Archive a ticket type (mark inactive).")
-    @RequiresPermission(value = RbacPermissions.TICKET_TYPE_UPDATE, resources = {"event_id=#eventId", "ticket_type_id=#ticketTypeId"})
-    public ResponseEntity<TicketTypeResponse> archiveTicketType(
-        @PathVariable UUID eventId,
-        @PathVariable UUID ticketTypeId,
-        @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Access denied to event: " + eventId);
+        TicketType cloned = ticketTypeService.cloneTicketType(ticketTypeId, eventId, request, principal);
+        TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, cloned.getId(), null, null, null, principal)
+            .stream().findFirst().orElse(TicketTypeResponse.from(cloned));
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
             }
-            TicketType archived = ticketTypeService.archiveTicketType(ticketTypeId, eventId, principal);
-            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, archived.getId(), null, null, null, principal)
-                .stream().findFirst().orElse(TicketTypeResponse.from(archived));
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            /**
+             * Archive a ticket type (mark inactive).
+             */
+            @PostMapping("/{ticketTypeId}/archive")
+            @Operation(summary = "Archive ticket type", description = "Archive a ticket type (mark inactive).")
+            @RequiresPermission(value = RbacPermissions.TICKET_TYPE_UPDATE, resources = {"event_id=#eventId", "ticket_type_id=#ticketTypeId"})
+            public ResponseEntity<TicketTypeResponse> archiveTicketType(
+                @PathVariable UUID eventId,
+                @PathVariable UUID ticketTypeId,
+                @AuthenticationPrincipal UserPrincipal principal) {            if (!authorizationService.canAccessEvent(principal, eventId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Access denied to event: " + eventId);
         }
-    }
-
-    /**
-     * Restore a ticket type (mark active).
-     */
-    @PostMapping("/{ticketTypeId}/restore")
-    @Operation(summary = "Restore ticket type", description = "Restore a ticket type (mark active).")
-    @RequiresPermission(value = RbacPermissions.TICKET_TYPE_UPDATE, resources = {"event_id=#eventId", "ticket_type_id=#ticketTypeId"})
-    public ResponseEntity<TicketTypeResponse> restoreTicketType(
-        @PathVariable UUID eventId,
-        @PathVariable UUID ticketTypeId,
-        @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Access denied to event: " + eventId);
+        TicketType archived = ticketTypeService.archiveTicketType(ticketTypeId, eventId, principal);
+        TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, archived.getId(), null, null, null, principal)
+            .stream().findFirst().orElse(TicketTypeResponse.from(archived));
+        return ResponseEntity.ok(response);
             }
-            TicketType restored = ticketTypeService.restoreTicketType(ticketTypeId, eventId, principal);
-            TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, restored.getId(), null, null, null, principal)
-                .stream().findFirst().orElse(TicketTypeResponse.from(restored));
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            /**
+             * Restore a ticket type (mark active).
+             */
+            @PostMapping("/{ticketTypeId}/restore")
+            @Operation(summary = "Restore ticket type", description = "Restore a ticket type (mark active).")
+            @RequiresPermission(value = RbacPermissions.TICKET_TYPE_UPDATE, resources = {"event_id=#eventId", "ticket_type_id=#ticketTypeId"})
+            public ResponseEntity<TicketTypeResponse> restoreTicketType(
+                @PathVariable UUID eventId,
+                @PathVariable UUID ticketTypeId,
+                @AuthenticationPrincipal UserPrincipal principal) {            if (!authorizationService.canAccessEvent(principal, eventId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Access denied to event: " + eventId);
         }
-    }
-
-    /**
-     * Deletes a ticket type.
-     */
-    @DeleteMapping("/{ticketTypeId}")
-    @Operation(summary = "Delete ticket type", description = "Delete a ticket type from an event (soft delete).")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "204", description = "Ticket type deleted successfully"),
-        @ApiResponse(responseCode = "404", description = "Ticket type or event not found"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden")
-    })
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @RequiresPermission(value = RbacPermissions.TICKET_TYPE_DELETE, resources = {"event_id=#eventId", "ticket_type_id=#ticketTypeId"})
-    public ResponseEntity<Void> deleteTicketType(
-        @Parameter(description = "ID of the event") @PathVariable UUID eventId,
-        @Parameter(description = "ID of the ticket type") @PathVariable UUID ticketTypeId,
-        @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            // Verify user can access the event
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-                    "Access denied to event: " + eventId);
+        TicketType restored = ticketTypeService.restoreTicketType(ticketTypeId, eventId, principal);
+        TicketTypeResponse response = ticketTypeService.getTicketTypes(eventId, restored.getId(), null, null, null, principal)
+            .stream().findFirst().orElse(TicketTypeResponse.from(restored));
+        return ResponseEntity.ok(response);
             }
-
-            ticketTypeService.deleteTicketType(ticketTypeId, eventId, principal);
-            return ResponseEntity.noContent().build();
-        } catch (AccessDeniedException e) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
+            /**
+             * Deletes a ticket type.
+             */
+            @DeleteMapping("/{ticketTypeId}")
+            @Operation(summary = "Delete ticket type", description = "Delete a ticket type from an event (soft delete).")
+            @ApiResponses(value = {
+                @ApiResponse(responseCode = "204", description = "Ticket type deleted successfully"),
+                @ApiResponse(responseCode = "404", description = "Ticket type or event not found"),
+                @ApiResponse(responseCode = "401", description = "Unauthorized"),
+                @ApiResponse(responseCode = "403", description = "Forbidden")
+            })
+            @ResponseStatus(HttpStatus.NO_CONTENT)
+            @RequiresPermission(value = RbacPermissions.TICKET_TYPE_DELETE, resources = {"event_id=#eventId", "ticket_type_id=#ticketTypeId"})
+            public ResponseEntity<Void> deleteTicketType(
+                @Parameter(description = "ID of the event") @PathVariable UUID eventId,
+                @Parameter(description = "ID of the ticket type") @PathVariable UUID ticketTypeId,
+                @AuthenticationPrincipal UserPrincipal principal) {            // Verify user can access the event
+        if (!authorizationService.canAccessEvent(principal, eventId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                "Access denied to event: " + eventId);
         }
+        ticketTypeService.deleteTicketType(ticketTypeId, eventId, principal);
+        return ResponseEntity.noContent().build();
     }
 
     /**
@@ -276,15 +232,11 @@ public class TicketTypeController {
         @PathVariable UUID eventId,
         @PathVariable UUID ticketTypeId,
         @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!authorizationService.canAccessEvent(principal, eventId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Access denied to event: " + eventId);
-            }
-            ticketTypeService.hardDeleteTicketType(ticketTypeId, eventId, principal);
-            return ResponseEntity.noContent().build();
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        if (!authorizationService.canAccessEvent(principal, eventId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Access denied to event: " + eventId);
         }
+        ticketTypeService.hardDeleteTicketType(ticketTypeId, eventId, principal);
+        return ResponseEntity.noContent().build();
     }
 }

@@ -45,17 +45,11 @@ public class TicketCheckoutController {
             @PathVariable UUID eventId,
             @Valid @RequestBody CreateTicketCheckoutRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!canAccessCheckout(principal, eventId)) {
-                throw new ForbiddenException("Access denied to event: " + eventId);
-            }
-            TicketCheckoutResponse response = checkoutService.createCheckout(eventId, request, principal);
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        if (!canAccessCheckout(principal, eventId)) {
+            throw new ForbiddenException("Access denied to event: " + eventId);
         }
+        TicketCheckoutResponse response = checkoutService.createCheckout(eventId, request, principal);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/{checkoutId}/start-payment")
@@ -65,17 +59,11 @@ public class TicketCheckoutController {
             @PathVariable UUID eventId,
             @PathVariable UUID checkoutId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!canAccessCheckout(principal, eventId)) {
-                throw new ForbiddenException("Access denied to event: " + eventId);
-            }
-            TicketPaymentInitResponse response = checkoutService.startPayment(checkoutId, eventId, principal);
-            return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        if (!canAccessCheckout(principal, eventId)) {
+            throw new ForbiddenException("Access denied to event: " + eventId);
         }
+        TicketPaymentInitResponse response = checkoutService.startPayment(checkoutId, eventId, principal);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{checkoutId}")
@@ -85,17 +73,11 @@ public class TicketCheckoutController {
             @PathVariable UUID eventId,
             @PathVariable UUID checkoutId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!canAccessCheckout(principal, eventId)) {
-                throw new ForbiddenException("Access denied to event: " + eventId);
-            }
-            TicketCheckoutResponse response = checkoutService.getCheckout(checkoutId, eventId);
-            return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        if (!canAccessCheckout(principal, eventId)) {
+            throw new ForbiddenException("Access denied to event: " + eventId);
         }
+        TicketCheckoutResponse response = checkoutService.getCheckout(checkoutId, eventId);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{checkoutId}/cancel")
@@ -105,17 +87,11 @@ public class TicketCheckoutController {
             @PathVariable UUID eventId,
             @PathVariable UUID checkoutId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            if (!canAccessCheckout(principal, eventId)) {
-                throw new ForbiddenException("Access denied to event: " + eventId);
-            }
-            TicketCheckoutResponse response = checkoutService.cancelCheckout(checkoutId, eventId);
-            return ResponseEntity.ok(response);
-        } catch (eventplanner.common.exception.exceptions.ApiException e) {
-            throw e;
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(e.getMessage());
+        if (!canAccessCheckout(principal, eventId)) {
+            throw new ForbiddenException("Access denied to event: " + eventId);
         }
+        TicketCheckoutResponse response = checkoutService.cancelCheckout(checkoutId, eventId);
+        return ResponseEntity.ok(response);
     }
 
     private boolean canAccessCheckout(UserPrincipal principal, UUID eventId) {
