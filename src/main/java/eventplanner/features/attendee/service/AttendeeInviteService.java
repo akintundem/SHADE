@@ -4,6 +4,10 @@ import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.enums.CommunicationType;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.UnauthorizedException;
+import eventplanner.common.exception.exceptions.ConflictException;
 import eventplanner.common.config.ExternalServicesProperties;
 import eventplanner.common.util.UserAccountUtil;
 import eventplanner.features.attendee.dto.request.CreateAttendeeInviteRequest;
@@ -70,19 +74,19 @@ public class AttendeeInviteService {
 
     public AttendeeInvite createInvite(UUID eventId, UserPrincipal inviter, CreateAttendeeInviteRequest request) {
         if (inviter == null) {
-            throw new IllegalArgumentException("Authentication required");
+            throw new BadRequestException("Authentication required");
         }
         if (request == null) {
-            throw new IllegalArgumentException("Request is required");
+            throw new BadRequestException("Request is required");
         }
 
         UUID inviteeUserId = request.getInviteeUserId();
         String inviteeEmail = AuthValidationUtil.safeTrim(request.getInviteeEmail());
         if (inviteeUserId == null && (inviteeEmail == null || inviteeEmail.isBlank())) {
-            throw new IllegalArgumentException("Either inviteeUserId or inviteeEmail must be provided");
+            throw new BadRequestException("Either inviteeUserId or inviteeEmail must be provided");
         }
         if (inviteeUserId == null && inviteeEmail != null && Boolean.FALSE.equals(request.getSendEmail())) {
-            throw new IllegalArgumentException("Email delivery is required when inviting by email");
+            throw new BadRequestException("Email delivery is required when inviting by email");
         }
 
         if (inviteeEmail != null && !inviteeEmail.isBlank()) {
@@ -103,38 +107,38 @@ public class AttendeeInviteService {
         ensureInvitesAllowed(event);
 
         if (isAtCapacity(event)) {
-            throw new IllegalArgumentException("Event is at capacity");
+            throw new BadRequestException("Event is at capacity");
         }
 
         UserAccount inviterUser = UserAccountUtil.getManagedUserAccountOrThrow(
                 inviter, userAccountRepository, "Inviter user not found");
 
         if (inviteeUserId != null && event.getOwner() != null && inviteeUserId.equals(event.getOwner().getId())) {
-            throw new IllegalArgumentException("Event owner cannot be invited as an attendee");
+            throw new BadRequestException("Event owner cannot be invited as an attendee");
         }
         if (inviteeEmail != null && event.getOwner() != null && event.getOwner().getEmail() != null &&
                 inviteeEmail.equalsIgnoreCase(event.getOwner().getEmail())) {
-            throw new IllegalArgumentException("Event owner cannot be invited as an attendee");
+            throw new BadRequestException("Event owner cannot be invited as an attendee");
         }
 
         if (inviteeUserId != null &&
                 attendeeRepository.findByEventIdAndUserId(eventId, inviteeUserId).isPresent()) {
-            throw new IllegalArgumentException("User is already an attendee for this event");
+            throw new BadRequestException("User is already an attendee for this event");
         }
         if (inviteeEmail != null &&
                 attendeeRepository.findByEventIdAndEmailIgnoreCase(eventId, inviteeEmail).isPresent()) {
-            throw new IllegalArgumentException("Email is already an attendee for this event");
+            throw new BadRequestException("Email is already an attendee for this event");
         }
 
         UserAccount inviteeUser = null;
         if (inviteeUserId != null) {
             inviteeUser = userAccountRepository.findById(inviteeUserId).orElse(null);
             if (inviteeUser == null) {
-                throw new IllegalArgumentException("Invitee user not found: " + inviteeUserId);
+                throw new BadRequestException("Invitee user not found: " + inviteeUserId);
             }
             if (inviteeEmail != null && inviteeUser.getEmail() != null &&
                     !inviteeEmail.equalsIgnoreCase(inviteeUser.getEmail())) {
-                throw new IllegalArgumentException("inviteeEmail does not match inviteeUserId");
+                throw new BadRequestException("inviteeEmail does not match inviteeUserId");
             }
         }
 
@@ -185,10 +189,10 @@ public class AttendeeInviteService {
 
     public List<AttendeeInvite> createInvitesBulk(UUID eventId, UserPrincipal inviter, List<CreateAttendeeInviteRequest> requests) {
         if (inviter == null) {
-            throw new IllegalArgumentException("Authentication required");
+            throw new BadRequestException("Authentication required");
         }
         if (requests == null || requests.isEmpty()) {
-            throw new IllegalArgumentException("At least one invite request is required");
+            throw new BadRequestException("At least one invite request is required");
         }
 
         Event event = eventRepository.findById(eventId)
@@ -201,7 +205,7 @@ public class AttendeeInviteService {
         List<AttendeeInvite> results = new java.util.ArrayList<>();
         for (CreateAttendeeInviteRequest request : requests) {
             if (request == null) {
-                throw new IllegalArgumentException("Invite request cannot be null");
+                throw new BadRequestException("Invite request cannot be null");
             }
 
             UUID inviteeUserId = request.getInviteeUserId();
@@ -213,13 +217,13 @@ public class AttendeeInviteService {
             }
 
             if (inviteeUserId == null && (inviteeEmail == null || inviteeEmail.isBlank())) {
-                throw new IllegalArgumentException("Either inviteeUserId or inviteeEmail must be provided");
+                throw new BadRequestException("Either inviteeUserId or inviteeEmail must be provided");
             }
             if (inviteeUserId != null && !seenUserIds.add(inviteeUserId)) {
-                throw new IllegalArgumentException("Duplicate invitee userId in request: " + inviteeUserId);
+                throw new BadRequestException("Duplicate invitee userId in request: " + inviteeUserId);
             }
             if (inviteeEmail != null && !seenEmails.add(inviteeEmail)) {
-                throw new IllegalArgumentException("Duplicate invitee email in request: " + inviteeEmail);
+                throw new BadRequestException("Duplicate invitee email in request: " + inviteeEmail);
             }
         }
 
@@ -233,7 +237,7 @@ public class AttendeeInviteService {
     @Transactional(readOnly = true)
     public AttendeeInvite getInviteById(UUID eventId, UUID inviteId) {
         if (eventId == null || inviteId == null) {
-            throw new IllegalArgumentException("Event ID and invite ID are required");
+            throw new BadRequestException("Event ID and invite ID are required");
         }
         return inviteRepository.findByIdAndEventId(inviteId, eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Invite not found: " + inviteId));
@@ -253,7 +257,7 @@ public class AttendeeInviteService {
         AttendeeInvite invite = getInviteById(eventId, inviteId);
 
         if (invite.getStatus() != AttendeeInviteStatus.PENDING) {
-            throw new IllegalArgumentException("Only pending invites can be revoked");
+            throw new BadRequestException("Only pending invites can be revoked");
         }
 
         invite.setStatus(AttendeeInviteStatus.REVOKED);
@@ -266,10 +270,10 @@ public class AttendeeInviteService {
         AttendeeInviteStatus status = invite.getStatus();
 
         if (status == AttendeeInviteStatus.ACCEPTED || status == AttendeeInviteStatus.REVOKED) {
-            throw new IllegalArgumentException("Only pending or expired invites can be resent");
+            throw new BadRequestException("Only pending or expired invites can be resent");
         }
         if (status == AttendeeInviteStatus.DECLINED) {
-            throw new IllegalArgumentException("Declined invites cannot be resent");
+            throw new BadRequestException("Declined invites cannot be resent");
         }
 
         invite.setStatus(AttendeeInviteStatus.PENDING);
@@ -307,15 +311,15 @@ public class AttendeeInviteService {
      */
     public Attendee updateInviteStatus(UUID inviteId, String token, AttendeeInviteStatus status, UserPrincipal principal) {
         if (principal == null || principal.getUser() == null) {
-            throw new IllegalArgumentException("Authentication and user account information are required");
+            throw new BadRequestException("Authentication and user account information are required");
         }
         if (status == null) {
-            throw new IllegalArgumentException("Status is required");
+            throw new BadRequestException("Status is required");
         }
         
         // Validate status transitions
         if (status == AttendeeInviteStatus.PENDING) {
-            throw new IllegalArgumentException("Cannot set invite status back to PENDING");
+            throw new BadRequestException("Cannot set invite status back to PENDING");
         }
         
         AttendeeInvite invite;
@@ -327,7 +331,7 @@ public class AttendeeInviteService {
             invite = inviteRepository.findByTokenHash(tokenHash)
                     .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
         } else {
-            throw new IllegalArgumentException("Either inviteId or token must be provided");
+            throw new BadRequestException("Either inviteId or token must be provided");
         }
         
         // Verify the logged-in user is the one who can respond to this invite
@@ -335,7 +339,7 @@ public class AttendeeInviteService {
         
         // Check if invite is already in a final state
         if (invite.getStatus() != AttendeeInviteStatus.PENDING) {
-            throw new IllegalArgumentException("Invite is not pending. Current status: " + invite.getStatus());
+            throw new BadRequestException("Invite is not pending. Current status: " + invite.getStatus());
         }
         
         // Check expiry
@@ -345,7 +349,7 @@ public class AttendeeInviteService {
             inviteRepository.save(invite);
             notifyOwnerOfInviteStatus(invite.getEvent(), principal.getUser(), AttendeeInviteStatus.EXPIRED);
             notifyInviterOfInviteStatus(invite, principal.getUser(), AttendeeInviteStatus.EXPIRED);
-            throw new IllegalArgumentException("Invite has expired");
+            throw new BadRequestException("Invite has expired");
         }
         
         // Handle status update
@@ -372,7 +376,7 @@ public class AttendeeInviteService {
     private Attendee acceptInviteInternal(AttendeeInvite invite, UserPrincipal principal) {
         Event event = invite.getEvent();
         if (event == null) {
-            throw new IllegalArgumentException("Event not found for invite");
+            throw new BadRequestException("Event not found for invite");
         }
         UUID eventId = event.getId();
         UUID userId = principal.getId();
@@ -385,7 +389,7 @@ public class AttendeeInviteService {
         }
 
         if (isAtCapacity(event)) {
-            throw new IllegalArgumentException("Event is at capacity");
+            throw new BadRequestException("Event is at capacity");
         }
 
         // Fetch UserAccount for attendee
@@ -399,7 +403,7 @@ public class AttendeeInviteService {
                 Attendee existing = existingByEmail.get();
 
                 if (existing.getUser() != null && !existing.getUser().getId().equals(userId)) {
-                    throw new IllegalArgumentException("An attendee with this email already exists for this event");
+                    throw new BadRequestException("An attendee with this email already exists for this event");
                 }
 
                 existing.setUser(user);
@@ -429,7 +433,7 @@ public class AttendeeInviteService {
         if (user.getName() != null) {
             attendee.setName(user.getName());
         } else {
-            throw new IllegalArgumentException("User name is required");
+            throw new BadRequestException("User name is required");
         }
         attendee.setEmail(user.getEmail());
 
@@ -609,7 +613,7 @@ public class AttendeeInviteService {
             case TICKETED:
                 return;
             default:
-                throw new IllegalArgumentException("Invitations are only supported for invite-only or ticketed events");
+                throw new BadRequestException("Invitations are only supported for invite-only or ticketed events");
         }
     }
 
@@ -618,10 +622,10 @@ public class AttendeeInviteService {
         String principalEmail = principal.getUser().getEmail();
 
         if (principalId == null) {
-            throw new IllegalArgumentException("User ID is required");
+            throw new BadRequestException("User ID is required");
         }
         if (principalEmail == null || principalEmail.trim().isEmpty()) {
-            throw new IllegalArgumentException("User email is required");
+            throw new BadRequestException("User email is required");
         }
 
         UUID inviteeUserId = invite.getInvitee() != null ? invite.getInvitee().getId() : null;
@@ -645,7 +649,7 @@ public class AttendeeInviteService {
                 principalId.toString(),
                 principalEmail
             );
-            throw new IllegalArgumentException(errorMessage);
+            throw new BadRequestException(errorMessage);
         }
     }
 

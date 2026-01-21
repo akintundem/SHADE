@@ -131,7 +131,7 @@ public class TicketService {
     public List<Ticket> issueTickets(List<IssueTicketRequest> requests, UserPrincipal principal,
                                      boolean finalizeFreeTickets, boolean forceIssue) {
         if (requests == null || requests.isEmpty()) {
-            throw new IllegalArgumentException("At least one ticket request is required");
+            throw new BadRequestException("At least one ticket request is required");
         }
 
         List<Ticket> allTickets = new ArrayList<>();
@@ -141,7 +141,7 @@ public class TicketService {
         for (IssueTicketRequest request : requests) {
             // Validate event ID consistency
             if (!request.getEventId().equals(eventId)) {
-                throw new IllegalArgumentException("All ticket requests must be for the same event");
+                throw new BadRequestException("All ticket requests must be for the same event");
             }
 
             List<Ticket> tickets = issueSingleTicketRequest(request, principal, finalizeFreeTickets, forceIssue);
@@ -161,7 +161,7 @@ public class TicketService {
     private List<Ticket> issueSingleTicketRequest(IssueTicketRequest request, UserPrincipal principal,
                                                   boolean finalizeFreeTickets, boolean forceIssue) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
 
         // Fetch entities
@@ -172,7 +172,7 @@ public class TicketService {
         TicketType ticketType = ticketTypeRepository.findById(request.getTicketTypeId())
             .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + request.getTicketTypeId()));
         if (ticketType.getEvent() == null || !ticketType.getEvent().getId().equals(request.getEventId())) {
-            throw new IllegalArgumentException("Ticket type does not belong to event");
+            throw new BadRequestException("Ticket type does not belong to event");
         }
 
         if (request.getAttendeeId() == null && (request.getOwnerEmail() == null || request.getOwnerEmail().isBlank())) {
@@ -186,7 +186,7 @@ public class TicketService {
 
         // Validate that either attendeeId or email/name is provided
         if (request.getAttendeeId() == null && (request.getOwnerEmail() == null || request.getOwnerName() == null)) {
-            throw new IllegalArgumentException("Either attendeeId or both ownerEmail and ownerName must be provided");
+            throw new BadRequestException("Either attendeeId or both ownerEmail and ownerName must be provided");
         }
 
         Attendee attendee = null;
@@ -285,7 +285,7 @@ public class TicketService {
      */
     public Ticket validateTicket(ValidateTicketRequest request, UserPrincipal principal) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
 
         // Find ticket by QR code data
@@ -459,7 +459,7 @@ public class TicketService {
      */
     public Ticket updateTicket(UUID ticketId, UpdateTicketRequest request, UserPrincipal principal) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
         Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
@@ -471,7 +471,7 @@ public class TicketService {
             throw new ConflictException("Cannot update a validated ticket");
         }
         if (ticket.getAttendee() != null) {
-            throw new IllegalArgumentException("Use transfer to update attendee-based tickets");
+            throw new BadRequestException("Use transfer to update attendee-based tickets");
         }
 
         String ownerEmail = request.getOwnerEmail() != null
@@ -480,11 +480,11 @@ public class TicketService {
         String ownerName = request.getOwnerName() != null ? request.getOwnerName().trim() : null;
 
         if ((ownerEmail == null || ownerEmail.isBlank()) && (ownerName == null || ownerName.isBlank())) {
-            throw new IllegalArgumentException("At least one field must be provided");
+            throw new BadRequestException("At least one field must be provided");
         }
         if (ownerEmail != null && (ownerName == null || ownerName.isBlank()) &&
             (ticket.getOwnerName() == null || ticket.getOwnerName().isBlank())) {
-            throw new IllegalArgumentException("Owner name is required when updating owner email");
+            throw new BadRequestException("Owner name is required when updating owner email");
         }
 
         if (ownerEmail != null) {
@@ -502,7 +502,7 @@ public class TicketService {
      */
     public Ticket transferTicket(UUID ticketId, TransferTicketRequest request, UserPrincipal principal) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
         Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
@@ -519,7 +519,7 @@ public class TicketService {
 
         if (request.getNewAttendeeId() == null &&
             (request.getNewOwnerEmail() == null || request.getNewOwnerName() == null)) {
-            throw new IllegalArgumentException("New attendeeId or ownerEmail/ownerName is required");
+            throw new BadRequestException("New attendeeId or ownerEmail/ownerName is required");
         }
 
         Attendee newAttendee = null;
@@ -531,7 +531,7 @@ public class TicketService {
                 .orElseThrow(() -> new ResourceNotFoundException("Attendee not found: " + request.getNewAttendeeId()));
             if (ticket.getEvent() == null || newAttendee.getEvent() == null ||
                 !ticket.getEvent().getId().equals(newAttendee.getEvent().getId())) {
-                throw new IllegalArgumentException("Attendee does not belong to this event");
+                throw new BadRequestException("Attendee does not belong to this event");
             }
             enforceTransferLimit(ticket, newAttendee.getId(), null);
             ticket.setAttendee(newAttendee);
@@ -541,7 +541,7 @@ public class TicketService {
             newOwnerEmail = AuthValidationUtil.normalizeEmail(request.getNewOwnerEmail());
             newOwnerName = request.getNewOwnerName() != null ? request.getNewOwnerName().trim() : null;
             if (newOwnerName == null || newOwnerName.isBlank()) {
-                throw new IllegalArgumentException("New owner name is required");
+                throw new BadRequestException("New owner name is required");
             }
             enforceTransferLimit(ticket, null, newOwnerEmail);
             ticket.setAttendee(null);
@@ -608,13 +608,13 @@ public class TicketService {
      */
     public BulkTicketActionResponse bulkAction(BulkTicketActionRequest request, UserPrincipal principal) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
         if (request.getTicketIds() == null || request.getTicketIds().isEmpty()) {
-            throw new IllegalArgumentException("At least one ticket ID is required");
+            throw new BadRequestException("At least one ticket ID is required");
         }
         if (request.getEventId() == null) {
-            throw new IllegalArgumentException("Event ID is required");
+            throw new BadRequestException("Event ID is required");
         }
 
         List<Ticket> found = ticketRepository.findAllById(request.getTicketIds());
@@ -661,7 +661,7 @@ public class TicketService {
                         updated = resendTicket(ticketId, resend, principal);
                         break;
                     default:
-                        throw new IllegalArgumentException("Unsupported action: " + request.getAction());
+                        throw new BadRequestException("Unsupported action: " + request.getAction());
                 }
 
                 results.add(BulkTicketActionResult.builder()

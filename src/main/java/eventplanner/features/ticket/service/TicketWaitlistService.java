@@ -51,7 +51,7 @@ public class TicketWaitlistService {
 
     public TicketWaitlistEntry createEntry(UUID eventId, CreateTicketWaitlistRequest request, UserPrincipal principal) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
         if (principal == null || principal.getUser() == null) {
             throw new BadRequestException("Authenticated user is required");

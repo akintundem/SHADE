@@ -3,6 +3,11 @@ package eventplanner.features.attendee.service;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.enums.CommunicationType;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.UnauthorizedException;
+import eventplanner.common.exception.exceptions.ForbiddenException;
+import eventplanner.common.exception.exceptions.ConflictException;
 import eventplanner.features.event.enums.EventAccessType;
 import eventplanner.features.event.enums.EventStatus;
 import eventplanner.security.auth.enums.VisibilityLevel;
@@ -160,11 +165,11 @@ public class AttendeeService {
      */
     public List<Attendee> createFromBulkRequest(BulkAttendeeCreateRequest request) {
         if (request == null || request.getEventId() == null) {
-            throw new IllegalArgumentException("Invalid request: eventId is required");
+            throw new BadRequestException("Invalid request: eventId is required");
         }
         
         if (request.getAttendees() == null || request.getAttendees().isEmpty()) {
-            throw new IllegalArgumentException("Attendees list cannot be empty");
+            throw new BadRequestException("Attendees list cannot be empty");
         }
         
         // Fetch the event
@@ -201,7 +206,7 @@ public class AttendeeService {
             } else {
                 // Use email - validate that either userId or email is provided
                 if (!StringUtils.hasText(trimmedEmail)) {
-                    throw new IllegalArgumentException(
+                    throw new BadRequestException(
                         "Either userId or email must be provided for each attendee");
                 }
 
@@ -218,7 +223,7 @@ public class AttendeeService {
                     // User doesn't exist - use provided info, no user link
                     attendee.setUser(null);
                     if (!StringUtils.hasText(attendeeInfo.getName())) {
-                        throw new IllegalArgumentException(
+                        throw new BadRequestException(
                             "Name is required when email is provided and user doesn't exist in directory");
                     }
                     attendee.setName(attendeeInfo.getName().trim());
@@ -231,20 +236,20 @@ public class AttendeeService {
 
             // Prevent duplicates within the same request (user or email)
             if (resolvedUserId != null && !seenUserIds.add(resolvedUserId)) {
-                throw new IllegalArgumentException("Duplicate attendee for userId " + resolvedUserId + " in the same request");
+                throw new BadRequestException("Duplicate attendee for userId " + resolvedUserId + " in the same request");
             }
             if (normalizedEmail != null && !seenEmails.add(normalizedEmail)) {
-                throw new IllegalArgumentException("Duplicate attendee email in the same request: " + attendee.getEmail());
+                throw new BadRequestException("Duplicate attendee email in the same request: " + attendee.getEmail());
             }
 
             // Prevent duplicates against existing attendees in the event
             if (resolvedUserId != null && repository.findByEventIdAndUserId(event.getId(), resolvedUserId).isPresent()) {
                 log.warn("Duplicate attendee detected for user {} in event {}", resolvedUserId, event.getId());
-                throw new IllegalArgumentException("An attendee with this user already exists for this event");
+                throw new BadRequestException("An attendee with this user already exists for this event");
             }
             if (normalizedEmail != null && repository.findByEventIdAndEmailIgnoreCase(event.getId(), normalizedEmail).isPresent()) {
                 log.warn("Duplicate attendee detected for email {} in event {}", attendee.getEmail(), event.getId());
-                throw new IllegalArgumentException("An attendee with this email already exists for this event");
+                throw new BadRequestException("An attendee with this email already exists for this event");
             }
 
             // Set participation visibility: use provided value, or default to user's global setting, or PUBLIC
@@ -308,7 +313,7 @@ public class AttendeeService {
         }
         String normalizedSortBy = sortBy.trim();
         if (!ALLOWED_SORT_FIELDS.contains(normalizedSortBy)) {
-            throw new IllegalArgumentException("Invalid sort field. Allowed values: " + String.join(",", ALLOWED_SORT_FIELDS));
+            throw new BadRequestException("Invalid sort field. Allowed values: " + String.join(",", ALLOWED_SORT_FIELDS));
         }
 
         Sort.Direction direction;
@@ -317,7 +322,7 @@ public class AttendeeService {
         } else if ("DESC".equalsIgnoreCase(sortDirection)) {
             direction = Sort.Direction.DESC;
         } else {
-            throw new IllegalArgumentException("Invalid sort direction. Allowed values: ASC or DESC");
+            throw new BadRequestException("Invalid sort direction. Allowed values: ASC or DESC");
         }
 
         Sort sort = Sort.by(direction, normalizedSortBy);
@@ -339,7 +344,7 @@ public class AttendeeService {
         if (StringUtils.hasText(status)) {
             List<AttendeeStatus> statuses = parseStatuses(status);
             if (statuses.isEmpty()) {
-                throw new IllegalArgumentException("Invalid status values");
+                throw new BadRequestException("Invalid status values");
             }
             return repository.findByEventIdAndRsvpStatusIn(eventId, statuses, pageable);
         }
@@ -381,10 +386,10 @@ public class AttendeeService {
      */
     private void validateAttendee(Attendee attendee) {
         if (attendee.getEvent() == null) {
-            throw new IllegalArgumentException("Event is required");
+            throw new BadRequestException("Event is required");
         }
         if (attendee.getName() == null || attendee.getName().trim().isEmpty()) {
-            throw new IllegalArgumentException("Attendee name is required");
+            throw new BadRequestException("Attendee name is required");
         }
         // Validate email when provided
         if (attendee.getEmail() != null && !attendee.getEmail().isEmpty()) {
@@ -493,10 +498,10 @@ public class AttendeeService {
      */
     public Attendee rsvpToEvent(UUID eventId, UserPrincipal principal) {
         if (eventId == null) {
-            throw new IllegalArgumentException("Event ID is required");
+            throw new BadRequestException("Event ID is required");
         }
         if (principal == null || principal.getId() == null) {
-            throw new IllegalArgumentException("Authentication required");
+            throw new BadRequestException("Authentication required");
         }
 
         Event event = eventRepository.findById(eventId)
@@ -504,7 +509,7 @@ public class AttendeeService {
 
         // Verify event requires RSVP
         if (event.getAccessType() != EventAccessType.RSVP_REQUIRED) {
-            throw new IllegalArgumentException("Event does not require RSVP");
+            throw new BadRequestException("Event does not require RSVP");
         }
 
         ensureEventOpenForRsvp(event);
@@ -552,13 +557,13 @@ public class AttendeeService {
      */
     public Attendee updateRsvpStatus(UUID eventId, AttendeeStatus status, UserPrincipal principal) {
         if (eventId == null) {
-            throw new IllegalArgumentException("Event ID is required");
+            throw new BadRequestException("Event ID is required");
         }
         if (principal == null || principal.getId() == null) {
-            throw new IllegalArgumentException("Authentication required");
+            throw new BadRequestException("Authentication required");
         }
         if (status == null) {
-            throw new IllegalArgumentException("RSVP status is required");
+            throw new BadRequestException("RSVP status is required");
         }
 
         Event event = eventRepository.findById(eventId)
@@ -587,10 +592,10 @@ public class AttendeeService {
      */
     public Attendee cancelRsvp(UUID eventId, UserPrincipal principal) {
         if (eventId == null) {
-            throw new IllegalArgumentException("Event ID is required");
+            throw new BadRequestException("Event ID is required");
         }
         if (principal == null || principal.getId() == null) {
-            throw new IllegalArgumentException("Authentication required");
+            throw new BadRequestException("Authentication required");
         }
 
         Event event = eventRepository.findById(eventId)
@@ -617,19 +622,19 @@ public class AttendeeService {
      */
     public List<Attendee> bulkUpdateRsvpStatus(UUID eventId, List<BulkRsvpUpdateItem> updates, String note, UserPrincipal principal) {
         if (eventId == null) {
-            throw new IllegalArgumentException("Event ID is required");
+            throw new BadRequestException("Event ID is required");
         }
         if (principal == null || principal.getId() == null) {
-            throw new IllegalArgumentException("Authentication required");
+            throw new BadRequestException("Authentication required");
         }
         if (updates == null || updates.isEmpty()) {
-            throw new IllegalArgumentException("At least one RSVP update is required");
+            throw new BadRequestException("At least one RSVP update is required");
         }
 
         Event event = eventRepository.findById(eventId)
             .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
         if (event.getAccessType() != EventAccessType.RSVP_REQUIRED) {
-            throw new IllegalArgumentException("Event does not require RSVP");
+            throw new BadRequestException("Event does not require RSVP");
         }
 
         ensureEventManagerAccess(event, principal);
@@ -666,10 +671,10 @@ public class AttendeeService {
     @Transactional(readOnly = true)
     public Optional<Attendee> getRsvpStatus(UUID eventId, UserPrincipal principal) {
         if (eventId == null) {
-            throw new IllegalArgumentException("Event ID is required");
+            throw new BadRequestException("Event ID is required");
         }
         if (principal == null || principal.getId() == null) {
-            throw new IllegalArgumentException("Authentication required");
+            throw new BadRequestException("Authentication required");
         }
 
         Event event = eventRepository.findById(eventId)
@@ -703,23 +708,23 @@ public class AttendeeService {
 
     private void ensureEventOpenForRsvp(Event event) {
         if (event == null) {
-            throw new IllegalArgumentException("Event not found");
+            throw new BadRequestException("Event not found");
         }
         if (event.getEventStatus() == EventStatus.CANCELLED) {
-            throw new IllegalArgumentException("Event has been cancelled");
+            throw new BadRequestException("Event has been cancelled");
         }
         if (event.getEventStatus() == EventStatus.REGISTRATION_CLOSED) {
-            throw new IllegalArgumentException("Event registration is closed");
+            throw new BadRequestException("Event registration is closed");
         }
         if (event.getEventStatus() == EventStatus.COMPLETED) {
-            throw new IllegalArgumentException("Event has ended");
+            throw new BadRequestException("Event has ended");
         }
         if (isEventPast(event)) {
-            throw new IllegalArgumentException("Event has ended");
+            throw new BadRequestException("Event has ended");
         }
         if (event.getRegistrationDeadline() != null &&
                 LocalDateTime.now(ZoneOffset.UTC).isAfter(event.getRegistrationDeadline())) {
-            throw new IllegalArgumentException("Registration deadline has passed");
+            throw new BadRequestException("Registration deadline has passed");
         }
     }
 
@@ -727,17 +732,17 @@ public class AttendeeService {
         if (authorizationService.canAccessEventWithInvite(principal, event)) {
             return;
         }
-        throw new IllegalArgumentException("Access denied for private event");
+        throw new BadRequestException("Access denied for private event");
     }
 
     private void ensureEventManagerAccess(Event event, UserPrincipal principal) {
         if (event == null || principal == null) {
-            throw new IllegalArgumentException("Authentication required");
+            throw new BadRequestException("Authentication required");
         }
         if (canManageEvent(event, principal)) {
             return;
         }
-        throw new IllegalArgumentException("Access denied to manage RSVP");
+        throw new BadRequestException("Access denied to manage RSVP");
     }
 
     private boolean canManageEvent(Event event, UserPrincipal principal) {
@@ -763,7 +768,7 @@ public class AttendeeService {
             current = 0;
         }
         if (current >= capacity) {
-            throw new IllegalArgumentException("Event is at capacity");
+            throw new BadRequestException("Event is at capacity");
         }
     }
 
@@ -857,7 +862,7 @@ public class AttendeeService {
     @Transactional(readOnly = true)
     public Page<Event> getInvitedEvents(UUID userId, Integer page, Integer size) {
         if (userId == null) {
-            throw new IllegalArgumentException("User ID is required");
+            throw new BadRequestException("User ID is required");
         }
         
         int pageNum = Math.max(0, page != null ? page : 0);

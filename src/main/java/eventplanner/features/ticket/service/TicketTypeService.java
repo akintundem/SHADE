@@ -6,6 +6,8 @@ import eventplanner.common.exception.exceptions.ApiException;
 import eventplanner.common.exception.exceptions.ErrorCode;
 import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ConflictException;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.authorization.service.AuthorizationService;
@@ -62,7 +64,7 @@ public class TicketTypeService {
     @Transactional
     public TicketType createTicketType(UUID eventId, CreateTicketTypeRequest request, UserPrincipal principal) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
 
         // Fetch event
@@ -101,7 +103,7 @@ public class TicketTypeService {
                 ticketType.setMetadata(objectMapper.writeValueAsString(request.getMetadata()));
             } catch (JsonProcessingException e) {
 
-                throw new IllegalArgumentException("Invalid metadata format");
+                throw new BadRequestException("Invalid metadata format");
             }
         }
 
@@ -114,7 +116,7 @@ public class TicketTypeService {
             long totalInventory = existingInventory + request.getQuantityAvailable();
 
             if (totalInventory > event.getCapacity()) {
-                throw new IllegalArgumentException(
+                throw new BadRequestException(
                     String.format("Total ticket inventory (%d) would exceed event capacity (%d). " +
                         "Current inventory: %d, Requested: %d",
                         totalInventory, event.getCapacity(), existingInventory, request.getQuantityAvailable()));
@@ -136,7 +138,7 @@ public class TicketTypeService {
     @Transactional
     public TicketType updateTicketType(UUID id, UUID eventId, UpdateTicketTypeRequest request, Long expectedVersion, UserPrincipal principal) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
 
         TicketType ticketType = repository.findByIdAndEventId(id, eventId)
@@ -169,7 +171,7 @@ public class TicketTypeService {
             // Validate that new quantity is not less than sold + reserved
             int minRequired = ticketType.getQuantitySold() + ticketType.getQuantityReserved();
             if (request.getQuantityAvailable() < minRequired) {
-                throw new IllegalArgumentException(
+                throw new BadRequestException(
                     "Quantity available cannot be less than quantity sold (" + ticketType.getQuantitySold() +
                     ") + quantity reserved (" + ticketType.getQuantityReserved() + ")");
             }
@@ -185,7 +187,7 @@ public class TicketTypeService {
                 long totalInventory = existingInventory + request.getQuantityAvailable();
 
                 if (totalInventory > event.getCapacity()) {
-                    throw new IllegalArgumentException(
+                    throw new BadRequestException(
                         String.format("Total ticket inventory (%d) would exceed event capacity (%d). " +
                             "Other ticket types: %d, Requested: %d",
                             totalInventory, event.getCapacity(), existingInventory, request.getQuantityAvailable()));
@@ -226,7 +228,7 @@ public class TicketTypeService {
                 ticketType.setMetadata(objectMapper.writeValueAsString(request.getMetadata()));
             } catch (JsonProcessingException e) {
 
-                throw new IllegalArgumentException("Invalid metadata format");
+                throw new BadRequestException("Invalid metadata format");
             }
         }
 
@@ -250,7 +252,7 @@ public class TicketTypeService {
         // Prevent deletion when tickets already exist
         long issuedCount = repository.countTicketsByTicketTypeId(id);
         if (issuedCount > 0) {
-            throw new IllegalArgumentException("Cannot delete ticket type with issued tickets: " + issuedCount);
+            throw new BadRequestException("Cannot delete ticket type with issued tickets: " + issuedCount);
         }
 
         ticketType.softDelete();
@@ -287,7 +289,7 @@ public class TicketTypeService {
     public void hardDeleteTicketType(UUID id, UUID eventId, UserPrincipal principal) {
         long issuedCount = repository.countTicketsByTicketTypeId(id);
         if (issuedCount > 0) {
-            throw new IllegalArgumentException("Cannot hard delete ticket type with issued tickets: " + issuedCount);
+            throw new BadRequestException("Cannot hard delete ticket type with issued tickets: " + issuedCount);
         }
         int deleted = repository.hardDeleteByIdAndEventId(id, eventId);
         if (deleted == 0) {
@@ -511,7 +513,7 @@ public class TicketTypeService {
             .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + ticketTypeId));
 
         if (ticketType.getQuantityReserved() < quantity) {
-            throw new IllegalArgumentException(
+            throw new BadRequestException(
                 "Cannot release " + quantity + " tickets. Only " + ticketType.getQuantityReserved() + " are reserved");
         }
 
@@ -529,7 +531,7 @@ public class TicketTypeService {
             .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + ticketTypeId));
 
         if (ticketType.getQuantityReserved() < quantity) {
-            throw new IllegalArgumentException(
+            throw new BadRequestException(
                 "Cannot confirm sale of " + quantity + " tickets. Only " + ticketType.getQuantityReserved() + " are reserved");
         }
 
@@ -550,7 +552,7 @@ public class TicketTypeService {
      */
     public String validateCurrencyCode(String currencyCode) {
         if (currencyCode == null || currencyCode.trim().isEmpty()) {
-            throw new IllegalArgumentException("Currency code cannot be null or empty");
+            throw new BadRequestException("Currency code cannot be null or empty");
         }
         
         String normalized = currencyCode.trim().toUpperCase();
@@ -558,7 +560,7 @@ public class TicketTypeService {
             Monetary.getCurrency(normalized);
             return normalized;
         } catch (Exception e) {
-            throw new IllegalArgumentException(
+            throw new BadRequestException(
                 "Invalid currency code: " + currencyCode + ". Must be a valid ISO 4217 code (e.g., USD, EUR, GBP).", e);
         }
     }
@@ -635,7 +637,7 @@ public class TicketTypeService {
             tier.setEndsAt(request.getEndsAt());
             if (request.getStartsAt() != null && request.getEndsAt() != null &&
                 request.getEndsAt().isBefore(request.getStartsAt())) {
-                throw new IllegalArgumentException("Tier end date must be after start date");
+                throw new BadRequestException("Tier end date must be after start date");
             }
             tier.setPriceMinor(request.getPriceMinor());
             tier.setPriority(request.getPriority() != null ? request.getPriority() : 0);
@@ -659,14 +661,14 @@ public class TicketTypeService {
                 continue;
             }
             if (request.getRequiredTicketTypeId().equals(ticketType.getId())) {
-                throw new IllegalArgumentException("Ticket type cannot depend on itself");
+                throw new BadRequestException("Ticket type cannot depend on itself");
             }
             TicketType required = repository.findById(request.getRequiredTicketTypeId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                     "Required ticket type not found: " + request.getRequiredTicketTypeId()));
             if (required.getEvent() == null || ticketType.getEvent() == null ||
                 !required.getEvent().getId().equals(ticketType.getEvent().getId())) {
-                throw new IllegalArgumentException("Required ticket type must belong to the same event");
+                throw new BadRequestException("Required ticket type must belong to the same event");
             }
             TicketTypeDependency dependency = new TicketTypeDependency();
             dependency.setTicketType(ticketType);

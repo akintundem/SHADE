@@ -51,7 +51,7 @@ public class TicketApprovalService {
 
     public TicketApprovalRequest createRequest(UUID eventId, CreateTicketApprovalRequest request, UserPrincipal principal) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
         if (principal == null || principal.getUser() == null) {
             throw new BadRequestException("Authenticated user is required");

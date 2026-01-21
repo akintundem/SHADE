@@ -3,6 +3,8 @@ package eventplanner.features.ticket.service;
 import eventplanner.common.exception.exceptions.ApiException;
 import eventplanner.common.exception.exceptions.ErrorCode;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.UnauthorizedException;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.ticket.dto.request.CreateTicketCheckoutRequest;
@@ -77,18 +79,18 @@ public class TicketCheckoutService {
      */
     public TicketCheckoutResponse createCheckout(UUID eventId, CreateTicketCheckoutRequest request, UserPrincipal principal) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
         if (principal == null || principal.getUser() == null) {
-            throw new IllegalArgumentException("Authenticated user is required to start checkout");
+            throw new UnauthorizedException("Authenticated user is required to start checkout");
         }
         if (request.getItems() == null || request.getItems().isEmpty()) {
-            throw new IllegalArgumentException("At least one ticket item is required");
+            throw new BadRequestException("At least one ticket item is required");
         }
 
         UserAccount purchaser = loadPurchaser(principal);
         if (purchaser.getEmail() == null || purchaser.getEmail().isBlank()) {
-            throw new IllegalArgumentException("User account email is required for checkout");
+            throw new BadRequestException("User account email is required for checkout");
         }
 
         Event event = eventRepository.findById(eventId)
@@ -109,7 +111,7 @@ public class TicketCheckoutService {
         for (TicketCheckoutItemRequest item : normalizedItems) {
             TicketType ticketType = ticketTypes.get(item.getTicketTypeId());
             if (Boolean.TRUE.equals(ticketType.getRequiresApproval())) {
-                throw new IllegalArgumentException("Ticket type requires approval");
+                throw new BadRequestException("Ticket type requires approval");
             }
 
             IssueTicketRequest issueRequest =
@@ -390,7 +392,7 @@ public class TicketCheckoutService {
 
         for (TicketType type : types) {
             if (type.getEvent() == null || !type.getEvent().getId().equals(eventId)) {
-                throw new IllegalArgumentException("Ticket type " + type.getId() + " does not belong to event " + eventId);
+                throw new BadRequestException("Ticket type " + type.getId() + " does not belong to event " + eventId);
             }
             TicketCheckoutItemRequest item = quantities.get(type.getId());
             if (!type.canPurchase(item.getQuantity())) {
@@ -418,7 +420,7 @@ public class TicketCheckoutService {
 
         for (TicketType type : types) {
             if (eventId != null && (type.getEvent() == null || !type.getEvent().getId().equals(eventId))) {
-                throw new IllegalArgumentException("Ticket type " + type.getId() + " does not belong to event " + eventId);
+                throw new BadRequestException("Ticket type " + type.getId() + " does not belong to event " + eventId);
             }
         }
 
@@ -433,7 +435,7 @@ public class TicketCheckoutService {
             UUID ticketTypeId = item.getTicketType() != null ? item.getTicketType().getId() : null;
             TicketType ticketType = ticketTypes.get(ticketTypeId);
             if (ticketType == null) {
-                throw new IllegalArgumentException("Ticket type not found for checkout item");
+                throw new BadRequestException("Ticket type not found for checkout item");
             }
             long unitPriceMinor = resolveUnitPrice(ticketType, activeTiers != null ? activeTiers.get(ticketTypeId) : null);
             long lineTotalMinor = Math.multiplyExact(unitPriceMinor, item.getQuantity());
@@ -481,7 +483,7 @@ public class TicketCheckoutService {
             if (currency == null) {
                 currency = typeCurrency;
             } else if (typeCurrency != null && !currency.equalsIgnoreCase(typeCurrency)) {
-                throw new IllegalArgumentException("All ticket types in a checkout must share the same currency");
+                throw new BadRequestException("All ticket types in a checkout must share the same currency");
             }
         }
         return currency != null ? currency : "USD";
@@ -538,7 +540,7 @@ public class TicketCheckoutService {
         for (TicketCheckoutItemRequest item : items) {
             int newQuantity = aggregated.getOrDefault(item.getTicketTypeId(), 0) + item.getQuantity();
             if (newQuantity > 50) {
-                throw new IllegalArgumentException("Quantity for ticket type " + item.getTicketTypeId() + " exceeds maximum of 50");
+                throw new BadRequestException("Quantity for ticket type " + item.getTicketTypeId() + " exceeds maximum of 50");
             }
             aggregated.put(item.getTicketTypeId(), newQuantity);
         }
@@ -596,7 +598,7 @@ public class TicketCheckoutService {
                 TicketType requiredType = dependency.getRequiredTicketType();
                 String dependentName = dependentType != null ? dependentType.getName() : dependentTypeId.toString();
                 String requiredName = requiredType != null ? requiredType.getName() : requiredTypeId.toString();
-                throw new IllegalArgumentException("Ticket type " + dependentName + " requires " +
+                throw new BadRequestException("Ticket type " + dependentName + " requires " +
                     requiredQty + " of " + requiredName);
             }
         }
@@ -663,7 +665,7 @@ public class TicketCheckoutService {
         }
         UUID checkoutEventId = checkout.getEvent() != null ? checkout.getEvent().getId() : null;
         if (checkoutEventId != null && !checkoutEventId.equals(eventId)) {
-            throw new IllegalArgumentException("Checkout does not belong to event " + eventId);
+            throw new BadRequestException("Checkout does not belong to event " + eventId);
         }
     }
 
@@ -678,12 +680,12 @@ public class TicketCheckoutService {
             for (TicketCheckoutItem item : items) {
                 UUID tid = item.getTicketType() != null ? item.getTicketType().getId() : null;
                 if (ticketTypeId == null || tid == null || !ticketTypeId.equals(tid)) {
-                    throw new IllegalArgumentException("Promotion code can only be applied when all items are the same ticket type");
+                    throw new BadRequestException("Promotion code can only be applied when all items are the same ticket type");
                 }
             }
         }
         return ticketPromotionRepository.findByEventIdAndTicketTypeIdAndCodeIgnoreCase(eventId, ticketTypeId, code)
             .filter(TicketPromotion::isValidNow)
-            .orElseThrow(() -> new IllegalArgumentException("Invalid or inactive promotion code"));
+            .orElseThrow(() -> new BadRequestException("Invalid or inactive promotion code"));
     }
 }

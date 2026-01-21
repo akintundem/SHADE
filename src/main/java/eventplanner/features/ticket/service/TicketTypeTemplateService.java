@@ -3,6 +3,9 @@ package eventplanner.features.ticket.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.UnauthorizedException;
+import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.ticket.dto.request.ApplyTicketTypeTemplateRequest;
@@ -39,10 +42,10 @@ public class TicketTypeTemplateService {
 
     public TicketTypeTemplate createTemplate(CreateTicketTypeTemplateRequest request, UserPrincipal principal) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
         if (principal == null || principal.getId() == null) {
-            throw new IllegalArgumentException("Authentication required");
+            throw new BadRequestException("Authentication required");
         }
         UserAccount creator = userAccountRepository.findById(principal.getId())
             .orElseThrow(() -> new IllegalArgumentException("User not found: " + principal.getId()));
@@ -57,17 +60,17 @@ public class TicketTypeTemplateService {
     @Transactional(readOnly = true)
     public List<TicketTypeTemplate> listTemplates(UserPrincipal principal) {
         if (principal == null || principal.getId() == null) {
-            throw new IllegalArgumentException("Authentication required");
+            throw new BadRequestException("Authentication required");
         }
         return templateRepository.findByCreatedById(principal.getId());
     }
 
     public TicketTypeTemplate updateTemplate(UUID id, UpdateTicketTypeTemplateRequest request, UserPrincipal principal) {
         if (id == null) {
-            throw new IllegalArgumentException("Template ID is required");
+            throw new BadRequestException("Template ID is required");
         }
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
         TicketTypeTemplate template = templateRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Template not found: " + id));
@@ -86,7 +89,7 @@ public class TicketTypeTemplateService {
 
     public TicketType applyTemplate(UUID templateId, UUID eventId, ApplyTicketTypeTemplateRequest request, UserPrincipal principal) {
         if (templateId == null || eventId == null) {
-            throw new IllegalArgumentException("Template ID and event ID are required");
+            throw new BadRequestException("Template ID and event ID are required");
         }
         TicketTypeTemplate template = templateRepository.findById(templateId)
             .orElseThrow(() -> new ResourceNotFoundException("Template not found: " + templateId));
@@ -95,7 +98,7 @@ public class TicketTypeTemplateService {
         Event event = eventRepository.findById(eventId)
             .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
         if (!authorizationService.canAccessEvent(principal, eventId)) {
-            throw new IllegalArgumentException("Access denied to event: " + eventId);
+            throw new BadRequestException("Access denied to event: " + eventId);
         }
 
         TicketType ticketType = new TicketType();
@@ -148,7 +151,7 @@ public class TicketTypeTemplateService {
             try {
                 template.setMetadata(objectMapper.writeValueAsString(request.getMetadata()));
             } catch (JsonProcessingException e) {
-                throw new IllegalArgumentException("Invalid metadata format");
+                throw new BadRequestException("Invalid metadata format");
             }
         }
     }
@@ -203,43 +206,43 @@ public class TicketTypeTemplateService {
             try {
                 template.setMetadata(objectMapper.writeValueAsString(request.getMetadata()));
             } catch (JsonProcessingException e) {
-                throw new IllegalArgumentException("Invalid metadata format");
+                throw new BadRequestException("Invalid metadata format");
             }
         }
     }
 
     private String validateCurrencyCode(String currencyCode) {
         if (currencyCode == null || currencyCode.trim().isEmpty()) {
-            throw new IllegalArgumentException("Currency code cannot be null or empty");
+            throw new BadRequestException("Currency code cannot be null or empty");
         }
         String normalized = currencyCode.trim().toUpperCase();
         try {
             Monetary.getCurrency(normalized);
             return normalized;
         } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid currency code: " + currencyCode, e);
+            throw new BadRequestException("Invalid currency code: " + currencyCode, e);
         }
     }
 
     private void validatePricingConfig(Long earlyBirdPriceMinor, LocalDateTime earlyBirdEndDate,
                                        Integer groupDiscountMinQuantity, Integer groupDiscountPercentBps) {
         if (earlyBirdPriceMinor != null && earlyBirdEndDate == null) {
-            throw new IllegalArgumentException("Early bird end date is required when early bird price is set");
+            throw new BadRequestException("Early bird end date is required when early bird price is set");
         }
         if (groupDiscountMinQuantity != null && (groupDiscountPercentBps == null || groupDiscountPercentBps <= 0)) {
-            throw new IllegalArgumentException("Group discount percent is required when minimum quantity is set");
+            throw new BadRequestException("Group discount percent is required when minimum quantity is set");
         }
     }
 
     private void validateTemplateDates(LocalDateTime saleStartDate, LocalDateTime saleEndDate) {
         if (saleStartDate != null && saleEndDate != null && saleEndDate.isBefore(saleStartDate)) {
-            throw new IllegalArgumentException("Sale end date must be after sale start date");
+            throw new BadRequestException("Sale end date must be after sale start date");
         }
     }
 
     private void ensureOwnership(TicketTypeTemplate template, UserPrincipal principal) {
         if (principal == null || principal.getId() == null) {
-            throw new IllegalArgumentException("Authentication required");
+            throw new BadRequestException("Authentication required");
         }
         if (template.getCreatedBy() != null && template.getCreatedBy().getId() != null &&
             template.getCreatedBy().getId().equals(principal.getId())) {
@@ -248,6 +251,6 @@ public class TicketTypeTemplateService {
         if (principal.isSystemAdmin()) {
             return;
         }
-        throw new IllegalArgumentException("Access denied to template");
+        throw new BadRequestException("Access denied to template");
     }
 }
