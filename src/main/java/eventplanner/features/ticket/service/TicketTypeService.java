@@ -105,6 +105,22 @@ public class TicketTypeService {
             }
         }
 
+        // Validate total ticket inventory doesn't exceed event capacity
+        if (event.getCapacity() != null && request.getQuantityAvailable() != null) {
+            long existingInventory = repository.findByEventId(eventId).stream()
+                .mapToInt(TicketType::getQuantityAvailable)
+                .sum();
+
+            long totalInventory = existingInventory + request.getQuantityAvailable();
+
+            if (totalInventory > event.getCapacity()) {
+                throw new IllegalArgumentException(
+                    String.format("Total ticket inventory (%d) would exceed event capacity (%d). " +
+                        "Current inventory: %d, Requested: %d",
+                        totalInventory, event.getCapacity(), existingInventory, request.getQuantityAvailable()));
+            }
+        }
+
         TicketType saved = repository.save(ticketType);
 
         handlePromotionCreate(request, saved, principal);
@@ -154,9 +170,28 @@ public class TicketTypeService {
             int minRequired = ticketType.getQuantitySold() + ticketType.getQuantityReserved();
             if (request.getQuantityAvailable() < minRequired) {
                 throw new IllegalArgumentException(
-                    "Quantity available cannot be less than quantity sold (" + ticketType.getQuantitySold() + 
+                    "Quantity available cannot be less than quantity sold (" + ticketType.getQuantitySold() +
                     ") + quantity reserved (" + ticketType.getQuantityReserved() + ")");
             }
+
+            // Validate total ticket inventory doesn't exceed event capacity (when updating)
+            Event event = ticketType.getEvent();
+            if (event.getCapacity() != null) {
+                long existingInventory = repository.findByEventId(eventId).stream()
+                    .filter(tt -> !tt.getId().equals(id)) // Exclude current ticket type
+                    .mapToInt(TicketType::getQuantityAvailable)
+                    .sum();
+
+                long totalInventory = existingInventory + request.getQuantityAvailable();
+
+                if (totalInventory > event.getCapacity()) {
+                    throw new IllegalArgumentException(
+                        String.format("Total ticket inventory (%d) would exceed event capacity (%d). " +
+                            "Other ticket types: %d, Requested: %d",
+                            totalInventory, event.getCapacity(), existingInventory, request.getQuantityAvailable()));
+                }
+            }
+
             ticketType.setQuantityAvailable(request.getQuantityAvailable());
         }
         if (request.getSaleStartDate() != null) {

@@ -3,8 +3,13 @@ package eventplanner.features.event.service;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.enums.EventStatus;
 import eventplanner.features.event.repository.EventRepository;
+import eventplanner.features.ticket.entity.Ticket;
+import eventplanner.features.ticket.enums.TicketStatus;
+import eventplanner.features.ticket.repository.TicketRepository;
+import eventplanner.features.ticket.repository.TicketTypeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,11 +31,17 @@ public class EventStatusAutomationService {
 
     private final EventRepository eventRepository;
 
+    @Autowired(required = false)
+    private TicketRepository ticketRepository;
+
+    @Autowired(required = false)
+    private TicketTypeRepository ticketTypeRepository;
+
     /**
      * Scheduled task to automatically transition events to IN_PROGRESS.
      * Runs every 5 minutes to check for events that should start.
-     * Cron expression: second, minute, hour, day, month, weekday
-     * "0 */5 * * * *" means: at 0 seconds of every 5 minutes
+     * Cron expression format: second, minute, hour, day, month, weekday
+     * Default cron: runs at 0 seconds of every 5 minutes
      */
     @Scheduled(cron = "${event.status.auto-transition.cron:0 */5 * * * *}")
     @Transactional
@@ -140,11 +151,38 @@ public class EventStatusAutomationService {
                     EventStatus previousStatus = event.getEventStatus();
                     event.setEventStatus(EventStatus.COMPLETED);
                     eventRepository.save(event);
+
+                    // Expire pending tickets when event completes
+                    if (ticketRepository != null && ticketTypeRepository != null) {
+                        try {
+                            List<Ticket> pendingTickets = ticketRepository.findByEventIdAndStatus(
+                                event.getId(), TicketStatus.PENDING);
+
+                            if (!pendingTickets.isEmpty()) {
+                                for (Ticket ticket : pendingTickets) {
+                                    ticket.cancel("Event completed - pending ticket expired");
+
+                                    // Release reserved inventory
+                                    if (ticket.getTicketType() != null) {
+                                        ticketTypeRepository.decrementQuantityReserved(
+                                            ticket.getTicketType().getId(), 1);
+                                    }
+                                }
+                                ticketRepository.saveAll(pendingTickets);
+                                log.debug("Expired {} pending tickets for completed event '{}'",
+                                    pendingTickets.size(), event.getName());
+                            }
+                        } catch (Exception e) {
+                            log.warn("Failed to expire pending tickets for event {}: {}",
+                                event.getId(), e.getMessage());
+                        }
+                    }
+
                     completed++;
-                    log.debug("Event '{}' (ID: {}) transitioned from {} to COMPLETED", 
+                    log.debug("Event '{}' (ID: {}) transitioned from {} to COMPLETED",
                             event.getName(), event.getId(), previousStatus);
                 } catch (Exception e) {
-                    log.error("Error transitioning event {} to COMPLETED: {}", 
+                    log.error("Error transitioning event {} to COMPLETED: {}",
                             event.getId(), e.getMessage(), e);
                 }
             }

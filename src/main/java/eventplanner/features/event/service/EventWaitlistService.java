@@ -52,7 +52,7 @@ public class EventWaitlistService {
      */
     public EventWaitlistEntry createEntry(UUID eventId, CreateEventWaitlistRequest request, UserPrincipal principal) {
         if (request == null) {
-            throw new IllegalArgumentException("Request cannot be null");
+            throw new BadRequestException("Request cannot be null");
         }
 
         Event event = eventRepository.findById(eventId)

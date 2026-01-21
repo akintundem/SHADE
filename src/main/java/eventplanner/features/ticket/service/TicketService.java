@@ -919,15 +919,19 @@ public class TicketService {
     }
 
     private void reserveTicketsOrThrow(UUID ticketTypeId, int quantity) {
-        TicketType lockedType = ticketTypeRepository.findByIdForUpdate(ticketTypeId)
-            .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + ticketTypeId));
+        // Use atomic update to prevent race conditions
+        int updated = ticketTypeRepository.incrementQuantityReservedAtomic(ticketTypeId, quantity);
 
-        if (!lockedType.canPurchase(quantity)) {
+        if (updated == 0) {
+            // Either ticket type doesn't exist or not enough inventory
+            TicketType ticketType = ticketTypeRepository.findById(ticketTypeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + ticketTypeId));
+
+            // Ticket type exists but not enough inventory
             throw new ApiException(ErrorCode.TICKET_TYPE_SOLD_OUT,
-                "Not enough tickets available");
+                String.format("Not enough tickets available. Requested: %d, Available: %d",
+                    quantity, ticketType.getQuantityRemaining()));
         }
-
-        ticketTypeRepository.incrementQuantityReserved(ticketTypeId, quantity);
     }
 
     private void ensureTicketIssuanceAccess(Event event, UserPrincipal principal) {

@@ -266,6 +266,32 @@ public class Event extends BaseEntity {
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<eventplanner.features.feeds.entity.EventFeedPost> feedPosts = new ArrayList<>();
 
+    /**
+     * One-to-many relationship with tickets.
+     * Note: orphanRemoval = false to support soft-delete scenarios.
+     */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = false, fetch = FetchType.LAZY)
+    private List<eventplanner.features.ticket.entity.Ticket> tickets = new ArrayList<>();
+
+    /**
+     * One-to-many relationship with attendees.
+     * Note: orphanRemoval = false to preserve attendee history.
+     */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = false, fetch = FetchType.LAZY)
+    private List<eventplanner.features.attendee.entity.Attendee> attendees = new ArrayList<>();
+
+    /**
+     * One-to-many relationship with ticket types.
+     */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<eventplanner.features.ticket.entity.TicketType> ticketTypes = new ArrayList<>();
+
+    /**
+     * One-to-many relationship with waitlist entries.
+     */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<eventplanner.features.event.entity.EventWaitlistEntry> waitlistEntries = new ArrayList<>();
+
     public Event(String name, EventType eventType, UserAccount owner) {
         this.name = name;
         this.eventType = eventType;

@@ -1,6 +1,8 @@
 package eventplanner.common.exception.handler;
 
 import eventplanner.common.exception.exceptions.ApiException;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ConflictException;
 import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.common.exception.exceptions.UnauthorizedException;
@@ -62,12 +64,44 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(problem);
     }
 
+    /**
+     * Handle IllegalArgumentException with message sanitization.
+     * Sanitizes the message to prevent leaking internal details.
+     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Problem> handleIllegalArgumentException(
             IllegalArgumentException ex, NativeWebRequest request) {
 
-        Problem problem = ProblemBuilder.badRequest("Invalid request parameters");
+        // Sanitize message to prevent information leakage
+        String safeMessage = ResponseSanitizer.sanitize(ex.getMessage(), 400);
+        Problem problem = ProblemBuilder.badRequest(safeMessage);
         return ResponseEntity.badRequest().body(problem);
+    }
+
+    /**
+     * Handle BadRequestException - these are designed to be shown to users.
+     * Message is already safe and user-facing.
+     */
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<Problem> handleBadRequestException(
+            BadRequestException ex, NativeWebRequest request) {
+
+        // BadRequestException messages are designed to be user-facing
+        String message = ex.getMessage() != null ? ex.getMessage() : "Invalid request";
+        Problem problem = ProblemBuilder.badRequest(message);
+        return ResponseEntity.badRequest().body(problem);
+    }
+
+    /**
+     * Handle ConflictException - resource conflicts (duplicates, version mismatches, etc.)
+     */
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<Problem> handleConflictException(
+            ConflictException ex, NativeWebRequest request) {
+
+        String message = ex.getMessage() != null ? ex.getMessage() : "Resource conflict";
+        Problem problem = ProblemBuilder.conflict(message);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -86,19 +120,29 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(problem);
     }
 
+    /**
+     * Handle ResourceNotFoundException - entity not found errors.
+     * Messages are designed to be user-facing.
+     */
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Problem> handleResourceNotFoundException(
             ResourceNotFoundException ex, NativeWebRequest request) {
 
-        Problem problem = ProblemBuilder.notFound("The requested resource was not found");
+        String message = ex.getMessage() != null ? ex.getMessage() : "The requested resource was not found";
+        Problem problem = ProblemBuilder.notFound(message);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
     }
 
+    /**
+     * Handle UnauthorizedException - authentication required errors.
+     * Messages are designed to be user-facing.
+     */
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<Problem> handleUnauthorizedException(
             UnauthorizedException ex, NativeWebRequest request) {
 
-        Problem problem = ProblemBuilder.unauthorized("Authentication required");
+        String message = ex.getMessage() != null ? ex.getMessage() : "Authentication required";
+        Problem problem = ProblemBuilder.unauthorized(message);
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problem);
     }
 
@@ -110,11 +154,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problem);
     }
 
+    /**
+     * Handle ForbiddenException - authorization failures.
+     * Messages are designed to be user-facing.
+     */
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<Problem> handleForbiddenException(
             ForbiddenException ex, NativeWebRequest request) {
 
-        Problem problem = ProblemBuilder.forbidden("Access denied");
+        String message = ex.getMessage() != null ? ex.getMessage() : "Access denied";
+        Problem problem = ProblemBuilder.forbidden(message);
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problem);
     }
 

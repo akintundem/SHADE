@@ -10,8 +10,15 @@ import eventplanner.features.event.dto.response.TicketTypeSummary;
 import eventplanner.features.event.dto.response.UserEventContext;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.ticket.entity.TicketType;
+import eventplanner.features.ticket.entity.Ticket;
+import eventplanner.features.ticket.enums.TicketStatus;
 import eventplanner.features.ticket.repository.TicketTypeRepository;
+import eventplanner.features.ticket.repository.TicketRepository;
 import eventplanner.features.event.entity.Venue;
+import eventplanner.common.communication.services.core.NotificationService;
+import eventplanner.common.communication.services.core.dto.NotificationRequest;
+import eventplanner.common.communication.enums.CommunicationType;
+import eventplanner.common.config.ExternalServicesProperties;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.event.enums.EventAccessType;
 import eventplanner.features.event.enums.EventStatus;
@@ -38,6 +45,11 @@ import java.util.Comparator;
 import eventplanner.features.event.repository.EventRoleRepository;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.ForbiddenException;
+import eventplanner.common.exception.exceptions.UnauthorizedException;
+import eventplanner.common.exception.exceptions.ConflictException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -101,10 +113,19 @@ public class EventService {
     
     @Autowired(required = false)
     private eventplanner.features.event.service.EventWaitlistService eventWaitlistService;
-    
+
+    @Autowired(required = false)
+    private TicketRepository ticketRepository;
+
+    @Autowired(required = false)
+    private NotificationService notificationService;
+
+    @Autowired(required = false)
+    private ExternalServicesProperties externalServicesProperties;
+
     @Autowired
     private NotificationTargetResolver notificationTargetResolver;
-    
+
     @Autowired
     private BulkNotificationService bulkNotificationService;
 
@@ -214,20 +235,31 @@ public class EventService {
             if (!Objects.equals(oldCapacity, newCapacity)) {
                 importantChange = true;
                 changeSummary.add("Capacity");
+
+                // Validate capacity decrease
+                if (oldCapacity != null && newCapacity < oldCapacity) {
+                    Integer currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
+                    if (currentCount > newCapacity) {
+                        throw new BadRequestException(
+                            String.format("Cannot reduce capacity to %d when %d attendees are already confirmed",
+                                newCapacity, currentCount));
+                    }
+                }
             }
             event.setCapacity(newCapacity);
-            
+
             // Promote waitlist entries if capacity increased
             if (eventWaitlistService != null && oldCapacity != null && newCapacity != null && newCapacity > oldCapacity) {
                 try {
                     Integer currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
-                    int spotsAvailable = newCapacity - Math.max(currentCount, oldCapacity);
+                    // Fixed calculation: spots available = new capacity - current confirmed attendees
+                    int spotsAvailable = newCapacity - currentCount;
                     if (spotsAvailable > 0) {
                         eventWaitlistService.promoteWaitlistEntries(event.getId(), spotsAvailable);
                     }
                 } catch (Exception e) {
                     // Log but don't fail the update
-                    log.warn("Failed to promote waitlist entries when capacity increased for event {}: {}", 
+                    log.warn("Failed to promote waitlist entries when capacity increased for event {}: {}",
                             event.getId(), e.getMessage());
                 }
             }
@@ -387,11 +419,11 @@ public class EventService {
      */
     public Event create(CreateEventRequest request, UUID ownerId) {
         if (ownerId == null) {
-            throw new IllegalArgumentException("Owner ID is required for event creation");
+            throw new BadRequestException("Owner ID is required for event creation");
         }
-        
+
         UserAccount owner = userAccountRepository.findById(ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Owner not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Owner not found"));
         
         Event event = new Event();
         event.setName(request.getName());
@@ -452,16 +484,16 @@ public class EventService {
     @Transactional
     public Event cloneEvent(UUID sourceEventId, CloneEventRequest request, UserPrincipal principal) {
         if (principal == null || principal.getId() == null) {
-            throw new IllegalArgumentException("Authentication required to clone events");
+            throw new UnauthorizedException("Authentication required to clone events");
         }
 
         // Fetch source event
         Event source = eventRepository.findById(sourceEventId)
-            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + sourceEventId));
+            .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + sourceEventId));
 
         // Check access - user must be able to access the source event
         if (authorizationService != null && !authorizationService.canAccessEvent(principal, sourceEventId)) {
-            throw new IllegalArgumentException("Access denied to event: " + sourceEventId);
+            throw new ForbiddenException("Access denied to event: " + sourceEventId);
         }
 
         // Create new event
@@ -617,7 +649,7 @@ public class EventService {
                     startDateTo = now;
                 }
             } else {
-                throw new IllegalArgumentException("Invalid timeframe. Use UPCOMING or PAST.");
+                throw new BadRequestException("Invalid timeframe. Use UPCOMING or PAST.");
             }
         }
 
@@ -727,24 +759,86 @@ public class EventService {
      */
     public Event archiveEvent(UUID id, UUID archivedBy, String reason) {
         Event event = eventRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + id));
-        
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found with ID: " + id));
+
         if (Boolean.TRUE.equals(event.getIsArchived())) {
-            throw new IllegalArgumentException("Event is already archived");
+            throw new ConflictException("Event is already archived");
         }
-        
+
         event.setIsArchived(true);
         event.setArchivedAt(LocalDateTime.now());
         if (archivedBy != null) {
             UserAccount archivedByUser = userAccountRepository.findById(archivedBy)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + archivedBy));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + archivedBy));
             event.setArchivedBy(archivedByUser);
         } else {
             event.setArchivedBy(null);
         }
         event.setArchiveReason(reason);
-        
+
+        // Cancel all pending tickets when event is archived
+        if (ticketRepository != null) {
+            try {
+                List<Ticket> pendingTickets = ticketRepository.findByEventIdAndStatus(id, TicketStatus.PENDING);
+                if (!pendingTickets.isEmpty()) {
+                    for (Ticket ticket : pendingTickets) {
+                        ticket.cancel("Event archived: " + (reason != null ? reason : "Event no longer available"));
+                    }
+                    ticketRepository.saveAll(pendingTickets);
+                    log.info("Cancelled {} pending tickets for archived event {}", pendingTickets.size(), id);
+                }
+
+                // Notify holders of ISSUED tickets
+                List<Ticket> issuedTickets = ticketRepository.findByEventIdAndStatus(id, TicketStatus.ISSUED);
+                if (!issuedTickets.isEmpty()) {
+                    sendEventArchivedNotifications(event, issuedTickets);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to cancel pending tickets for archived event {}: {}", id, e.getMessage());
+            }
+        }
+
         return eventRepository.save(event);
+    }
+
+    /**
+     * Send notifications to ticket holders when event is archived.
+     */
+    private void sendEventArchivedNotifications(Event event, List<Ticket> tickets) {
+        if (notificationService == null || externalServicesProperties == null) {
+            log.warn("Notification service not available, skipping event archived notifications");
+            return;
+        }
+
+        for (Ticket ticket : tickets) {
+            try {
+                String recipient = ticket.getOwnerEmail() != null
+                    ? ticket.getOwnerEmail()
+                    : (ticket.getAttendee() != null ? ticket.getAttendee().getEmail() : null);
+
+                if (recipient != null) {
+                    Map<String, Object> vars = new HashMap<>();
+                    vars.put("eventName", event.getName());
+                    vars.put("ticketNumber", ticket.getTicketNumber());
+                    if (event.getArchiveReason() != null) {
+                        vars.put("reason", event.getArchiveReason());
+                    }
+
+                    notificationService.send(NotificationRequest.builder()
+                        .type(CommunicationType.EMAIL)
+                        .to(recipient)
+                        .subject("Event Update: " + event.getName())
+                        .templateId("event-archived")
+                        .templateVariables(vars)
+                        .eventId(event.getId())
+                        .from(externalServicesProperties.getEmail().getFromEvents())
+                        .build());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to send archived notification for ticket {}: {}",
+                    ticket.getId(), e.getMessage());
+            }
+        }
     }
 
     /**
@@ -755,17 +849,17 @@ public class EventService {
      */
     public Event restoreEvent(UUID id, UUID restoredBy) {
         Event event = eventRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + id));
-        
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found with ID: " + id));
+
         if (!Boolean.TRUE.equals(event.getIsArchived())) {
-            throw new IllegalArgumentException("Event is not archived");
+            throw new ConflictException("Event is not archived");
         }
-        
+
         event.setIsArchived(false);
         event.setRestoredAt(LocalDateTime.now());
         if (restoredBy != null) {
             UserAccount restoredByUser = userAccountRepository.findById(restoredBy)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + restoredBy));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + restoredBy));
             event.setRestoredBy(restoredByUser);
         } else {
             event.setRestoredBy(null);
@@ -1282,9 +1376,9 @@ public class EventService {
     public EventFeedResponse buildEventFeed(UUID eventId, UserPrincipal user, EventFeedRequest request) {
         Optional<Event> eventOpt = getByIdWithAccessControl(eventId, user);
         if (eventOpt.isEmpty()) {
-            throw new IllegalArgumentException("Event not found or access denied");
+            throw new ResourceNotFoundException("Event not found or access denied");
         }
-        
+
         return toFeedResponse(eventOpt.get(), user, request);
     }
 
@@ -1296,7 +1390,7 @@ public class EventService {
      */
     public Page<Event> getForYouFeed(EventListRequest request, UserPrincipal user) {
         if (user == null) {
-            throw new IllegalArgumentException("Authentication required for For You feed");
+            throw new UnauthorizedException("Authentication required for For You feed");
         }
         
         // For now, return public events sorted by relevance (can be enhanced with ML/recommendations)
@@ -1333,7 +1427,7 @@ public class EventService {
      */
     public Page<Event> getFollowingFeed(EventListRequest request, UserPrincipal user) {
         if (user == null) {
-            throw new IllegalArgumentException("Authentication required for Following feed");
+            throw new UnauthorizedException("Authentication required for Following feed");
         }
         
         // TODO: Implement proper follow/following relationship when that feature is added

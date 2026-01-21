@@ -6,6 +6,8 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventReminder;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.event.repository.EventReminderRepository;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -44,7 +46,7 @@ public class EventReminderService {
         }
         
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
         
         EventReminder reminder = new EventReminder();
         reminder.setEvent(event);
@@ -95,9 +97,9 @@ public class EventReminderService {
 
     public EventReminderResponse update(UUID eventId, UUID reminderId, EventReminderRequest request) {
         EventReminder reminder = reminderRepository.findById(reminderId)
-                .orElseThrow(() -> new IllegalArgumentException("Reminder not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Reminder not found"));
         if (reminder.getEvent() == null || !reminder.getEvent().getId().equals(eventId)) {
-            throw new IllegalArgumentException("Reminder does not belong to event");
+            throw new BadRequestException("Reminder does not belong to event");
         }
         if (request.getTitle() != null) reminder.setTitle(request.getTitle());
         if (request.getDescription() != null) reminder.setDescription(request.getDescription());
@@ -137,18 +139,18 @@ public class EventReminderService {
 
     public void delete(UUID eventId, UUID reminderId) {
         EventReminder reminder = reminderRepository.findById(reminderId)
-                .orElseThrow(() -> new IllegalArgumentException("Reminder not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Reminder not found"));
         if (reminder.getEvent() == null || !reminder.getEvent().getId().equals(eventId)) {
-            throw new IllegalArgumentException("Reminder does not belong to event");
+            throw new BadRequestException("Reminder does not belong to event");
         }
         reminderRepository.delete(reminder);
     }
 
     public EventReminderResponse get(UUID eventId, UUID reminderId) {
         EventReminder reminder = reminderRepository.findById(reminderId)
-                .orElseThrow(() -> new IllegalArgumentException("Reminder not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Reminder not found"));
         if (reminder.getEvent() == null || !reminder.getEvent().getId().equals(eventId)) {
-            throw new IllegalArgumentException("Reminder does not belong to event");
+            throw new BadRequestException("Reminder does not belong to event");
         }
         return EventReminderResponse.from(reminder);
     }

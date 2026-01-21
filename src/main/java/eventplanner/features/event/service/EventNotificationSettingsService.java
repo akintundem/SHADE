@@ -7,6 +7,8 @@ import eventplanner.features.event.entity.EventNotificationSettings;
 import eventplanner.features.event.enums.EventNotificationChannel;
 import eventplanner.features.event.repository.EventNotificationSettingsRepository;
 import eventplanner.features.event.repository.EventRepository;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,14 +45,14 @@ public class EventNotificationSettingsService {
 
     private EventNotificationSettings ensureSettings(UUID eventId) {
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
         return settingsRepository.findByEventId(eventId)
             .orElseGet(() -> settingsRepository.save(EventNotificationSettings.createDefault(event)));
     }
 
     private void applyChannelSettings(EventNotificationSettings settings, Set<EventNotificationChannel> enabledChannels) {
         if (enabledChannels == null) {
-            throw new IllegalArgumentException("Enabled channels must be provided");
+            throw new BadRequestException("Enabled channels must be provided");
         }
         EnumSet<EventNotificationChannel> channels = EnumSet.copyOf(enabledChannels);
         settings.setEmailEnabled(channels.contains(EventNotificationChannel.EMAIL));

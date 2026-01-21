@@ -72,26 +72,30 @@ public class AttendeeController {
 			@AuthenticationPrincipal UserPrincipal principal) {
 		try {
 			UUID attendeeId = UUID.fromString(id);
-			
+
 			// Get attendee and verify access
 			Attendee attendee = attendeeService.getAttendeeById(attendeeId);
 			if (attendee.getEvent() == null) {
 				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for attendee");
 			}
 			UUID eventId = attendee.getEvent().getId();
-			if (!authorizationService.canAccessEvent(principal, eventId)) {
-				throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-					"Access denied to event: " + eventId);
+
+			// Only event owner/organizers can delete attendees
+			if (!authorizationService.isEventOwner(principal, eventId) &&
+				!authorizationService.hasEventMembership(principal, eventId) &&
+				!authorizationService.isAdmin(principal)) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+					"Only event organizers can delete attendees");
 			}
-			
+
 			// Delete
 			boolean deleted = attendeeService.delete(attendeeId);
 			if (!deleted) {
 				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Attendee not found: " + id);
 			}
-			
+
 			return ResponseEntity.noContent().build();
-			
+
 		} catch (IllegalArgumentException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
 		}
@@ -347,7 +351,8 @@ public class AttendeeController {
     // ==================== Update Invite RSVP Status ====================
 
     @PostMapping("/invites")
-    @Operation(summary = "Update attendee invite RSVP status", 
+    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+    @Operation(summary = "Update attendee invite RSVP status",
         description = "Update attendee invite RSVP status. Can update by inviteId or token (query parameters). Status can be any valid AttendeeInviteStatus (ACCEPTED, DECLINED, REVOKED, EXPIRED). Works for both user-linked attendees and email-only guests.")
     public ResponseEntity<AttendeeResponse> updateInviteStatus(
             @RequestParam(required = false) UUID inviteId,

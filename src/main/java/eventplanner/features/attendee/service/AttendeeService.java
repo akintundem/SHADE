@@ -18,6 +18,10 @@ import eventplanner.features.attendee.repository.AttendeeRsvpHistoryRepository;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.event.service.EventWaitlistService;
+import eventplanner.features.ticket.entity.Ticket;
+import eventplanner.features.ticket.enums.TicketStatus;
+import eventplanner.features.ticket.repository.TicketRepository;
+import eventplanner.features.ticket.repository.TicketTypeRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.common.config.ExternalServicesProperties;
@@ -57,7 +61,13 @@ public class AttendeeService {
     private final ExternalServicesProperties externalServicesProperties;
     private final AuthorizationService authorizationService;
     private final AttendeeRsvpHistoryRepository rsvpHistoryRepository;
-    
+
+    @Autowired(required = false)
+    private TicketRepository ticketRepository;
+
+    @Autowired(required = false)
+    private TicketTypeRepository ticketTypeRepository;
+
     @Autowired(required = false)
     private EventWaitlistService eventWaitlistService;
 
@@ -87,7 +97,31 @@ public class AttendeeService {
 
         Event event = attendee.getEvent();
         AttendeeStatus previousStatus = attendee.getRsvpStatus();
-        
+
+        // Cancel all tickets associated with this attendee
+        if (ticketRepository != null && ticketTypeRepository != null) {
+            try {
+                List<Ticket> attendeeTickets = ticketRepository.findByAttendeeId(attendeeId);
+                if (!attendeeTickets.isEmpty()) {
+                    for (Ticket ticket : attendeeTickets) {
+                        if (ticket.getStatus() != TicketStatus.CANCELLED &&
+                            ticket.getStatus() != TicketStatus.REFUNDED) {
+                            ticket.cancel("Attendee removed from event");
+
+                            // Decrement sold quantity for cancelled ticket
+                            if (ticket.getTicketType() != null) {
+                                ticketTypeRepository.decrementQuantitySold(ticket.getTicketType().getId(), 1);
+                            }
+                        }
+                    }
+                    ticketRepository.saveAll(attendeeTickets);
+                    log.info("Cancelled {} tickets for deleted attendee {}", attendeeTickets.size(), attendeeId);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to cancel tickets for deleted attendee {}: {}", attendeeId, e.getMessage());
+            }
+        }
+
         // Delete the attendee
         repository.deleteById(attendeeId);
         log.info("Deleted attendee {}", attendeeId);

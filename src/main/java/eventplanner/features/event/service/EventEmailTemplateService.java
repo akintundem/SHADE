@@ -1,6 +1,7 @@
 package eventplanner.features.event.service;
 
 import eventplanner.features.event.enums.EmailTemplateType;
+import eventplanner.common.exception.exceptions.BadRequestException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -42,7 +43,7 @@ public class EventEmailTemplateService {
         String templateId = TEMPLATE_ID_MAP.get(templateType);
         if (templateId == null) {
             log.error("No template ID mapping found for template type: {}", templateType);
-            throw new IllegalArgumentException("Invalid email template type: " + templateType);
+            throw new BadRequestException("Invalid email template type: " + templateType);
         }
         
         return templateId;

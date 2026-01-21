@@ -17,6 +17,8 @@ import eventplanner.features.event.repository.EventStoredObjectRepository;
 import eventplanner.common.util.UserAccountUtil;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
+import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -183,7 +185,7 @@ public class EventMediaService {
         accessControlService.requireCoverManage(principal, eventId);
         // Extra guard: cover image must be an image/*
         if (!StringUtils.hasText(request.getContentType()) || !request.getContentType().toLowerCase(java.util.Locale.ROOT).startsWith("image/")) {
-            throw new IllegalArgumentException("Cover image must be an image/* content type");
+            throw new BadRequestException("Cover image must be an image/* content type");
         }
         return buildPresignedResponse(eventId, request, PURPOSE_EVENT_COVER);
     }
@@ -225,10 +227,10 @@ public class EventMediaService {
 
     private EventPresignedUploadResponse buildPresignedResponse(UUID eventId, EventMediaUploadRequest request, String purpose) {
         if (!StringUtils.hasText(request.getFileName())) {
-            throw new IllegalArgumentException("fileName is required");
+            throw new BadRequestException("fileName is required");
         }
         if (!StringUtils.hasText(request.getContentType())) {
-            throw new IllegalArgumentException("contentType is required");
+            throw new BadRequestException("contentType is required");
         }
 
         UUID objectId = UUID.randomUUID();
@@ -269,9 +271,9 @@ public class EventMediaService {
 
     private EventStoredObject requireStoredObject(UUID eventId, UUID objectId, String purpose) {
         EventStoredObject item = storedObjectRepository.findById(objectId)
-            .orElseThrow(() -> new IllegalArgumentException("Stored object not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Stored object not found"));
         if (item.getEvent() == null || !eventId.equals(item.getEvent().getId()) || !purpose.equals(item.getPurpose())) {
-            throw new IllegalArgumentException("Stored object not found");
+            throw new ResourceNotFoundException("Stored object not found");
         }
         return item;
     }
@@ -286,22 +288,22 @@ public class EventMediaService {
         // accessControlService already enforced auth, but keep defensive validations for request payload.
         String expectedObjectKey = buildObjectKey(eventId, purpose, objectId);
         if (StringUtils.hasText(request.getObjectKey()) && !expectedObjectKey.equals(request.getObjectKey())) {
-            throw new IllegalArgumentException("objectKey does not match expected key for this upload");
+            throw new BadRequestException("objectKey does not match expected key for this upload");
         }
         if (!StringUtils.hasText(request.getContentType())) {
-            throw new IllegalArgumentException("contentType is required");
+            throw new BadRequestException("contentType is required");
         }
         if (!StringUtils.hasText(request.getFileName())) {
-            throw new IllegalArgumentException("fileName is required");
+            throw new BadRequestException("fileName is required");
         }
         if (PURPOSE_EVENT_COVER.equals(purpose)) {
             if (!request.getContentType().toLowerCase(java.util.Locale.ROOT).startsWith("image/")) {
-                throw new IllegalArgumentException("contentType must be image/*");
+                throw new BadRequestException("contentType must be image/*");
             }
         }
 
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
         
         // Get managed UserAccount entity for JPA relationship (optional)
         UserAccount uploadedByUser = (principal != null && principal.getId() != null)
