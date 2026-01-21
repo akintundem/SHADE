@@ -1,7 +1,17 @@
 -- Migration V7: Set default values for event series columns
 -- This migration sets default values for is_series_master and is_series_exception
--- for existing rows before making them NOT NULL
--- Note: This migration will be handled by Hibernate ddl-auto=update instead
+-- for existing rows that have NULL values
 
--- Column creation and default value setting will be handled by Hibernate
--- when it creates/updates the events table schema based on the Event entity
+DO $$
+BEGIN
+    -- Only update if the column exists
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'events' AND column_name = 'is_series_master') THEN
+        UPDATE events SET is_series_master = false WHERE is_series_master IS NULL;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'events' AND column_name = 'is_series_exception') THEN
+        UPDATE events SET is_series_exception = false WHERE is_series_exception IS NULL;
+    END IF;
+END $$;
