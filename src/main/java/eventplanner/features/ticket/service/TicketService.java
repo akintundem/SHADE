@@ -26,7 +26,6 @@ import eventplanner.features.attendee.enums.AttendeeStatus;
 import eventplanner.security.auth.enums.VisibilityLevel;
 import lombok.extern.slf4j.Slf4j;
 import eventplanner.features.ticket.enums.TicketStatus;
-import eventplanner.features.ticket.enums.BulkTicketAction;
 import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.features.ticket.repository.TicketRepository;
 import eventplanner.features.ticket.repository.TicketTypeRepository;
@@ -149,13 +148,6 @@ public class TicketService {
         }
 
         return allTickets;
-    }
-
-    /**
-     * Issue one or more tickets to an attendee (internal method).
-     */
-    private List<Ticket> issueSingleTicketRequest(IssueTicketRequest request, UserPrincipal principal, boolean finalizeFreeTickets) {
-        return issueSingleTicketRequest(request, principal, finalizeFreeTickets, false);
     }
 
     private List<Ticket> issueSingleTicketRequest(IssueTicketRequest request, UserPrincipal principal,

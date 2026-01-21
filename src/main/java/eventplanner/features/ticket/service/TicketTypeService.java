@@ -7,7 +7,6 @@ import eventplanner.common.exception.exceptions.ErrorCode;
 import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.common.exception.exceptions.BadRequestException;
-import eventplanner.common.exception.exceptions.ConflictException;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.authorization.service.AuthorizationService;

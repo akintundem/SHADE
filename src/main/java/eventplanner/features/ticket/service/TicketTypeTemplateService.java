@@ -4,8 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.common.exception.exceptions.BadRequestException;
-import eventplanner.common.exception.exceptions.UnauthorizedException;
-import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.ticket.dto.request.ApplyTicketTypeTemplateRequest;
