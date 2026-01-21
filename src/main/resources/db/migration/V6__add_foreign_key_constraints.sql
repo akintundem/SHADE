@@ -234,47 +234,8 @@ END $$;
 -- =============================================================================
 -- CREATE INDEXES FOR FOREIGN KEYS (improves query performance)
 -- =============================================================================
+-- Note: Index creation commented out as Hibernate will create appropriate indexes
+-- when it creates the tables with ddl-auto=update. This migration focuses only
+-- on adding foreign key constraints to ensure referential integrity.
 
--- Tickets indexes
-CREATE INDEX IF NOT EXISTS idx_tickets_event_id ON tickets(event_id);
-CREATE INDEX IF NOT EXISTS idx_tickets_ticket_type_id ON tickets(ticket_type_id);
-CREATE INDEX IF NOT EXISTS idx_tickets_attendee_id ON tickets(attendee_id);
-CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
-CREATE INDEX IF NOT EXISTS idx_tickets_event_status ON tickets(event_id, status);
-
--- Attendees indexes
-CREATE INDEX IF NOT EXISTS idx_attendees_event_id ON attendees(event_id);
-CREATE INDEX IF NOT EXISTS idx_attendees_user_id ON attendees(user_id);
-CREATE INDEX IF NOT EXISTS idx_attendees_email ON attendees(email);
-CREATE INDEX IF NOT EXISTS idx_attendees_event_email ON attendees(event_id, email);
-CREATE INDEX IF NOT EXISTS idx_attendees_event_user ON attendees(event_id, user_id);
-
--- Ticket types indexes
-CREATE INDEX IF NOT EXISTS idx_ticket_types_event_id ON ticket_types(event_id);
-CREATE INDEX IF NOT EXISTS idx_ticket_types_event_active ON ticket_types(event_id, is_active);
-
--- Ticket checkouts indexes
-CREATE INDEX IF NOT EXISTS idx_ticket_checkouts_event_id ON ticket_checkouts(event_id);
-CREATE INDEX IF NOT EXISTS idx_ticket_checkouts_status ON ticket_checkouts(status);
-CREATE INDEX IF NOT EXISTS idx_ticket_checkouts_purchaser_id ON ticket_checkouts(purchaser_id);
-
--- Ticket checkout items indexes
-CREATE INDEX IF NOT EXISTS idx_checkout_items_checkout_id ON ticket_checkout_items(checkout_id);
-CREATE INDEX IF NOT EXISTS idx_checkout_items_ticket_type_id ON ticket_checkout_items(ticket_type_id);
-
--- Waitlist indexes
-CREATE INDEX IF NOT EXISTS idx_waitlist_event_id ON event_waitlist_entries(event_id);
-CREATE INDEX IF NOT EXISTS idx_waitlist_user_id ON event_waitlist_entries(requester_user_id);
-CREATE INDEX IF NOT EXISTS idx_waitlist_status ON event_waitlist_entries(status);
-
--- Attendee invites indexes
-CREATE INDEX IF NOT EXISTS idx_attendee_invites_event_id ON attendee_invites(event_id);
-CREATE INDEX IF NOT EXISTS idx_attendee_invites_status ON attendee_invites(status);
-CREATE INDEX IF NOT EXISTS idx_attendee_invites_token ON attendee_invites(token);
-
--- Price tiers indexes
-CREATE INDEX IF NOT EXISTS idx_price_tiers_ticket_type_id ON ticket_price_tiers(ticket_type_id);
-
--- Ticket type dependencies indexes
-CREATE INDEX IF NOT EXISTS idx_dependencies_ticket_type_id ON ticket_type_dependencies(ticket_type_id);
-CREATE INDEX IF NOT EXISTS idx_dependencies_required_ticket_type_id ON ticket_type_dependencies(required_ticket_type_id);
+-- Indexes will be auto-created by Hibernate based on @Index annotations in entities
