@@ -14,6 +14,7 @@ import eventplanner.features.ticket.entity.Ticket;
 import eventplanner.features.ticket.enums.TicketStatus;
 import eventplanner.features.ticket.repository.TicketTypeRepository;
 import eventplanner.features.ticket.repository.TicketRepository;
+import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.features.event.entity.Venue;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
@@ -119,6 +120,9 @@ public class EventService {
 
     @Autowired(required = false)
     private NotificationService notificationService;
+    
+    @Autowired(required = false)
+    private AttendeeRepository attendeeRepository;
 
     @Autowired(required = false)
     private ExternalServicesProperties externalServicesProperties;
@@ -333,7 +337,15 @@ public class EventService {
         
         // Update access control settings
         if (request.getAccessType() != null) {
-            event.setAccessType(request.getAccessType());
+            EventAccessType oldAccessType = event.getAccessType();
+            EventAccessType newAccessType = request.getAccessType();
+            
+            // Validate access type change
+            if (!oldAccessType.equals(newAccessType)) {
+                validateAccessTypeChange(event, oldAccessType, newAccessType);
+            }
+            
+            event.setAccessType(newAccessType);
         }
         if (request.getFeedsPublicAfterEvent() != null) {
             event.setFeedsPublicAfterEvent(request.getFeedsPublicAfterEvent());
@@ -795,6 +807,31 @@ public class EventService {
                 }
             } catch (Exception e) {
                 log.warn("Failed to cancel pending tickets for archived event {}: {}", id, e.getMessage());
+            }
+        }
+
+        // Update attendee statuses to DECLINED for archived events
+        if (attendeeRepository != null) {
+            try {
+                List<eventplanner.features.attendee.entity.Attendee> attendees = 
+                    attendeeRepository.findByEventId(id);
+                int updatedCount = 0;
+                for (eventplanner.features.attendee.entity.Attendee attendee : attendees) {
+                    if (attendee.getRsvpStatus() == eventplanner.features.attendee.enums.AttendeeStatus.CONFIRMED ||
+                        attendee.getRsvpStatus() == eventplanner.features.attendee.enums.AttendeeStatus.PENDING) {
+                        attendee.setRsvpStatus(eventplanner.features.attendee.enums.AttendeeStatus.DECLINED);
+                        updatedCount++;
+                    }
+                }
+                if (updatedCount > 0) {
+                    attendeeRepository.saveAll(attendees);
+                    log.info("Updated {} attendee statuses to DECLINED for archived event {}", updatedCount, id);
+                    
+                    // Recalculate attendee count after status updates
+                    recalculateAttendeeCount(id);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to update attendee statuses for archived event {}: {}", id, e.getMessage());
             }
         }
 
@@ -1305,6 +1342,61 @@ public class EventService {
     private List<FeedPost> aggregateAllFeedPosts(Event event, UserPrincipal user, EventFeedRequest request) {
         List<FeedPost> posts = new ArrayList<>();
 
+        // Don't show feed posts for archived events
+        if (Boolean.TRUE.equals(event.getIsArchived())) {
+            return posts;
+        }
+
+        // Validate access based on event access type
+        // Note: This is a secondary check - buildEventFeed() already checks access,
+        // but this ensures aggregation respects access type
+        EventAccessType accessType = event.getAccessType() != null ? event.getAccessType() : EventAccessType.OPEN;
+        
+        // For TICKETED events, verify user has valid ticket
+        if (accessType == EventAccessType.TICKETED && user != null) {
+            if (ticketRepository != null) {
+                boolean hasValidTicket = ticketRepository.hasValidTicketByUserId(event.getId(), user.getId());
+                if (!hasValidTicket && user.getUsername() != null) {
+                    // Check by email as fallback
+                    hasValidTicket = ticketRepository.hasValidTicketByEmail(event.getId(), user.getUsername());
+                }
+                // Owner and collaborators have access (checked in buildEventFeed)
+                // If no valid ticket and not owner/collaborator, return empty
+                if (!hasValidTicket && 
+                    (event.getOwner() == null || !event.getOwner().getId().equals(user.getId()))) {
+                    // Double-check if user is collaborator
+                    boolean isCollaborator = false;
+                    if (authorizationService != null) {
+                        isCollaborator = authorizationService.hasEventMembership(user, event.getId());
+                    }
+                    if (!isCollaborator) {
+                        return posts; // No access
+                    }
+                }
+            }
+        }
+        
+        // For RSVP_REQUIRED events, verify user has confirmed RSVP
+        if (accessType == EventAccessType.RSVP_REQUIRED && user != null) {
+            if (attendeeRepository != null) {
+                Optional<eventplanner.features.attendee.entity.Attendee> attendee = 
+                    attendeeRepository.findByEventIdAndUserId(event.getId(), user.getId());
+                if (attendee.isEmpty() || 
+                    attendee.get().getRsvpStatus() != eventplanner.features.attendee.enums.AttendeeStatus.CONFIRMED) {
+                    // Owner and collaborators have access (checked in buildEventFeed)
+                    if ((event.getOwner() == null || !event.getOwner().getId().equals(user.getId()))) {
+                        boolean isCollaborator = false;
+                        if (authorizationService != null) {
+                            isCollaborator = authorizationService.hasEventMembership(user, event.getId());
+                        }
+                        if (!isCollaborator) {
+                            return posts; // No access
+                        }
+                    }
+                }
+            }
+        }
+
         // Internal app posts (Feeds)
         if (eventPostRepository != null) {
             List<EventFeedPost> eventPosts = eventPostRepository.findByEventIdOrderByCreatedAtDesc(event.getId());
@@ -1448,6 +1540,107 @@ public class EventService {
         followingRequest.setSortDirection("ASC");
         
         return listEvents(followingRequest, user);
+    }
+
+    // ==================== ATTENDEE COUNT SYNCHRONIZATION ====================
+
+    /**
+     * Recalculate event attendee count from actual confirmed attendees.
+     * This is the single source of truth for attendee count accuracy.
+     * Use this method to fix discrepancies or after bulk operations.
+     * 
+     * @param eventId The event ID
+     * @return The recalculated count
+     */
+    @Transactional
+    public int recalculateAttendeeCount(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found with ID: " + eventId));
+        
+        int actualCount = 0;
+        
+        if (attendeeRepository != null) {
+            // Count confirmed attendees from the database
+            List<eventplanner.features.attendee.entity.Attendee> attendees = 
+                attendeeRepository.findByEventId(eventId);
+            
+            // Count unique confirmed attendees (by user ID or email)
+            java.util.Set<UUID> processedUserIds = new java.util.HashSet<>();
+            java.util.Set<String> processedEmails = new java.util.HashSet<>();
+            
+            for (eventplanner.features.attendee.entity.Attendee attendee : attendees) {
+                if (attendee.getRsvpStatus() == eventplanner.features.attendee.enums.AttendeeStatus.CONFIRMED) {
+                    UUID userId = attendee.getUser() != null ? attendee.getUser().getId() : null;
+                    String email = attendee.getEmail();
+                    
+                    // Count once per unique user or email
+                    if (userId != null && !processedUserIds.contains(userId)) {
+                        processedUserIds.add(userId);
+                        actualCount++;
+                    } else if (email != null && !processedEmails.contains(email.toLowerCase())) {
+                        processedEmails.add(email.toLowerCase());
+                        actualCount++;
+                    }
+                }
+            }
+        }
+        
+        // Update event with recalculated count
+        event.setCurrentAttendeeCount(Math.max(0, actualCount));
+        eventRepository.save(event);
+        
+        log.info("Recalculated attendee count for event {}: {} (was {})", 
+                eventId, actualCount, event.getCurrentAttendeeCount());
+        
+        return actualCount;
+    }
+
+    /**
+     * Validate access type change to prevent invalid transitions.
+     */
+    private void validateAccessTypeChange(Event event, EventAccessType oldType, EventAccessType newType) {
+        // Prevent changing from TICKETED to non-TICKETED if tickets exist
+        if (oldType == EventAccessType.TICKETED && newType != EventAccessType.TICKETED) {
+            if (ticketRepository != null) {
+                // Count all tickets (any status) for the event
+                List<Ticket> allTickets = ticketRepository.findByEventIdAndStatusIn(
+                    event.getId(), 
+                    java.util.Arrays.asList(
+                        TicketStatus.PENDING, 
+                        TicketStatus.ISSUED, 
+                        TicketStatus.VALIDATED,
+                        TicketStatus.CANCELLED,
+                        TicketStatus.REFUNDED
+                    )
+                );
+                if (!allTickets.isEmpty()) {
+                    throw new BadRequestException(
+                        "Cannot change access type from TICKETED when tickets exist. " +
+                        "Please cancel or refund all tickets first.");
+                }
+            }
+        }
+        
+        // Warn about restricting access (log only, don't prevent)
+        if (isAccessBeingRestricted(oldType, newType)) {
+            log.warn("Event {} access type changed from {} to {} - this may restrict feed access for some users",
+                    event.getId(), oldType, newType);
+        }
+    }
+
+    /**
+     * Check if access type change is restricting access.
+     */
+    private boolean isAccessBeingRestricted(EventAccessType oldType, EventAccessType newType) {
+        // OPEN -> anything else is restricting
+        if (oldType == EventAccessType.OPEN) {
+            return newType != EventAccessType.OPEN;
+        }
+        // RSVP_REQUIRED -> TICKETED or INVITE_ONLY is more restrictive
+        if (oldType == EventAccessType.RSVP_REQUIRED) {
+            return newType == EventAccessType.TICKETED || newType == EventAccessType.INVITE_ONLY;
+        }
+        return false;
     }
 
 }

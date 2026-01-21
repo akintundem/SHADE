@@ -98,6 +98,21 @@ public class FeedPostService {
      */
     public CreateFeedPostResponse create(UUID eventId, UserPrincipal principal, FeedPostCreateRequest request) {
         accessControlService.requireMediaUpload(principal, eventId);
+        
+        // Prevent feed post creation for archived or cancelled events
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+        if (Boolean.TRUE.equals(event.getIsArchived())) {
+            throw new IllegalArgumentException("Cannot create feed posts for archived events");
+        }
+        if (event.getEventStatus() == eventplanner.features.event.enums.EventStatus.CANCELLED) {
+            throw new IllegalArgumentException("Cannot create feed posts for cancelled events");
+        }
+        
+        // Note: For TICKETED events, accessControlService.requireMediaUpload() already validates
+        // that the user has proper access (ticket/ownership/collaborator status).
+        // This check is redundant but ensures we don't create posts for cancelled events.
+        
         EventFeedPost.PostType type = parseType(request != null ? request.getType() : null);
 
         String content = request != null ? safeTrimToNull(request.getContent()) : null;
@@ -109,9 +124,6 @@ public class FeedPostService {
         if (content != null && content.length() > 4000) {
             throw new IllegalArgumentException("content too long");
         }
-
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
         
         EventFeedPost post = new EventFeedPost();
         post.setEvent(event);
@@ -255,6 +267,14 @@ public class FeedPostService {
 
     public List<FeedPostResponse> list(UUID eventId, UserPrincipal principal) {
         accessControlService.requireMediaView(principal, eventId);
+        
+        // Check if event is archived - don't show feed posts for archived events
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+        if (Boolean.TRUE.equals(event.getIsArchived())) {
+            return List.of(); // Return empty list for archived events
+        }
+        
         // Get all posts for the event, then filter to only show completed ones
         // This includes posts with null status (existing posts before status tracking)
         List<EventFeedPost> posts = postRepository.findByEventIdOrderByCreatedAtDesc(eventId)
@@ -271,6 +291,21 @@ public class FeedPostService {
 
     public PostListResponse listPaginated(UUID eventId, UserPrincipal principal, Integer page, Integer size) {
         accessControlService.requireMediaView(principal, eventId);
+        
+        // Check if event is archived - don't show feed posts for archived events
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+        if (Boolean.TRUE.equals(event.getIsArchived())) {
+            PostListResponse response = new PostListResponse();
+            response.setPosts(List.of());
+            response.setCurrentPage(page != null ? page : 0);
+            response.setPageSize(size != null ? size : 20);
+            response.setTotalPosts(0L);
+            response.setTotalPages(0);
+            response.setHasNext(false);
+            response.setHasPrevious(false);
+            return response;
+        }
         
         // Enforce max page size
         int pageNum = Math.max(0, page != null ? page : 0);
