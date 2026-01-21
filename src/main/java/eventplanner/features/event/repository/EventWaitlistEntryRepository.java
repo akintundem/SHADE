@@ -16,15 +16,20 @@ import java.util.UUID;
 @Repository
 public interface EventWaitlistEntryRepository extends JpaRepository<EventWaitlistEntry, UUID> {
 
-    Optional<EventWaitlistEntry> findByIdAndEventId(UUID id, UUID eventId);
+    @Query("SELECT e FROM EventWaitlistEntry e WHERE e.id = :id AND e.event.id = :eventId")
+    Optional<EventWaitlistEntry> findByIdAndEventId(@Param("id") UUID id, @Param("eventId") UUID eventId);
 
-    Page<EventWaitlistEntry> findByEventId(UUID eventId, Pageable pageable);
+    @Query("SELECT e FROM EventWaitlistEntry e WHERE e.event.id = :eventId")
+    Page<EventWaitlistEntry> findByEventId(@Param("eventId") UUID eventId, Pageable pageable);
 
-    Page<EventWaitlistEntry> findByEventIdAndStatus(UUID eventId, EventWaitlistStatus status, Pageable pageable);
+    @Query("SELECT e FROM EventWaitlistEntry e WHERE e.event.id = :eventId AND e.status = :status")
+    Page<EventWaitlistEntry> findByEventIdAndStatus(@Param("eventId") UUID eventId, @Param("status") EventWaitlistStatus status, Pageable pageable);
 
-    List<EventWaitlistEntry> findByRequesterIdAndEventId(UUID requesterId, UUID eventId);
+    @Query("SELECT e FROM EventWaitlistEntry e WHERE e.requester.id = :requesterId AND e.event.id = :eventId")
+    List<EventWaitlistEntry> findByRequesterIdAndEventId(@Param("requesterId") UUID requesterId, @Param("eventId") UUID eventId);
 
-    boolean existsByEventIdAndRequesterIdAndStatus(UUID eventId, UUID requesterId, EventWaitlistStatus status);
+    @Query("SELECT COUNT(e) > 0 FROM EventWaitlistEntry e WHERE e.event.id = :eventId AND e.requester.id = :requesterId AND e.status = :status")
+    boolean existsByEventIdAndRequesterIdAndStatus(@Param("eventId") UUID eventId, @Param("requesterId") UUID requesterId, @Param("status") EventWaitlistStatus status);
 
     /**
      * Find waiting entries for an event, ordered by creation time (FIFO).
@@ -37,5 +42,6 @@ public interface EventWaitlistEntryRepository extends JpaRepository<EventWaitlis
     /**
      * Count waiting entries for an event.
      */
-    long countByEventIdAndStatus(UUID eventId, EventWaitlistStatus status);
+    @Query("SELECT COUNT(e) FROM EventWaitlistEntry e WHERE e.event.id = :eventId AND e.status = :status")
+    long countByEventIdAndStatus(@Param("eventId") UUID eventId, @Param("status") EventWaitlistStatus status);
 }

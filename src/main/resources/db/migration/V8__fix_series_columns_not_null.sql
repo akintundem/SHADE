@@ -1,16 +1,16 @@
--- Migration V7: Set default values for event series columns
--- This migration sets default values for is_series_master and is_series_exception
--- for existing rows that have NULL values, then adds NOT NULL constraints
+-- Migration V8: Fix NOT NULL constraints for event series columns
+-- This migration ensures is_series_master and is_series_exception have NOT NULL constraints
+-- It updates any remaining NULL values and adds the constraint if needed
 
 DO $$
 BEGIN
-    -- Set default values for is_series_master
+    -- Fix is_series_master column
     IF EXISTS (SELECT 1 FROM information_schema.columns
                WHERE table_name = 'events' AND column_name = 'is_series_master') THEN
-        -- First, update all NULL values to false
+        -- Update any remaining NULL values to false
         UPDATE events SET is_series_master = false WHERE is_series_master IS NULL;
         
-        -- Then, add NOT NULL constraint if column is currently nullable
+        -- Add NOT NULL constraint if column is currently nullable
         IF EXISTS (
             SELECT 1 FROM information_schema.columns
             WHERE table_name = 'events' 
@@ -21,13 +21,13 @@ BEGIN
         END IF;
     END IF;
 
-    -- Set default values for is_series_exception
+    -- Fix is_series_exception column
     IF EXISTS (SELECT 1 FROM information_schema.columns
                WHERE table_name = 'events' AND column_name = 'is_series_exception') THEN
-        -- First, update all NULL values to false
+        -- Update any remaining NULL values to false
         UPDATE events SET is_series_exception = false WHERE is_series_exception IS NULL;
         
-        -- Then, add NOT NULL constraint if column is currently nullable
+        -- Add NOT NULL constraint if column is currently nullable
         IF EXISTS (
             SELECT 1 FROM information_schema.columns
             WHERE table_name = 'events' 
