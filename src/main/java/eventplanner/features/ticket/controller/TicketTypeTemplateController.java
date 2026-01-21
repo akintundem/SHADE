@@ -1,6 +1,5 @@
 package eventplanner.features.ticket.controller;
 
-import eventplanner.common.exception.exceptions.BadRequestException;
 import eventplanner.features.ticket.dto.request.ApplyTicketTypeTemplateRequest;
 import eventplanner.features.ticket.dto.request.CreateTicketTypeTemplateRequest;
 import eventplanner.features.ticket.dto.request.UpdateTicketTypeTemplateRequest;

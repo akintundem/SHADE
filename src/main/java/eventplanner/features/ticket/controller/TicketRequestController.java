@@ -1,6 +1,5 @@
 package eventplanner.features.ticket.controller;
 
-import eventplanner.common.exception.exceptions.BadRequestException;
 import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.features.ticket.dto.request.CreateTicketApprovalRequest;
 import eventplanner.features.ticket.dto.request.CreateTicketWaitlistRequest;
