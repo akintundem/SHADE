@@ -3,6 +3,8 @@ package eventplanner.features.currency.controller;
 import eventplanner.features.currency.dto.CurrencyResponse;
 import eventplanner.features.currency.entity.Currency;
 import eventplanner.features.currency.service.CurrencyService;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,7 @@ public class CurrencyController {
     private final CurrencyService currencyService;
 
     @GetMapping
+    @RequiresPermission(RbacPermissions.CURRENCY_READ)
     @Operation(summary = "Get all active currencies", description = "Get list of all active currencies")
     public ResponseEntity<List<CurrencyResponse>> getAllActiveCurrencies() {
         List<Currency> currencies = currencyService.getAllActiveCurrencies();
@@ -34,6 +37,7 @@ public class CurrencyController {
     }
 
     @GetMapping("/{code}")
+    @RequiresPermission(RbacPermissions.CURRENCY_READ)
     @Operation(summary = "Get currency by code", description = "Get currency details by ISO 4217 code")
     public ResponseEntity<CurrencyResponse> getCurrency(@PathVariable String code) {
         return currencyService.getCurrencyByCode(code)
@@ -42,6 +46,7 @@ public class CurrencyController {
     }
 
     @GetMapping("/{code}/validate")
+    @RequiresPermission(RbacPermissions.CURRENCY_READ)
     @Operation(summary = "Validate currency code", description = "Check if currency code is valid and active")
     public ResponseEntity<Boolean> validateCurrency(@PathVariable String code) {
         boolean isValid = currencyService.isValidCurrency(code);
@@ -49,6 +54,7 @@ public class CurrencyController {
     }
 
     @GetMapping("/{code}/symbol")
+    @RequiresPermission(RbacPermissions.CURRENCY_READ)
     @Operation(summary = "Get currency symbol", description = "Get the currency symbol for a currency code")
     public ResponseEntity<String> getCurrencySymbol(@PathVariable String code) {
         String symbol = currencyService.getCurrencySymbol(code);

@@ -1,4 +1,4 @@
-package eventplanner.security.auth.dto;
+package eventplanner.security.auth.dto.preferences;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

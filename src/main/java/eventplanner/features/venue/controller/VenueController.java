@@ -6,6 +6,8 @@ import eventplanner.features.venue.dto.VenueSearchRequest;
 import eventplanner.features.venue.entity.Venue;
 import eventplanner.features.venue.service.VenueService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,6 +35,7 @@ public class VenueController {
     private final VenueService venueService;
 
     @PostMapping
+    @RequiresPermission(RbacPermissions.VENUE_CREATE)
     @Operation(summary = "Create venue", description = "Create a new venue")
     public ResponseEntity<VenueResponse> createVenue(
         @Valid @RequestBody VenueRequest request,
@@ -44,6 +47,7 @@ public class VenueController {
     }
 
     @PutMapping("/{venueId}")
+    @RequiresPermission(value = RbacPermissions.VENUE_UPDATE, resources = {"venue_id=#venueId"})
     @Operation(summary = "Update venue", description = "Update an existing venue")
     public ResponseEntity<VenueResponse> updateVenue(
         @PathVariable UUID venueId,
@@ -56,6 +60,7 @@ public class VenueController {
     }
 
     @GetMapping("/{venueId}")
+    @RequiresPermission(RbacPermissions.VENUE_READ)
     @Operation(summary = "Get venue by ID", description = "Get venue details by ID")
     public ResponseEntity<VenueResponse> getVenue(@PathVariable UUID venueId) {
         Venue venue = venueService.getVenueById(venueId);
@@ -63,6 +68,7 @@ public class VenueController {
     }
 
     @GetMapping
+    @RequiresPermission(RbacPermissions.VENUE_READ)
     @Operation(summary = "Get all venues", description = "Get all venues with pagination")
     public ResponseEntity<Page<VenueResponse>> getAllVenues(Pageable pageable) {
         Page<Venue> venues = venueService.getAllVenues(pageable);
@@ -71,6 +77,7 @@ public class VenueController {
     }
 
     @PostMapping("/search")
+    @RequiresPermission(RbacPermissions.VENUE_READ)
     @Operation(summary = "Search venues", description = "Search venues by various criteria including location")
     public ResponseEntity<List<VenueResponse>> searchVenues(
         @RequestBody VenueSearchRequest request
@@ -148,6 +155,7 @@ public class VenueController {
     }
 
     @GetMapping("/by-city")
+    @RequiresPermission(RbacPermissions.VENUE_READ)
     @Operation(summary = "Find venues by city", description = "Find venues in a specific city")
     public ResponseEntity<List<VenueResponse>> getVenuesByCity(@RequestParam String city) {
         List<Venue> venues = venueService.findVenuesByCity(city);
@@ -158,6 +166,7 @@ public class VenueController {
     }
 
     @DeleteMapping("/{venueId}")
+    @RequiresPermission(value = RbacPermissions.VENUE_DELETE, resources = {"venue_id=#venueId"})
     @Operation(summary = "Delete venue", description = "Delete a venue (soft delete)")
     public ResponseEntity<Void> deleteVenue(
         @PathVariable UUID venueId,

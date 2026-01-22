@@ -52,6 +52,7 @@ public final class RbacPermissions {
     public static final String COLLABORATOR_INVITE_ACCEPT = "collaborator.invite.accept";
     public static final String COMMUNICATION_READ = "communication.read";
     public static final String COMMUNICATION_SEND = "communication.send";
+    public static final String CURRENCY_READ = "currency.read";
     public static final String EVENT_ASSETS_READ = "event.assets.read";
     public static final String EVENT_ASSETS_UPLOAD = "event.assets.upload";
     public static final String EVENT_COVER_IMAGE_DELETE = "event.coverimage.delete";
@@ -108,4 +109,8 @@ public final class RbacPermissions {
     public static final String USER_READ = "user.read";
     public static final String USER_SEARCH = "user.search";
     public static final String USER_UPDATE = "user.update";
+    public static final String VENUE_CREATE = "venue.create";
+    public static final String VENUE_DELETE = "venue.delete";
+    public static final String VENUE_READ = "venue.read";
+    public static final String VENUE_UPDATE = "venue.update";
 }

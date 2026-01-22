@@ -1,29 +1,29 @@
 package eventplanner.security.auth.controller;
 
-import eventplanner.security.auth.dto.UserPreferenceRequest;
-import eventplanner.security.auth.dto.UserPreferenceResponse;
+import eventplanner.security.auth.dto.preferences.UserPreferenceRequest;
+import eventplanner.security.auth.dto.preferences.UserPreferenceResponse;
 import eventplanner.security.auth.entity.UserPreference;
 import eventplanner.security.auth.service.UserPreferenceService;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.authorization.rbac.constants.RbacPermissions;
+import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Controller for user preferences management
+ * Uses /me pattern for security - users can only access their own preferences
  */
 @RestController
-@RequestMapping("/api/v1/users/{userId}/preferences")
+@RequestMapping("/api/v1/users/me/preferences")
 @Tag(name = "User Preferences")
 @RequiredArgsConstructor
 public class UserPreferenceController {
@@ -31,38 +31,37 @@ public class UserPreferenceController {
     private final UserPreferenceService preferenceService;
 
     @GetMapping
-    @Operation(summary = "Get all user preferences", description = "Get all preferences for a user as a key-value map")
-    public ResponseEntity<Map<String, String>> getUserPreferences(
-        @PathVariable UUID userId,
+    @RequiresPermission(value = RbacPermissions.USER_READ, resources = {"user_id=#principal.id"})
+    @Operation(summary = "Get my preferences", description = "Get all preferences for the authenticated user as a key-value map")
+    public ResponseEntity<Map<String, String>> getMyPreferences(
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        validateUserAccess(userId, principal);
+        UUID userId = principal.getUser().getId();
         Map<String, String> preferences = preferenceService.getUserPreferences(userId);
         return ResponseEntity.ok(preferences);
     }
 
     @GetMapping("/{key}")
+    @RequiresPermission(value = RbacPermissions.USER_READ, resources = {"user_id=#principal.id"})
     @Operation(summary = "Get specific preference", description = "Get a specific preference value by key")
-    public ResponseEntity<String> getUserPreference(
-        @PathVariable UUID userId,
+    public ResponseEntity<String> getMyPreference(
         @PathVariable String key,
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        validateUserAccess(userId, principal);
+        UUID userId = principal.getUser().getId();
         return preferenceService.getUserPreference(userId, key)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
 
     @PutMapping
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
     @Operation(summary = "Set user preference", description = "Set or update a user preference")
     public ResponseEntity<UserPreferenceResponse> setPreference(
-        @PathVariable UUID userId,
         @Valid @RequestBody UserPreferenceRequest request,
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        validateUserAccess(userId, principal);
-
+        UUID userId = principal.getUser().getId();
         UserPreference preference = preferenceService.setUserPreference(
             userId,
             request.getKey(),
@@ -74,46 +73,38 @@ public class UserPreferenceController {
     }
 
     @PutMapping("/batch")
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
     @Operation(summary = "Set multiple preferences", description = "Set or update multiple preferences at once")
     public ResponseEntity<Void> setPreferences(
-        @PathVariable UUID userId,
         @RequestBody Map<String, String> preferences,
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        validateUserAccess(userId, principal);
+        UUID userId = principal.getUser().getId();
         preferenceService.setUserPreferences(userId, preferences);
         return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/{key}")
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
     @Operation(summary = "Delete preference", description = "Delete a specific user preference")
     public ResponseEntity<Void> deletePreference(
-        @PathVariable UUID userId,
         @PathVariable String key,
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        validateUserAccess(userId, principal);
+        UUID userId = principal.getUser().getId();
         preferenceService.deleteUserPreference(userId, key);
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping
-    @Operation(summary = "Delete all preferences", description = "Delete all preferences for a user")
+    @RequiresPermission(value = RbacPermissions.USER_UPDATE, resources = {"user_id=#principal.id"})
+    @Operation(summary = "Delete all preferences", description = "Delete all preferences for the authenticated user")
     public ResponseEntity<Void> deleteAllPreferences(
-        @PathVariable UUID userId,
         @AuthenticationPrincipal UserPrincipal principal
     ) {
-        validateUserAccess(userId, principal);
+        UUID userId = principal.getUser().getId();
         preferenceService.deleteAllUserPreferences(userId);
         return ResponseEntity.noContent().build();
-    }
-
-    private void validateUserAccess(UUID userId, UserPrincipal principal) {
-        if (!principal.getUser().getId().equals(userId)) {
-            throw new org.springframework.security.access.AccessDeniedException(
-                "You can only access your own preferences"
-            );
-        }
     }
 
     private UserPreferenceResponse toResponse(UserPreference entity) {

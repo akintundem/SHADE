@@ -1,4 +1,4 @@
-package eventplanner.security.auth.dto;
+package eventplanner.security.auth.dto.preferences;
 
 import lombok.Data;
 
