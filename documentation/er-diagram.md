@@ -44,8 +44,10 @@ erDiagram
 
   EVENT_ROLES {
     UUID id PK
-    UUID event_id
-    UUID user_id
+    UUID event_id FK
+    UUID user_id FK
+    UUID role_definition_id FK
+    UUID assigned_by FK
   }
 
   COMMUNICATIONS {
@@ -180,6 +182,58 @@ erDiagram
   EVENT_USER_PERMISSIONS {
     UUID id PK
     UUID event_user_id FK
+    UUID permission_id FK
+    UUID granted_by FK
+  }
+
+  EVENT_ROLE_DEFINITIONS {
+    UUID id PK
+    UUID event_id FK
+    UUID created_by FK
+    string name
+    string description
+  }
+
+  EVENT_ROLE_PERMISSIONS {
+    UUID id PK
+    UUID role_definition_id FK
+    UUID permission_id FK
+  }
+
+  PERMISSIONS {
+    UUID id PK
+    string key
+    string description
+    string scope
+  }
+
+  EVENT_TIMELINES {
+    UUID id PK
+    UUID event_id FK
+    UUID created_by FK
+    string status
+    datetime published_at
+    UUID published_by FK
+  }
+
+  TIMELINE_ITEMS {
+    UUID id PK
+    UUID timeline_id FK
+    UUID task_id FK
+    UUID created_by FK
+    string title
+    string description
+    string item_type
+    string visibility
+    datetime starts_at
+    datetime ends_at
+  }
+
+  TIMELINE_ITEM_ASSIGNEES {
+    UUID id PK
+    UUID timeline_item_id FK
+    UUID event_user_id FK
+    UUID assigned_by FK
   }
 
   EVENT_COLLABORATOR_INVITES {
@@ -281,6 +335,14 @@ erDiagram
   EVENTS ||--o{ EVENT_USERS : members
   AUTH_USERS ||--o{ EVENT_USERS : members
   EVENT_USERS ||--o{ EVENT_USER_PERMISSIONS : permissions
+  PERMISSIONS ||--o{ EVENT_USER_PERMISSIONS : grants
+  AUTH_USERS ||--o{ EVENT_USER_PERMISSIONS : grants
+
+  EVENTS ||--o{ EVENT_ROLE_DEFINITIONS : role_defs
+  AUTH_USERS ||--o{ EVENT_ROLE_DEFINITIONS : creates
+  EVENT_ROLE_DEFINITIONS ||--o{ EVENT_ROLE_PERMISSIONS : grants
+  PERMISSIONS ||--o{ EVENT_ROLE_PERMISSIONS : includes
+  EVENT_ROLE_DEFINITIONS ||--o{ EVENT_ROLES : assigned
 
   EVENTS ||--o{ EVENT_COLLABORATOR_INVITES : collab_invites
   AUTH_USERS ||--o{ EVENT_COLLABORATOR_INVITES : inviter
@@ -288,6 +350,15 @@ erDiagram
 
   EVENTS ||--o{ EVENT_ROLES : roles
   AUTH_USERS ||--o{ EVENT_ROLES : roles
+
+  EVENTS ||--o{ EVENT_TIMELINES : timelines
+  AUTH_USERS ||--o{ EVENT_TIMELINES : creates
+  EVENT_TIMELINES ||--o{ TIMELINE_ITEMS : items
+  AUTH_USERS ||--o{ TIMELINE_ITEMS : creates
+  TASKS ||--o{ TIMELINE_ITEMS : scheduled
+  TIMELINE_ITEMS ||--o{ TIMELINE_ITEM_ASSIGNEES : assignees
+  EVENT_USERS ||--o{ TIMELINE_ITEM_ASSIGNEES : assigned
+  AUTH_USERS ||--o{ TIMELINE_ITEM_ASSIGNEES : assigns
 
   AUTH_USERS ||--o{ DEVICE_TOKENS : devices
   EVENTS ||--o{ COMMUNICATIONS : communications

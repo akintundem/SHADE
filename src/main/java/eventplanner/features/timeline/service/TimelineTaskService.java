@@ -7,6 +7,10 @@ import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.enums.CommunicationType;
+import eventplanner.features.collaboration.entity.EventUser;
+import eventplanner.features.collaboration.enums.EventPermission;
+import eventplanner.features.collaboration.repository.EventUserRepository;
+import eventplanner.features.collaboration.service.EventPermissionEvaluator;
 import eventplanner.features.timeline.enums.TimelineStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
@@ -38,21 +42,51 @@ public class TimelineTaskService {
     private final TaskRepository taskRepository;
     private final ChecklistRepository checklistRepository;
     private final EventRepository eventRepository;
+    private final EventUserRepository eventUserRepository;
     private final UserAccountRepository userAccountRepository;
     private final AuthorizationService authorizationService;
+    private final EventPermissionEvaluator eventPermissionEvaluator;
     private final NotificationService notificationService;
     
-    /**
-     * Validate event access
-     */
-    private void validateEventAccess(UserPrincipal user, UUID eventId) {
-        if (authorizationService == null) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access control not available");
+    private Event requireTimelineReadAccess(UserPrincipal user, UUID eventId) {
+        return requireTimelineAccess(user, eventId, false);
+    }
+
+    private Event requireTimelineManageAccess(UserPrincipal user, UUID eventId) {
+        return requireTimelineAccess(user, eventId, true);
+    }
+
+    private Event requireTimelineAccess(UserPrincipal user, UUID eventId, boolean requiresManage) {
+        Event event = ensureEventExists(eventId);
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Access denied: authentication required");
         }
-        if (!authorizationService.canAccessEvent(user, eventId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-                "Access denied: You do not have permission to access this event");
+        if (authorizationService != null) {
+            if (authorizationService.isAdmin(user) || authorizationService.isEventOwner(user, eventId)) {
+                return event;
+            }
         }
+        EventUser membership = eventUserRepository.findByEventIdAndUserId(eventId, user.getId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Access denied: you are not a collaborator on this event"));
+
+        if (requiresManage) {
+            if (!eventPermissionEvaluator.hasPermission(membership, EventPermission.MANAGE_SCHEDULE)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access denied: missing schedule permission");
+            }
+        } else {
+            if (!eventPermissionEvaluator.hasAnyPermission(
+                membership,
+                EventPermission.VIEW_EVENT,
+                EventPermission.MANAGE_SCHEDULE
+            )) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access denied: missing view permission");
+            }
+        }
+        return event;
     }
     
     /**
@@ -68,7 +102,7 @@ public class TimelineTaskService {
      * Get all tasks for an event
      */
     public List<TaskDetailResponse> getAllTasks(UUID eventId, UserPrincipal user) {
-        validateEventAccess(user, eventId);
+        requireTimelineReadAccess(user, eventId);
         List<Task> tasks = taskRepository.findByEventIdOrderByTaskOrderAsc(eventId);
         return tasks.stream().map(this::mapToTaskDetailResponse).collect(Collectors.toList());
     }
@@ -77,7 +111,7 @@ public class TimelineTaskService {
      * Auto-save task draft
      */
     public TaskDetailResponse autoSaveTask(UUID eventId, TaskAutoSaveRequest request, UserPrincipal user) {
-        validateEventAccess(user, eventId);
+        Event event = requireTimelineManageAccess(user, eventId);
         
         Task task;
         UUID previousAssignee = null;
@@ -87,7 +121,7 @@ public class TimelineTaskService {
             previousAssignee = task.getAssignedTo() != null ? task.getAssignedTo().getId() : null;
         } else {
             task = new Task();
-            task.setEvent(ensureEventExists(eventId));
+            task.setEvent(event);
             task.setStatus(TimelineStatus.TO_DO);
             task.setProgressPercentage(0);
             task.setIsDraft(true);
@@ -104,7 +138,7 @@ public class TimelineTaskService {
      * Finalize task draft
      */
     public Optional<TaskDetailResponse> finalizeTask(UUID eventId, UUID taskId, TaskAutoSaveRequest request, UserPrincipal user) {
-        validateEventAccess(user, eventId);
+        requireTimelineManageAccess(user, eventId);
         
         Task task = taskRepository.findByIdAndEventId(taskId, eventId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
@@ -134,8 +168,7 @@ public class TimelineTaskService {
         if (request.getStatus() != null) task.setStatus(request.getStatus());
         
         if (request.getAssignedTo() != null) {
-            UserAccount assignedUser = userAccountRepository.findById(request.getAssignedTo())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+            UserAccount assignedUser = resolveAssignee(task.getEvent(), request.getAssignedTo());
             task.setAssignedTo(assignedUser);
         }
     }
@@ -147,7 +180,7 @@ public class TimelineTaskService {
         Task parentTask = taskRepository.findById(taskId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Parent task not found"));
         
-        validateEventAccess(user, parentTask.getEvent().getId());
+        requireTimelineManageAccess(user, parentTask.getEvent().getId());
         
         Checklist item;
         UUID previousAssignee = null;
@@ -181,7 +214,7 @@ public class TimelineTaskService {
         Task parentTask = taskRepository.findById(taskId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Parent task not found"));
             
-        validateEventAccess(user, parentTask.getEvent().getId());
+        requireTimelineManageAccess(user, parentTask.getEvent().getId());
         
         Checklist item = checklistRepository.findById(itemId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Checklist item not found"));
@@ -215,8 +248,7 @@ public class TimelineTaskService {
         if (request.getStatus() != null) item.setStatus(request.getStatus());
         
         if (request.getAssignedTo() != null) {
-            UserAccount assignedUser = userAccountRepository.findById(request.getAssignedTo())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+            UserAccount assignedUser = resolveAssignee(item.getTask().getEvent(), request.getAssignedTo());
             item.setAssignedTo(assignedUser);
         }
     }
@@ -225,7 +257,7 @@ public class TimelineTaskService {
      * Update task orders
      */
     public void updateTaskOrders(UUID eventId, List<UUID> taskIds, UserPrincipal user) {
-        validateEventAccess(user, eventId);
+        requireTimelineManageAccess(user, eventId);
         for (int i = 0; i < taskIds.size(); i++) {
             UUID taskId = taskIds.get(i);
             int order = i;
@@ -243,7 +275,7 @@ public class TimelineTaskService {
         Task parentTask = taskRepository.findById(taskId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
         
-        validateEventAccess(user, parentTask.getEvent().getId());
+        requireTimelineManageAccess(user, parentTask.getEvent().getId());
         
         for (int i = 0; i < itemIds.size(); i++) {
             UUID itemId = itemIds.get(i);
@@ -264,7 +296,7 @@ public class TimelineTaskService {
         Task task = taskRepository.findById(taskId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
         
-        validateEventAccess(user, task.getEvent().getId());
+        requireTimelineManageAccess(user, task.getEvent().getId());
         taskRepository.delete(task);
     }
 
@@ -279,10 +311,26 @@ public class TimelineTaskService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item does not belong to this task");
         }
         
-        validateEventAccess(user, item.getTask().getEvent().getId());
+        requireTimelineManageAccess(user, item.getTask().getEvent().getId());
         
         checklistRepository.delete(item);
         recalculateTaskProgress(taskId);
+    }
+
+    private UserAccount resolveAssignee(Event event, UUID userId) {
+        if (event == null || userId == null) {
+            return null;
+        }
+        UserAccount assignedUser = userAccountRepository.findById(userId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if (event.getOwner() != null && userId.equals(event.getOwner().getId())) {
+            return assignedUser;
+        }
+        if (eventUserRepository.findByEventIdAndUserId(event.getId(), userId).isPresent()) {
+            return assignedUser;
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            "Assignee must be a collaborator on this event");
     }
     
     private void notifyTaskAssignmentIfChanged(Task task, UUID previousAssignee) {

@@ -430,24 +430,42 @@ Core entity for event management.
 
 ### COLLABORATION
 
-#### `event_collaborators`
-**Purpose**: Team members managing an event.
+#### `event_users`
+**Purpose**: Event collaborators and staff memberships.
 
 **Key Columns**:
 - `id`, `event_id` (FK), `user_id` (FK)
-- `role` (VARCHAR) - OWNER, CO_HOST, ORGANIZER, MEDIA_MANAGER, TICKETING_MANAGER
-- `invited_by` (FK → auth_users)
+- `user_type` (VARCHAR) - ORGANIZER, COORDINATOR, ADMIN, COLLABORATOR, STAFF, VOLUNTEER, etc.
+- `registration_status`, `registration_date`
+- `is_volunteer`, `volunteer_hours`
 
 **Indexes**:
 - Unique composite: `(event_id, user_id)`
-- Index on `role` for permission checks
+- Index on `user_type` for filtering
 
-**Permissions**:
-- OWNER: Full control
-- CO_HOST: Manage event, attendees, tickets
-- ORGANIZER: Event details and venue
-- MEDIA_MANAGER: Upload/manage media
-- TICKETING_MANAGER: Ticket operations
+---
+
+#### `event_user_permissions`
+**Purpose**: Optional granular overrides for collaborator permissions.
+
+**Key Columns**:
+- `id`, `event_user_id` (FK)
+- `permission` (VARCHAR) - VIEW_EVENT, MANAGE_SCHEDULE, MANAGE_BUDGET, etc.
+
+**Indexes**:
+- Index on `event_user_id`
+- Index on `permission`
+
+---
+
+#### `event_collaborator_invites`
+**Purpose**: Pending/accepted collaborator invitations.
+
+**Key Columns**:
+- `id`, `event_id` (FK)
+- `inviter_user_id` (FK), `invitee_user_id` (FK, nullable), `invitee_email` (nullable)
+- `role` (VARCHAR) - collaborator role for acceptance
+- `status` (VARCHAR), `token_hash`, `expires_at`, `responded_at`
 
 ---
 
@@ -465,18 +483,29 @@ Core entity for event management.
 
 ---
 
-#### `checklists` & `tasks`
-**Purpose**: Event planning to-do lists.
+#### `tasks`
+**Purpose**: Event planning tasks.
 
-**Key Columns** (tasks):
-- `id`, `checklist_id` (FK), `event_id` (FK)
+**Key Columns**:
+- `id`, `event_id` (FK)
 - `title`, `description`
-- `completed` (BOOLEAN)
-- `due_date` (TIMESTAMP)
+- `start_date`, `due_date`
+- `priority`, `category`, `status`
+- `progress_percentage`, `task_order`
+- `assigned_to` (FK → auth_users)
+- `is_draft`, `completed_subtasks_count`, `total_subtasks_count`
 
-**Indexes**:
-- `checklist_id`, `event_id`, `completed`
-- `due_date` for deadlines
+---
+
+#### `checklists`
+**Purpose**: Subtasks attached to tasks.
+
+**Key Columns**:
+- `id`, `task_id` (FK)
+- `title`, `description`
+- `due_date`, `status`
+- `assigned_to` (FK → auth_users)
+- `task_order`, `is_draft`
 
 ---
 
@@ -506,7 +535,7 @@ events         ─────► budgets      (One budget per event)
 ```
 users ◄─── user_follows ───► users              (Follow relationships)
 users ◄─── event_subscriptions ───► events      (Event subscriptions)
-users ◄─── event_collaborators ───► events      (Collaborators)
+users ◄─── event_users ───► events              (Collaborators)
 ```
 
 ### Self-Referencing
