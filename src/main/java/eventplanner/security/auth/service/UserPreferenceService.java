@@ -1,7 +1,7 @@
-package eventplanner.features.user.service;
+package eventplanner.security.auth.service;
 
-import eventplanner.features.user.entity.UserPreference;
-import eventplanner.features.user.repository.UserPreferenceRepository;
+import eventplanner.security.auth.entity.UserPreference;
+import eventplanner.security.auth.repository.UserPreferenceRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.common.exception.exceptions.BadRequestException;

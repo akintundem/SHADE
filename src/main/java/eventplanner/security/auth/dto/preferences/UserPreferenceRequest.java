@@ -1,4 +1,4 @@
-package eventplanner.features.user.dto;
+package eventplanner.security.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

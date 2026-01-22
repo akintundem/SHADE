@@ -1,4 +1,4 @@
-package eventplanner.features.user.dto;
+package eventplanner.security.auth.dto;
 
 import lombok.Data;
 

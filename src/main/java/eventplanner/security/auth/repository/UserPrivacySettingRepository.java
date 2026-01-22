@@ -1,6 +1,6 @@
-package eventplanner.features.user.repository;
+package eventplanner.security.auth.repository;
 
-import eventplanner.features.user.entity.UserPrivacySetting;
+import eventplanner.security.auth.entity.UserPrivacySetting;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

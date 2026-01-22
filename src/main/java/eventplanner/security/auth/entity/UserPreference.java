@@ -1,4 +1,4 @@
-package eventplanner.features.user.entity;
+package eventplanner.security.auth.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
 import eventplanner.security.auth.entity.UserAccount;

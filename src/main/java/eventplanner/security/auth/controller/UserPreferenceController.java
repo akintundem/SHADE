@@ -1,9 +1,9 @@
-package eventplanner.features.user.controller;
+package eventplanner.security.auth.controller;
 
-import eventplanner.features.user.dto.UserPreferenceRequest;
-import eventplanner.features.user.dto.UserPreferenceResponse;
-import eventplanner.features.user.entity.UserPreference;
-import eventplanner.features.user.service.UserPreferenceService;
+import eventplanner.security.auth.dto.UserPreferenceRequest;
+import eventplanner.security.auth.dto.UserPreferenceResponse;
+import eventplanner.security.auth.entity.UserPreference;
+import eventplanner.security.auth.service.UserPreferenceService;
 import eventplanner.security.auth.service.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

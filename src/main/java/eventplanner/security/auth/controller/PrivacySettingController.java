@@ -1,9 +1,9 @@
-package eventplanner.features.user.controller;
+package eventplanner.security.auth.controller;
 
-import eventplanner.features.user.dto.PrivacySettingRequest;
-import eventplanner.features.user.dto.PrivacySettingResponse;
-import eventplanner.features.user.entity.UserPrivacySetting;
-import eventplanner.features.user.service.UserPrivacySettingService;
+import eventplanner.security.auth.dto.PrivacySettingRequest;
+import eventplanner.security.auth.dto.PrivacySettingResponse;
+import eventplanner.security.auth.entity.UserPrivacySetting;
+import eventplanner.security.auth.service.UserPrivacySettingService;
 import eventplanner.security.auth.service.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
