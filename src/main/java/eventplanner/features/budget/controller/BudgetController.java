@@ -27,6 +27,11 @@ import java.util.UUID;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.authorization.service.AuthorizationService;
+import eventplanner.features.collaboration.service.EventPermissionEvaluator;
+import eventplanner.features.collaboration.repository.EventUserRepository;
+import eventplanner.features.collaboration.entity.EventUser;
+import eventplanner.features.collaboration.enums.EventPermission;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 /**
@@ -38,9 +43,34 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 public class BudgetController {
 
 	private final BudgetService budgetService;
+	private final AuthorizationService authorizationService;
+	private final EventPermissionEvaluator permissionEvaluator;
+	private final EventUserRepository eventUserRepository;
 
-	public BudgetController(BudgetService budgetService) {
+	public BudgetController(BudgetService budgetService,
+							AuthorizationService authorizationService,
+							EventPermissionEvaluator permissionEvaluator,
+							EventUserRepository eventUserRepository) {
 		this.budgetService = budgetService;
+		this.authorizationService = authorizationService;
+		this.permissionEvaluator = permissionEvaluator;
+		this.eventUserRepository = eventUserRepository;
+	}
+
+	private void requireBudgetAccess(UUID eventId, UserPrincipal user, EventPermission permission) {
+		if (user == null) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+		}
+		if (authorizationService.isAdmin(user) || authorizationService.isEventOwner(user, eventId)) {
+			return;
+		}
+		EventUser membership = eventUserRepository.findByEventIdAndUserId(eventId, user.getId())
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+						"Access denied: you are not a collaborator on this event"));
+		if (!permissionEvaluator.hasPermission(membership, permission)) {
+			throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+					"Access denied: missing " + permission + " permission");
+		}
 	}
 
 	// ==================== CORE BUDGET CRUD ====================
@@ -58,13 +88,11 @@ public class BudgetController {
 	public ResponseEntity<BudgetDetailResponse> getBudget(
 			@PathVariable String eventId,
 			@AuthenticationPrincipal UserPrincipal user) {
-		if (user == null || user.getUser() == null) {
-			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not authenticated");
-		}		UUID uuid = UUID.fromString(eventId);
+		UUID uuid = UUID.fromString(eventId);
+		requireBudgetAccess(uuid, user, EventPermission.VIEW_EVENT);
 		Budget budget = budgetService.getByEventId(uuid)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
 		return BudgetHttpUtil.wrapResponse(budget, BudgetDetailResponse.fromEntity(budget));
-
 	}
 
 	@PutMapping
@@ -81,12 +109,11 @@ public class BudgetController {
 			@Valid @RequestBody UpdateBudgetRequest request,
 			@RequestHeader(value = "If-Match", required = false) String ifMatch,
 			@AuthenticationPrincipal UserPrincipal user) {
-		if (user == null || user.getUser() == null) {
-			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not authenticated");
-		}		UUID uuid = UUID.fromString(eventId);
+		UUID uuid = UUID.fromString(eventId);
+		requireBudgetAccess(uuid, user, EventPermission.MANAGE_BUDGET);
 		Budget existing = budgetService.getByEventId(uuid)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
-		
+
 		// Validate ETag if provided
 		if (ifMatch != null && !ifMatch.equals(BudgetHttpUtil.generateETag(existing))) {
 			throw new ResponseStatusException(HttpStatus.PRECONDITION_FAILED, "Budget has been modified.");
@@ -94,7 +121,6 @@ public class BudgetController {
 
 		Budget updated = budgetService.updateBudget(existing.getId(), request);
 		return BudgetHttpUtil.wrapResponse(updated, BudgetDetailResponse.fromEntity(updated));
-
 	}
 
 	// ==================== CATEGORY MANAGEMENT ====================

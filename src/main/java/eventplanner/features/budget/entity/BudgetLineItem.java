@@ -91,6 +91,12 @@ public class BudgetLineItem extends BaseEntity {
     private String notes;
 
     /**
+     * Reference to timeline task (if this expense is linked to a task)
+     */
+    @Column(name = "task_id")
+    private java.util.UUID taskId;
+
+    /**
      * Indicates if this line item is a draft (auto-saved) or finalized.
      * Drafts are saved with relaxed validation and skip budget recalculation.
      */

@@ -155,4 +155,16 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
      */
     @Query("SELECT COUNT(t) FROM Ticket t WHERE t.event.id = :eventId AND t.status IN :statuses")
     long countByEventIdAndStatusIn(@Param("eventId") UUID eventId, @Param("statuses") List<TicketStatus> statuses);
+
+    /**
+     * Calculate total actual revenue from sold tickets (ISSUED, VALIDATED status).
+     * Converts priceMinor to decimal by dividing by 100.
+     * @param eventId The event ID
+     * @return Total revenue from sold tickets
+     */
+    @Query("SELECT COALESCE(SUM(CAST(t.ticketType.priceMinor AS decimal) / 100), 0) " +
+           "FROM Ticket t " +
+           "WHERE t.event.id = :eventId " +
+           "AND t.status IN ('ISSUED', 'VALIDATED')")
+    java.math.BigDecimal sumActualRevenue(@Param("eventId") UUID eventId);
 }

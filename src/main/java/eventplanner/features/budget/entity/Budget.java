@@ -61,6 +61,15 @@ public class Budget extends BaseEntity {
     @Column(name = "variance_percentage", precision = 5, scale = 2)
     private BigDecimal variancePercentage;
 
+    @Column(name = "total_revenue", precision = 12, scale = 2)
+    private BigDecimal totalRevenue;
+
+    @Column(name = "projected_revenue", precision = 12, scale = 2)
+    private BigDecimal projectedRevenue;
+
+    @Column(name = "net_position", precision = 12, scale = 2)
+    private BigDecimal netPosition;
+
     @Column(name = "budget_status")
     private String budgetStatus;
 

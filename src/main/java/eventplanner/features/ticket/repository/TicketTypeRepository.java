@@ -78,4 +78,17 @@ public interface TicketTypeRepository extends JpaRepository<TicketType, UUID> {
 
     @Query("SELECT COUNT(tk) FROM Ticket tk WHERE tk.ticketType.id = :ticketTypeId")
     long countTicketsByTicketTypeId(@Param("ticketTypeId") UUID ticketTypeId);
+
+    /**
+     * Calculate projected revenue from all active ticket types (price * available quantity).
+     * Converts priceMinor to decimal by dividing by 100.
+     * @param eventId The event ID
+     * @return Projected total revenue if all tickets are sold
+     */
+    @Query("SELECT COALESCE(SUM((CAST(t.priceMinor AS decimal) / 100) * t.quantityAvailable), 0) " +
+           "FROM TicketType t " +
+           "WHERE t.event.id = :eventId " +
+           "AND t.isActive = true " +
+           "AND t.priceMinor IS NOT NULL")
+    java.math.BigDecimal sumProjectedRevenue(@Param("eventId") UUID eventId);
 }
