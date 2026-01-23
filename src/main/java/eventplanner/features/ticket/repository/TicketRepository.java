@@ -158,13 +158,18 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
 
     /**
      * Calculate total actual revenue from sold tickets (ISSUED, VALIDATED status).
-     * Converts priceMinor to decimal by dividing by 100.
+     * Returns total revenue in minor units (cents) and converts to BigDecimal in code.
      * @param eventId The event ID
      * @return Total revenue from sold tickets
      */
-    @Query("SELECT COALESCE(SUM(CAST(t.ticketType.priceMinor AS decimal) / 100), 0) " +
+    @Query("SELECT COALESCE(SUM(t.ticketType.priceMinor), 0) " +
            "FROM Ticket t " +
            "WHERE t.event.id = :eventId " +
            "AND t.status IN ('ISSUED', 'VALIDATED')")
-    java.math.BigDecimal sumActualRevenue(@Param("eventId") UUID eventId);
+    Long sumActualRevenueMinor(@Param("eventId") UUID eventId);
+
+    default java.math.BigDecimal sumActualRevenue(UUID eventId) {
+        Long totalMinor = sumActualRevenueMinor(eventId);
+        return totalMinor == null ? java.math.BigDecimal.ZERO : java.math.BigDecimal.valueOf(totalMinor, 2);
+    }
 }

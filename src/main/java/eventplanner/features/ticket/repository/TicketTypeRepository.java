@@ -81,14 +81,19 @@ public interface TicketTypeRepository extends JpaRepository<TicketType, UUID> {
 
     /**
      * Calculate projected revenue from all active ticket types (price * available quantity).
-     * Converts priceMinor to decimal by dividing by 100.
+     * Returns total revenue in minor units (cents) and converts to BigDecimal in code.
      * @param eventId The event ID
      * @return Projected total revenue if all tickets are sold
      */
-    @Query("SELECT COALESCE(SUM((CAST(t.priceMinor AS decimal) / 100) * t.quantityAvailable), 0) " +
+    @Query("SELECT COALESCE(SUM(t.priceMinor * t.quantityAvailable), 0) " +
            "FROM TicketType t " +
            "WHERE t.event.id = :eventId " +
            "AND t.isActive = true " +
            "AND t.priceMinor IS NOT NULL")
-    java.math.BigDecimal sumProjectedRevenue(@Param("eventId") UUID eventId);
+    Long sumProjectedRevenueMinor(@Param("eventId") UUID eventId);
+
+    default java.math.BigDecimal sumProjectedRevenue(UUID eventId) {
+        Long totalMinor = sumProjectedRevenueMinor(eventId);
+        return totalMinor == null ? java.math.BigDecimal.ZERO : java.math.BigDecimal.valueOf(totalMinor, 2);
+    }
 }

@@ -1,17 +1,12 @@
 package eventplanner.features.feeds.controller;
 
-import eventplanner.features.feeds.dto.request.CommentCreateRequest;
-import eventplanner.features.feeds.dto.request.CommentUpdateRequest;
 import eventplanner.features.feeds.dto.request.FeedPostCreateRequest;
 import eventplanner.features.feeds.dto.request.FeedPostMediaUploadCompleteRequest;
 import eventplanner.features.feeds.dto.request.QuotePostRequest;
-import eventplanner.features.feeds.dto.response.CommentResponse;
 import eventplanner.features.feeds.dto.response.CreateFeedPostResponse;
 import eventplanner.features.feeds.dto.response.FeedPostResponse;
 import eventplanner.features.feeds.dto.response.PostListResponse;
 import eventplanner.features.feeds.service.FeedPostService;
-import eventplanner.features.feeds.service.PostCommentService;
-import eventplanner.features.feeds.service.PostLikeService;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
@@ -20,10 +15,6 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -46,15 +37,8 @@ import java.util.UUID;
 public class FeedPostController {
 
     private final FeedPostService postService;
-    private final PostCommentService commentService;
-    private final PostLikeService likeService;
-
-    public FeedPostController(FeedPostService postService,
-                             PostCommentService commentService,
-                             PostLikeService likeService) {
+    public FeedPostController(FeedPostService postService) {
         this.postService = postService;
-        this.commentService = commentService;
-        this.likeService = likeService;
     }
 
     @PostMapping("/{id}/posts")
@@ -146,89 +130,4 @@ public class FeedPostController {
         return ResponseEntity.ok(postService.repost(id, postId, principal, request.getQuoteText()));
     }
 
-    // ============================================================================
-    // COMMENT ENDPOINTS
-    // ============================================================================
-
-    @PostMapping("/{id}/posts/{postId}/comments")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
-    @Operation(summary = "Create comment", description = "Add a comment to a post")
-    public ResponseEntity<CommentResponse> createComment(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @Parameter(description = "Post ID") @PathVariable UUID postId,
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody CommentCreateRequest request
-    ) {
-        return ResponseEntity.ok(commentService.createComment(id, postId, principal, request));
-    }
-
-    @GetMapping("/{id}/posts/{postId}/comments")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
-    @Operation(summary = "Get comments", description = "Get all comments for a post with pagination")
-    public ResponseEntity<Page<CommentResponse>> getComments(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @Parameter(description = "Post ID") @PathVariable UUID postId,
-            @Parameter(description = "Page number (0-indexed)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
-            @AuthenticationPrincipal UserPrincipal principal
-    ) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt"));
-        return ResponseEntity.ok(commentService.getComments(id, postId, principal, pageable));
-    }
-
-    @PutMapping("/{id}/posts/{postId}/comments/{commentId}")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
-    @Operation(summary = "Update comment", description = "Update a comment (creator only)")
-    public ResponseEntity<CommentResponse> updateComment(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @Parameter(description = "Post ID") @PathVariable UUID postId,
-            @Parameter(description = "Comment ID") @PathVariable UUID commentId,
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody CommentUpdateRequest request
-    ) {
-        return ResponseEntity.ok(commentService.updateComment(id, postId, commentId, principal, request));
-    }
-
-    @DeleteMapping("/{id}/posts/{postId}/comments/{commentId}")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
-    @Operation(summary = "Delete comment", description = "Delete a comment (creator only)")
-    public ResponseEntity<Void> deleteComment(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @Parameter(description = "Post ID") @PathVariable UUID postId,
-            @Parameter(description = "Comment ID") @PathVariable UUID commentId,
-            @AuthenticationPrincipal UserPrincipal principal
-    ) {
-        commentService.deleteComment(id, postId, commentId, principal);
-        return ResponseEntity.noContent().build();
-    }
-
-    // ============================================================================
-    // LIKE ENDPOINTS
-    // ============================================================================
-
-    @PostMapping("/{id}/posts/{postId}/like")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
-    @Operation(summary = "Like post", description = "Like a post")
-    public ResponseEntity<Void> likePost(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @Parameter(description = "Post ID") @PathVariable UUID postId,
-            @AuthenticationPrincipal UserPrincipal principal
-    ) {
-        likeService.likePost(id, postId, principal);
-        return ResponseEntity.noContent().build();
-    }
-
-    @DeleteMapping("/{id}/posts/{postId}/like")
-    @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
-    @Operation(summary = "Unlike post", description = "Remove like from a post")
-    public ResponseEntity<Void> unlikePost(
-            @Parameter(description = "Event ID") @PathVariable UUID id,
-            @Parameter(description = "Post ID") @PathVariable UUID postId,
-            @AuthenticationPrincipal UserPrincipal principal
-    ) {
-        likeService.unlikePost(id, postId, principal);
-        return ResponseEntity.noContent().build();
-    }
 }
-
-
