@@ -6,6 +6,8 @@ import eventplanner.features.attendee.enums.AttendeeStatus;
 import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.features.collaboration.entity.EventUser;
 import eventplanner.features.collaboration.repository.EventUserRepository;
+import eventplanner.features.social.entity.EventSubscription;
+import eventplanner.features.social.repository.EventSubscriptionRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,7 @@ public class NotificationTargetResolver {
     private final UserAccountRepository userAccountRepository;
     private final AttendeeRepository attendeeRepository;
     private final EventUserRepository eventUserRepository;
+    private final EventSubscriptionRepository eventSubscriptionRepository;
 
     /**
      * Resolve notification targets based on target type and parameters
@@ -281,8 +284,61 @@ public class NotificationTargetResolver {
         // This is a placeholder for future segment-based targeting
         // Could filter by userType, status, registration date, etc.
         log.warn("USER_SEGMENT targeting not yet fully implemented");
-        return new NotificationTarget(NotificationTarget.TargetType.USER_SEGMENT, 
+        return new NotificationTarget(NotificationTarget.TargetType.USER_SEGMENT,
                 Collections.emptySet(), Collections.emptySet());
+    }
+
+    /**
+     * Filter user IDs based on event subscription preferences.
+     * Only includes users who have opted in for notifications (NOTIFY or BOTH).
+     *
+     * @param userIds Original set of user IDs
+     * @param eventId Event ID to check subscriptions for
+     * @return Filtered set of user IDs who want notifications
+     */
+    public Set<UUID> filterBySubscriptionPreferences(Set<UUID> userIds, UUID eventId) {
+        if (userIds == null || userIds.isEmpty() || eventId == null) {
+            return userIds != null ? userIds : Collections.emptySet();
+        }
+
+        // Get all subscriptions for this event with NOTIFY or BOTH
+        List<EventSubscription> subscriptions = eventSubscriptionRepository
+                .findByEventIdAndSubscriptionTypeIn(
+                        eventId,
+                        List.of(EventSubscription.SubscriptionType.NOTIFY, EventSubscription.SubscriptionType.BOTH)
+                );
+
+        // Create set of user IDs who want notifications
+        Set<UUID> notifySubscribers = subscriptions.stream()
+                .map(sub -> sub.getUser().getId())
+                .collect(Collectors.toSet());
+
+        // Filter: keep users who either:
+        // 1. Have a subscription with NOTIFY/BOTH preference, OR
+        // 2. Don't have any subscription (default behavior - send notifications)
+        Set<UUID> existingSubscriptions = eventSubscriptionRepository
+                .findByEventIdAndUserIdIn(eventId, new ArrayList<>(userIds))
+                .stream()
+                .map(sub -> sub.getUser().getId())
+                .collect(Collectors.toSet());
+
+        Set<UUID> filtered = userIds.stream()
+                .filter(userId -> {
+                    // If user has a subscription, check if they want notifications
+                    if (existingSubscriptions.contains(userId)) {
+                        return notifySubscribers.contains(userId);
+                    }
+                    // If no subscription exists, default to sending notifications
+                    return true;
+                })
+                .collect(Collectors.toSet());
+
+        int filteredCount = userIds.size() - filtered.size();
+        if (filteredCount > 0) {
+            log.info("Filtered {} users based on subscription preferences (event: {})", filteredCount, eventId);
+        }
+
+        return filtered;
     }
 }
 

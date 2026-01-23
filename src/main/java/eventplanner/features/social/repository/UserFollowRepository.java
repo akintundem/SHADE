@@ -82,4 +82,10 @@ public interface UserFollowRepository extends JpaRepository<UserFollow, UUID> {
             @Param("followerId") UUID followerId,
             @Param("followeeId") UUID followeeId
     );
+
+    /**
+     * Get list of user IDs that a user is following (for event feed filtering)
+     */
+    @Query("SELECT f.followee.id FROM UserFollow f WHERE f.follower.id = :userId AND f.status = 'ACTIVE'")
+    java.util.List<UUID> findFollowedUserIdsByFollowerId(@Param("userId") UUID userId);
 }

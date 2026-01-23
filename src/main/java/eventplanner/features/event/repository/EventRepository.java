@@ -30,4 +30,10 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
     List<Map<String, Object>> getEventsByMonth(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
 
     Long countByEventStatus(String status);
+
+    /**
+     * Find public events owned by any of the specified users (for following feed)
+     */
+    @Query("SELECT e FROM Event e WHERE e.owner.id IN :ownerIds AND e.isPublic = true ORDER BY e.startDateTime DESC")
+    Page<Event> findByOwnerIdInAndIsPublicTrue(@Param("ownerIds") List<UUID> ownerIds, Pageable pageable);
 }

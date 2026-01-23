@@ -384,7 +384,8 @@ public class EventCollaboratorInviteService {
             return; // Cannot send push without user ID
         }
 
-        notificationService.send(NotificationRequest.builder()
+        // CRITICAL: Collaboration invites must be delivered
+        notificationService.sendOrThrow(NotificationRequest.builder()
                 .type(CommunicationType.PUSH_NOTIFICATION)
                 .to(inviteeUserId.toString())
                 .subject("Event collaboration invite")
@@ -414,7 +415,8 @@ public class EventCollaboratorInviteService {
         String acceptUrl = appBaseUrl + "/api/v1/collaborator-invites/accept?token=" + rawToken;
         variables.put("acceptUrl", acceptUrl);
 
-        notificationService.send(NotificationRequest.builder()
+        // CRITICAL: Collaboration invitation emails must be delivered
+        notificationService.sendOrThrow(NotificationRequest.builder()
                 .type(CommunicationType.EMAIL)
                 .to(invite.getInviteeEmail())
                 .subject("You're invited to collaborate on an event")

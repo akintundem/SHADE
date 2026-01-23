@@ -99,48 +99,46 @@ public class EventCollaboratorService {
             return;
         }
         
-        try {
-            Map<String, Object> templateVariables = new HashMap<>();
-            templateVariables.put("eventName", event.getName());
-            templateVariables.put("eventId", event.getId().toString());
-            templateVariables.put("role", collaborator.getUserType() != null ? collaborator.getUserType().name() : "COLLABORATOR");
-            if (event.getStartDateTime() != null) {
-                templateVariables.put("eventDate", event.getStartDateTime().format(java.time.format.DateTimeFormatter.ofPattern("MMM d, h:mm a")));
-            }
-            if (event.getEventWebsiteUrl() != null) {
-                templateVariables.put("actionUrl", event.getEventWebsiteUrl());
-            }
-            templateVariables.put("collaboratorName", collaborator.getUser() != null ? collaborator.getUser().getName() : "there");
-            
-            UserAccount user = collaborator.getUser();
-            
-            // Send email if available
-            if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
-                notificationService.send(NotificationRequest.builder()
-                        .type(CommunicationType.EMAIL)
-                        .to(user.getEmail())
-                        .subject("You've been added as a collaborator: " + event.getName())
-                        .templateId("collaborator-welcome")
-                        .templateVariables(templateVariables)
-                        .eventId(event.getId())
-                        .from(externalServicesProperties.getEmail().getFromEvents())
-                        .build());
-            }
-            
-            // Send push notification
-            Map<String, Object> pushData = new HashMap<>(templateVariables);
-            pushData.put("body", "You've been added as a collaborator to: " + event.getName());
-            
-            notificationService.send(NotificationRequest.builder()
-                    .type(CommunicationType.PUSH_NOTIFICATION)
-                    .to(user.getId().toString())
-                    .subject("Event collaboration confirmed")
-                    .templateVariables(pushData)
-                    .eventId(event.getId())
-                    .build());
-        } catch (Exception e) {
-            // Don't fail the entire operation if communication fails
+        // Notification delivery is CRITICAL - collaborators must know they've been added
+        // If notification fails, roll back the entire operation
+        Map<String, Object> templateVariables = new HashMap<>();
+        templateVariables.put("eventName", event.getName());
+        templateVariables.put("eventId", event.getId().toString());
+        templateVariables.put("role", collaborator.getUserType() != null ? collaborator.getUserType().name() : "COLLABORATOR");
+        if (event.getStartDateTime() != null) {
+            templateVariables.put("eventDate", event.getStartDateTime().format(java.time.format.DateTimeFormatter.ofPattern("MMM d, h:mm a")));
         }
+        if (event.getEventWebsiteUrl() != null) {
+            templateVariables.put("actionUrl", event.getEventWebsiteUrl());
+        }
+        templateVariables.put("collaboratorName", collaborator.getUser() != null ? collaborator.getUser().getName() : "there");
+
+        UserAccount user = collaborator.getUser();
+
+        // Send email if available - MUST succeed
+        if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
+            notificationService.sendOrThrow(NotificationRequest.builder()
+                    .type(CommunicationType.EMAIL)
+                    .to(user.getEmail())
+                    .subject("You've been added as a collaborator: " + event.getName())
+                    .templateId("collaborator-welcome")
+                    .templateVariables(templateVariables)
+                    .eventId(event.getId())
+                    .from(externalServicesProperties.getEmail().getFromEvents())
+                    .build());
+        }
+
+        // Send push notification - MUST succeed
+        Map<String, Object> pushData = new HashMap<>(templateVariables);
+        pushData.put("body", "You've been added as a collaborator to: " + event.getName());
+
+        notificationService.sendOrThrow(NotificationRequest.builder()
+                .type(CommunicationType.PUSH_NOTIFICATION)
+                .to(user.getId().toString())
+                .subject("Event collaboration confirmed")
+                .templateVariables(pushData)
+                .eventId(event.getId())
+                .build());
     }
 
     public EventCollaboratorResponse updateCollaborator(UUID eventId, UUID collaboratorId, EventCollaboratorRequest request) {

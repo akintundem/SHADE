@@ -29,6 +29,7 @@ import eventplanner.features.ticket.repository.TicketTypeRepository;
 import eventplanner.features.ticket.repository.TicketPromotionRepository;
 import eventplanner.features.ticket.repository.TicketPriceTierRepository;
 import eventplanner.features.ticket.repository.TicketTypeDependencyRepository;
+import eventplanner.features.budget.service.BudgetSyncService;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -73,6 +74,7 @@ public class TicketCheckoutService {
     private final TicketTypeDependencyRepository ticketTypeDependencyRepository;
     private final LocationRepository locationRepository;
     private final TicketingPolicyService ticketingPolicyService;
+    private final BudgetSyncService budgetSyncService;
 
     /**
      * Start a new checkout session and reserve tickets.
@@ -344,8 +346,11 @@ public class TicketCheckoutService {
         
         if (checkout.getEvent() != null && !issuedTickets.isEmpty()) {
             ticketService.syncAttendeesAndEventCount(checkout.getEvent(), issuedTickets, true);
+
+            // Sync ticket revenue with budget after successful checkout
+            budgetSyncService.syncTicketRevenue(checkout.getEvent().getId());
         }
-        
+
         return savedCheckout;
     }
 

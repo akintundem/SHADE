@@ -65,4 +65,22 @@ public interface EventSubscriptionRepository extends JpaRepository<EventSubscrip
             @Param("userId") UUID userId,
             @Param("eventId") UUID eventId
     );
+
+    /**
+     * Find subscriptions by event and subscription types (for notification filtering)
+     */
+    @Query("SELECT s FROM EventSubscription s WHERE s.event.id = :eventId AND s.subscriptionType IN :types")
+    List<EventSubscription> findByEventIdAndSubscriptionTypeIn(
+            @Param("eventId") UUID eventId,
+            @Param("types") List<EventSubscription.SubscriptionType> types
+    );
+
+    /**
+     * Find subscriptions by event and user IDs (batch check)
+     */
+    @Query("SELECT s FROM EventSubscription s WHERE s.event.id = :eventId AND s.user.id IN :userIds")
+    List<EventSubscription> findByEventIdAndUserIdIn(
+            @Param("eventId") UUID eventId,
+            @Param("userIds") List<UUID> userIds
+    );
 }

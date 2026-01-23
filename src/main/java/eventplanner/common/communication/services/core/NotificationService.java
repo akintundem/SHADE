@@ -1,6 +1,7 @@
 package eventplanner.common.communication.services.core;
 
 import eventplanner.common.config.ExternalServicesProperties;
+import eventplanner.common.communication.exception.NotificationFailureException;
 import eventplanner.common.communication.model.Communication;
 import eventplanner.common.communication.repository.CommunicationRepository;
 import eventplanner.common.communication.services.channel.email.EmailService;
@@ -189,5 +190,40 @@ public class NotificationService {
                     .errorMessage("Invalid userId format: " + userIdString)
                     .build();
         }
+    }
+
+    /**
+     * Send notification and throw exception if it fails.
+     * Use this method when notification delivery is CRITICAL to the operation
+     * and you want the transaction to roll back if notification fails.
+     *
+     * This method will:
+     * 1. Call send() to attempt notification delivery
+     * 2. Check the response
+     * 3. Throw NotificationFailureException if delivery failed
+     * 4. Cause @Transactional methods to roll back
+     *
+     * Example use case:
+     * - Adding collaborator to event (they MUST be notified)
+     * - Creating ticket (user MUST receive confirmation)
+     * - Payment confirmation (user MUST know payment succeeded)
+     *
+     * @param request Notification request
+     * @return NotificationResponse only if successful (never returns on failure)
+     * @throws NotificationFailureException if notification fails, causing transaction rollback
+     */
+    public NotificationResponse sendOrThrow(NotificationRequest request) {
+        NotificationResponse response = send(request);
+
+        if (!response.isSuccess()) {
+            String notificationType = request.getType() != null ? request.getType().toString() : "UNKNOWN";
+            throw new NotificationFailureException(
+                "Failed to send " + notificationType + " notification: " + response.getErrorMessage(),
+                response.getCommunicationId(),
+                notificationType
+            );
+        }
+
+        return response;
     }
 }

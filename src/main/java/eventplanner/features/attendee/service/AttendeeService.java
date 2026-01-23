@@ -442,42 +442,39 @@ public class AttendeeService {
         boolean sendEmail = Boolean.TRUE.equals(request.getSendEmail());
         boolean sendPush = Boolean.TRUE.equals(request.getSendPushNotification());
         
+        // Notification delivery is CRITICAL - attendees must receive confirmation
+        // If notification fails, roll back the entire operation
         for (Attendee attendee : attendees) {
-            try {
-                // Send email if requested and email is available
-                if (sendEmail && attendee.getEmail() != null && !attendee.getEmail().trim().isEmpty()) {
-                    Map<String, Object> emailVars = new HashMap<>(templateVariables);
-                    String attendeeName = attendee.getName() != null && !attendee.getName().isBlank()
-                            ? attendee.getName()
-                            : "there";
-                    emailVars.put("attendeeName", attendeeName);
-                    notificationService.send(NotificationRequest.builder()
-                            .type(CommunicationType.EMAIL)
-                            .to(attendee.getEmail())
-                            .subject("You've been added to: " + event.getName())
-                            .templateId("attendee-welcome")
-                            .templateVariables(emailVars)
-                            .eventId(event.getId())
-                            .from(externalServicesProperties.getEmail().getFromEvents())
-                            .build());
-                }
-                
-                // Send push notification if requested and user account is linked
-                if (sendPush && attendee.getUser() != null && attendee.getUser().getId() != null) {
-                    Map<String, Object> pushData = new HashMap<>(templateVariables);
-                    pushData.put("body", "You've been added as an attendee to: " + event.getName());
-                    
-                    notificationService.send(NotificationRequest.builder()
-                            .type(CommunicationType.PUSH_NOTIFICATION)
-                            .to(attendee.getUser().getId().toString())
-                            .subject("Event attendance confirmed")
-                            .templateVariables(pushData)
-                            .eventId(event.getId())
-                            .build());
-                }
-            } catch (Exception e) {
-                // Don't fail the entire operation if communication fails
-                log.warn("Failed to send notification to attendee {}: {}", attendee.getId(), e.getMessage());
+            // Send email if requested and email is available - MUST succeed
+            if (sendEmail && attendee.getEmail() != null && !attendee.getEmail().trim().isEmpty()) {
+                Map<String, Object> emailVars = new HashMap<>(templateVariables);
+                String attendeeName = attendee.getName() != null && !attendee.getName().isBlank()
+                        ? attendee.getName()
+                        : "there";
+                emailVars.put("attendeeName", attendeeName);
+                notificationService.sendOrThrow(NotificationRequest.builder()
+                        .type(CommunicationType.EMAIL)
+                        .to(attendee.getEmail())
+                        .subject("You've been added to: " + event.getName())
+                        .templateId("attendee-welcome")
+                        .templateVariables(emailVars)
+                        .eventId(event.getId())
+                        .from(externalServicesProperties.getEmail().getFromEvents())
+                        .build());
+            }
+
+            // Send push notification if requested and user account is linked - MUST succeed
+            if (sendPush && attendee.getUser() != null && attendee.getUser().getId() != null) {
+                Map<String, Object> pushData = new HashMap<>(templateVariables);
+                pushData.put("body", "You've been added as an attendee to: " + event.getName());
+
+                notificationService.sendOrThrow(NotificationRequest.builder()
+                        .type(CommunicationType.PUSH_NOTIFICATION)
+                        .to(attendee.getUser().getId().toString())
+                        .subject("Event attendance confirmed")
+                        .templateVariables(pushData)
+                        .eventId(event.getId())
+                        .build());
             }
         }
     }

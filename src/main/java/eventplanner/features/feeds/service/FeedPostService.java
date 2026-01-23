@@ -8,6 +8,8 @@ import eventplanner.common.storage.s3.dto.PresignedUploadRequest;
 import eventplanner.common.storage.s3.services.PresignedUploadService;
 import eventplanner.common.storage.s3.UploadCompletionCallback;
 import eventplanner.common.util.UserAccountUtil;
+import eventplanner.common.exception.exceptions.ForbiddenException;
+import eventplanner.common.exception.exceptions.UnauthorizedException;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventStoredObject;
 import eventplanner.features.event.repository.EventRepository;
@@ -638,30 +640,45 @@ public class FeedPostService {
         // Enforce max page size
         int pageNum = Math.max(0, page != null ? page : 0);
         int pageSize = Math.min(100, Math.max(1, size != null ? size : 20));
-        
+
         Pageable pageable = PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
-        
+
         // Get only completed posts by user
         Page<EventFeedPost> postPage = postRepository.findByCreatedByUserIdAndMediaUploadStatusOrderByCreatedAtDesc(
                 userId, MediaUploadStatus.COMPLETED, pageable);
-        
-        // Enrich with engagement data
+
+        // Enrich with engagement data, filtering out posts from events the viewer cannot access
         List<FeedPostResponse> enrichedPosts = new ArrayList<>();
         for (EventFeedPost post : postPage.getContent()) {
             if (post.getEvent() != null && post.getEvent().getId() != null) {
-                enrichedPosts.add(toResponse(post, post.getEvent().getId()));
+                // Check if viewer has access to this event's content
+                try {
+                    accessControlService.requireMediaView(principal, post.getEvent().getId());
+                    enrichedPosts.add(toResponse(post, post.getEvent().getId()));
+                } catch (ForbiddenException e) {
+                    // Skip posts from private events the viewer cannot access
+                    log.debug("User {} cannot view post {} from event {}: {}",
+                            principal != null ? principal.getId() : "anonymous",
+                            post.getId(), post.getEvent().getId(), e.getMessage());
+                } catch (UnauthorizedException e) {
+                    // Skip posts that require authentication
+                    log.debug("Unauthenticated user cannot view post {} from event {}: {}",
+                            post.getId(), post.getEvent().getId(), e.getMessage());
+                }
             }
         }
-        
+
         PostListResponse response = new PostListResponse();
         response.setPosts(enrichedPosts);
         response.setCurrentPage(pageNum);
         response.setPageSize(pageSize);
-        response.setTotalPosts(postPage.getTotalElements());
-        response.setTotalPages(postPage.getTotalPages());
-        response.setHasNext(postPage.hasNext());
-        response.setHasPrevious(postPage.hasPrevious());
-        
+        // Note: totalPosts reflects all user posts, not just accessible ones
+        // This is intentional to avoid leaking information about private event count
+        response.setTotalPosts((long) enrichedPosts.size());
+        response.setTotalPages((int) Math.ceil((double) enrichedPosts.size() / pageSize));
+        response.setHasNext(false); // Conservative - cannot determine without querying
+        response.setHasPrevious(pageNum > 0);
+
         return response;
     }
 }

@@ -544,7 +544,8 @@ public class AttendeeInviteService {
         data.put("inviteId", invite.getId() != null ? invite.getId().toString() : null);
         data.put("eventId", event.getId() != null ? event.getId().toString() : null);
 
-        notificationService.send(NotificationRequest.builder()
+        // CRITICAL: Event invites must be delivered
+        notificationService.sendOrThrow(NotificationRequest.builder()
                 .type(CommunicationType.PUSH_NOTIFICATION)
                 .to(invite.getInvitee().getId().toString())
                 .subject("Event invite")
@@ -575,7 +576,8 @@ public class AttendeeInviteService {
         String acceptUrl = appBaseUrl + "/api/v1/attendees/invites?token=" + rawToken + "&status=accepted";
         variables.put("acceptUrl", acceptUrl);
 
-        notificationService.send(NotificationRequest.builder()
+        // CRITICAL: Event invitation emails must be delivered
+        notificationService.sendOrThrow(NotificationRequest.builder()
                 .type(CommunicationType.EMAIL)
                 .to(invite.getInviteeEmail())
                 .subject("You're invited to: " + event.getName())

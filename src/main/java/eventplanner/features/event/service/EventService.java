@@ -32,6 +32,7 @@ import eventplanner.features.event.dto.response.FeedPost;
 import eventplanner.features.feeds.entity.EventFeedPost;
 import eventplanner.features.feeds.repository.FeedPostRepository;
 import eventplanner.features.event.repository.EventStoredObjectRepository;
+import eventplanner.features.social.repository.UserFollowRepository;
 import eventplanner.features.budget.service.BudgetService;
 import eventplanner.common.storage.s3.registry.BucketAlias;
 import eventplanner.common.storage.s3.services.S3StorageService;
@@ -132,6 +133,9 @@ public class EventService {
 
     @Autowired
     private BulkNotificationService bulkNotificationService;
+
+    @Autowired(required = false)
+    private UserFollowRepository userFollowRepository;
 
     /**
      * Get event by ID
@@ -416,10 +420,19 @@ public class EventService {
                     .data(data)
                     .parameters(parameters)
                     .build();
-            
+
+            // CRITICAL: Event updates MUST be communicated to subscribers
+            // (time changes, location changes, cancellations, etc.)
+            // If notification fails, roll back the update to avoid confusion
             bulkNotificationService.sendBulkPushNotification(request);
         } catch (Exception e) {
-            // Best-effort push; swallow errors to avoid blocking updates
+            // Log error with full context
+            log.error("CRITICAL: Failed to notify subscribers about event update for event {}: {}",
+                    event.getId(), e.getMessage(), e);
+            // Re-throw to cause transaction rollback
+            throw new IllegalStateException(
+                    "Failed to notify event subscribers about update. " +
+                    "Event changes rolled back to prevent inconsistency.", e);
         }
     }
 
@@ -840,6 +853,7 @@ public class EventService {
 
     /**
      * Send notifications to ticket holders when event is archived.
+     * Uses sendOrThrow to ensure ticket holders are notified of critical event cancellation.
      */
     private void sendEventArchivedNotifications(Event event, List<Ticket> tickets) {
         if (notificationService == null || externalServicesProperties == null) {
@@ -848,32 +862,29 @@ public class EventService {
         }
 
         for (Ticket ticket : tickets) {
-            try {
-                String recipient = ticket.getOwnerEmail() != null
-                    ? ticket.getOwnerEmail()
-                    : (ticket.getAttendee() != null ? ticket.getAttendee().getEmail() : null);
+            String recipient = ticket.getOwnerEmail() != null
+                ? ticket.getOwnerEmail()
+                : (ticket.getAttendee() != null ? ticket.getAttendee().getEmail() : null);
 
-                if (recipient != null) {
-                    Map<String, Object> vars = new HashMap<>();
-                    vars.put("eventName", event.getName());
-                    vars.put("ticketNumber", ticket.getTicketNumber());
-                    if (event.getArchiveReason() != null) {
-                        vars.put("reason", event.getArchiveReason());
-                    }
-
-                    notificationService.send(NotificationRequest.builder()
-                        .type(CommunicationType.EMAIL)
-                        .to(recipient)
-                        .subject("Event Update: " + event.getName())
-                        .templateId("event-archived")
-                        .templateVariables(vars)
-                        .eventId(event.getId())
-                        .from(externalServicesProperties.getEmail().getFromEvents())
-                        .build());
+            if (recipient != null) {
+                Map<String, Object> vars = new HashMap<>();
+                vars.put("eventName", event.getName());
+                vars.put("ticketNumber", ticket.getTicketNumber());
+                if (event.getArchiveReason() != null) {
+                    vars.put("reason", event.getArchiveReason());
                 }
-            } catch (Exception e) {
-                log.warn("Failed to send archived notification for ticket {}: {}",
-                    ticket.getId(), e.getMessage());
+
+                // CRITICAL: Ticket holders MUST be notified of event cancellation
+                // If notification fails, archive operation should fail (transaction rollback)
+                notificationService.sendOrThrow(NotificationRequest.builder()
+                    .type(CommunicationType.EMAIL)
+                    .to(recipient)
+                    .subject("Event Cancelled: " + event.getName())
+                    .templateId("event-archived")
+                    .templateVariables(vars)
+                    .eventId(event.getId())
+                    .from(externalServicesProperties.getEmail().getFromEvents())
+                    .build());
             }
         }
     }
@@ -1521,25 +1532,37 @@ public class EventService {
         if (user == null) {
             throw new UnauthorizedException("Authentication required for Following feed");
         }
-        
-        // TODO: Implement proper follow/following relationship when that feature is added
-        // For now, return upcoming public events as a placeholder.
-        // When follow feature is implemented, this should filter to events from
-        // users/organizations the current user follows.
-        EventListRequest followingRequest = new EventListRequest();
-        if (request != null) {
-            followingRequest.setPage(request.getPage() != null ? request.getPage() : 0);
-            followingRequest.setSize(request.getSize() != null ? request.getSize() : 20);
-        } else {
-            followingRequest.setPage(0);
-            followingRequest.setSize(20);
+
+        if (userFollowRepository == null) {
+            log.warn("UserFollowRepository not available, returning empty following feed");
+            return Page.empty();
         }
-        followingRequest.setIsPublic(true);
-        followingRequest.setTimeframe("UPCOMING");
-        followingRequest.setSortBy("startDateTime");
-        followingRequest.setSortDirection("ASC");
-        
-        return listEvents(followingRequest, user);
+
+        // Get list of user IDs that the current user follows
+        List<UUID> followedUserIds = userFollowRepository.findFollowedUserIdsByFollowerId(user.getId());
+
+        if (followedUserIds.isEmpty()) {
+            // User doesn't follow anyone, return empty page
+            log.debug("User {} doesn't follow anyone yet", user.getId());
+            return Page.empty();
+        }
+
+        // Build pageable
+        int pageNum = request != null && request.getPage() != null ? request.getPage() : 0;
+        int pageSize = request != null && request.getSize() != null ? request.getSize() : 20;
+        pageSize = Math.min(100, Math.max(1, pageSize)); // Enforce limits
+
+        Sort sort = Sort.by(Sort.Direction.DESC, "startDateTime"); // Most recent events first
+        Pageable pageable = PageRequest.of(pageNum, pageSize, sort);
+
+        // Query events owned by followed users
+        // Only show public events or events the user has access to
+        Page<Event> events = eventRepository.findByOwnerIdInAndIsPublicTrue(followedUserIds, pageable);
+
+        log.debug("User {} following feed: {} events from {} followed users",
+                user.getId(), events.getTotalElements(), followedUserIds.size());
+
+        return events;
     }
 
     // ==================== ATTENDEE COUNT SYNCHRONIZATION ====================

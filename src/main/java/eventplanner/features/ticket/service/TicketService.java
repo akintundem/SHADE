@@ -31,6 +31,7 @@ import eventplanner.features.ticket.repository.TicketRepository;
 import eventplanner.features.ticket.repository.TicketTypeRepository;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
+import eventplanner.features.budget.service.BudgetSyncService;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
@@ -70,6 +71,7 @@ public class TicketService {
     private final ExternalServicesProperties externalServicesProperties;
     private final String qrSecretKey;
     private final AuthorizationService authorizationService;
+    private final BudgetSyncService budgetSyncService;
 
     private static final int DEFAULT_MAX_TICKETS_PER_PERSON = 5;
 
@@ -81,6 +83,7 @@ public class TicketService {
                          NotificationService notificationService,
                          ExternalServicesProperties externalServicesProperties,
                          AuthorizationService authorizationService,
+                         BudgetSyncService budgetSyncService,
                          AppProperties appProperties) {
         this.ticketRepository = ticketRepository;
         this.ticketTypeRepository = ticketTypeRepository;
@@ -90,6 +93,7 @@ public class TicketService {
         this.notificationService = notificationService;
         this.externalServicesProperties = externalServicesProperties;
         this.authorizationService = authorizationService;
+        this.budgetSyncService = budgetSyncService;
         this.qrSecretKey = requireConfigured(appProperties.getTicket().getQrSecret(), "app.ticket.qr-secret");
     }
 
@@ -441,6 +445,9 @@ public class TicketService {
         // Sync event attendee count when ticket is refunded
         if (previousStatus == TicketStatus.ISSUED && ticket.getEvent() != null) {
             syncEventCountOnTicketCancellation(ticket.getEvent(), saved);
+
+            // Sync budget revenue after refund
+            budgetSyncService.syncTicketRevenue(ticket.getEvent().getId());
         }
 
         return saved;
@@ -817,50 +824,49 @@ public class TicketService {
             Attendee attendee = firstTicket.getAttendee();
             String email = attendee != null ? attendee.getEmail() : firstTicket.getOwnerEmail();
             
-            try {
-                if (Boolean.TRUE.equals(sendEmail) && email != null) {
-                    Map<String, Object> templateVars = new java.util.HashMap<>();
-                    templateVars.put("eventName", event.getName());
-                    templateVars.put("eventId", event.getId().toString());
-                    templateVars.put("ticketCount", entry.getValue().size());
-                    String attendeeName = attendee != null && attendee.getName() != null && !attendee.getName().isBlank()
-                            ? attendee.getName()
-                            : "there";
-                    templateVars.put("attendeeName", attendeeName);
-                    if (event.getEventWebsiteUrl() != null) {
-                        templateVars.put("ticketsUrl", event.getEventWebsiteUrl());
-                    }
-                    
-                    notificationService.send(NotificationRequest.builder()
-                        .type(CommunicationType.EMAIL)
-                        .to(email)
-                        .subject("Your tickets for: " + event.getName())
-                        .templateId("ticket-confirmation")
-                        .templateVariables(templateVars)
-                        .eventId(event.getId())
-                        .from(externalServicesProperties.getEmail().getFromEvents())
-                        .build());
+            // CRITICAL: Ticket confirmations must be delivered
+            // Users need QR codes, ticket details, and event information
+            if (Boolean.TRUE.equals(sendEmail) && email != null) {
+                Map<String, Object> templateVars = new java.util.HashMap<>();
+                templateVars.put("eventName", event.getName());
+                templateVars.put("eventId", event.getId().toString());
+                templateVars.put("ticketCount", entry.getValue().size());
+                String attendeeName = attendee != null && attendee.getName() != null && !attendee.getName().isBlank()
+                        ? attendee.getName()
+                        : "there";
+                templateVars.put("attendeeName", attendeeName);
+                if (event.getEventWebsiteUrl() != null) {
+                    templateVars.put("ticketsUrl", event.getEventWebsiteUrl());
                 }
-                
-                if (Boolean.TRUE.equals(sendPushNotification) && attendee != null && attendee.getUser() != null
-                        && attendee.getUser().getId() != null) {
-                    Map<String, Object> pushData = new java.util.HashMap<>();
-                    pushData.put("body", "Your tickets for: " + event.getName());
-                    pushData.put("eventId", event.getId().toString());
-                    pushData.put("ticketCount", entry.getValue().size());
-                    if (event.getEventWebsiteUrl() != null) {
-                        pushData.put("ticketsUrl", event.getEventWebsiteUrl());
-                    }
-                    
-                    notificationService.send(NotificationRequest.builder()
-                        .type(CommunicationType.PUSH_NOTIFICATION)
-                        .to(attendee.getUser().getId().toString())
-                        .subject("Tickets confirmed")
-                        .templateVariables(pushData)
-                        .eventId(event.getId())
-                        .build());
+
+                notificationService.sendOrThrow(NotificationRequest.builder()
+                    .type(CommunicationType.EMAIL)
+                    .to(email)
+                    .subject("Your tickets for: " + event.getName())
+                    .templateId("ticket-confirmation")
+                    .templateVariables(templateVars)
+                    .eventId(event.getId())
+                    .from(externalServicesProperties.getEmail().getFromEvents())
+                    .build());
+            }
+
+            if (Boolean.TRUE.equals(sendPushNotification) && attendee != null && attendee.getUser() != null
+                    && attendee.getUser().getId() != null) {
+                Map<String, Object> pushData = new java.util.HashMap<>();
+                pushData.put("body", "Your tickets for: " + event.getName());
+                pushData.put("eventId", event.getId().toString());
+                pushData.put("ticketCount", entry.getValue().size());
+                if (event.getEventWebsiteUrl() != null) {
+                    pushData.put("ticketsUrl", event.getEventWebsiteUrl());
                 }
-            } catch (Exception e) {
+
+                notificationService.sendOrThrow(NotificationRequest.builder()
+                    .type(CommunicationType.PUSH_NOTIFICATION)
+                    .to(attendee.getUser().getId().toString())
+                    .subject("Tickets confirmed")
+                    .templateVariables(pushData)
+                    .eventId(event.getId())
+                    .build());
             }
         }
     }
