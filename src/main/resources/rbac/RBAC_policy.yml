@@ -986,6 +986,24 @@ policy:
         owns_scope: false
         is_member: false
     -
+      name: user.social.read
+      scope: SYSTEM
+      resources: null
+      description: View any user's followers, following, follow status, and follow stats
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: user.social.update
+      scope: SYSTEM
+      resources: null
+      description: Follow or unfollow another user
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
       name: user.update
       scope: SYSTEM
       resources: user_id
@@ -1072,6 +1090,8 @@ policy:
         - user.notifications.manage
         - user.read
         - user.search
+        - user.social.read
+        - user.social.update
         - user.update
         - vendor.create
         - vendor.read
@@ -1083,11 +1103,13 @@ policy:
         - collaborator.invite.accept
         - organization.create
         - organization.search
+        - user.notifications.manage
+        - user.social.read
+        - user.social.update
         - vendor.create
         - vendor.read
         - public.events.search
         - vendor.search
-        - user.notifications.manage
       USER:
         - auth.me
         - collaborator.invite.accept
@@ -1101,6 +1123,8 @@ policy:
         - user.notifications.manage
         - user.read
         - user.search
+        - user.social.read
+        - user.social.update
         - user.update
         - my.events.search
         - public.events.search

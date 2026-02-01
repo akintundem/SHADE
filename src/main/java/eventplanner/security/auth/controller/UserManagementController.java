@@ -55,9 +55,10 @@ public class UserManagementController {
     }
 
     @GetMapping("/{userId}")
-    @RequiresPermission(RbacPermissions.ADMIN_USERS_DETAIL)
-    public SecureUserResponse getUser(@PathVariable UUID userId) {
-        return userAccountService.getSecureUser(userId);
+    @RequiresPermission(RbacPermissions.USER_SEARCH)
+    @Operation(summary = "Get user public profile", description = "Get a user's public profile by ID. Returns non-sensitive fields only.")
+    public PublicUserResponse getUser(@PathVariable UUID userId) {
+        return userAccountService.getPublicUser(userId);
     }
 
     @PutMapping("/{userId}")
@@ -167,14 +168,13 @@ public class UserManagementController {
 
     @GetMapping("/{userId}/posts")
     @RequiresPermission(RbacPermissions.USER_SEARCH)
-    @Operation(summary = "Get user posts", description = "Get all posts created by the requested user across all events")
+    @Operation(summary = "Get user posts", description = "Get all posts created by the specified user across all events")
     public ResponseEntity<PostListResponse> getUserPostsById(
             @PathVariable UUID userId,
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = "20") Integer size,
             @AuthenticationPrincipal UserPrincipal principal) {
-        ensurePrincipalMatchesUser(userId, principal);
-        PostListResponse posts = userAccountService.getUserPosts(principal, page, size);
+        PostListResponse posts = userAccountService.getUserPostsById(userId, page, size, principal);
         return ResponseEntity.ok(posts);
     }
 

@@ -312,6 +312,12 @@ public class UserAccountService {
             .map(this::toPublicUserResponse);
     }
 
+    public PublicUserResponse getPublicUser(UUID userId) {
+        UserAccount user = userAccountRepository.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        return toPublicUserResponse(user);
+    }
+
     private PublicUserResponse toPublicUserResponse(UserAccount user) {
         return PublicUserResponse.builder()
                 .id(user.getId())
@@ -449,9 +455,14 @@ public class UserAccountService {
         if (principal == null || principal.getId() == null) {
             throw new AccessDeniedException("Authentication required");
         }
-        
+        return getUserPostsById(principal.getId(), page, size, principal);
+    }
+
+    /**
+     * Get all posts created by the specified user.
+     */
+    public PostListResponse getUserPostsById(UUID userId, Integer page, Integer size, UserPrincipal principal) {
         if (feedPostService == null) {
-            // Return empty response if FeedPostService is not available
             PostListResponse response = new PostListResponse();
             response.setPosts(Collections.emptyList());
             response.setCurrentPage(page != null ? page : 0);
@@ -462,8 +473,7 @@ public class UserAccountService {
             response.setHasPrevious(false);
             return response;
         }
-        
-        return feedPostService.getUserPosts(principal.getId(), page, size, principal);
+        return feedPostService.getUserPosts(userId, page, size, principal);
     }
 
     /**

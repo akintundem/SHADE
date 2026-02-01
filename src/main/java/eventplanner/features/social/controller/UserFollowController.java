@@ -34,7 +34,7 @@ public class UserFollowController {
     }
 
     @PostMapping("/{userId}/follow")
-    @RequiresPermission(RbacPermissions.USER_UPDATE)
+    @RequiresPermission(RbacPermissions.USER_SOCIAL_UPDATE)
     @Operation(summary = "Follow user", description = "Follow another user")
     public ResponseEntity<Void> followUser(
             @Parameter(description = "User ID to follow") @PathVariable UUID userId,
@@ -45,7 +45,7 @@ public class UserFollowController {
     }
 
     @DeleteMapping("/{userId}/follow")
-    @RequiresPermission(RbacPermissions.USER_UPDATE)
+    @RequiresPermission(RbacPermissions.USER_SOCIAL_UPDATE)
     @Operation(summary = "Unfollow user", description = "Unfollow a user")
     public ResponseEntity<Void> unfollowUser(
             @Parameter(description = "User ID to unfollow") @PathVariable UUID userId,
@@ -56,7 +56,7 @@ public class UserFollowController {
     }
 
     @GetMapping("/{userId}/follow-status")
-    @RequiresPermission(RbacPermissions.USER_READ)
+    @RequiresPermission(RbacPermissions.USER_SOCIAL_READ)
     @Operation(summary = "Get follow status", description = "Get follow relationship status between current user and target user")
     public ResponseEntity<FollowStatusResponse> getFollowStatus(
             @Parameter(description = "User ID") @PathVariable UUID userId,
@@ -66,7 +66,7 @@ public class UserFollowController {
     }
 
     @GetMapping("/{userId}/following")
-    @RequiresPermission(RbacPermissions.USER_READ)
+    @RequiresPermission(RbacPermissions.USER_SOCIAL_READ)
     @Operation(summary = "Get following", description = "Get list of users that this user is following")
     public ResponseEntity<Page<UserProfileResponse>> getFollowing(
             @Parameter(description = "User ID") @PathVariable UUID userId,
@@ -79,7 +79,7 @@ public class UserFollowController {
     }
 
     @GetMapping("/{userId}/followers")
-    @RequiresPermission(RbacPermissions.USER_READ)
+    @RequiresPermission(RbacPermissions.USER_SOCIAL_READ)
     @Operation(summary = "Get followers", description = "Get list of users following this user")
     public ResponseEntity<Page<UserProfileResponse>> getFollowers(
             @Parameter(description = "User ID") @PathVariable UUID userId,
@@ -92,7 +92,7 @@ public class UserFollowController {
     }
 
     @GetMapping("/{userId}/follow-stats")
-    @RequiresPermission(RbacPermissions.USER_READ)
+    @RequiresPermission(RbacPermissions.USER_SOCIAL_READ)
     @Operation(summary = "Get follow stats", description = "Get follower and following counts for a user")
     public ResponseEntity<FollowStatsResponse> getFollowStats(
             @Parameter(description = "User ID") @PathVariable UUID userId

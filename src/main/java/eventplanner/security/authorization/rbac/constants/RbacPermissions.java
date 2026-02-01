@@ -108,6 +108,8 @@ public final class RbacPermissions {
     public static final String USER_NOTIFICATIONS_MANAGE = "user.notifications.manage";
     public static final String USER_READ = "user.read";
     public static final String USER_SEARCH = "user.search";
+    public static final String USER_SOCIAL_READ = "user.social.read";
+    public static final String USER_SOCIAL_UPDATE = "user.social.update";
     public static final String USER_UPDATE = "user.update";
     public static final String VENUE_CREATE = "venue.create";
     public static final String VENUE_DELETE = "venue.delete";
