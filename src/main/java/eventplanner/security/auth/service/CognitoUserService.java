@@ -100,6 +100,7 @@ public class CognitoUserService {
         }
         if (StringUtils.hasText(preferredUsername)) {
             attributes.add(AttributeType.builder().name("preferred_username").value(preferredUsername.trim()).build());
+            attributes.add(AttributeType.builder().name("custom:username").value(preferredUsername.trim()).build());
         }
         if (StringUtils.hasText(phoneNumber)) {
             attributes.add(AttributeType.builder().name("phone_number").value(phoneNumber.trim()).build());

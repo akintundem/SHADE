@@ -357,8 +357,28 @@ public class UserAccountService {
             throw new IllegalArgumentException("Username is required");
         }
 
+        // First try to find by cognitoSub (handles auto-provisioned users with fallback emails)
+        if (StringUtils.hasText(cognitoSub)) {
+            Optional<UserAccount> existingBySub = userAccountRepository.findByCognitoSub(cognitoSub);
+            if (existingBySub.isPresent()) {
+                UserAccount user = existingBySub.get();
+                // Update email if it was a fallback (e.g. {sub}@cognito.local)
+                if (!email.equalsIgnoreCase(user.getEmail())) {
+                    if (userAccountRepository.findByEmailIgnoreCase(email)
+                            .filter(u -> !u.getId().equals(user.getId())).isPresent()) {
+                        throw new IllegalArgumentException("Email is already in use by another account");
+                    }
+                    user.setEmail(email);
+                }
+                applySignupUpdates(user, request, normalizedUsername);
+                userAccountRepository.save(user);
+                return new ProvisionResult(user, false);
+            }
+        }
+
+        // Then try by email (existing flow)
         Optional<UserAccount> existingUser = userAccountRepository.findByEmailIgnoreCase(email);
-        
+
         if (existingUser.isPresent()) {
             UserAccount user = existingUser.get();
             if (StringUtils.hasText(cognitoSub)) {
