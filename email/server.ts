@@ -27,6 +27,15 @@ const ALLOWED = new Set(
 )
 const resend = new Resend(config.resendApiKey as string)
 
+const MAX_RECIPIENTS_TOTAL = 50
+const MAX_SUBJECT_LENGTH = 500
+const MAX_FROM_LENGTH = 200
+const BASIC_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function isValidEmail(s: string): boolean {
+  return typeof s === 'string' && s.length <= 254 && BASIC_EMAIL_REGEX.test(s.trim())
+}
+
 const templateLookup = new Map()
 Object.entries(EMAIL_TEMPLATES).forEach(([key, entry]) => {
   templateLookup.set(key, { key, ...entry })
@@ -50,8 +59,18 @@ const resolveEmailRequest = (payload: any) => {
 
   const toList = normalizeList(to)
   if (!toList.length) requestError('to is required')
+  const ccList = normalizeList(cc)
+  const bccList = normalizeList(bcc)
+  const totalRecipients = toList.length + ccList.length + bccList.length
+  if (totalRecipients > MAX_RECIPIENTS_TOTAL) requestError(`total recipients must be at most ${MAX_RECIPIENTS_TOTAL}`)
+
+  for (const addr of [...toList, ...ccList, ...bccList]) {
+    if (!isValidEmail(addr)) requestError(`invalid email address: ${String(addr).slice(0, 50)}`)
+  }
+
   const fromAddress = from || DEFAULT_FROM
   if (!fromAddress) requestError('from is required')
+  if (fromAddress.length > MAX_FROM_LENGTH) requestError('from too long')
 
   const template = templateLookup.get(templateId)
   if (!template) requestError('unknown templateId')
@@ -66,9 +85,8 @@ const resolveEmailRequest = (payload: any) => {
     (typeof template.subject === 'function'
       ? template.subject(props as never)
       : template.subject)
-
-  const ccList = normalizeList(cc)
-  const bccList = normalizeList(bcc)
+  if (resolvedSubject && resolvedSubject.length > MAX_SUBJECT_LENGTH) requestError('subject too long')
+  if (replyTo && !isValidEmail(replyTo)) requestError('invalid replyTo')
 
   return {
     toList,

@@ -74,8 +74,10 @@ public class RbacAuthorizationService {
             return false;
         }
 
+        // SECURITY: Deny when policy declares conditions that are not enforced (deny-by-default)
         if (!permission.getConditions().isEmpty()) {
-            log.debug("RBAC manual conditions for {} -> {}", permissionName, permission.getConditions());
+            log.warn("RBAC permission {} has undeployed conditions: {} - access denied until conditions are enforced", permissionName, permission.getConditions());
+            return false;
         }
         return true;
     }

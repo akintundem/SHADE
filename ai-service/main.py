@@ -6,8 +6,10 @@ import os
 import base64
 import io
 import random
-from typing import Optional, Dict, Any, List
+import secrets
+from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -162,8 +164,8 @@ async def verify_auth(request: Request, call_next):
     # Check for Kong-injected service secret
     secret_header = request.headers.get("x-ai-secret")
     
-    # If shared secret is configured and matches, allow the request (Kong gateway auth)
-    if SHARED_SECRET and secret_header == SHARED_SECRET:
+    # Constant-time comparison to prevent timing attacks
+    if SHARED_SECRET and secret_header and secrets.compare_digest(secret_header, SHARED_SECRET):
         return await call_next(request)
     
     # If secret is required but missing/invalid, check for valid JWT as fallback
@@ -182,7 +184,7 @@ async def verify_auth(request: Request, call_next):
         await verify_jwt_token(token)
     except HTTPException as exc:
         # If secret was provided but invalid, give specific error
-        if secret_header and SHARED_SECRET and secret_header != SHARED_SECRET:
+        if secret_header and SHARED_SECRET and not secrets.compare_digest(secret_header, SHARED_SECRET):
             return JSONResponse(
                 status_code=403,
                 content={"success": False, "error": "Invalid x-ai-secret header"}
@@ -460,8 +462,7 @@ def generate_enhanced_event_prompt(
                     time_context += ", evening time"
                 else:
                     time_context += ", night time"
-        except Exception as e:
-            print(f"[ai] Error parsing datetime: {e}")
+        except Exception:
             pass
     
     # Build the comprehensive prompt
@@ -529,11 +530,33 @@ Make it visually rich, specific, and compelling. Focus on creating a unique and 
             if refined_prompt.startswith('"') and refined_prompt.endswith('"'):
                 refined_prompt = refined_prompt[1:-1]
             return refined_prompt
-        except Exception as e:
-            print(f"[ai] Error refining prompt with LLM: {e}")
+        except Exception:
+            if os.getenv("AI_DEBUG_LOGGING", "").lower() == "true":
+                print("[ai] Error refining prompt")
             # Fall back to base prompt
     
     return base_prompt
+
+
+def _is_safe_image_url(url: str) -> Tuple[bool, str]:
+    """Validate URL for image fetch: https only, allowlisted OpenAI host, no private IPs."""
+    if not url or not url.strip():
+        return False, "empty"
+    try:
+        parsed = urlparse(url.strip())
+    except Exception:
+        return False, "invalid"
+    if parsed.scheme != "https":
+        return False, "scheme"
+    host = (parsed.hostname or "").lower()
+    # Allow OpenAI CDN and known image hosts
+    allowed_hosts = ("oaidalleapiprodscus.blob.core.windows.net", "dalleproduse.blob.core.windows.net")
+    if host not in allowed_hosts:
+        return False, "host"
+    # Reject private/link-local
+    if host.endswith(".local") or host.startswith("169.254.") or host in ("localhost", "127.0.0.1"):
+        return False, "private"
+    return True, ""
 
 
 @app.get("/health")
@@ -575,7 +598,9 @@ async def generate_cover_image(
             style=request.style
         )
         
-        print(f"[ai] Generating image with prompt: {prompt[:100]}...")
+        # Do not log prompt content (user/event data) unless debug
+        if os.getenv("AI_DEBUG_LOGGING", "").lower() == "true":
+            print(f"[ai] Generating image (prompt length={len(prompt)})")
         
         # Generate image using OpenAI's latest image generation model
         # GPT Image 1.5 is the latest model (replacing legacy DALL-E)
@@ -604,11 +629,15 @@ async def generate_cover_image(
             )
             image_url = response.data[0].url
         
-        # Optionally fetch and return as base64
+        # Optionally fetch and return as base64 (SSRF-safe: allowlisted hosts only)
         image_base64 = None
         if os.getenv("RETURN_BASE64", "false").lower() == "true":
-            async with httpx.AsyncClient() as client:
+            ok, reason = _is_safe_image_url(image_url)
+            if not ok:
+                raise HTTPException(status_code=502, detail=f"Unsafe or unsupported image URL: {reason}")
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 img_response = await client.get(image_url)
+                img_response.raise_for_status()
                 image_base64 = base64.b64encode(img_response.content).decode('utf-8')
         
         return ImageGenerationResponse(
@@ -677,9 +706,13 @@ async def generate_cover_image_v2(
             )
             image_url = response.data[0].url
         
-        # Always fetch and return as base64
-        async with httpx.AsyncClient() as client:
+        # Always fetch and return as base64 (SSRF-safe)
+        ok, reason = _is_safe_image_url(image_url)
+        if not ok:
+            return JSONResponse(status_code=502, content={"success": False, "error": f"Unsafe image URL: {reason}"})
+        async with httpx.AsyncClient(timeout=30.0) as client:
             img_response = await client.get(image_url)
+            img_response.raise_for_status()
             image_base64 = base64.b64encode(img_response.content).decode('utf-8')
         
         return ImageGenerationResponse(
@@ -690,7 +723,8 @@ async def generate_cover_image_v2(
         )
         
     except Exception as e:
-        print(f"[ai] Error generating image: {e}")
+        if os.getenv("AI_DEBUG_LOGGING", "").lower() == "true":
+            print(f"[ai] Error: {type(e).__name__}")
         return JSONResponse(
             status_code=500,
             content={
@@ -741,7 +775,8 @@ async def generate_event_cover_image(
             variation_seed=request.variationSeed
         )
         
-        print(f"[ai] Generating event cover image for '{request.name}' with prompt: {prompt[:150]}...")
+        if os.getenv("AI_DEBUG_LOGGING", "").lower() == "true":
+            print(f"[ai] Generating event cover for '{request.name}' (prompt len={len(prompt)})")
         
         # Generate image using OpenAI's latest image generation model
         image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
@@ -768,8 +803,11 @@ async def generate_event_cover_image(
             )
             image_url = response.data[0].url
         
-        # Always fetch and return as base64 for mobile to save to S3
-        async with httpx.AsyncClient() as client:
+        # Always fetch and return as base64 for mobile (SSRF-safe)
+        ok, reason = _is_safe_image_url(image_url)
+        if not ok:
+            raise HTTPException(status_code=502, detail=f"Unsafe image URL: {reason}")
+        async with httpx.AsyncClient(timeout=30.0) as client:
             img_response = await client.get(image_url)
             img_response.raise_for_status()
             image_base64 = base64.b64encode(img_response.content).decode('utf-8')
@@ -782,16 +820,18 @@ async def generate_event_cover_image(
         )
         
     except httpx.HTTPError as e:
-        print(f"[ai] Error fetching image from URL: {e}")
+        if os.getenv("AI_DEBUG_LOGGING", "").lower() == "true":
+            print(f"[ai] HTTP error: {type(e).__name__}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch generated image: {str(e)}"
         )
     except Exception as e:
-        print(f"[ai] Error generating event cover image: {e}")
+        if os.getenv("AI_DEBUG_LOGGING", "").lower() == "true":
+            print(f"[ai] Error: {type(e).__name__}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate image: {str(e)}"
+            detail="Failed to generate image"
         )
 
 

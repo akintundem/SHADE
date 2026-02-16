@@ -17,12 +17,11 @@ import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import jakarta.validation.Valid;
 import eventplanner.common.dto.ApiMessageResponse;
 import eventplanner.common.exception.exceptions.BadRequestException;
-import eventplanner.common.exception.exceptions.UnauthorizedException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,6 +45,9 @@ import java.util.UUID;
 @Validated
 @Tag(name = "User Management", description = "Endpoints for user management and location search")
 public class UserManagementController {
+
+    /** Max page size for directory/user search to limit enumeration and scraping. */
+    private static final int MAX_DIRECTORY_PAGE_SIZE = 50;
 
     private final UserAccountService userAccountService;
     private final LocationService locationService;
@@ -93,13 +95,15 @@ public class UserManagementController {
 
     @GetMapping("/directory")
     @RequiresPermission(RbacPermissions.USER_SEARCH)
+    @Operation(summary = "Search user directory", description = "Paginated user directory. Page size capped at " + MAX_DIRECTORY_PAGE_SIZE + " to limit enumeration.")
     public Page<PublicUserResponse> searchDirectory(@RequestParam(defaultValue = "") String searchTerm,
                                               @PageableDefault(size = 10) Pageable pageable) {
+        Pageable limited = capPageSize(pageable, MAX_DIRECTORY_PAGE_SIZE);
         String sanitizedTerm = searchTerm != null ? searchTerm.trim() : "";
         if (sanitizedTerm.isEmpty()) {
-            return userAccountService.listPublicUsers(pageable);
+            return userAccountService.listPublicUsers(limited);
         }
-        return userAccountService.searchPublicUsers(sanitizedTerm, pageable);
+        return userAccountService.searchPublicUsers(sanitizedTerm, limited);
     }
 
     /**
@@ -150,26 +154,27 @@ public class UserManagementController {
 
     @GetMapping("/me/posts")
     @RequiresPermission(RbacPermissions.USER_SEARCH)
-    @Operation(summary = "Get my posts", description = "Get all posts created by the current user across all events")
+    @Operation(summary = "Get my posts", description = "Get all posts created by the current user across all events. Size capped at " + MAX_DIRECTORY_PAGE_SIZE + ".")
     public ResponseEntity<PostListResponse> getMyPosts(
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = "20") Integer size,
             @AuthenticationPrincipal UserPrincipal principal) {
         Preconditions.requireAuthenticated(principal);
-        PostListResponse posts = 
-                userAccountService.getUserPosts(principal, page, size);
+        int safeSize = size != null && size > 0 ? Math.min(size, MAX_DIRECTORY_PAGE_SIZE) : 20;
+        PostListResponse posts = userAccountService.getUserPosts(principal, page != null ? page : 0, safeSize);
         return ResponseEntity.ok(posts);
     }
 
     @GetMapping("/{userId}/posts")
     @RequiresPermission(RbacPermissions.USER_SEARCH)
-    @Operation(summary = "Get user posts", description = "Get all posts created by the specified user across all events")
+    @Operation(summary = "Get user posts", description = "Get all posts created by the specified user across all events. Size capped at " + MAX_DIRECTORY_PAGE_SIZE + ".")
     public ResponseEntity<PostListResponse> getUserPostsById(
             @PathVariable UUID userId,
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = "20") Integer size,
             @AuthenticationPrincipal UserPrincipal principal) {
-        PostListResponse posts = userAccountService.getUserPostsById(userId, page, size, principal);
+        int safeSize = size != null && size > 0 ? Math.min(size, MAX_DIRECTORY_PAGE_SIZE) : 20;
+        PostListResponse posts = userAccountService.getUserPostsById(userId, page != null ? page : 0, safeSize, principal);
         return ResponseEntity.ok(posts);
     }
 
@@ -244,6 +249,11 @@ public class UserManagementController {
 
     private void ensurePrincipalMatchesUser(UUID userId, UserPrincipal principal) {
         Preconditions.requireSameUser(principal, userId);
+    }
+
+    private static Pageable capPageSize(Pageable pageable, int maxSize) {
+        if (pageable.getPageSize() <= maxSize) return pageable;
+        return PageRequest.of(pageable.getPageNumber(), maxSize, pageable.getSort());
     }
 
 }

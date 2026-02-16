@@ -1223,6 +1223,7 @@ policy:
         - timeline.task.read
         - timeline.task.update
         - timeline.workback.generate
+      # Least privilege: COORDINATOR cannot delete event, assign/remove roles, or approve budget
       COORDINATOR:
         - attendee.analytics.read
         - attendee.checkin
@@ -1247,16 +1248,13 @@ policy:
         - ticket.type.update
         - ticket.validate
         - budget.analytics.read
-        - budget.approve
         - budget.create
-        - budget.delete
         - budget.lineitem.create
         - budget.lineitem.delete
         - budget.lineitem.read
         - budget.lineitem.update
         - budget.read
         - budget.recalculate
-        - budget.reject
         - budget.submit
         - budget.update
         - communication.read
@@ -1265,7 +1263,6 @@ policy:
         - event.assets.upload
         - event.coverimage.delete
         - event.coverimage.update
-        - event.delete
         - event.media.delete
         - event.media.read
         - event.media.update
@@ -1280,9 +1277,7 @@ policy:
         - event.reminder.read
         - event.reminder.update
         - event.update
-        - role.assign
         - role.read
-        - role.remove
         - role.update
         - timeline.create
         - timeline.delete
@@ -1295,6 +1290,7 @@ policy:
         - timeline.task.read
         - timeline.task.update
         - timeline.workback.generate
+      # Least privilege: STAFF cannot delete event or approve/reject budget
       STAFF:
         - attendee.analytics.read
         - attendee.checkin
@@ -1319,16 +1315,13 @@ policy:
         - ticket.type.update
         - ticket.validate
         - budget.analytics.read
-        - budget.approve
         - budget.create
-        - budget.delete
         - budget.lineitem.create
         - budget.lineitem.delete
         - budget.lineitem.read
         - budget.lineitem.update
         - budget.read
         - budget.recalculate
-        - budget.reject
         - budget.submit
         - budget.update
         - communication.read
@@ -1337,7 +1330,6 @@ policy:
         - event.assets.upload
         - event.coverimage.delete
         - event.coverimage.update
-        - event.delete
         - event.media.delete
         - event.media.read
         - event.media.update
@@ -1355,6 +1347,7 @@ policy:
         - timeline.task.read
         - timeline.task.update
         - timeline.workback.generate
+      # Least privilege: VOLUNTEER cannot delete media or timeline items
       VOLUNTEER:
         - attendee.checkin
         - attendee.checkout
@@ -1362,16 +1355,12 @@ policy:
         - attendee.read
         - ticket.read
         - ticket.validate
-        - event.media.delete
         - event.media.read
         - event.media.update
         - event.media.upload
         - event.read
-        - timeline.create
-        - timeline.delete
         - timeline.read
-        - timeline.task.create
-        - timeline.task.delete
+        - timeline.task.read
         - timeline.task.position.update
       SECURITY:
         - attendee.checkin

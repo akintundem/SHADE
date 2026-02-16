@@ -7,12 +7,16 @@ _transform: true
 plugins:
   # ---------------------------------------------------------------------------
   # CORS Configuration
-  # Origins are loaded from environment variables for production flexibility
+  # SECURITY: No wildcard when credentials: true. Set explicit allowlist in production
+  # via KONG_CORS_ORIGINS (comma-separated). Default below is dev-only.
   # ---------------------------------------------------------------------------
   - name: cors
     config:
       origins:
-        - "~*"  # Kong will use KONG_CORS_ORIGINS env var to override
+        - "http://localhost:3000"
+        - "https://localhost:3000"
+        - "http://localhost:8080"
+        - "https://localhost:8080"
       methods:
         - GET
         - POST
@@ -129,8 +133,8 @@ services:
           - http
           - https
     plugins:
-      # Inject service API key - hardcoded since Kong doesn't interpolate env vars in header values
-      # Update this value if you change GATEWAY_SERVICE_API_KEY in .env
+      # Inject service API key from environment (never commit secrets)
+      # Set GATEWAY_SERVICE_API_KEY in .env / runtime and rotate regularly
       - name: request-transformer
         config:
           remove:
@@ -138,7 +142,7 @@ services:
               - X-API-Key  # Remove any client-provided key (prevent spoofing)
           add:
             headers:
-              - "X-API-Key:***REMOVED***"
+              - "X-API-Key:${GATEWAY_SERVICE_API_KEY}"
 
   # ---------------------------------------------------------------------------
   # AI Service (Python FastAPI)

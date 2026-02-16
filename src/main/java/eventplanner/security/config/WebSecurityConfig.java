@@ -63,15 +63,22 @@ public class WebSecurityConfig {
     }
 
     @Bean
+    public CookieCsrfTokenRepository csrfTokenRepository() {
+        CookieCsrfTokenRepository repo = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repo.setCookieCustomizer(builder -> builder.httpOnly(true));
+        return repo;
+    }
+
+    @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             // Perimeter CORS is enforced at the gateway; disable Spring CORS here.
             .cors(AbstractHttpConfigurer::disable)
             .csrf(csrf -> csrf
-                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                .csrfTokenRepository(csrfTokenRepository())
                 .ignoringRequestMatchers(
                     new AntPathRequestMatcher("/api/**")
-                )) // Disable CSRF for all API endpoints (using JWT auth)
+                )) // API uses JWT; CSRF cookie hardened with HttpOnly
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authz -> authz
                 .requestMatchers("/actuator/health").permitAll()

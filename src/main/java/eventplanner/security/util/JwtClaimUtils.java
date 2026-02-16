@@ -31,6 +31,8 @@ public final class JwtClaimUtils {
      * Convenience: is email verified, with access-token fallback.
      * When the token is an access token (no email_verified claim), returns true
      * because Cognito only issues access tokens for verified emails.
+     * SECURITY: This assumes IdP contract (Cognito) — enforce contract tests and fail-safe
+     * if claim model changes (e.g. access token without verified email).
      */
     public static boolean isEmailVerifiedOrAccessToken(Jwt jwt) {
         Boolean verified = jwt.getClaimAsBoolean("email_verified");

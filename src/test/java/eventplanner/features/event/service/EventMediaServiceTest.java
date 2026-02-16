@@ -53,7 +53,7 @@ class EventMediaServiceTest {
                 storageService,
                 storedObjectRepository,
                 eventRepository,
-                userAccountRepository
+                userAccountRepository, null
         );
     }
 

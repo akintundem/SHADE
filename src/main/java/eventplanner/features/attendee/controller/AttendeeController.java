@@ -1,5 +1,6 @@
 package eventplanner.features.attendee.controller;
 
+import eventplanner.features.attendee.dto.request.AcceptAttendeeInviteRequest;
 import eventplanner.features.attendee.dto.request.BulkAttendeeCreateRequest;
 import eventplanner.features.attendee.dto.request.CreateAttendeeInviteRequest;
 import eventplanner.features.attendee.dto.request.BulkAttendeeInviteRequest;
@@ -295,44 +296,48 @@ public class AttendeeController {
 
     // ==================== Update Invite RSVP Status ====================
 
+    /** Accept or decline invite by token (POST body only; token must not appear in URL). */
+    @PostMapping("/invites/accept")
+    @RequiresPermission(RbacPermissions.ATTENDEE_INVITE_RESPOND)
+    @Operation(summary = "Accept or decline attendee invite by token",
+        description = "Token must be sent in request body only (never in query string). Status ACCEPTED or DECLINED.")
+    public ResponseEntity<AttendeeResponse> acceptInviteByToken(
+            @Valid @RequestBody AcceptAttendeeInviteRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            throw new UnauthorizedException("Authentication required");
+        }
+        if (request.getStatus() != AttendeeInviteStatus.ACCEPTED && request.getStatus() != AttendeeInviteStatus.DECLINED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only ACCEPTED or DECLINED allowed for token-based accept");
+        }
+        Attendee attendee = inviteService.updateInviteStatus(null, request.getToken(), request.getStatus(), principal);
+        if (request.getStatus() == AttendeeInviteStatus.ACCEPTED) {
+            return ResponseEntity.ok(AttendeeResponse.from(attendee));
+        }
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/invites")
     @RequiresPermission(RbacPermissions.ATTENDEE_INVITE_RESPOND)
-    @Operation(summary = "Update attendee invite RSVP status",
-        description = "Update attendee invite RSVP status. Can update by inviteId or token (query parameters). Status can be any valid AttendeeInviteStatus (ACCEPTED, DECLINED, REVOKED, EXPIRED). Works for both user-linked attendees and email-only guests.")
+    @Operation(summary = "Update attendee invite RSVP status by invite ID",
+        description = "Update status by inviteId (for authenticated user with known invite). Token-based acceptance must use POST /invites/accept with body.")
     public ResponseEntity<AttendeeResponse> updateInviteStatus(
-            @RequestParam(required = false) UUID inviteId,
-            @RequestParam(required = false) String token,
+            @RequestParam UUID inviteId,
             @RequestParam String status,
-            @AuthenticationPrincipal UserPrincipal principal) {            if (principal == null) {
-                throw new UnauthorizedException("Authentication required");
-            }
-
-            if (inviteId == null && (token == null || token.trim().isEmpty())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-                    "Either inviteId or token must be provided");
-            }
-		
-		if (status == null || status.trim().isEmpty()) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
-				"Status is required");
-		}
-		
-		// Parse status
-		AttendeeInviteStatus inviteStatus;
-		inviteStatus = AttendeeInviteStatus.valueOf(status.toUpperCase().trim());
-
-		Attendee attendee = inviteService.updateInviteStatus(inviteId, token, inviteStatus, principal);
-
-		if (inviteStatus == AttendeeInviteStatus.ACCEPTED) {
-			// Return attendee response
-			AttendeeResponse response = AttendeeResponse.from(attendee);
-			return ResponseEntity.ok(response);
-		} else {
-			// Other statuses - return no content
-			return ResponseEntity.noContent().build();
-		}
-
-	}
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            throw new UnauthorizedException("Authentication required");
+        }
+        if (status == null || status.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status is required");
+        }
+        AttendeeInviteStatus inviteStatus = AttendeeInviteStatus.valueOf(status.toUpperCase().trim());
+        Attendee attendee = inviteService.updateInviteStatus(inviteId, null, inviteStatus, principal);
+        if (inviteStatus == AttendeeInviteStatus.ACCEPTED) {
+            return ResponseEntity.ok(AttendeeResponse.from(attendee));
+        }
+        return ResponseEntity.noContent().build();
+    }
 
 	// ==================== Get Tickets for Attendee ====================
 

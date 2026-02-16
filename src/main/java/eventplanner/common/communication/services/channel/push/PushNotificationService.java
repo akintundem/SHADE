@@ -36,7 +36,7 @@ public class PushNotificationService {
 
     // Configuration for token invalidation
     private static final int MAX_TOKEN_FAILURES = 3;
-    private static final int BATCH_SIZE = 1000; // Max tokens per batch to avoid payload size limits
+    private static final int BATCH_SIZE = 500; // Cap per provider limits; reduce abuse blast radius
 
     public PushNotificationService(DeviceTokenRepository deviceTokenRepository,
                                    RabbitTemplate rabbitTemplate,

@@ -91,8 +91,8 @@ public class NotificationService {
         if (type == CommunicationType.EMAIL) {
             communication.setRecipientEmail(to);
             communication.setTemplateId(templateId);
-            communication.setContent("Template: " + templateId + " with variables: " + 
-                    (templateVariables != null ? templateVariables.toString() : "none"));
+            // SECURITY: Do not persist raw template variables (tokens, PII, invite links)
+            communication.setContent("Template: " + templateId + ", eventId: " + (eventId != null ? eventId : "n/a") + ", recipient: <redacted>");
             communication.setChannel("email");
         } else if (type == CommunicationType.PUSH_NOTIFICATION) {
             communication.setChannel("push");

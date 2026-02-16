@@ -585,7 +585,9 @@ public class AttendeeInviteService {
             variables.put("message", invite.getMessage());
         }
 
-        String acceptUrl = appBaseUrl + "/api/v1/attendees/invites?token=" + rawToken + "&status=accepted";
+        // SECURITY: Token must not appear in URL (query). Use fragment so referrer/logs don't leak it.
+        // Frontend at /invite/accept reads fragment and POSTs token in body to /api/v1/attendees/invites/accept
+        String acceptUrl = appBaseUrl + "/invite/accept#" + java.net.URLEncoder.encode(rawToken, java.nio.charset.StandardCharsets.UTF_8);
         variables.put("acceptUrl", acceptUrl);
 
         // CRITICAL: Event invitation emails must be delivered

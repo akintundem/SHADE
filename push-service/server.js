@@ -17,6 +17,8 @@ if (!config.firebaseProjectId) throw new Error("FIREBASE_PROJECT_ID is required"
 const rabbitmqPrefetch = Number(config.rabbitmqPrefetch);
 const rabbitmqReconnectMs = Number(config.rabbitmqReconnectMs);
 const rabbitmqRequeueOnError = config.rabbitmqRequeueOnError === "true";
+/** Max tokens per push message to align with Java producer and provider limits. */
+const MAX_PUSH_TOKENS_PER_MESSAGE = 500;
 
 let firebaseApp;
 
@@ -49,7 +51,18 @@ function resolvePushRequest(payload) {
   if (!recipients.length) {
     requestError("`to` (device token or list) is required");
   }
-
+  if (recipients.length > MAX_PUSH_TOKENS_PER_MESSAGE) {
+    requestError(`at most ${MAX_PUSH_TOKENS_PER_MESSAGE} tokens per message`);
+  }
+  if (title && title.length > 500) requestError("title too long");
+  if (body && body.length > 2000) requestError("body too long");
+  if (data && typeof data === "object") {
+    const keys = Object.keys(data);
+    if (keys.length > 20) requestError("data has too many keys");
+    for (const k of keys) {
+      if (String(data[k]).length > 500) requestError("data value too long");
+    }
+  }
   return { recipients, title, body, data };
 }
 

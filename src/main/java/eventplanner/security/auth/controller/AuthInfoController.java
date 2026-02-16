@@ -28,7 +28,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 import static eventplanner.security.util.AuthValidationUtil.normalizeEmail;
@@ -59,7 +58,7 @@ public class AuthInfoController {
         return ResponseEntity.ok(session);
     }
 
-    @RequestMapping(value = "/logout", method = {RequestMethod.POST, RequestMethod.GET})
+    @PostMapping("/logout")
     public ResponseEntity<ApiMessageResponse> logout(@AuthenticationPrincipal UserPrincipal principal) {
         Preconditions.requireAuthenticated(principal);
         cognitoUserService.signOutUser(
@@ -86,14 +85,11 @@ public class AuthInfoController {
             if (!isEmailVerified(jwt)) {
                 throw new ForbiddenException("Email not verified");
             }
-
-            String requestEmail = normalizeEmail(request.getEmail());
+            // SECURITY: Never use request body email as identity; require verified token email
             if (!StringUtils.hasText(tokenEmail)) {
-                if (!StringUtils.hasText(requestEmail)) {
-                    throw new UnauthorizedException("Invalid token");
-                }
-                tokenEmail = requestEmail;
+                throw new UnauthorizedException("Token must contain verified email for signup");
             }
+            String requestEmail = normalizeEmail(request.getEmail());
             if (!tokenEmail.equalsIgnoreCase(requestEmail)) {
                 throw new BadRequestException("Invalid signup payload");
             }

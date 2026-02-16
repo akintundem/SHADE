@@ -67,16 +67,17 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Check if request has a Bearer token (JWT) - authenticated user requests
-        // If Bearer token is present, bypass API key validation entirely
-        String authorizationHeader = request.getHeader("Authorization");
-        boolean hasBearerToken = StringUtils.hasText(authorizationHeader) && 
-                                authorizationHeader.trim().startsWith("Bearer ");
-
-        // Bearer tokens are for user requests - skip API key validation
-        if (hasBearerToken) {
-            filterChain.doFilter(request, response);
-            return;
+        // Internal/service paths must always validate API key (no Bearer bypass)
+        // to enforce gateway-only access for trusted service routes.
+        boolean isInternalPath = isServicePathAllowed(path);
+        if (!isInternalPath) {
+            String authorizationHeader = request.getHeader("Authorization");
+            boolean hasBearerToken = StringUtils.hasText(authorizationHeader) &&
+                                    authorizationHeader.trim().startsWith("Bearer ");
+            if (hasBearerToken) {
+                filterChain.doFilter(request, response);
+                return;
+            }
         }
 
         // No Bearer token - validate API key for service-to-service requests

@@ -80,8 +80,7 @@ public class BulkNotificationService {
                 return response;
             }
             
-            log.info("Sending bulk push notification to {} recipients ({} user IDs, {} emails)",
-                    target.getTotalCount(), target.getUserIds().size(), target.getEmails().size());
+            log.info("Sending bulk push notification to {} recipients", target.getTotalCount());
 
             // Cap recipients to prevent abuse (target resolver may return more for non-ALL_USERS)
             List<UUID> userIds = new ArrayList<>(target.getUserIds());

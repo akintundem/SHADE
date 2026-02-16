@@ -60,8 +60,7 @@ public class EventNotificationService {
             request.getRecipientEmails()
         );
 
-        log.info("Resolved {} recipients for event {}: {} emails, {} user IDs", 
-                recipients.getTotalCount(), eventId, recipients.getEmails().size(), recipients.getUserIds().size());
+        log.info("Resolved {} recipients for event {} (counts redacted)", recipients.getTotalCount(), eventId);
 
         List<String> successfulRecipients = new ArrayList<>();
         List<String> failedRecipients = new ArrayList<>();

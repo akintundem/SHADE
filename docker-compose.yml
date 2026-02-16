@@ -69,11 +69,11 @@ services:
       PORT: "8000"
       AI_SERVICE_SECRET: ${AI_SERVICE_SECRET}
       EXTERNAL_AI_SERVICE_SECRET: ${EXTERNAL_AI_SERVICE_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       RETURN_BASE64: "false"
-      AI_COGNITO_ISSUER: ""
-      AI_COGNITO_AUDIENCE: ""
-    env_file:
-      - ./ai-service/.env
+      AI_COGNITO_ISSUER: ${AI_COGNITO_ISSUER:-}
+      AI_COGNITO_AUDIENCE: ${AI_COGNITO_AUDIENCE:-}
+    # Secrets from host env; do not commit ai-service/.env (use .env.example as template)
     restart: unless-stopped
     networks:
       - event-planner-network
@@ -148,8 +148,8 @@ services:
     ports:
       - "8000:8000"
       - "8443:8443"
-      # Admin port only exposed in development - remove in production
-      - "8001:8001"
+      # SECURITY: Kong Admin API (8001) not published - bind to localhost only inside container.
+      # For local debug only, temporarily add: "8001:8001" and use from host.
     networks:
       - event-planner-network
 
