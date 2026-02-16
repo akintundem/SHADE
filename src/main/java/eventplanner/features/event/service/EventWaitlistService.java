@@ -292,20 +292,16 @@ public class EventWaitlistService {
             attendee.setParticipationVisibility(VisibilityLevel.PUBLIC);
             attendeeRepository.save(attendee);
 
-            // Update event attendee count
-            Integer currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
-            event.setCurrentAttendeeCount(currentCount + 1);
-            eventRepository.save(event);
+            // Update event attendee count atomically
+            eventRepository.incrementAttendeeCount(event.getId(), 1);
         } else {
             // Update existing attendee to confirmed
             if (existingAttendee.getRsvpStatus() != AttendeeStatus.CONFIRMED) {
                 existingAttendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
                 attendeeRepository.save(existingAttendee);
 
-                // Update event attendee count if status changed
-                Integer currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
-                event.setCurrentAttendeeCount(currentCount + 1);
-                eventRepository.save(event);
+                // Update event attendee count atomically
+                eventRepository.incrementAttendeeCount(event.getId(), 1);
             }
         }
     }

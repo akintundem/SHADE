@@ -21,6 +21,7 @@ import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.util.TokenUtil;
 import eventplanner.features.config.AppProperties;
 import eventplanner.common.config.ExternalServicesProperties;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -321,7 +322,15 @@ public class EventCollaboratorInviteService {
         membership.setRegistrationStatus(RegistrationStatus.CONFIRMED);
         membership.setRegistrationDate(LocalDateTime.now(ZoneOffset.UTC));
 
-        EventUser savedMembership = eventUserRepository.save(membership);
+        EventUser savedMembership;
+        try {
+            savedMembership = eventUserRepository.save(membership);
+            eventUserRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            // Concurrent accept created a duplicate — return the existing membership
+            savedMembership = eventUserRepository.findByEventIdAndUserId(eventId, userId)
+                    .orElseThrow(() -> new IllegalArgumentException("Failed to save membership"));
+        }
 
         invite.setStatus(CollaboratorInviteStatus.ACCEPTED);
         invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));

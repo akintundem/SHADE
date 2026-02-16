@@ -15,7 +15,9 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "event_users")
+@Table(name = "event_users", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"event_id", "user_id"})
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

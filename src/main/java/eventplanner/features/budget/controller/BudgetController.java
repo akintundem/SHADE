@@ -129,12 +129,14 @@ public class BudgetController {
     @RequiresPermission(value = RbacPermissions.BUDGET_READ, resources = {"event_id=#eventId"})
 	@Operation(summary = "Get all categories", description = "Retrieve all categories for the event budget")
 	public ResponseEntity<List<BudgetCategoryResponse>> getCategories(
-			@PathVariable String eventId) {		UUID eventUuid = UUID.fromString(eventId);
+			@PathVariable String eventId,
+			@AuthenticationPrincipal UserPrincipal user) {
+		UUID eventUuid = UUID.fromString(eventId);
+		requireBudgetAccess(eventUuid, user, EventPermission.VIEW_EVENT);
 		Budget budget = budgetService.getByEventId(eventUuid)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
 		List<BudgetCategory> categories = budgetService.listCategories(budget.getId());
 		return ResponseEntity.ok(categories.stream().map(BudgetCategoryResponse::fromEntity).toList());
-
 	}
 
 	// ==================== LINE ITEM MANAGEMENT (EXPENSES) ====================

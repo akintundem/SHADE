@@ -1040,6 +1040,15 @@ policy:
         owns_scope: false
         is_member: false
     -
+      name: attendee.invite.respond
+      scope: SYSTEM
+      resources: null
+      description: Respond to attendee invites (accept/decline). Authenticated users can respond to their own invites.
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
       name: public.events.search
       scope: SYSTEM
       resources: null
@@ -1076,6 +1085,7 @@ policy:
         - admin.users.detail
         - admin.users.read
         - admin.users.update
+        - attendee.invite.respond
         - auth.me
         - collaborator.invite.accept
         - event.create
@@ -1099,6 +1109,7 @@ policy:
         - public.events.search
         - vendor.search
       ORGANIZER:
+        - attendee.invite.respond
         - auth.me
         - collaborator.invite.accept
         - organization.create
@@ -1111,6 +1122,7 @@ policy:
         - public.events.search
         - vendor.search
       USER:
+        - attendee.invite.respond
         - auth.me
         - collaborator.invite.accept
         - event.create

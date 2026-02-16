@@ -1062,11 +1062,13 @@ public class TicketService {
                 }
             }
 
-            // Update event attendee count
+            // Update event attendee count atomically
             if (countDelta != 0) {
-                Integer currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
-                event.setCurrentAttendeeCount(Math.max(0, currentCount + countDelta));
-                eventRepository.save(event);
+                if (countDelta > 0) {
+                    eventRepository.incrementAttendeeCount(event.getId(), countDelta);
+                } else {
+                    eventRepository.decrementAttendeeCount(event.getId(), countDelta);
+                }
             }
 
             // Save tickets with updated attendee links
@@ -1106,10 +1108,8 @@ public class TicketService {
                     attendee.setRsvpStatus(AttendeeStatus.DECLINED);
                     attendeeRepository.save(attendee);
                     
-                    // Decrease event count
-                    Integer currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
-                    event.setCurrentAttendeeCount(Math.max(0, currentCount - 1));
-                    eventRepository.save(event);
+                    // Decrease event count atomically
+                    eventRepository.decrementAttendeeCount(event.getId(), -1);
                 }
             }
         } catch (Exception e) {

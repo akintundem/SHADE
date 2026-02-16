@@ -130,9 +130,7 @@ public class AttendeeService {
         // Update event attendee count if attendee was confirmed
         if (event != null && previousStatus == AttendeeStatus.CONFIRMED) {
             try {
-                Integer currentCount = event.getCurrentAttendeeCount() != null ? event.getCurrentAttendeeCount() : 0;
-                event.setCurrentAttendeeCount(Math.max(0, currentCount - 1));
-                eventRepository.save(event);
+                eventRepository.decrementAttendeeCount(event.getId(), -1);
                 
                 // Promote waitlist entries when capacity becomes available
                 if (eventWaitlistService != null && event.getCapacity() != null) {
@@ -756,7 +754,10 @@ public class AttendeeService {
         if (capacity == null || capacity <= 0) {
             return;
         }
-        Integer current = event.getCurrentAttendeeCount();
+        // Use pessimistic lock to prevent race condition on capacity check
+        Event lockedEvent = eventRepository.findByIdForUpdate(event.getId())
+                .orElseThrow(() -> new BadRequestException("Event not found"));
+        Integer current = lockedEvent.getCurrentAttendeeCount();
         if (current == null) {
             current = 0;
         }
@@ -782,17 +783,12 @@ public class AttendeeService {
         if (event == null) {
             return;
         }
-        if (event.getCurrentAttendeeCount() == null) {
-            event.setCurrentAttendeeCount(0);
-        }
         boolean wasConfirmed = previousStatus == AttendeeStatus.CONFIRMED;
         boolean isConfirmed = nextStatus == AttendeeStatus.CONFIRMED;
         if (!wasConfirmed && isConfirmed) {
-            event.setCurrentAttendeeCount(event.getCurrentAttendeeCount() + 1);
-            eventRepository.save(event);
+            eventRepository.incrementAttendeeCount(event.getId(), 1);
         } else if (wasConfirmed && !isConfirmed) {
-            event.setCurrentAttendeeCount(Math.max(0, event.getCurrentAttendeeCount() - 1));
-            eventRepository.save(event);
+            eventRepository.decrementAttendeeCount(event.getId(), -1);
             
             // Promote waitlist entries when capacity becomes available
             if (eventWaitlistService != null && event.getCapacity() != null) {

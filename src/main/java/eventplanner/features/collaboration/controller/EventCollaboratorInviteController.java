@@ -58,9 +58,9 @@ public class EventCollaboratorInviteController {
         }
         if (!authorizationService.isEventOwner(principal, eventId) && !authorizationService.isAdmin(principal)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can invite collaborators");
-        }            CollaboratorInviteResponse response = inviteService.createInvite(eventId, principal, request);
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-
+        }
+        CollaboratorInviteResponse response = inviteService.createInvite(eventId, principal, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/api/v1/events/{eventId}/collaborator-invites")
@@ -94,9 +94,9 @@ public class EventCollaboratorInviteController {
         }
         if (!authorizationService.isEventOwner(principal, eventId) && !authorizationService.isAdmin(principal)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can revoke invites");
-        }            inviteService.revokeInvite(inviteId);
-            return ResponseEntity.noContent().build();
-
+        }
+        inviteService.revokeInvite(inviteId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/api/v1/collaborator-invites/incoming")
@@ -105,8 +105,8 @@ public class EventCollaboratorInviteController {
     public ResponseEntity<List<CollaboratorInviteResponse>> myInvites(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }            return ResponseEntity.ok(inviteService.listMyPendingInvites(principal));
-
+        }
+        return ResponseEntity.ok(inviteService.listMyPendingInvites(principal));
     }
 
     @PostMapping("/api/v1/collaborator-invites/{inviteId}/accept")
@@ -119,19 +119,19 @@ public class EventCollaboratorInviteController {
     ) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }            var membership = inviteService.acceptInviteById(inviteId, principal);
-            EventCollaboratorResponse response = new EventCollaboratorResponse();
-            response.setCollaboratorId(membership.getId());
-            response.setEventId(membership.getEvent() != null ? membership.getEvent().getId() : null);
-            response.setUserId(membership.getUser() != null ? membership.getUser().getId() : null);
-            response.setEmail(membership.getUser() != null ? membership.getUser().getEmail() : null);
-            response.setUserName(membership.getUser() != null ? membership.getUser().getName() : null);
-            response.setRole(membership.getUserType());
-            response.setRegistrationStatus(membership.getRegistrationStatus() != null ? membership.getRegistrationStatus().name() : null);
-            response.setAddedAt(membership.getCreatedAt());
-            response.setUpdatedAt(membership.getUpdatedAt());
-            return ResponseEntity.ok(response);
-
+        }
+        var membership = inviteService.acceptInviteById(inviteId, principal);
+        EventCollaboratorResponse response = new EventCollaboratorResponse();
+        response.setCollaboratorId(membership.getId());
+        response.setEventId(membership.getEvent() != null ? membership.getEvent().getId() : null);
+        response.setUserId(membership.getUser() != null ? membership.getUser().getId() : null);
+        response.setEmail(membership.getUser() != null ? membership.getUser().getEmail() : null);
+        response.setUserName(membership.getUser() != null ? membership.getUser().getName() : null);
+        response.setRole(membership.getUserType());
+        response.setRegistrationStatus(membership.getRegistrationStatus() != null ? membership.getRegistrationStatus().name() : null);
+        response.setAddedAt(membership.getCreatedAt());
+        response.setUpdatedAt(membership.getUpdatedAt());
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/api/v1/collaborator-invites/accept")
@@ -143,19 +143,19 @@ public class EventCollaboratorInviteController {
     ) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }            var membership = inviteService.acceptInviteByToken(token, principal);
-            EventCollaboratorResponse r = new EventCollaboratorResponse();
-            r.setCollaboratorId(membership.getId());
-            r.setEventId(membership.getEvent() != null ? membership.getEvent().getId() : null);
-            r.setUserId(membership.getUser() != null ? membership.getUser().getId() : null);
-            r.setEmail(membership.getUser() != null ? membership.getUser().getEmail() : null);
-            r.setUserName(membership.getUser() != null ? membership.getUser().getName() : null);
-            r.setRole(membership.getUserType());
-            r.setRegistrationStatus(membership.getRegistrationStatus() != null ? membership.getRegistrationStatus().name() : null);
-            r.setAddedAt(membership.getCreatedAt());
-            r.setUpdatedAt(membership.getUpdatedAt());
-            return ResponseEntity.ok(r);
-
+        }
+        var membership = inviteService.acceptInviteByToken(token, principal);
+        EventCollaboratorResponse r = new EventCollaboratorResponse();
+        r.setCollaboratorId(membership.getId());
+        r.setEventId(membership.getEvent() != null ? membership.getEvent().getId() : null);
+        r.setUserId(membership.getUser() != null ? membership.getUser().getId() : null);
+        r.setEmail(membership.getUser() != null ? membership.getUser().getEmail() : null);
+        r.setUserName(membership.getUser() != null ? membership.getUser().getName() : null);
+        r.setRole(membership.getUserType());
+        r.setRegistrationStatus(membership.getRegistrationStatus() != null ? membership.getRegistrationStatus().name() : null);
+        r.setAddedAt(membership.getCreatedAt());
+        r.setUpdatedAt(membership.getUpdatedAt());
+        return ResponseEntity.ok(r);
     }
 
     @PostMapping("/api/v1/collaborator-invites/{inviteId}/decline")
@@ -168,12 +168,8 @@ public class EventCollaboratorInviteController {
     ) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }            inviteService.declineInvite(inviteId, principal);
-            return ResponseEntity.noContent().build();
-
+        }
+        inviteService.declineInvite(inviteId, principal);
+        return ResponseEntity.noContent().build();
     }
 }
-
-
-
-

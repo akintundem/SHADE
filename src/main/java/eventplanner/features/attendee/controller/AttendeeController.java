@@ -307,7 +307,7 @@ public class AttendeeController {
     // ==================== Update Invite RSVP Status ====================
 
     @PostMapping("/invites")
-    @RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+    @RequiresPermission(RbacPermissions.ATTENDEE_INVITE_RESPOND)
     @Operation(summary = "Update attendee invite RSVP status",
         description = "Update attendee invite RSVP status. Can update by inviteId or token (query parameters). Status can be any valid AttendeeInviteStatus (ACCEPTED, DECLINED, REVOKED, EXPIRED). Works for both user-linked attendees and email-only guests.")
     public ResponseEntity<AttendeeResponse> updateInviteStatus(
@@ -414,7 +414,7 @@ public class AttendeeController {
 	// ==================== RSVP Operations ====================
 
 	@PostMapping("/events/{id}/rsvp")
-	@RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+	@RequiresPermission(RbacPermissions.ATTENDEE_INVITE_RESPOND)
 	@Operation(summary = "RSVP to event", description = "RSVP to an event that requires RSVP. Creates or updates attendee record with CONFIRMED status.")
 	@ApiResponses(value = {
 		@ApiResponse(responseCode = "200", description = "RSVP successful",
@@ -443,7 +443,7 @@ public class AttendeeController {
 	}
 
 	@GetMapping("/events/{id}/rsvp")
-	@RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+	@RequiresPermission(RbacPermissions.ATTENDEE_INVITE_RESPOND)
 	@Operation(summary = "Get RSVP status", description = "Get the authenticated user's RSVP status for an event.")
 	public ResponseEntity<RsvpStatusResponse> getRsvpStatus(
 			@PathVariable UUID id,
@@ -460,7 +460,7 @@ public class AttendeeController {
 	}
 
 	@PutMapping("/events/{id}/rsvp")
-	@RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+	@RequiresPermission(RbacPermissions.ATTENDEE_INVITE_RESPOND)
 	@Operation(summary = "Update RSVP status", description = "Update the authenticated user's RSVP status for an event.")
 	public ResponseEntity<RsvpStatusResponse> updateRsvpStatus(
 			@PathVariable UUID id,
@@ -474,7 +474,7 @@ public class AttendeeController {
 	}
 
 	@DeleteMapping("/events/{id}/rsvp")
-	@RequiresPermission(RbacPermissions.PUBLIC_EVENTS_SEARCH)
+	@RequiresPermission(RbacPermissions.ATTENDEE_INVITE_RESPOND)
 	@Operation(summary = "Cancel RSVP", description = "Cancel or withdraw RSVP for the authenticated user.")
 	public ResponseEntity<RsvpStatusResponse> cancelRsvp(
 			@PathVariable UUID id,

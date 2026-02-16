@@ -8,12 +8,40 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
+import jakarta.persistence.LockModeType;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecificationExecutor<Event> {
+
+    /**
+     * Atomically increment the current attendee count by the given delta.
+     * Uses a single UPDATE statement to avoid read-modify-write race conditions.
+     */
+    @Modifying
+    @Query("UPDATE Event e SET e.currentAttendeeCount = COALESCE(e.currentAttendeeCount, 0) + :delta WHERE e.id = :eventId")
+    int incrementAttendeeCount(@Param("eventId") UUID eventId, @Param("delta") int delta);
+
+    /**
+     * Atomically decrement the current attendee count, flooring at 0.
+     * Uses GREATEST to prevent negative counts.
+     */
+    @Modifying
+    @Query(value = "UPDATE events SET current_attendee_count = GREATEST(0, COALESCE(current_attendee_count, 0) + :delta) WHERE id = :eventId", nativeQuery = true)
+    int decrementAttendeeCount(@Param("eventId") UUID eventId, @Param("delta") int delta);
+
+    /**
+     * Fetch event with pessimistic write lock for capacity-sensitive operations.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT e FROM Event e WHERE e.id = :id")
+    Optional<Event> findByIdForUpdate(@Param("id") UUID id);
 
     Page<Event> findByEventStatus(String status, Pageable pageable);
 
