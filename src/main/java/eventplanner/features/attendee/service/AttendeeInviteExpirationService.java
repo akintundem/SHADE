@@ -8,8 +8,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 @Service
@@ -17,12 +17,13 @@ import java.util.List;
 public class AttendeeInviteExpirationService {
 
     private final AttendeeInviteRepository inviteRepository;
+    private final Clock clock;
 
     @Scheduled(cron = "0 0 * * * *")
     @Transactional
     public void expirePendingInvites() {
         try {
-            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+            LocalDateTime now = LocalDateTime.now(clock);
             List<AttendeeInvite> expired = inviteRepository.findExpiredPendingInvites(now);
             if (expired.isEmpty()) {
                 return;

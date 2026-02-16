@@ -1,5 +1,6 @@
 package eventplanner.features.feeds.service;
 
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.common.storage.s3.dto.MediaUploadStatus;
 import eventplanner.features.feeds.entity.EventFeedPost;
 
@@ -17,7 +18,7 @@ public final class FeedGuard {
      */
     public static void ensurePostAvailable(EventFeedPost post) {
         if (post == null) {
-            throw new IllegalArgumentException("Post not found");
+            throw new ResourceNotFoundException("Post not found");
         }
         MediaUploadStatus status = post.getMediaUploadStatus();
         if (status != null && status != MediaUploadStatus.COMPLETED) {

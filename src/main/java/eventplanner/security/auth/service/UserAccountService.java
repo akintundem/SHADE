@@ -191,7 +191,7 @@ public class UserAccountService {
         if (request.getLocation() != null && request.getLocation().getLocationId() != null) {
             UUID locationId = request.getLocation().getLocationId();
             Location location = locationRepository.findById(locationId)
-                    .orElseThrow(() -> new IllegalArgumentException("Location not found with ID: " + locationId));
+                    .orElseThrow(() -> new ResourceNotFoundException("Location not found with ID: " + locationId));
             settings.setLocation(location);
         } else if (request.getLocation() != null) {
             settings.setLocation(null);

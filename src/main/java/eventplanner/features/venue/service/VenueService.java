@@ -21,7 +21,7 @@ import java.util.UUID;
  * Handles venue CRUD operations, search, and PostGIS-powered spatial queries.
  */
 @Service
-@Transactional
+@Transactional(readOnly = true)
 @RequiredArgsConstructor
 @Slf4j
 public class VenueService {
@@ -33,6 +33,7 @@ public class VenueService {
     /**
      * Create a new venue
      */
+    @Transactional(readOnly = false)
     public Venue createVenue(Venue venue) {
         validateVenue(venue);
 
@@ -43,6 +44,7 @@ public class VenueService {
     /**
      * Update an existing venue
      */
+    @Transactional(readOnly = false)
     public Venue updateVenue(UUID venueId, Venue updatedVenue) {
         log.info("Updating venue: {}", venueId);
 
@@ -232,6 +234,7 @@ public class VenueService {
     /**
      * Delete venue (soft delete)
      */
+    @Transactional(readOnly = false)
     public void deleteVenue(UUID venueId) {
         log.info("Deleting venue: {}", venueId);
 

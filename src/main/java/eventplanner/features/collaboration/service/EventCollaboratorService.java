@@ -16,6 +16,7 @@ import eventplanner.features.event.repository.EventRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.common.config.ExternalServicesProperties;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,7 +68,7 @@ public class EventCollaboratorService {
         }
 
         UserAccount user = userAccountRepository.findById(request.getUserId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (eventUserRepository.findByEventIdAndUserId(eventId, user.getId()).isPresent()) {
             throw new IllegalArgumentException("User is already a collaborator on this event");
@@ -75,7 +76,7 @@ public class EventCollaboratorService {
 
         // Fetch Event entity
         Event event = eventRepository.findById(eventId)
-            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+            .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
         
         EventUser collaborator = new EventUser();
         collaborator.setEvent(event);
@@ -145,7 +146,7 @@ public class EventCollaboratorService {
 
     public EventCollaboratorResponse updateCollaborator(UUID eventId, UUID collaboratorId, EventCollaboratorRequest request) {
         EventUser collaborator = eventUserRepository.findById(collaboratorId)
-                .orElseThrow(() -> new IllegalArgumentException("Collaborator not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Collaborator not found"));
 
         if (collaborator.getEvent() == null || !collaborator.getEvent().getId().equals(eventId)) {
             throw new IllegalArgumentException("Collaborator does not belong to event");
@@ -153,7 +154,7 @@ public class EventCollaboratorService {
 
         if (request != null && request.getUserId() != null) {
             UserAccount user = userAccountRepository.findById(request.getUserId())
-                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
             eventUserRepository.findByEventIdAndUserId(eventId, user.getId())
                     .filter(existing -> !existing.getId().equals(collaboratorId))
                     .ifPresent(existing -> {
@@ -174,7 +175,7 @@ public class EventCollaboratorService {
 
     public void removeCollaborator(UUID eventId, UUID collaboratorId) {
         EventUser collaborator = eventUserRepository.findById(collaboratorId)
-                .orElseThrow(() -> new IllegalArgumentException("Collaborator not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Collaborator not found"));
         if (collaborator.getEvent() == null || !collaborator.getEvent().getId().equals(eventId)) {
             throw new IllegalArgumentException("Collaborator does not belong to event");
         }

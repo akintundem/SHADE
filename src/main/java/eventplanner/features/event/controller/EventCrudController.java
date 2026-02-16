@@ -17,6 +17,8 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.service.EventIdempotencyService;
 import eventplanner.features.event.service.EventMediaService;
 import eventplanner.features.event.service.EventService;
+import eventplanner.common.exception.exceptions.ForbiddenException;
+import eventplanner.common.exception.exceptions.UnauthorizedException;
 import eventplanner.common.util.Preconditions;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
@@ -43,8 +45,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -58,15 +60,18 @@ public class EventCrudController {
     private final EventMediaService eventMediaService;
     private final AuthorizationService authorizationService;
     private final EventIdempotencyService idempotencyService;
+    private final Clock clock;
 
-    public EventCrudController(EventService eventService, 
+    public EventCrudController(EventService eventService,
                               EventMediaService eventMediaService,
                               AuthorizationService authorizationService,
-                              EventIdempotencyService idempotencyService) {
+                              EventIdempotencyService idempotencyService,
+                              Clock clock) {
         this.eventService = eventService;
         this.eventMediaService = eventMediaService;
         this.authorizationService = authorizationService;
         this.idempotencyService = idempotencyService;
+        this.clock = clock != null ? clock : java.time.Clock.systemUTC();
     }
 
 
@@ -98,7 +103,7 @@ public class EventCrudController {
             @AuthenticationPrincipal UserPrincipal user) {
         try {
             if (user == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+                throw new UnauthorizedException("Authentication required");
             }
             request.setMine(true);
             Page<Event> events = eventService.listEvents(request, user);
@@ -121,7 +126,7 @@ public class EventCrudController {
             @AuthenticationPrincipal UserPrincipal user) {
         try {
             if (user == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+                throw new UnauthorizedException("Authentication required");
             }
             EventListRequest req = request != null ? request : new EventListRequest();
             Page<Event> events = eventService.getForYouFeed(req, user);
@@ -144,7 +149,7 @@ public class EventCrudController {
             @AuthenticationPrincipal UserPrincipal user) {
         try {
             if (user == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+                throw new UnauthorizedException("Authentication required");
             }
             EventListRequest req = request != null ? request : new EventListRequest();
             Page<Event> events = eventService.getFollowingFeed(req, user);
@@ -218,7 +223,7 @@ public class EventCrudController {
             response.setAvailableSpots(eventService.getAvailableCapacity(id));
             response.setUtilizationPercentage(calculateUtilizationPercentage(event.getCapacity(), event.getCurrentAttendeeCount()));
             boolean open = event.getEventStatus() == EventStatus.REGISTRATION_OPEN
-                    && (event.getRegistrationDeadline() == null || LocalDateTime.now(ZoneOffset.UTC).isBefore(event.getRegistrationDeadline()));
+                    && (event.getRegistrationDeadline() == null || LocalDateTime.now(clock).isBefore(event.getRegistrationDeadline()));
             response.setIsRegistrationOpen(open);
             return ResponseEntity.ok(response);
         }
@@ -365,7 +370,7 @@ public class EventCrudController {
 
             // Verify user can access the source event
             if (!authorizationService.canAccessEvent(principal, id)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                throw new ForbiddenException( 
                     "Access denied to event: " + id);
             }
 
@@ -376,7 +381,7 @@ public class EventCrudController {
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         } catch (AccessDeniedException ex) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
+            throw new ForbiddenException( ex.getMessage(), ex);
         }
     }
 
@@ -406,7 +411,7 @@ public class EventCrudController {
             }
             
             if (!authorizationService.canManageEvent(principal, id)) {
-                throw new AccessDeniedException("Only event owners or admins can update events");
+                throw new ForbiddenException("Only event owners or admins can update events");
             }
             
             // Parse version from If-Match header
@@ -452,7 +457,7 @@ public class EventCrudController {
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         } catch (AccessDeniedException ex) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
+            throw new ForbiddenException( ex.getMessage(), ex);
         }
     }
 
@@ -478,7 +483,7 @@ public class EventCrudController {
             }
 
             if (!authorizationService.canManageEvent(principal, id)) {
-                throw new AccessDeniedException("Only event owners or admins can update registration state");
+                throw new ForbiddenException("Only event owners or admins can update registration state");
             }
 
             String normalized = action.trim().toLowerCase(java.util.Locale.ROOT);
@@ -493,7 +498,7 @@ public class EventCrudController {
 
             return ResponseEntity.ok(eventService.toResponse(updatedEvent, principal));
         } catch (AccessDeniedException ex) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
+            throw new ForbiddenException( ex.getMessage(), ex);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
@@ -523,7 +528,7 @@ public class EventCrudController {
             }
             
             if (!authorizationService.canManageEvent(principal, id)) {
-                throw new AccessDeniedException("Only event owners or admins can archive events");
+                throw new ForbiddenException("Only event owners or admins can archive events");
             }
             
             Event archived = eventService.archiveEvent(id, principal.getId(), reason);
@@ -532,7 +537,7 @@ public class EventCrudController {
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         } catch (AccessDeniedException ex) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
+            throw new ForbiddenException( ex.getMessage(), ex);
         }
     }
 
@@ -559,7 +564,7 @@ public class EventCrudController {
             }
             
             if (!authorizationService.canManageEvent(principal, id)) {
-                throw new AccessDeniedException("Only event owners or admins can restore events");
+                throw new ForbiddenException("Only event owners or admins can restore events");
             }
             
             Event restored = eventService.restoreEvent(id, principal.getId());
@@ -568,7 +573,7 @@ public class EventCrudController {
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         } catch (AccessDeniedException ex) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage(), ex);
+            throw new ForbiddenException( ex.getMessage(), ex);
         }
     }
 

@@ -5,6 +5,7 @@ import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.enums.CommunicationType;
 import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.event.enums.EventAccessType;
 import eventplanner.features.event.enums.EventStatus;
 import eventplanner.security.auth.enums.VisibilityLevel;
@@ -42,8 +43,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.*;
 
 /**
@@ -63,6 +64,7 @@ public class AttendeeService {
     private final ExternalServicesProperties externalServicesProperties;
     private final AuthorizationService authorizationService;
     private final AttendeeRsvpHistoryRepository rsvpHistoryRepository;
+    private final Clock clock;
 
     @Autowired(required = false)
     private TicketRepository ticketRepository;
@@ -85,7 +87,7 @@ public class AttendeeService {
     @Transactional(readOnly = true)
     public Attendee getAttendeeById(UUID attendeeId) {
         return repository.findById(attendeeId)
-            .orElseThrow(() -> new IllegalArgumentException("Attendee not found: " + attendeeId));
+            .orElseThrow(() -> new ResourceNotFoundException("Attendee not found: " + attendeeId));
     }
 
     /**
@@ -169,7 +171,7 @@ public class AttendeeService {
         
         // Fetch the event
         Event event = eventRepository.findById(request.getEventId())
-            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.getEventId()));
+            .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + request.getEventId()));
         
         // Track duplicates within the same request to fail fast
         Set<UUID> seenUserIds = new HashSet<>();
@@ -478,7 +480,7 @@ public class AttendeeService {
         }
 
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
 
         // Verify event requires RSVP
         if (event.getAccessType() != EventAccessType.RSVP_REQUIRED) {
@@ -489,7 +491,7 @@ public class AttendeeService {
         ensurePrivateEventAccess(event, principal);
 
         UserAccount user = userAccountRepository.findById(principal.getId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + principal.getId()));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + principal.getId()));
 
         AttendeeStatus targetStatus = Boolean.TRUE.equals(event.getRequiresApproval())
                 ? AttendeeStatus.PENDING
@@ -540,12 +542,12 @@ public class AttendeeService {
         }
 
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
         ensureEventOpenForRsvp(event);
         ensurePrivateEventAccess(event, principal);
 
         Attendee attendee = repository.findByEventIdAndUserId(eventId, principal.getId())
-                .orElseThrow(() -> new IllegalArgumentException("RSVP not found for event: " + eventId));
+                .orElseThrow(() -> new ResourceNotFoundException("RSVP not found for event: " + eventId));
 
         AttendeeStatus previousStatus = attendee.getRsvpStatus();
         AttendeeStatus resolvedStatus = resolveApprovalStatus(event, previousStatus, status);
@@ -572,11 +574,11 @@ public class AttendeeService {
         }
 
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
         ensurePrivateEventAccess(event, principal);
 
         Attendee attendee = repository.findByEventIdAndUserId(eventId, principal.getId())
-                .orElseThrow(() -> new IllegalArgumentException("RSVP not found for event: " + eventId));
+                .orElseThrow(() -> new ResourceNotFoundException("RSVP not found for event: " + eventId));
 
         AttendeeStatus previousStatus = attendee.getRsvpStatus();
         if (previousStatus == AttendeeStatus.DECLINED) {
@@ -605,7 +607,7 @@ public class AttendeeService {
         }
 
         Event event = eventRepository.findById(eventId)
-            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+            .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
         if (event.getAccessType() != EventAccessType.RSVP_REQUIRED) {
             throw new BadRequestException("Event does not require RSVP");
         }
@@ -618,7 +620,7 @@ public class AttendeeService {
         List<Attendee> updated = new ArrayList<>();
         for (BulkRsvpUpdateItem item : updates) {
             Attendee attendee = repository.findByIdAndEventId(item.getAttendeeId(), eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Attendee not found: " + item.getAttendeeId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Attendee not found: " + item.getAttendeeId()));
 
             AttendeeStatus previousStatus = attendee.getRsvpStatus();
             AttendeeStatus resolvedStatus = canOverrideApproval
@@ -651,7 +653,7 @@ public class AttendeeService {
         }
 
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
         ensurePrivateEventAccess(event, principal);
 
         return repository.findByEventIdAndUserId(eventId, principal.getId());
@@ -696,7 +698,7 @@ public class AttendeeService {
             throw new BadRequestException("Event has ended");
         }
         if (event.getRegistrationDeadline() != null &&
-                LocalDateTime.now(ZoneOffset.UTC).isAfter(event.getRegistrationDeadline())) {
+                LocalDateTime.now(clock).isAfter(event.getRegistrationDeadline())) {
             throw new BadRequestException("Registration deadline has passed");
         }
     }
@@ -809,7 +811,7 @@ public class AttendeeService {
     }
 
     private boolean isEventPast(Event event) {
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now(clock);
         if (event.getEndDateTime() != null) {
             return now.isAfter(event.getEndDateTime());
         }

@@ -7,6 +7,7 @@ import eventplanner.common.communication.repository.CommunicationRepository;
 import eventplanner.common.communication.services.channel.push.PushNotificationService;
 import eventplanner.common.communication.services.core.dto.BulkNotificationRequest;
 import eventplanner.common.communication.services.core.dto.BulkNotificationResponse;
+import eventplanner.common.communication.services.core.NotificationTargetResolver;
 import eventplanner.common.communication.services.core.dto.NotificationTarget;
 import eventplanner.common.communication.enums.CommunicationStatus;
 import eventplanner.common.communication.enums.CommunicationType;
@@ -79,12 +80,18 @@ public class BulkNotificationService {
                 return response;
             }
             
-            log.info("Sending bulk push notification to {} recipients ({} user IDs, {} emails)", 
+            log.info("Sending bulk push notification to {} recipients ({} user IDs, {} emails)",
                     target.getTotalCount(), target.getUserIds().size(), target.getEmails().size());
-            
+
+            // Cap recipients to prevent abuse (target resolver may return more for non-ALL_USERS)
+            List<UUID> userIds = new ArrayList<>(target.getUserIds());
+            if (userIds.size() > NotificationTargetResolver.MAX_BULK_RECIPIENTS) {
+                log.warn("Bulk push recipient count {} exceeds max {}, truncating", userIds.size(), NotificationTargetResolver.MAX_BULK_RECIPIENTS);
+                userIds = userIds.subList(0, NotificationTargetResolver.MAX_BULK_RECIPIENTS);
+            }
+
             // Send push notifications to users with device tokens
-            if (!target.getUserIds().isEmpty()) {
-                List<UUID> userIds = new ArrayList<>(target.getUserIds());
+            if (!userIds.isEmpty()) {
                 PushNotificationService.BulkPushResult pushResult = pushNotificationService.sendBulkNotification(
                         userIds,
                         request.getTitle(),

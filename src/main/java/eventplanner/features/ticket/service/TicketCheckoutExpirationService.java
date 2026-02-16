@@ -1,5 +1,6 @@
 package eventplanner.features.ticket.service;
 
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.ticket.entity.Ticket;
 import eventplanner.features.ticket.entity.TicketCheckout;
 import eventplanner.features.ticket.enums.TicketCheckoutStatus;
@@ -52,7 +53,7 @@ public class TicketCheckoutExpirationService {
     @Transactional
     public void expireCheckout(UUID checkoutId) {
         TicketCheckout checkout = checkoutRepository.findById(checkoutId)
-            .orElseThrow(() -> new IllegalArgumentException("Checkout not found: " + checkoutId));
+            .orElseThrow(() -> new ResourceNotFoundException("Checkout not found: " + checkoutId));
         expireCheckout(checkout);
     }
 

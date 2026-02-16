@@ -1,5 +1,6 @@
 package eventplanner.features.feeds.service;
 
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.event.service.EventAccessControlService;
 import eventplanner.features.feeds.entity.EventFeedPost;
 import eventplanner.features.feeds.entity.PostLike;
@@ -46,10 +47,10 @@ public class PostLikeService {
         accessControlService.requireMediaView(principal, eventId);
         
         EventFeedPost post = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
         
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
-            throw new IllegalArgumentException("Post not found");
+            throw new ResourceNotFoundException("Post not found");
         }
         FeedGuard.ensurePostAvailable(post);
 
@@ -59,7 +60,7 @@ public class PostLikeService {
 
         UUID userId = principal.getId();
         UserAccount user = userAccountRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         
         // Check if already liked
         if (likeRepository.existsByPostAndUser(post, user)) {
@@ -79,10 +80,10 @@ public class PostLikeService {
         accessControlService.requireMediaView(principal, eventId);
         
         EventFeedPost post = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
         
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
-            throw new IllegalArgumentException("Post not found");
+            throw new ResourceNotFoundException("Post not found");
         }
         FeedGuard.ensurePostAvailable(post);
 
@@ -92,7 +93,7 @@ public class PostLikeService {
 
         UUID userId = principal.getId();
         UserAccount user = userAccountRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         likeRepository.deleteByPostAndUser(post, user);
         
         log.debug("User {} unliked post {}", userId, postId);

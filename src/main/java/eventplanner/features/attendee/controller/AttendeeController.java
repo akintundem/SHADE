@@ -22,6 +22,9 @@ import eventplanner.features.event.service.EventService;
 import eventplanner.features.ticket.dto.response.TicketResponse;
 import eventplanner.features.ticket.enums.TicketStatus;
 import eventplanner.features.ticket.service.TicketService;
+import eventplanner.common.exception.exceptions.ForbiddenException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.common.exception.exceptions.UnauthorizedException;
 import eventplanner.common.util.Preconditions;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
@@ -75,19 +78,19 @@ public class AttendeeController {
 		// Get attendee and verify access
 		Attendee attendee = attendeeService.getAttendeeById(attendeeId);
 		if (attendee.getEvent() == null) {
-			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for attendee");
+			throw new ResourceNotFoundException("Event not found for attendee");
 		}
 		UUID eventId = attendee.getEvent().getId();
 
 		if (!authorizationService.canManageEvent(principal, eventId)) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+			throw new ForbiddenException(
 				"Only event organizers can delete attendees");
 		}
 
 		// Delete
 		boolean deleted = attendeeService.delete(attendeeId);
 		if (!deleted) {
-			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Attendee not found: " + id);
+			throw new ResourceNotFoundException("Attendee not found: " + id);
 		}
 
 		return ResponseEntity.noContent().build();
@@ -104,7 +107,7 @@ public class AttendeeController {
 			@Valid @RequestBody BulkAttendeeCreateRequest request,
 			@AuthenticationPrincipal UserPrincipal principal) {		// Verify user can access the event
 		if (!authorizationService.canAccessEvent(principal, request.getEventId())) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+			throw new ForbiddenException( 
 				"Access denied to event: " + request.getEventId());
 		}
 		
@@ -131,11 +134,11 @@ public class AttendeeController {
 		
 		// Verify user can access the event
 		if (attendee.getEvent() == null) {
-			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for attendee");
+			throw new ResourceNotFoundException("Event not found for attendee");
 		}
 		UUID eventId = attendee.getEvent().getId();
 		if (!authorizationService.canAccessEvent(principal, eventId)) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+			throw new ForbiddenException( 
 				"Access denied to event: " + eventId);
 		}
 		
@@ -158,7 +161,7 @@ public class AttendeeController {
 		
 		// Verify event access
 		if (!authorizationService.canAccessEvent(principal, request.getEventId())) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+			throw new ForbiddenException( 
 				"Access denied to event: " + request.getEventId());
 		}
 		
@@ -191,7 +194,7 @@ public class AttendeeController {
 			@Valid @RequestBody CreateAttendeeInviteRequest request,
 			@AuthenticationPrincipal UserPrincipal principal) {		Preconditions.requireAuthenticated(principal);
 		if (!canManageInvites(principal, eventId)) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			throw new ForbiddenException( "Access denied to event: " + eventId);
 		}
 
 		AttendeeInvite invite = inviteService.createInvite(eventId, principal, request);
@@ -207,7 +210,7 @@ public class AttendeeController {
 			@Valid @RequestBody BulkAttendeeInviteRequest request,
 			@AuthenticationPrincipal UserPrincipal principal) {		Preconditions.requireAuthenticated(principal);
 		if (!canManageInvites(principal, eventId)) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			throw new ForbiddenException( "Access denied to event: " + eventId);
 		}
 
 		List<AttendeeInviteResponse> responses = inviteService
@@ -226,7 +229,7 @@ public class AttendeeController {
 			@Valid @ModelAttribute ListAttendeeInvitesRequest request,
 			@AuthenticationPrincipal UserPrincipal principal) {		Preconditions.requireAuthenticated(principal);
 		if (!canManageInvites(principal, eventId)) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			throw new ForbiddenException( "Access denied to event: " + eventId);
 		}
 
 		int page = request.getPage() != null ? request.getPage() : 0;
@@ -246,7 +249,7 @@ public class AttendeeController {
 			@PathVariable UUID inviteId,
 			@AuthenticationPrincipal UserPrincipal principal) {		Preconditions.requireAuthenticated(principal);
 		if (!canManageInvites(principal, eventId)) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			throw new ForbiddenException( "Access denied to event: " + eventId);
 		}
 
 		AttendeeInvite invite = inviteService.getInviteById(eventId, inviteId);
@@ -262,7 +265,7 @@ public class AttendeeController {
 			@PathVariable UUID inviteId,
 			@AuthenticationPrincipal UserPrincipal principal) {		Preconditions.requireAuthenticated(principal);
 		if (!canManageInvites(principal, eventId)) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			throw new ForbiddenException( "Access denied to event: " + eventId);
 		}
 
 		inviteService.revokeInvite(eventId, inviteId);
@@ -280,7 +283,7 @@ public class AttendeeController {
 			@RequestParam(required = false) Boolean sendPush,
 			@AuthenticationPrincipal UserPrincipal principal) {		Preconditions.requireAuthenticated(principal);
 		if (!canManageInvites(principal, eventId)) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event: " + eventId);
+			throw new ForbiddenException( "Access denied to event: " + eventId);
 		}
 
 		Boolean emailFlag = sendEmail != null ? sendEmail : Boolean.TRUE;
@@ -301,7 +304,7 @@ public class AttendeeController {
             @RequestParam(required = false) String token,
             @RequestParam String status,
             @AuthenticationPrincipal UserPrincipal principal) {            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+                throw new UnauthorizedException("Authentication required");
             }
 
             if (inviteId == null && (token == null || token.trim().isEmpty())) {
@@ -346,11 +349,11 @@ public class AttendeeController {
 		// Verify attendee exists and user can access the event
 		Attendee attendee = attendeeService.getAttendeeById(attendeeId);
 		if (attendee.getEvent() == null) {
-			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for attendee");
+			throw new ResourceNotFoundException("Event not found for attendee");
 		}
 		UUID attendeeEventId = attendee.getEvent().getId();
 		if (!authorizationService.canAccessEvent(principal, attendeeEventId)) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+			throw new ForbiddenException( 
 				"Access denied to event: " + attendeeEventId);
 		}
 		
@@ -386,7 +389,7 @@ public class AttendeeController {
 	public ResponseEntity<Page<EventResponse>> getInvitedEvents(
 			@Valid EventListRequest request,
 			@AuthenticationPrincipal UserPrincipal user) {		if (user == null) {
-			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+			throw new UnauthorizedException("Authentication required");
 		}
 		EventListRequest req = request != null ? request : new EventListRequest();
 		Integer page = req.getPage() != null ? req.getPage() : 0;
@@ -419,7 +422,7 @@ public class AttendeeController {
 		// Return updated event
 		Optional<Event> eventOpt = eventService.getById(id);
 		if (eventOpt.isEmpty()) {
-			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found");
+			throw new ResourceNotFoundException("Event not found");
 		}
 		EventResponse response = eventService.toResponse(eventOpt.get(), principal);
 		return ResponseEntity.ok(response);

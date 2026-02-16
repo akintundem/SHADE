@@ -1,5 +1,6 @@
 package eventplanner.features.feeds.service;
 
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.event.service.EventAccessControlService;
 import eventplanner.features.feeds.dto.request.CommentCreateRequest;
 import eventplanner.features.feeds.dto.request.CommentUpdateRequest;
@@ -52,10 +53,10 @@ public class PostCommentService {
         accessControlService.requireMediaView(principal, eventId);
         
         EventFeedPost post = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
         
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
-            throw new IllegalArgumentException("Post not found");
+            throw new ResourceNotFoundException("Post not found");
         }
         FeedGuard.ensurePostAvailable(post);
 
@@ -73,7 +74,7 @@ public class PostCommentService {
 
         UUID userId = principal.getId();
         UserAccount user = userAccountRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         
         PostComment comment = new PostComment();
         comment.setPost(post);
@@ -92,15 +93,15 @@ public class PostCommentService {
         accessControlService.requireMediaView(principal, eventId);
         
         EventFeedPost post = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
         
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
-            throw new IllegalArgumentException("Post not found");
+            throw new ResourceNotFoundException("Post not found");
         }
         FeedGuard.ensurePostAvailable(post);
 
         PostComment comment = commentRepository.findById(commentId)
-                .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
         
         if (comment.getPost() == null || !postId.equals(comment.getPost().getId())) {
             throw new IllegalArgumentException("Comment does not belong to post");
@@ -135,15 +136,15 @@ public class PostCommentService {
         accessControlService.requireMediaView(principal, eventId);
         
         EventFeedPost post = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
         
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
-            throw new IllegalArgumentException("Post not found");
+            throw new ResourceNotFoundException("Post not found");
         }
         FeedGuard.ensurePostAvailable(post);
 
         PostComment comment = commentRepository.findById(commentId)
-                .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
         
         if (comment.getPost() == null || !postId.equals(comment.getPost().getId())) {
             throw new IllegalArgumentException("Comment does not belong to post");
@@ -167,10 +168,10 @@ public class PostCommentService {
         accessControlService.requireMediaView(principal, eventId);
         
         EventFeedPost post = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
         
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
-            throw new IllegalArgumentException("Post not found");
+            throw new ResourceNotFoundException("Post not found");
         }
         FeedGuard.ensurePostAvailable(post);
 

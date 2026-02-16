@@ -1,5 +1,6 @@
 package eventplanner.common.storage.s3.services;
 
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.common.storage.s3.UploadCompletionCallback;
 import eventplanner.common.storage.s3.registry.BucketAlias;
 import eventplanner.common.storage.s3.dto.PresignedUploadCompleteRequest;
@@ -18,9 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.net.URL;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -40,15 +41,18 @@ public class PresignedUploadService {
     private final EventRepository eventRepository;
     private final EventStoredObjectRepository storedObjectRepository;
     private final UserAccountRepository userAccountRepository;
-    
+    private final Clock clock;
+
     public PresignedUploadService(S3StorageService storageService,
                                   EventRepository eventRepository,
                                   EventStoredObjectRepository storedObjectRepository,
-                                  UserAccountRepository userAccountRepository) {
+                                  UserAccountRepository userAccountRepository,
+                                  Clock clock) {
         this.storageService = storageService;
         this.eventRepository = eventRepository;
         this.storedObjectRepository = storedObjectRepository;
         this.userAccountRepository = userAccountRepository;
+        this.clock = clock != null ? clock : java.time.Clock.systemUTC();
     }
     
     /**
@@ -96,7 +100,7 @@ public class PresignedUploadService {
                 .uploadUrl(presignedPut.toString())
                 .headers(Map.of("Content-Type", request.getContentType()))
                 .resourceUrl(storageService.stripQuery(presignedPut))
-                .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plus(ttl))
+                .expiresAt(LocalDateTime.now(clock).plus(ttl))
                 .build();
     }
     
@@ -162,7 +166,7 @@ public class PresignedUploadService {
         
         // Fetch Event entity
         Event event = eventRepository.findById(eventId)
-            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+            .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
         
         // Get managed UserAccount entity for JPA relationship (optional)
         UserAccount uploadedByUser = (principal != null && principal.getId() != null)

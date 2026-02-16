@@ -6,14 +6,20 @@ import eventplanner.features.event.enums.EventStatus;
 import eventplanner.common.exception.exceptions.BadRequestException;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 
 /**
  * Shared ticketing policy guards for event lifecycle validation.
  */
 @Service
 public class TicketingPolicyService {
+
+    private final Clock clock;
+
+    public TicketingPolicyService(Clock clock) {
+        this.clock = clock != null ? clock : java.time.Clock.systemUTC();
+    }
 
     public void ensureEventOpenForTicketing(Event event) {
         if (event.getAccessType() != EventAccessType.TICKETED) {
@@ -29,7 +35,7 @@ public class TicketingPolicyService {
             throw new BadRequestException("Event has ended");
         }
         if (event.getRegistrationDeadline() != null &&
-                LocalDateTime.now(ZoneOffset.UTC).isAfter(event.getRegistrationDeadline())) {
+                LocalDateTime.now(clock).isAfter(event.getRegistrationDeadline())) {
             throw new BadRequestException("Registration deadline has passed");
         }
         if (isEventPast(event)) {
@@ -38,7 +44,7 @@ public class TicketingPolicyService {
     }
 
     private boolean isEventPast(Event event) {
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now(clock);
         if (event.getEndDateTime() != null) {
             return now.isAfter(event.getEndDateTime());
         }

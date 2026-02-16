@@ -46,7 +46,7 @@ public class TicketTypeTemplateService {
             throw new BadRequestException("Authentication required");
         }
         UserAccount creator = userAccountRepository.findById(principal.getId())
-            .orElseThrow(() -> new IllegalArgumentException("User not found: " + principal.getId()));
+            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + principal.getId()));
 
         TicketTypeTemplate template = new TicketTypeTemplate();
         template.setCreatedBy(creator);

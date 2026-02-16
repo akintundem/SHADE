@@ -14,8 +14,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import jakarta.persistence.criteria.Predicate;
@@ -30,6 +30,7 @@ import jakarta.persistence.criteria.Predicate;
 public class EventStatusAutomationService {
 
     private final EventRepository eventRepository;
+    private final Clock clock;
 
     @Autowired(required = false)
     private TicketRepository ticketRepository;
@@ -47,7 +48,7 @@ public class EventStatusAutomationService {
     @Transactional
     public void transitionToInProgress() {
         try {
-            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+            LocalDateTime now = LocalDateTime.now(clock);
             
             // Find events that should be IN_PROGRESS:
             // - Status is PUBLISHED or REGISTRATION_OPEN or REGISTRATION_CLOSED
@@ -113,7 +114,7 @@ public class EventStatusAutomationService {
     @Transactional
     public void transitionToCompleted() {
         try {
-            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+            LocalDateTime now = LocalDateTime.now(clock);
             // Events are considered completed 24 hours after end time
             LocalDateTime completionThreshold = now.minusHours(24);
             

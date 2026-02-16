@@ -14,9 +14,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+
 @Service
 @RequiredArgsConstructor
 public class ProfileImageService {
@@ -27,6 +28,7 @@ public class ProfileImageService {
 
     private final S3ImageUploadService imageUploadService;
     private final UserAccountRepository userAccountRepository;
+    private final Clock clock;
 
     public ProfileImageUploadResponse createProfileImageUpload(UserAccount user, ProfileImageUploadRequest request) {
         if (user == null) {
@@ -84,7 +86,7 @@ public class ProfileImageService {
 
         return ProfileImageCompleteResponse.builder()
             .profilePictureUrl(resourceUrl)
-            .updatedAt(LocalDateTime.now(ZoneOffset.UTC))
+            .updatedAt(LocalDateTime.now(clock))
             .build();
     }
 }

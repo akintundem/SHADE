@@ -24,9 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.net.URL;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +50,7 @@ public class EventMediaService {
 
     private final EventAccessControlService accessControlService;
     private final S3StorageService storageService;
+    private final Clock clock;
     private final EventStoredObjectRepository storedObjectRepository;
     private final EventRepository eventRepository;
     private final UserAccountRepository userAccountRepository;
@@ -58,12 +59,14 @@ public class EventMediaService {
                              S3StorageService storageService,
                              EventStoredObjectRepository storedObjectRepository,
                              EventRepository eventRepository,
-                             UserAccountRepository userAccountRepository) {
+                             UserAccountRepository userAccountRepository,
+                             Clock clock) {
         this.accessControlService = accessControlService;
         this.storageService = storageService;
         this.storedObjectRepository = storedObjectRepository;
         this.eventRepository = eventRepository;
         this.userAccountRepository = userAccountRepository;
+        this.clock = clock != null ? clock : java.time.Clock.systemUTC();
     }
 
     /**
@@ -264,7 +267,7 @@ public class EventMediaService {
             .headers(Map.of("Content-Type", request.getContentType()))
             // Non-presigned object URL; private buckets may block direct access.
             .resourceUrl(storageService.stripQuery(presignedPut))
-            .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plus(UPLOAD_URL_TTL))
+            .expiresAt(LocalDateTime.now(clock).plus(UPLOAD_URL_TTL))
             .build();
     }
 

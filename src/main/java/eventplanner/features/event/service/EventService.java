@@ -62,8 +62,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -82,6 +82,9 @@ public class EventService {
 
     @Autowired
     private EventRepository eventRepository;
+
+    @Autowired(required = false)
+    private Clock clock;
     
     @Autowired
     private EventRoleRepository eventRoleRepository;
@@ -191,7 +194,7 @@ public class EventService {
      */
     public Event update(UUID id, UpdateEventRequest request) {
         Event event = eventRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found with ID: " + id));
         boolean importantChange = false;
         List<String> changeSummary = new ArrayList<>();
         
@@ -526,7 +529,7 @@ public class EventService {
         
         // Set owner to current user
         UserAccount owner = userAccountRepository.findById(principal.getId())
-            .orElseThrow(() -> new IllegalArgumentException("User not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         clone.setOwner(owner);
 
         // Set name
@@ -664,7 +667,7 @@ public class EventService {
         LocalDateTime startDateTo = request.getStartDateTo();
         if (request.getTimeframe() != null && !request.getTimeframe().trim().isEmpty()) {
             String tf = request.getTimeframe().trim().toUpperCase(Locale.US);
-            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+            LocalDateTime now = LocalDateTime.now(clock != null ? clock : java.time.Clock.systemUTC());
             if ("UPCOMING".equals(tf)) {
                 if (startDateFrom == null || startDateFrom.isBefore(now)) {
                     startDateFrom = now;
@@ -930,7 +933,7 @@ public class EventService {
      */
     public Event updateWithVersion(UUID id, UpdateEventRequest request, Long expectedVersion) {
         Event event = eventRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found with ID: " + id));
         
         // Check version if provided
         if (expectedVersion != null && !expectedVersion.equals(event.getVersion())) {
@@ -1120,7 +1123,7 @@ public class EventService {
      */
     public Event updateEventStatus(UUID eventId, EventStatus newStatus) {
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found with ID: " + eventId));
         
         event.setEventStatus(newStatus);
         return eventRepository.save(event);
@@ -1178,7 +1181,7 @@ public class EventService {
      */
     public Integer getAvailableCapacity(UUID eventId) {
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found with ID: " + eventId));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found with ID: " + eventId));
         
         if (event.getCapacity() == null) {
             return null;

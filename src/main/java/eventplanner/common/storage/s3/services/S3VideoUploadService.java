@@ -8,9 +8,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.net.URL;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -48,6 +48,7 @@ public class S3VideoUploadService {
     private static final Duration DEFAULT_UPLOAD_URL_TTL = Duration.ofMinutes(10);
 
     private final S3StorageService storageService;
+    private final Clock clock;
 
     public PresignedUploadResult createVideoUpload(BucketAlias bucketAlias,
                                                    String keyPrefix,
@@ -99,7 +100,7 @@ public class S3VideoUploadService {
             .headers(Map.of("Content-Type", contentType))
             .objectKey(objectKey)
             .resourceUrl(resourceUrl)
-            .expiresAt(LocalDateTime.now(ZoneOffset.UTC).plus(ttl))
+            .expiresAt(LocalDateTime.now(clock).plus(ttl))
             .build();
     }
 

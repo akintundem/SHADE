@@ -29,6 +29,9 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class NotificationTargetResolver {
 
+    /** Maximum recipients per bulk notification to prevent abuse and timeouts. */
+    public static final int MAX_BULK_RECIPIENTS = 1000;
+
     private final UserAccountRepository userAccountRepository;
     private final AttendeeRepository attendeeRepository;
     private final EventUserRepository eventUserRepository;
@@ -65,21 +68,21 @@ public class NotificationTargetResolver {
     private NotificationTarget resolveAllUsers(Map<String, Object> parameters) {
         Set<UUID> userIds = new HashSet<>();
         
-        // Support pagination for large user bases
-        int page = parameters != null && parameters.containsKey("page") 
+        // Support pagination for large user bases (capped to prevent abuse)
+        int page = parameters != null && parameters.containsKey("page")
                 ? (Integer) parameters.get("page") : 0;
-        int size = parameters != null && parameters.containsKey("size") 
-                ? (Integer) parameters.get("size") : 1000;
-        
+        int size = parameters != null && parameters.containsKey("size")
+                ? Math.min((Integer) parameters.get("size"), MAX_BULK_RECIPIENTS) : MAX_BULK_RECIPIENTS;
+
         Pageable pageable = PageRequest.of(page, size);
         Page<UserAccount> userPage = userAccountRepository.findAll(pageable);
         
-        while (userPage.hasContent()) {
-            userIds.addAll(userPage.getContent().stream()
+        while (userPage.hasContent() && userIds.size() < MAX_BULK_RECIPIENTS) {
+            userPage.getContent().stream()
                     .map(UserAccount::getId)
-                    .collect(Collectors.toSet()));
-            
-            if (!userPage.hasNext()) {
+                    .forEach(userIds::add);
+
+            if (!userPage.hasNext() || userIds.size() >= MAX_BULK_RECIPIENTS) {
                 break;
             }
             pageable = userPage.nextPageable();

@@ -1,5 +1,6 @@
 package eventplanner.common.util;
 
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -27,10 +28,10 @@ public final class UserAccountUtil {
      */
     public static UserAccount getManagedUserAccountOrThrow(UserPrincipal principal, UserAccountRepository userAccountRepository, String errorMessage) {
         if (principal == null || principal.getId() == null) {
-            throw new IllegalArgumentException(errorMessage != null ? errorMessage : "User not found");
+            throw new ResourceNotFoundException(errorMessage != null ? errorMessage : "User not found");
         }
         
         return userAccountRepository.findById(principal.getId())
-            .orElseThrow(() -> new IllegalArgumentException(errorMessage != null ? errorMessage : "User not found"));
+            .orElseThrow(() -> new ResourceNotFoundException(errorMessage != null ? errorMessage : "User not found"));
     }
 }

@@ -38,8 +38,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -76,6 +76,7 @@ public class TicketCheckoutService {
     private final LocationRepository locationRepository;
     private final TicketingPolicyService ticketingPolicyService;
     private final BudgetSyncService budgetSyncService;
+    private final Clock clock;
 
     /**
      * Start a new checkout session and reserve tickets.
@@ -516,7 +517,7 @@ public class TicketCheckoutService {
         if (typeIds.isEmpty()) {
             return Map.of();
         }
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now(clock);
         List<TicketPriceTier> tiers = ticketPriceTierRepository.findActiveByTicketTypeIds(typeIds, now);
         return tiers.stream()
             .collect(Collectors.groupingBy(t -> t.getTicketType().getId()));
@@ -528,7 +529,7 @@ public class TicketCheckoutService {
             return tier.getPriceMinor() != null ? tier.getPriceMinor() : 0L;
         }
         if (ticketType.getEarlyBirdPriceMinor() != null && ticketType.getEarlyBirdEndDate() != null) {
-            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+            LocalDateTime now = LocalDateTime.now(clock);
             if (!now.isAfter(ticketType.getEarlyBirdEndDate())) {
                 return ticketType.getEarlyBirdPriceMinor();
             }

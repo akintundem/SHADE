@@ -15,6 +15,7 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.event.dto.request.CreateCollaboratorInviteRequest;
 import eventplanner.features.event.dto.response.CollaboratorInviteResponse;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.common.util.UserAccountUtil;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
@@ -28,8 +29,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +52,7 @@ public class EventCollaboratorInviteService {
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
     private final ExternalServicesProperties externalServicesProperties;
+    private final Clock clock;
 
     private final String appBaseUrl;
 
@@ -61,7 +63,8 @@ public class EventCollaboratorInviteService {
             UserAccountRepository userAccountRepository,
             NotificationService notificationService,
             ExternalServicesProperties externalServicesProperties,
-            AppProperties appProperties
+            AppProperties appProperties,
+            Clock clock
     ) {
         this.inviteRepository = inviteRepository;
         this.eventUserRepository = eventUserRepository;
@@ -69,6 +72,7 @@ public class EventCollaboratorInviteService {
         this.userAccountRepository = userAccountRepository;
         this.notificationService = notificationService;
         this.externalServicesProperties = externalServicesProperties;
+        this.clock = clock != null ? clock : java.time.Clock.systemUTC();
         this.appBaseUrl = requireConfigured(appProperties.getBaseUrl(), "app.base-url");
     }
 
@@ -125,7 +129,7 @@ public class EventCollaboratorInviteService {
 
         // Fetch Event entity
         Event event = eventRepository.findById(eventId)
-            .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+            .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
         
         // Get managed UserAccount entity for inviter (required for JPA relationship)
         UserAccount inviterUser = UserAccountUtil.getManagedUserAccountOrThrow(
@@ -167,7 +171,7 @@ public class EventCollaboratorInviteService {
         invite.setInviteeEmail(inviteeEmail);
         invite.setRole(request.getRole());
         invite.setStatus(CollaboratorInviteStatus.PENDING);
-        invite.setExpiresAt(LocalDateTime.now(ZoneOffset.UTC).plusDays(DEFAULT_INVITE_TTL_DAYS));
+        invite.setExpiresAt(LocalDateTime.now(clock).plusDays(DEFAULT_INVITE_TTL_DAYS));
         invite.setMessage(safeTrim(request.getMessage()));
 
         // Reset status/response for refreshed invites
@@ -233,7 +237,7 @@ public class EventCollaboratorInviteService {
         }
         
         EventCollaboratorInvite invite = inviteRepository.findById(inviteId)
-                .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Invite not found"));
         // Verify the logged-in user is the one who can accept this invite
         verifyInviteBelongsToPrincipal(invite, principal);
         return acceptInvite(invite, principal);
@@ -252,7 +256,7 @@ public class EventCollaboratorInviteService {
         
         String tokenHash = TokenUtil.hashToken(token.trim());
         EventCollaboratorInvite invite = inviteRepository.findByTokenHash(tokenHash)
-                .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Invite not found"));
         // Verify the logged-in user is the one who can accept this invite (even with token)
         verifyInviteBelongsToPrincipal(invite, principal);
         return acceptInvite(invite, principal);
@@ -266,7 +270,7 @@ public class EventCollaboratorInviteService {
             throw new IllegalArgumentException("User account information is required");
         }
         EventCollaboratorInvite invite = inviteRepository.findById(inviteId)
-                .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Invite not found"));
 
         // Verify the logged-in user is the one who can decline this invite
         verifyInviteBelongsToPrincipal(invite, principal);
@@ -274,25 +278,25 @@ public class EventCollaboratorInviteService {
         if (invite.getStatus() != CollaboratorInviteStatus.PENDING) {
             throw new IllegalArgumentException("Invite is not pending");
         }
-        if (invite.getExpiresAt() != null && LocalDateTime.now(ZoneOffset.UTC).isAfter(invite.getExpiresAt())) {
+        if (invite.getExpiresAt() != null && LocalDateTime.now(clock).isAfter(invite.getExpiresAt())) {
             invite.setStatus(CollaboratorInviteStatus.EXPIRED);
         } else {
             invite.setStatus(CollaboratorInviteStatus.DECLINED);
         }
-        invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+        invite.setRespondedAt(LocalDateTime.now(clock));
         inviteRepository.save(invite);
     }
 
     public void revokeInvite(UUID inviteId) {
         EventCollaboratorInvite invite = inviteRepository.findById(inviteId)
-                .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Invite not found"));
 
         if (invite.getStatus() != CollaboratorInviteStatus.PENDING) {
             throw new IllegalArgumentException("Only pending invites can be revoked");
         }
 
         invite.setStatus(CollaboratorInviteStatus.REVOKED);
-        invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+        invite.setRespondedAt(LocalDateTime.now(clock));
         inviteRepository.save(invite);
     }
 
@@ -306,16 +310,16 @@ public class EventCollaboratorInviteService {
         }
 
         // Expiry check
-        if (invite.getExpiresAt() != null && LocalDateTime.now(ZoneOffset.UTC).isAfter(invite.getExpiresAt())) {
+        if (invite.getExpiresAt() != null && LocalDateTime.now(clock).isAfter(invite.getExpiresAt())) {
             invite.setStatus(CollaboratorInviteStatus.EXPIRED);
-            invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+            invite.setRespondedAt(LocalDateTime.now(clock));
             inviteRepository.save(invite);
             throw new IllegalArgumentException("Invite has expired");
         }
 
         Event event = invite.getEvent();
         if (event == null) {
-            throw new IllegalArgumentException("Event not found for invite");
+            throw new ResourceNotFoundException("Event not found for invite");
         }
         UUID eventId = event.getId();
         UUID userId = principal.getId();
@@ -324,21 +328,21 @@ public class EventCollaboratorInviteService {
         Optional<EventUser> existingMembership = eventUserRepository.findByEventIdAndUserId(eventId, userId);
         if (existingMembership.isPresent()) {
             invite.setStatus(CollaboratorInviteStatus.ACCEPTED);
-            invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+            invite.setRespondedAt(LocalDateTime.now(clock));
             inviteRepository.save(invite);
             return existingMembership.get();
         }
 
         // Fetch UserAccount for membership
         UserAccount user = userAccountRepository.findById(userId)
-            .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
         
         EventUser membership = new EventUser();
         membership.setEvent(event);
         membership.setUser(user);
         membership.setUserType(invite.getRole() != null ? invite.getRole() : EventUserType.COLLABORATOR);
         membership.setRegistrationStatus(RegistrationStatus.CONFIRMED);
-        membership.setRegistrationDate(LocalDateTime.now(ZoneOffset.UTC));
+        membership.setRegistrationDate(LocalDateTime.now(clock));
 
         EventUser savedMembership;
         try {
@@ -351,7 +355,7 @@ public class EventCollaboratorInviteService {
         }
 
         invite.setStatus(CollaboratorInviteStatus.ACCEPTED);
-        invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+        invite.setRespondedAt(LocalDateTime.now(clock));
         inviteRepository.save(invite);
 
         return savedMembership;

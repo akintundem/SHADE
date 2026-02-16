@@ -11,6 +11,7 @@ import eventplanner.common.storage.s3.UploadCompletionCallback;
 import eventplanner.common.util.UserAccountUtil;
 import eventplanner.security.util.AuthValidationUtil;
 import eventplanner.common.exception.exceptions.ForbiddenException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.common.exception.exceptions.UnauthorizedException;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.EventStoredObject;
@@ -103,7 +104,7 @@ public class FeedPostService {
         
         // Prevent feed post creation for archived or cancelled events
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
         if (Boolean.TRUE.equals(event.getIsArchived())) {
             throw new IllegalArgumentException("Cannot create feed posts for archived events");
         }
@@ -194,9 +195,9 @@ public class FeedPostService {
                                                 UserPrincipal principal,
                                                 FeedPostMediaUploadCompleteRequest request) {
         accessControlService.requireMediaUpload(principal, eventId);
-        EventFeedPost post = postRepository.findById(postId).orElseThrow(() -> new IllegalArgumentException("Post not found"));
+        EventFeedPost post = postRepository.findById(postId).orElseThrow(() -> new ResourceNotFoundException("Post not found"));
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
-            throw new IllegalArgumentException("Post not found");
+            throw new ResourceNotFoundException("Post not found");
         }
         if (post.getMediaObjectId() == null || !post.getMediaObjectId().equals(mediaId)) {
             throw new IllegalArgumentException("Media does not belong to post");
@@ -252,7 +253,7 @@ public class FeedPostService {
 
         // Reload post to get updated status
         EventFeedPost updatedPost = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
         return enrichPostsWithEngagement(List.of(updatedPost), eventId, principal).get(0);
     }
 
@@ -261,7 +262,7 @@ public class FeedPostService {
         
         // Check if event is archived - don't show feed posts for archived events
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
         if (Boolean.TRUE.equals(event.getIsArchived())) {
             return List.of(); // Return empty list for archived events
         }
@@ -285,7 +286,7 @@ public class FeedPostService {
         
         // Check if event is archived - don't show feed posts for archived events
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
         if (Boolean.TRUE.equals(event.getIsArchived())) {
             PostListResponse response = new PostListResponse();
             response.setPosts(List.of());
@@ -321,16 +322,16 @@ public class FeedPostService {
 
     public FeedPostResponse get(UUID eventId, UUID postId, UserPrincipal principal) {
         accessControlService.requireMediaView(principal, eventId);
-        EventFeedPost post = postRepository.findById(postId).orElseThrow(() -> new IllegalArgumentException("Post not found"));
+        EventFeedPost post = postRepository.findById(postId).orElseThrow(() -> new ResourceNotFoundException("Post not found"));
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
-            throw new IllegalArgumentException("Post not found");
+            throw new ResourceNotFoundException("Post not found");
         }
         // Only return if completed (null status = existing post, treat as completed)
         // Or allow creator to see their own pending posts
         MediaUploadStatus status = post.getMediaUploadStatus();
         if (status != null && status != MediaUploadStatus.COMPLETED) {
             if (principal == null || post.getCreatedBy() == null || !post.getCreatedBy().getId().equals(principal.getId())) {
-                throw new IllegalArgumentException("Post not found");
+                throw new ResourceNotFoundException("Post not found");
             }
         }
         return toResponse(post, eventId);
@@ -338,9 +339,9 @@ public class FeedPostService {
 
     public void delete(UUID eventId, UUID postId, UserPrincipal principal) {
         accessControlService.requireMediaUpload(principal, eventId);
-        EventFeedPost post = postRepository.findById(postId).orElseThrow(() -> new IllegalArgumentException("Post not found"));
+        EventFeedPost post = postRepository.findById(postId).orElseThrow(() -> new ResourceNotFoundException("Post not found"));
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
-            throw new IllegalArgumentException("Post not found");
+            throw new ResourceNotFoundException("Post not found");
         }
 
         if (principal == null || principal.getId() == null) {
@@ -567,7 +568,7 @@ public class FeedPostService {
 
         // Get the original post
         EventFeedPost originalPost = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
         // Verify the post belongs to the event
         if (!originalPost.getEvent().getId().equals(eventId)) {
@@ -586,10 +587,10 @@ public class FeedPostService {
 
         // Create a new post that references the original
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
 
         UserAccount author = userAccountRepository.findById(principal.getId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         EventFeedPost repost = new EventFeedPost();
         repost.setEvent(event);

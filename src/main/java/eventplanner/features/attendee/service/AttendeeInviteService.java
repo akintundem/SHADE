@@ -6,6 +6,7 @@ import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.enums.CommunicationType;
 import eventplanner.common.exception.exceptions.BadRequestException;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.common.config.ExternalServicesProperties;
 import eventplanner.common.util.UserAccountUtil;
 import eventplanner.features.attendee.dto.request.CreateAttendeeInviteRequest;
@@ -28,8 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.HashMap;
@@ -50,6 +51,7 @@ public class AttendeeInviteService {
     private final EventRepository eventRepository;
     private final NotificationService notificationService;
     private final ExternalServicesProperties externalServicesProperties;
+    private final Clock clock;
     private final String appBaseUrl;
 
     public AttendeeInviteService(
@@ -59,7 +61,8 @@ public class AttendeeInviteService {
             EventRepository eventRepository,
             NotificationService notificationService,
             ExternalServicesProperties externalServicesProperties,
-            AppProperties appProperties
+            AppProperties appProperties,
+            Clock clock
     ) {
         this.inviteRepository = inviteRepository;
         this.attendeeRepository = attendeeRepository;
@@ -67,7 +70,8 @@ public class AttendeeInviteService {
         this.eventRepository = eventRepository;
         this.notificationService = notificationService;
         this.externalServicesProperties = externalServicesProperties;
-        this.appBaseUrl = requireConfigured(appProperties.getBaseUrl(), "app.base-url");
+        this.clock = clock != null ? clock : java.time.Clock.systemUTC();
+        this.appBaseUrl = eventplanner.common.util.Preconditions.requireConfigured(appProperties.getBaseUrl(), "app.base-url");
     }
 
     public AttendeeInvite createInvite(UUID eventId, UserPrincipal inviter, CreateAttendeeInviteRequest request) {
@@ -101,7 +105,7 @@ public class AttendeeInviteService {
         }
 
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
         ensureInvitesAllowed(event);
 
         if (isAtCapacity(event)) {
@@ -163,7 +167,7 @@ public class AttendeeInviteService {
         invite.setMessage(AuthValidationUtil.safeTrim(request.getMessage()));
         invite.setStatus(AttendeeInviteStatus.PENDING);
         invite.setRespondedAt(null);
-        invite.setExpiresAt(LocalDateTime.now(ZoneOffset.UTC).plusDays(DEFAULT_INVITE_TTL_DAYS));
+        invite.setExpiresAt(LocalDateTime.now(clock).plusDays(DEFAULT_INVITE_TTL_DAYS));
 
         String rawToken = null;
         if (inviteeEmail != null) {
@@ -194,7 +198,7 @@ public class AttendeeInviteService {
         }
 
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
         ensureInvitesAllowed(event);
 
         Set<UUID> seenUserIds = new HashSet<>();
@@ -238,7 +242,7 @@ public class AttendeeInviteService {
             throw new BadRequestException("Event ID and invite ID are required");
         }
         return inviteRepository.findByIdAndEventId(inviteId, eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Invite not found: " + inviteId));
+                .orElseThrow(() -> new ResourceNotFoundException("Invite not found: " + inviteId));
     }
 
     @Transactional(readOnly = true)
@@ -260,7 +264,7 @@ public class AttendeeInviteService {
         }
 
         invite.setStatus(AttendeeInviteStatus.REVOKED);
-        invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+        invite.setRespondedAt(LocalDateTime.now(clock));
         inviteRepository.save(invite);
     }
 
@@ -277,7 +281,7 @@ public class AttendeeInviteService {
 
         invite.setStatus(AttendeeInviteStatus.PENDING);
         invite.setRespondedAt(null);
-        invite.setExpiresAt(LocalDateTime.now(ZoneOffset.UTC).plusDays(DEFAULT_INVITE_TTL_DAYS));
+        invite.setExpiresAt(LocalDateTime.now(clock).plusDays(DEFAULT_INVITE_TTL_DAYS));
 
         String rawToken = null;
         if (invite.getInviteeEmail() != null) {
@@ -324,11 +328,11 @@ public class AttendeeInviteService {
         AttendeeInvite invite;
         if (inviteId != null) {
             invite = inviteRepository.findById(inviteId)
-                    .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Invite not found"));
         } else if (token != null && !token.trim().isEmpty()) {
             String tokenHash = TokenUtil.hashToken(token.trim());
             invite = inviteRepository.findByTokenHash(tokenHash)
-                    .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Invite not found"));
         } else {
             throw new BadRequestException("Either inviteId or token must be provided");
         }
@@ -344,7 +348,7 @@ public class AttendeeInviteService {
         // Check expiry
         if (isExpired(invite)) {
             invite.setStatus(AttendeeInviteStatus.EXPIRED);
-            invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+            invite.setRespondedAt(LocalDateTime.now(clock));
             inviteRepository.save(invite);
             notifyOwnerOfInviteStatus(invite.getEvent(), principal.getUser(), AttendeeInviteStatus.EXPIRED);
             notifyInviterOfInviteStatus(invite, principal.getUser(), AttendeeInviteStatus.EXPIRED);
@@ -360,7 +364,7 @@ public class AttendeeInviteService {
         } else {
             // DECLINED, REVOKED, or EXPIRED
             invite.setStatus(status);
-            invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+            invite.setRespondedAt(LocalDateTime.now(clock));
             inviteRepository.save(invite);
             notifyOwnerOfInviteStatus(invite.getEvent(), principal.getUser(), status);
             notifyInviterOfInviteStatus(invite, principal.getUser(), status);
@@ -369,7 +373,7 @@ public class AttendeeInviteService {
     }
 
     private boolean isExpired(AttendeeInvite invite) {
-        return invite.getExpiresAt() != null && LocalDateTime.now(ZoneOffset.UTC).isAfter(invite.getExpiresAt());
+        return invite.getExpiresAt() != null && LocalDateTime.now(clock).isAfter(invite.getExpiresAt());
     }
 
     private Attendee acceptInviteInternal(AttendeeInvite invite, UserPrincipal principal) {
@@ -393,7 +397,7 @@ public class AttendeeInviteService {
 
         // Fetch UserAccount for attendee
         UserAccount user = userAccountRepository.findById(userId)
-            .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
         // Check for an email-only attendee and upgrade it instead of creating duplicates
         if (user.getEmail() != null) {
@@ -457,7 +461,7 @@ public class AttendeeInviteService {
 
     private void finalizeInvite(AttendeeInvite invite, AttendeeInviteStatus status) {
         invite.setStatus(status);
-        invite.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+        invite.setRespondedAt(LocalDateTime.now(clock));
         inviteRepository.save(invite);
     }
     
@@ -659,12 +663,4 @@ public class AttendeeInviteService {
             throw new BadRequestException(errorMessage);
         }
     }
-
-    private static String requireConfigured(String value, String propertyName) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException(propertyName + " must be configured");
-        }
-        return value;
-    }
-
 }

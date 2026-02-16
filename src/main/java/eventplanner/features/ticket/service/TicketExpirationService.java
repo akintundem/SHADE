@@ -1,5 +1,6 @@
 package eventplanner.features.ticket.service;
 
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.ticket.entity.Ticket;
 import eventplanner.features.ticket.enums.TicketStatus;
 import eventplanner.features.ticket.repository.TicketRepository;
@@ -72,7 +73,7 @@ public class TicketExpirationService {
     @Transactional
     public void expirePendingTicket(UUID ticketId) {
         Ticket ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new IllegalArgumentException("Ticket not found: " + ticketId));
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
 
         if (ticket.getStatus() != TicketStatus.PENDING) {
             throw new IllegalStateException(

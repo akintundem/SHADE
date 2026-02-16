@@ -14,6 +14,7 @@ import eventplanner.features.collaboration.service.EventPermissionEvaluator;
 import eventplanner.features.timeline.enums.TimelineStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.event.service.EventAccessControlService;
 import eventplanner.features.timeline.dto.request.*;
 import eventplanner.features.timeline.dto.response.*;
@@ -130,7 +131,7 @@ public class TimelineTaskService {
         UUID previousAssignee = null;
         if (request.getId() != null) {
             task = taskRepository.findByIdAndEventId(request.getId(), eventId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found"));
             previousAssignee = task.getAssignedTo() != null ? task.getAssignedTo().getId() : null;
         } else {
             task = new Task();
@@ -154,7 +155,7 @@ public class TimelineTaskService {
         requireTimelineManageAccess(user, eventId);
         
         Task task = taskRepository.findByIdAndEventId(taskId, eventId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Task not found"));
         UUID previousAssignee = task.getAssignedTo() != null ? task.getAssignedTo().getId() : null;
             
         updateTaskFields(task, request);
@@ -191,7 +192,7 @@ public class TimelineTaskService {
      */
     public TaskDetailResponse.ChecklistItemResponse autoSaveChecklistItem(UUID taskId, ChecklistAutoSaveRequest request, UserPrincipal user) {
         Task parentTask = taskRepository.findById(taskId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Parent task not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Parent task not found"));
         
         requireTimelineManageAccess(user, parentTask.getEvent().getId());
         
@@ -199,7 +200,7 @@ public class TimelineTaskService {
         UUID previousAssignee = null;
         if (request.getId() != null) {
             item = checklistRepository.findById(request.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Checklist item not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Checklist item not found"));
             if (!item.getTask().getId().equals(taskId)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item does not belong to this task");
             }
@@ -225,12 +226,12 @@ public class TimelineTaskService {
      */
     public Optional<TaskDetailResponse.ChecklistItemResponse> finalizeChecklistItem(UUID taskId, UUID itemId, ChecklistAutoSaveRequest request, UserPrincipal user) {
         Task parentTask = taskRepository.findById(taskId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Parent task not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Parent task not found"));
             
         requireTimelineManageAccess(user, parentTask.getEvent().getId());
         
         Checklist item = checklistRepository.findById(itemId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Checklist item not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Checklist item not found"));
         UUID previousAssignee = item.getAssignedTo() != null ? item.getAssignedTo().getId() : null;
             
         if (!item.getTask().getId().equals(taskId)) {
@@ -286,7 +287,7 @@ public class TimelineTaskService {
      */
     public void updateChecklistOrders(UUID taskId, List<UUID> itemIds, UserPrincipal user) {
         Task parentTask = taskRepository.findById(taskId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Task not found"));
         
         requireTimelineManageAccess(user, parentTask.getEvent().getId());
         
@@ -307,7 +308,7 @@ public class TimelineTaskService {
      */
     public void deleteTask(UUID taskId, UserPrincipal user) {
         Task task = taskRepository.findById(taskId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Task not found"));
         
         requireTimelineManageAccess(user, task.getEvent().getId());
         taskRepository.delete(task);
@@ -318,7 +319,7 @@ public class TimelineTaskService {
      */
     public void deleteChecklistItem(UUID taskId, UUID itemId, UserPrincipal user) {
         Checklist item = checklistRepository.findById(itemId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Item not found"));
             
         if (!item.getTask().getId().equals(taskId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item does not belong to this task");
@@ -335,7 +336,7 @@ public class TimelineTaskService {
             return null;
         }
         UserAccount assignedUser = userAccountRepository.findById(userId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         if (event.getOwner() != null && userId.equals(event.getOwner().getId())) {
             return assignedUser;
         }

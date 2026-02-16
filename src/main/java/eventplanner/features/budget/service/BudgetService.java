@@ -1,5 +1,6 @@
 package eventplanner.features.budget.service;
 
+import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.features.budget.dto.request.UpdateBudgetRequest;
 import eventplanner.features.budget.dto.request.BudgetLineItemAutoSaveRequest;
 import eventplanner.features.budget.entity.Budget;
@@ -40,7 +41,7 @@ public class BudgetService {
 
     public Budget getBudgetOrThrow(UUID eventId) {
         return getByEventId(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Budget not found for event"));
+                .orElseThrow(() -> new ResourceNotFoundException("Budget not found for event"));
     }
 
 
@@ -120,7 +121,7 @@ public class BudgetService {
                 throw new IllegalArgumentException("Budget category ID is required for new line items");
             }
             BudgetCategory category = categoryRepository.findById(request.getBudgetCategoryId())
-                    .orElseThrow(() -> new IllegalArgumentException("Category not found"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
             if (!category.getBudget().getId().equals(budget.getId())) {
                 throw new IllegalArgumentException("Category does not belong to this budget");
             }
@@ -140,7 +141,7 @@ public class BudgetService {
             if (request.getBudgetCategoryId() != null && 
                 (item.getBudgetCategory() == null || !item.getBudgetCategory().getId().equals(request.getBudgetCategoryId()))) {
                 BudgetCategory category = categoryRepository.findById(request.getBudgetCategoryId())
-                        .orElseThrow(() -> new IllegalArgumentException("Category not found"));
+                        .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
                 if (!category.getBudget().getId().equals(budget.getId())) {
                     throw new IllegalArgumentException("Category does not belong to this budget");
                 }
@@ -174,7 +175,7 @@ public class BudgetService {
         if (request.getBudgetCategoryId() != null &&
                 (item.getBudgetCategory() == null || !item.getBudgetCategory().getId().equals(request.getBudgetCategoryId()))) {
             BudgetCategory category = categoryRepository.findById(request.getBudgetCategoryId())
-                    .orElseThrow(() -> new IllegalArgumentException("Category not found"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
             if (!category.getBudget().getId().equals(budget.getId())) {
                 throw new IllegalArgumentException("Category does not belong to this budget");
             }
