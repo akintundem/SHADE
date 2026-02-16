@@ -98,9 +98,8 @@ public class BudgetService {
         if (request.getNotes() != null) {
             budget.setNotes(request.getNotes());
         }
-        if (request.getBudgetStatus() != null) {
-            budget.setBudgetStatus(request.getBudgetStatus());
-        }
+        // Budget status is auto-calculated; ignore manual overrides to prevent
+        // inconsistent state between actual spend and the status label.
         
         recalculateContingency(budget);
         budgetRepository.save(budget);
@@ -210,6 +209,13 @@ public class BudgetService {
         if (request.getIsEssential() != null) item.setIsEssential(request.getIsEssential());
         if (request.getPriority() != null) item.setPriority(request.getPriority());
         if (request.getNotes() != null) item.setNotes(request.getNotes());
+
+        // Auto-compute estimatedCost from unitCost * quantity when both are present
+        // and no explicit estimatedCost was provided in this request.
+        if (request.getEstimatedCost() == null
+                && item.getUnitCost() != null && item.getQuantity() != null && item.getQuantity() > 0) {
+            item.setEstimatedCost(item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity())));
+        }
     }
 
     private boolean isLineItemEmpty(BudgetLineItem item) {
@@ -224,7 +230,8 @@ public class BudgetService {
             if (item.getEstimatedCost().compareTo(BigDecimal.ZERO) > 0) {
                 item.setVariancePercentage(item.getVariance()
                     .divide(item.getEstimatedCost(), 4, RoundingMode.HALF_UP)
-                    .multiply(new BigDecimal("100")));
+                    .multiply(new BigDecimal("100"))
+                    .setScale(2, RoundingMode.HALF_UP));
             } else {
                 item.setVariancePercentage(null);
             }
@@ -312,19 +319,22 @@ public class BudgetService {
         }
     }
 
-    private void validatePositiveAmount(BigDecimal amount, String fieldName) {
+    // ---- Shared validation helpers (kept here since they're budget-specific) ----
+
+    static void validatePositiveAmount(BigDecimal amount, String fieldName) {
         if (amount != null && amount.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException(fieldName + " cannot be negative");
         }
     }
 
-    private void validatePercentage(BigDecimal percentage, String fieldName) {
-        if (percentage != null && (percentage.compareTo(BigDecimal.ZERO) < 0 || percentage.compareTo(new BigDecimal("100")) > 0)) {
+    static void validatePercentage(BigDecimal percentage, String fieldName) {
+        if (percentage != null && (percentage.compareTo(BigDecimal.ZERO) < 0
+                || percentage.compareTo(BigDecimal.valueOf(100)) > 0)) {
             throw new IllegalArgumentException(fieldName + " must be between 0 and 100");
         }
     }
 
-    private void validateCurrency(String currency) {
+    static void validateCurrency(String currency) {
         if (currency == null || currency.length() != 3) {
             throw new IllegalArgumentException("Invalid currency code");
         }

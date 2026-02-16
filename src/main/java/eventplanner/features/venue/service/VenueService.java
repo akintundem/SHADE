@@ -154,7 +154,10 @@ public class VenueService {
         BigDecimal minLatitude,
         BigDecimal maxLatitude,
         BigDecimal minLongitude,
-        BigDecimal maxLongitude
+        BigDecimal maxLongitude,
+        String venueType,
+        boolean parkingRequired,
+        boolean transitRequired
     ) {
         log.debug("PostGIS: finding venues within bounds: lat [{}, {}], lng [{}, {}]",
             minLatitude, maxLatitude, minLongitude, maxLongitude);
@@ -165,7 +168,10 @@ public class VenueService {
             minLatitude.doubleValue(),
             maxLatitude.doubleValue(),
             minLongitude.doubleValue(),
-            maxLongitude.doubleValue()
+            maxLongitude.doubleValue(),
+            venueType,
+            parkingRequired,
+            transitRequired
         );
     }
 
@@ -176,7 +182,10 @@ public class VenueService {
     public List<Venue> findVenuesNearLocation(
         BigDecimal latitude,
         BigDecimal longitude,
-        BigDecimal radiusKm
+        BigDecimal radiusKm,
+        String venueType,
+        boolean parkingRequired,
+        boolean transitRequired
     ) {
         validateSinglePointCoordinates(latitude, longitude);
 
@@ -190,7 +199,10 @@ public class VenueService {
         return venueRepository.findNearLocation(
             latitude.doubleValue(),
             longitude.doubleValue(),
-            radiusMeters
+            radiusMeters,
+            venueType,
+            parkingRequired,
+            transitRequired
         );
     }
 

@@ -169,6 +169,18 @@ public class AuthorizationService {
             .anyMatch(EventRole::getIsActive);
     }
 
+    /**
+     * Check if a user can manage an event (admin, owner, or active member).
+     * Consolidates the identical checks that were duplicated in AttendeeController,
+     * AttendeeService, TicketApprovalService, and TicketWaitlistService.
+     */
+    public boolean canManageEvent(UserPrincipal user, UUID eventId) {
+        if (user == null || eventId == null) {
+            return false;
+        }
+        return isAdmin(user) || isEventOwner(user, eventId) || hasEventMembership(user, eventId);
+    }
+
     private boolean hasAcceptedInvite(UserPrincipal user, UUID eventId) {
         if (user == null || eventId == null) {
             return false;

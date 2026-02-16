@@ -10,6 +10,7 @@ import eventplanner.security.auth.dto.res.AuthSessionResponse;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.service.CognitoUserService;
 import eventplanner.security.auth.service.UserAccountService;
+import eventplanner.common.util.Preconditions;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
@@ -48,9 +49,7 @@ public class AuthInfoController {
     @GetMapping("/session")
     @RequiresPermission(value = RbacPermissions.AUTH_ME, resources = {"user_id=#principal.id"})
     public ResponseEntity<AuthSessionResponse> session(@AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            throw new ResourceNotFoundException("User not found");
-        }
+        Preconditions.requireAuthenticated(principal);
         var account = principal.getUser();
         var userResponse = AuthMapper.toSecureUserResponse(account);
         var session = AuthSessionResponse.builder()
@@ -62,9 +61,7 @@ public class AuthInfoController {
 
     @RequestMapping(value = "/logout", method = {RequestMethod.POST, RequestMethod.GET})
     public ResponseEntity<ApiMessageResponse> logout(@AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            throw new UnauthorizedException("Unauthorized");
-        }
+        Preconditions.requireAuthenticated(principal);
         cognitoUserService.signOutUser(
                 principal.getUser().getCognitoSub(),
                 principal.getUser().getEmail()
@@ -144,16 +141,7 @@ public class AuthInfoController {
     }
 
     private boolean isEmailVerified(Jwt jwt) {
-        Boolean verified = jwt.getClaimAsBoolean("email_verified");
-        if (verified != null) {
-            return verified;
-        }
-        String rawValue = jwt.getClaimAsString("email_verified");
-        if (StringUtils.hasText(rawValue)) {
-            return "true".equalsIgnoreCase(rawValue);
-        }
-        String tokenUse = jwt.getClaimAsString("token_use");
-        return "access".equals(tokenUse);
+        return eventplanner.security.util.JwtClaimUtils.isEmailVerifiedOrAccessToken(jwt);
     }
 
     private String resolveTokenEmail(Jwt jwt) {

@@ -6,23 +6,16 @@ import eventplanner.common.exception.exceptions.ConflictException;
 import eventplanner.common.exception.exceptions.ErrorCode;
 import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
-import eventplanner.features.attendee.entity.Attendee;
-import eventplanner.features.attendee.repository.AttendeeRepository;
 import eventplanner.features.event.entity.Event;
-import eventplanner.features.event.repository.EventRepository;
 import eventplanner.features.ticket.dto.request.CreateTicketWaitlistRequest;
 import eventplanner.features.ticket.dto.request.IssueTicketRequest;
 import eventplanner.features.ticket.dto.request.TicketWaitlistFulfillRequest;
 import eventplanner.features.ticket.entity.TicketType;
 import eventplanner.features.ticket.entity.TicketWaitlistEntry;
 import eventplanner.features.ticket.enums.TicketWaitlistStatus;
-import eventplanner.features.ticket.repository.TicketRepository;
-import eventplanner.features.ticket.repository.TicketTypeRepository;
 import eventplanner.features.ticket.repository.TicketWaitlistEntryRepository;
 import eventplanner.security.authorization.service.AuthorizationService;
-import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.security.util.AuthValidationUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,7 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -38,16 +30,11 @@ import java.util.UUID;
 @Transactional
 public class TicketWaitlistService {
 
-    private static final int DEFAULT_MAX_TICKETS_PER_PERSON = 5;
-
     private final TicketWaitlistEntryRepository waitlistRepository;
-    private final TicketTypeRepository ticketTypeRepository;
-    private final TicketRepository ticketRepository;
-    private final EventRepository eventRepository;
-    private final AttendeeRepository attendeeRepository;
     private final TicketService ticketService;
     private final AuthorizationService authorizationService;
     private final TicketingPolicyService ticketingPolicyService;
+    private final TicketPolicyHelper policyHelper;
 
     public TicketWaitlistEntry createEntry(UUID eventId, CreateTicketWaitlistRequest request, UserPrincipal principal) {
         if (request == null) {
@@ -57,11 +44,11 @@ public class TicketWaitlistService {
             throw new BadRequestException("Authenticated user is required");
         }
 
-        Event event = loadEvent(eventId);
+        Event event = policyHelper.loadEvent(eventId);
         ticketingPolicyService.ensureEventOpenForTicketing(event);
 
-        TicketType ticketType = loadTicketType(event, request.getTicketTypeId());
-        ensureTicketTypeOnSale(ticketType);
+        TicketType ticketType = policyHelper.loadTicketType(event, request.getTicketTypeId());
+        policyHelper.ensureTicketTypeOnSale(ticketType);
 
         if (ticketType.canPurchase(request.getQuantity())) {
             throw new ConflictException("Tickets are available; purchase instead of joining the waitlist");
@@ -73,7 +60,7 @@ public class TicketWaitlistService {
             throw new ConflictException("You are already on the waitlist for this ticket type");
         }
 
-        String requesterEmail = normalizeEmail(principal.getUser().getEmail());
+        String requesterEmail = TicketPolicyHelper.normalizeEmail(principal.getUser().getEmail());
         String requesterName = principal.getUser().getName() != null
             ? principal.getUser().getName().trim()
             : requesterEmail;
@@ -81,13 +68,7 @@ public class TicketWaitlistService {
             throw new BadRequestException("Requester email is required");
         }
 
-        int maxTicketsPerPerson = resolveMaxTicketsPerPerson(ticketType);
-        long existingTickets = countExistingTickets(eventId, requesterId, requesterEmail);
-        if (maxTicketsPerPerson != Integer.MAX_VALUE &&
-            existingTickets + request.getQuantity() > maxTicketsPerPerson) {
-            throw new ApiException(ErrorCode.MAX_TICKETS_EXCEEDED,
-                "Cannot request more than " + maxTicketsPerPerson + " tickets per person");
-        }
+        policyHelper.enforceMaxTicketsPerPerson(ticketType, eventId, requesterId, requesterEmail, request.getQuantity());
 
         TicketWaitlistEntry entry = new TicketWaitlistEntry();
         entry.setEvent(event);
@@ -153,39 +134,16 @@ public class TicketWaitlistService {
         return waitlistRepository.save(entry);
     }
 
-    private Event loadEvent(UUID eventId) {
-        return eventRepository.findById(eventId)
-            .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
-    }
-
-    private TicketType loadTicketType(Event event, UUID ticketTypeId) {
-        TicketType ticketType = ticketTypeRepository.findById(ticketTypeId)
-            .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + ticketTypeId));
-        if (ticketType.getEvent() == null || !Objects.equals(ticketType.getEvent().getId(), event.getId())) {
-            throw new BadRequestException("Ticket type does not belong to this event");
-        }
-        return ticketType;
-    }
-
     private TicketWaitlistEntry loadEntry(UUID eventId, UUID entryId) {
         return waitlistRepository.findByIdAndEventId(entryId, eventId)
             .orElseThrow(() -> new ResourceNotFoundException("Waitlist entry not found: " + entryId));
-    }
-
-    private void ensureTicketTypeOnSale(TicketType ticketType) {
-        if (!ticketType.isOnSale()) {
-            throw new BadRequestException("Ticket sales are not active for this ticket type");
-        }
     }
 
     private void ensureCanManageWaitlist(UserPrincipal principal, UUID eventId) {
         if (principal == null || eventId == null) {
             throw new ForbiddenException("Access denied to waitlist");
         }
-        if (authorizationService.isAdmin(principal) || authorizationService.isEventOwner(principal, eventId)) {
-            return;
-        }
-        if (!authorizationService.hasEventMembership(principal, eventId)) {
+        if (!authorizationService.canManageEvent(principal, eventId)) {
             throw new ForbiddenException("Access denied to waitlist");
         }
     }
@@ -198,76 +156,15 @@ public class TicketWaitlistService {
         if (requesterId != null && requesterId.equals(principal.getId())) {
             return true;
         }
-        UUID eventId = entry.getEvent().getId();
-        return authorizationService.isAdmin(principal) ||
-            authorizationService.isEventOwner(principal, eventId) ||
-            authorizationService.hasEventMembership(principal, eventId);
+        return authorizationService.canManageEvent(principal, entry.getEvent().getId());
     }
 
     private IssueTicketRequest buildIssueRequest(TicketWaitlistEntry entry, TicketWaitlistFulfillRequest request) {
-        UserAccount requester = entry.getRequester();
-        String requesterEmail = normalizeEmail(entry.getRequesterEmail());
-        String requesterName = entry.getRequesterName();
-        if (requesterEmail == null || requesterEmail.isBlank()) {
-            if (requester != null) {
-                requesterEmail = normalizeEmail(requester.getEmail());
-            }
-        }
-        if (requesterName == null || requesterName.isBlank()) {
-            requesterName = requester != null ? requester.getName() : requesterEmail;
-        }
-        if (requesterEmail == null || requesterEmail.isBlank()) {
-            throw new BadRequestException("Requester email is required to issue tickets");
-        }
-
-        Attendee attendee = null;
-        if (requester != null && requester.getId() != null) {
-            attendee = attendeeRepository.findByEventIdAndUserId(entry.getEvent().getId(), requester.getId()).orElse(null);
-        }
-        if (attendee == null && requesterEmail != null) {
-            attendee = attendeeRepository.findByEventIdAndEmailIgnoreCase(entry.getEvent().getId(), requesterEmail).orElse(null);
-        }
-
-        IssueTicketRequest issueRequest = new IssueTicketRequest();
-        issueRequest.setEventId(entry.getEvent().getId());
-        issueRequest.setTicketTypeId(entry.getTicketType().getId());
-        issueRequest.setQuantity(entry.getQuantity());
-        if (attendee != null) {
-            issueRequest.setAttendeeId(attendee.getId());
-        } else {
-            issueRequest.setOwnerEmail(requesterEmail);
-            issueRequest.setOwnerName(requesterName);
-        }
         boolean sendEmail = request == null || Boolean.TRUE.equals(request.getSendEmail());
         boolean sendPush = request == null || Boolean.TRUE.equals(request.getSendPush());
-        issueRequest.setSendEmail(sendEmail);
-        issueRequest.setSendPushNotification(sendPush);
-        return issueRequest;
-    }
-
-    private String normalizeEmail(String email) {
-        return email != null ? AuthValidationUtil.normalizeEmail(email) : null;
-    }
-
-    private int resolveMaxTicketsPerPerson(TicketType ticketType) {
-        Integer configuredMax = ticketType.getMaxTicketsPerPerson();
-        int maxTicketsPerPerson = configuredMax == null ? Integer.MAX_VALUE : configuredMax;
-        if (configuredMax != null && configuredMax <= 0) {
-            maxTicketsPerPerson = DEFAULT_MAX_TICKETS_PER_PERSON;
-        }
-        return maxTicketsPerPerson;
-    }
-
-    private long countExistingTickets(UUID eventId, UUID requesterId, String requesterEmail) {
-        Attendee attendee = requesterId != null
-            ? attendeeRepository.findByEventIdAndUserId(eventId, requesterId).orElse(null)
-            : null;
-        if (attendee != null) {
-            return ticketRepository.findByAttendeeIdAndEventId(attendee.getId(), eventId).size();
-        }
-        if (requesterEmail != null) {
-            return ticketRepository.findByOwnerEmailAndEventId(requesterEmail, eventId).size();
-        }
-        return 0;
+        return policyHelper.buildIssueRequest(
+            entry.getEvent().getId(), entry.getTicketType().getId(), entry.getQuantity(),
+            entry.getRequester(), entry.getRequesterEmail(), entry.getRequesterName(),
+            sendEmail, sendPush);
     }
 }

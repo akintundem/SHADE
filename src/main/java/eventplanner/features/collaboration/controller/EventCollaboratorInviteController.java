@@ -6,6 +6,7 @@ import eventplanner.features.event.dto.request.CreateCollaboratorInviteRequest;
 import eventplanner.features.event.dto.request.RespondToCollaboratorInviteRequest;
 import eventplanner.features.event.dto.response.CollaboratorInviteResponse;
 import eventplanner.features.collaboration.dto.response.EventCollaboratorResponse;
+import eventplanner.common.util.Preconditions;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
@@ -54,10 +55,8 @@ public class EventCollaboratorInviteController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody CreateCollaboratorInviteRequest request
     ) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        if (!authorizationService.isEventOwner(principal, eventId) && !authorizationService.isAdmin(principal)) {
+        Preconditions.requireAuthenticated(principal);
+        if (!authorizationService.canManageEvent(principal, eventId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can invite collaborators");
         }
         CollaboratorInviteResponse response = inviteService.createInvite(eventId, principal, request);
@@ -73,10 +72,8 @@ public class EventCollaboratorInviteController {
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size
     ) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        if (!authorizationService.isEventOwner(principal, eventId) && !authorizationService.isAdmin(principal)) {
+        Preconditions.requireAuthenticated(principal);
+        if (!authorizationService.canManageEvent(principal, eventId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can view invites");
         }
         return ResponseEntity.ok(inviteService.listEventInvites(eventId, page, size));
@@ -90,10 +87,8 @@ public class EventCollaboratorInviteController {
             @PathVariable UUID inviteId,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        if (!authorizationService.isEventOwner(principal, eventId) && !authorizationService.isAdmin(principal)) {
+        Preconditions.requireAuthenticated(principal);
+        if (!authorizationService.canManageEvent(principal, eventId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can revoke invites");
         }
         inviteService.revokeInvite(inviteId);
@@ -102,12 +97,13 @@ public class EventCollaboratorInviteController {
 
     @GetMapping("/api/v1/collaborator-invites/incoming")
     // No @RequiresPermission - any authenticated user can view their own pending invites
-    @Operation(summary = "List my collaborator invites", description = "List pending collaborator invites for the authenticated user")
-    public ResponseEntity<List<CollaboratorInviteResponse>> myInvites(@AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        return ResponseEntity.ok(inviteService.listMyPendingInvites(principal));
+    @Operation(summary = "List my collaborator invites", description = "List pending collaborator invites for the authenticated user (paginated, excludes expired)")
+    public ResponseEntity<org.springframework.data.domain.Page<CollaboratorInviteResponse>> myInvites(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        Preconditions.requireAuthenticated(principal);
+        return ResponseEntity.ok(inviteService.listMyPendingInvites(principal, page, size));
     }
 
     @PostMapping("/api/v1/collaborator-invites/{inviteId}/accept")
@@ -118,9 +114,7 @@ public class EventCollaboratorInviteController {
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestBody(required = false) RespondToCollaboratorInviteRequest request
     ) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         var membership = inviteService.acceptInviteById(inviteId, principal);
         EventCollaboratorResponse response = new EventCollaboratorResponse();
         response.setCollaboratorId(membership.getId());
@@ -142,9 +136,7 @@ public class EventCollaboratorInviteController {
             @Valid @RequestBody AcceptCollaboratorInviteByTokenRequest request,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         var membership = inviteService.acceptInviteByToken(request.getToken(), principal);
         EventCollaboratorResponse r = new EventCollaboratorResponse();
         r.setCollaboratorId(membership.getId());
@@ -167,9 +159,7 @@ public class EventCollaboratorInviteController {
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestBody(required = false) RespondToCollaboratorInviteRequest request
     ) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         inviteService.declineInvite(inviteId, principal);
         return ResponseEntity.noContent().build();
     }

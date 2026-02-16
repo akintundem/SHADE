@@ -14,6 +14,7 @@ import eventplanner.features.collaboration.service.EventPermissionEvaluator;
 import eventplanner.features.timeline.enums.TimelineStatus;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.repository.EventRepository;
+import eventplanner.features.event.service.EventAccessControlService;
 import eventplanner.features.timeline.dto.request.*;
 import eventplanner.features.timeline.dto.response.*;
 import eventplanner.features.timeline.entity.Task;
@@ -47,6 +48,7 @@ public class TimelineTaskService {
     private final AuthorizationService authorizationService;
     private final EventPermissionEvaluator eventPermissionEvaluator;
     private final NotificationService notificationService;
+    private final EventAccessControlService accessControlService;
     
     private Event requireTimelineReadAccess(UserPrincipal user, UUID eventId) {
         return requireTimelineAccess(user, eventId, false);
@@ -89,13 +91,8 @@ public class TimelineTaskService {
         return event;
     }
     
-    /**
-     * Ensure event exists
-     */
     private Event ensureEventExists(UUID eventId) {
-        return eventRepository.findById(eventId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, 
-                "Event not found: " + eventId));
+        return accessControlService.ensureEventExists(eventId);
     }
 
     /**
@@ -500,12 +497,15 @@ public class TimelineTaskService {
             task.setCompletedSubtasksCount(completed);
             task.setProgressPercentage(progress);
             
-            // Only auto-update status if current status is not manually set to POSTPONED
-            if (task.getStatus() != TimelineStatus.POSTPONED) {
+            // Never auto-update status for manually-set POSTPONED or CANCELLED tasks.
+            if (task.getStatus() != TimelineStatus.POSTPONED
+                    && task.getStatus() != TimelineStatus.CANCELLED) {
                 if (progress >= 100) {
                     task.setStatus(TimelineStatus.COMPLETED);
                 } else if (progress > 0) {
                     task.setStatus(TimelineStatus.ACTIVE);
+                } else {
+                    task.setStatus(TimelineStatus.TO_DO);
                 }
             }
         }

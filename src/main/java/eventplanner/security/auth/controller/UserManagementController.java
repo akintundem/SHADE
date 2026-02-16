@@ -10,6 +10,7 @@ import eventplanner.security.auth.dto.res.PublicUserResponse;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.service.LocationService;
 import eventplanner.security.auth.service.UserAccountService;
+import eventplanner.common.util.Preconditions;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
@@ -66,9 +67,7 @@ public class UserManagementController {
     public SecureUserResponse updateUser(@AuthenticationPrincipal UserPrincipal principal,
                                          @PathVariable UUID userId,
                                          @Valid @RequestBody UpdateUserProfileRequest request) {
-        if (principal == null) {
-            throw new AccessDeniedException("Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         return userAccountService.updateSecureUser(userId, principal.getUser(), request);
     }
 
@@ -76,9 +75,7 @@ public class UserManagementController {
     @RequiresPermission(value = RbacPermissions.USER_DELETE, resources = {"user_id=#userId"})
     public ResponseEntity<ApiMessageResponse> deleteUser(@AuthenticationPrincipal UserPrincipal principal,
                                                          @PathVariable UUID userId) {
-        if (principal == null) {
-            throw new AccessDeniedException("Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         userAccountService.deleteUserAccount(userId, principal.getUser());
         return ResponseEntity.ok(ApiMessageResponse.success("User account deleted"));
     }
@@ -158,9 +155,7 @@ public class UserManagementController {
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = "20") Integer size,
             @AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            throw new UnauthorizedException("Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         PostListResponse posts = 
                 userAccountService.getUserPosts(principal, page, size);
         return ResponseEntity.ok(posts);
@@ -184,9 +179,7 @@ public class UserManagementController {
     public ResponseEntity<SecureUserResponse> updateNotificationSettings(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody NotificationSettingsUpdateRequest request) {
-        if (principal == null) {
-            throw new AccessDeniedException("Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         SecureUserResponse updated = userAccountService.updateNotificationSettings(principal, request);
         return ResponseEntity.ok(updated);
     }
@@ -209,9 +202,7 @@ public class UserManagementController {
     public ResponseEntity<SecureUserResponse> updatePrivacySettings(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody PrivacySettingsUpdateRequest request) {
-        if (principal == null) {
-            throw new AccessDeniedException("Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         SecureUserResponse updated = userAccountService.updatePrivacySettings(principal, request);
         return ResponseEntity.ok(updated);
     }
@@ -234,9 +225,7 @@ public class UserManagementController {
     public ResponseEntity<SecureUserResponse> updateSecuritySettings(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody SecuritySettingsUpdateRequest request) {
-        if (principal == null) {
-            throw new AccessDeniedException("Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         SecureUserResponse updated = userAccountService.updateSecuritySettings(principal, request);
         return ResponseEntity.ok(updated);
     }
@@ -254,12 +243,7 @@ public class UserManagementController {
     }
 
     private void ensurePrincipalMatchesUser(UUID userId, UserPrincipal principal) {
-        if (principal == null || principal.getId() == null) {
-            throw new AccessDeniedException("Authentication required");
-        }
-        if (!principal.getId().equals(userId)) {
-            throw new AccessDeniedException("Cannot access another user's data");
-        }
+        Preconditions.requireSameUser(principal, userId);
     }
 
 }

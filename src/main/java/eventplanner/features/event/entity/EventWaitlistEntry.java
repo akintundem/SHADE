@@ -36,6 +36,7 @@ import java.util.UUID;
         @Index(name = "idx_event_waitlist_status", columnList = "status"),
         @Index(name = "idx_event_waitlist_requester", columnList = "requester_user_id"),
         @Index(name = "idx_event_waitlist_event_status", columnList = "event_id, status"),
+        @Index(name = "idx_event_waitlist_event_status_created", columnList = "event_id, status, created_at"),
         @Index(name = "idx_event_waitlist_created_at", columnList = "created_at")
     }
 )

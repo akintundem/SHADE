@@ -1,5 +1,6 @@
 package eventplanner.features.feeds.service;
 
+import eventplanner.common.util.PaginationUtils;
 import eventplanner.common.storage.s3.registry.BucketAlias;
 import eventplanner.common.storage.s3.services.S3StorageService;
 import eventplanner.common.storage.s3.dto.MediaUploadStatus;
@@ -8,6 +9,7 @@ import eventplanner.common.storage.s3.dto.PresignedUploadRequest;
 import eventplanner.common.storage.s3.services.PresignedUploadService;
 import eventplanner.common.storage.s3.UploadCompletionCallback;
 import eventplanner.common.util.UserAccountUtil;
+import eventplanner.security.util.AuthValidationUtil;
 import eventplanner.common.exception.exceptions.ForbiddenException;
 import eventplanner.common.exception.exceptions.UnauthorizedException;
 import eventplanner.features.event.entity.Event;
@@ -45,9 +47,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.function.Function;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+
 
 @Service
 @Slf4j
@@ -297,11 +298,7 @@ public class FeedPostService {
             return response;
         }
         
-        // Enforce max page size
-        int pageNum = Math.max(0, page != null ? page : 0);
-        int pageSize = Math.min(100, Math.max(1, size != null ? size : 20));
-        
-        Pageable pageable = PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Pageable pageable = PaginationUtils.createPageable(page, size, "createdAt", "DESC", "createdAt");
         
         // Get only completed posts
         Page<EventFeedPost> postPage = postRepository.findByEventIdAndMediaUploadStatusOrderByCreatedAtDesc(
@@ -312,8 +309,8 @@ public class FeedPostService {
         
         PostListResponse response = new PostListResponse();
         response.setPosts(enrichedPosts);
-        response.setCurrentPage(pageNum);
-        response.setPageSize(pageSize);
+        response.setCurrentPage(pageable.getPageNumber());
+        response.setPageSize(pageable.getPageSize());
         response.setTotalPosts(postPage.getTotalElements());
         response.setTotalPages(postPage.getTotalPages());
         response.setHasNext(postPage.hasNext());
@@ -487,9 +484,7 @@ public class FeedPostService {
     }
 
     private String safeTrimToNull(String s) {
-        if (s == null) return null;
-        String t = s.trim();
-        return t.isEmpty() ? null : t;
+        return AuthValidationUtil.safeTrimToNull(s);
     }
 
     /**
@@ -633,11 +628,7 @@ public class FeedPostService {
      * Get all posts created by a user
      */
     public PostListResponse getUserPosts(UUID userId, Integer page, Integer size, UserPrincipal principal) {
-        // Enforce max page size
-        int pageNum = Math.max(0, page != null ? page : 0);
-        int pageSize = Math.min(100, Math.max(1, size != null ? size : 20));
-
-        Pageable pageable = PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Pageable pageable = PaginationUtils.createPageable(page, size, "createdAt", "DESC", "createdAt");
 
         // Get only completed posts by user
         Page<EventFeedPost> postPage = postRepository.findByCreatedByUserIdAndMediaUploadStatusOrderByCreatedAtDesc(
@@ -666,14 +657,14 @@ public class FeedPostService {
 
         PostListResponse response = new PostListResponse();
         response.setPosts(enrichedPosts);
-        response.setCurrentPage(pageNum);
-        response.setPageSize(pageSize);
+        response.setCurrentPage(pageable.getPageNumber());
+        response.setPageSize(pageable.getPageSize());
         // Note: totalPosts reflects all user posts, not just accessible ones
         // This is intentional to avoid leaking information about private event count
         response.setTotalPosts((long) enrichedPosts.size());
-        response.setTotalPages((int) Math.ceil((double) enrichedPosts.size() / pageSize));
+        response.setTotalPages((int) Math.ceil((double) enrichedPosts.size() / pageable.getPageSize()));
         response.setHasNext(false); // Conservative - cannot determine without querying
-        response.setHasPrevious(pageNum > 0);
+        response.setHasPrevious(pageable.getPageNumber() > 0);
 
         return response;
     }

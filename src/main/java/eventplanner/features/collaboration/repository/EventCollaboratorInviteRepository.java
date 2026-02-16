@@ -46,5 +46,24 @@ public interface EventCollaboratorInviteRepository extends JpaRepository<EventCo
             @Param("email") String email,
             @Param("status") CollaboratorInviteStatus status
     );
+
+    /**
+     * Paginated version of incoming invites that also excludes expired ones.
+     */
+    @Query("""
+            SELECT i
+            FROM EventCollaboratorInvite i
+            WHERE (i.invitee.id = :userId OR (i.inviteeEmail IS NOT NULL AND LOWER(i.inviteeEmail) = LOWER(:email)))
+              AND i.status = :status
+              AND (i.expiresAt IS NULL OR i.expiresAt > :now)
+            ORDER BY i.createdAt DESC
+            """)
+    Page<EventCollaboratorInvite> findIncomingInvitesPaginated(
+            @Param("userId") UUID userId,
+            @Param("email") String email,
+            @Param("status") CollaboratorInviteStatus status,
+            @Param("now") java.time.LocalDateTime now,
+            Pageable pageable
+    );
 }
 

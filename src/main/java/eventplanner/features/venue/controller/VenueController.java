@@ -84,6 +84,11 @@ public class VenueController {
     ) {
         List<Venue> venues;
 
+        // Extract optional filter flags once
+        String venueType = request.getVenueType();
+        boolean parkingRequired = Boolean.TRUE.equals(request.getParkingRequired());
+        boolean transitRequired = Boolean.TRUE.equals(request.getTransitRequired());
+
         // PostGIS: bounding-box search (ST_MakeEnvelope)
         if (request.getMinLatitude() != null && request.getMaxLatitude() != null &&
             request.getMinLongitude() != null && request.getMaxLongitude() != null) {
@@ -92,7 +97,10 @@ public class VenueController {
                 request.getMinLatitude(),
                 request.getMaxLatitude(),
                 request.getMinLongitude(),
-                request.getMaxLongitude()
+                request.getMaxLongitude(),
+                venueType,
+                parkingRequired,
+                transitRequired
             );
         }
         // PostGIS: radius search (ST_DWithin, km)
@@ -100,7 +108,10 @@ public class VenueController {
             venues = venueService.findVenuesNearLocation(
                 request.getLatitude(),
                 request.getLongitude(),
-                request.getRadiusKm()
+                request.getRadiusKm(),
+                venueType,
+                parkingRequired,
+                transitRequired
             );
         }
         // Search by city and state with capacity filter
@@ -125,26 +136,6 @@ public class VenueController {
         }
         else {
             return ResponseEntity.badRequest().build();
-        }
-
-        // Apply additional filters
-        if (request.getVenueType() != null) {
-            String type = request.getVenueType();
-            venues = venues.stream()
-                .filter(v -> v.getVenueType() != null && v.getVenueType().equalsIgnoreCase(type))
-                .collect(Collectors.toList());
-        }
-
-        if (Boolean.TRUE.equals(request.getParkingRequired())) {
-            venues = venues.stream()
-                .filter(v -> Boolean.TRUE.equals(v.getParkingAvailable()))
-                .collect(Collectors.toList());
-        }
-
-        if (Boolean.TRUE.equals(request.getTransitRequired())) {
-            venues = venues.stream()
-                .filter(v -> Boolean.TRUE.equals(v.getPublicTransitNearby()))
-                .collect(Collectors.toList());
         }
 
         List<VenueResponse> responses = venues.stream()

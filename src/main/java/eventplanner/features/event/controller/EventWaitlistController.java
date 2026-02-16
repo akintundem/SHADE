@@ -5,6 +5,7 @@ import eventplanner.features.event.dto.response.EventWaitlistEntryResponse;
 import eventplanner.features.event.entity.EventWaitlistEntry;
 import eventplanner.features.event.enums.EventWaitlistStatus;
 import eventplanner.features.event.service.EventWaitlistService;
+import eventplanner.common.util.Preconditions;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
@@ -96,9 +97,7 @@ public class EventWaitlistController {
     public ResponseEntity<List<EventWaitlistEntryResponse>> getMyEntries(
             @Parameter(description = "Event ID") @PathVariable UUID eventId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         List<EventWaitlistEntry> entries = waitlistService.listEntriesForUser(eventId, principal);
         List<EventWaitlistEntryResponse> responses = entries.stream()
             .map(EventWaitlistEntryResponse::from)

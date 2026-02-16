@@ -1,6 +1,6 @@
 package eventplanner.security.auth.controller;
 
-import eventplanner.common.exception.exceptions.UnauthorizedException;
+import eventplanner.common.util.Preconditions;
 import eventplanner.security.auth.dto.req.ProfileImageCompleteRequest;
 import eventplanner.security.auth.dto.req.ProfileImageUploadRequest;
 import eventplanner.security.auth.dto.res.ProfileImageCompleteResponse;
@@ -32,9 +32,7 @@ public class ProfileImageController {
     public ResponseEntity<ProfileImageUploadResponse> createUploadUrl(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody ProfileImageUploadRequest request) {
-        if (principal == null) {
-            throw new UnauthorizedException("Unauthorized");
-        }
+        Preconditions.requireAuthenticated(principal);
         ProfileImageUploadResponse response = profileImageService.createProfileImageUpload(principal.getUser(), request);
         return ResponseEntity.ok(response);
     }
@@ -44,9 +42,7 @@ public class ProfileImageController {
     public ResponseEntity<ProfileImageCompleteResponse> completeUpload(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody ProfileImageCompleteRequest request) {
-        if (principal == null) {
-            throw new UnauthorizedException("Unauthorized");
-        }
+        Preconditions.requireAuthenticated(principal);
         ProfileImageCompleteResponse response = profileImageService.completeProfileImageUpload(principal.getUser(), request);
         return ResponseEntity.ok(response);
     }

@@ -51,10 +51,7 @@ public class PostLikeService {
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
-        MediaUploadStatus status = post.getMediaUploadStatus();
-        if (status != null && status != MediaUploadStatus.COMPLETED) {
-            throw new IllegalArgumentException("Post not available");
-        }
+        FeedGuard.ensurePostAvailable(post);
 
         if (principal == null || principal.getId() == null) {
             throw new IllegalArgumentException("Authentication required");
@@ -87,10 +84,7 @@ public class PostLikeService {
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
-        MediaUploadStatus status = post.getMediaUploadStatus();
-        if (status != null && status != MediaUploadStatus.COMPLETED) {
-            throw new IllegalArgumentException("Post not available");
-        }
+        FeedGuard.ensurePostAvailable(post);
 
         if (principal == null || principal.getId() == null) {
             throw new IllegalArgumentException("Authentication required");

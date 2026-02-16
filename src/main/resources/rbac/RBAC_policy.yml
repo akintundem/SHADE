@@ -61,6 +61,15 @@ policy:
         owns_scope: false
         is_member: true
     -
+      name: attendee.update
+      scope: EVENT
+      resources: event_id
+      description: Bulk update RSVP statuses for attendees
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: true
+    -
       name: attendee.export
       scope: EVENT
       resources: event_id
@@ -1148,6 +1157,7 @@ policy:
         - attendee.checkout
         - attendee.create
         - attendee.delete
+        - attendee.update
         - attendee.export
         - attendee.import
         - attendee.qrcode.read
@@ -1219,6 +1229,7 @@ policy:
         - attendee.checkout
         - attendee.create
         - attendee.delete
+        - attendee.update
         - attendee.export
         - attendee.import
         - attendee.qrcode.read
@@ -1290,6 +1301,7 @@ policy:
         - attendee.checkout
         - attendee.create
         - attendee.delete
+        - attendee.update
         - attendee.export
         - attendee.import
         - attendee.qrcode.read

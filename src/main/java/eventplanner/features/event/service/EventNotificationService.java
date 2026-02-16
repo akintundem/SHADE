@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
@@ -29,7 +30,6 @@ import java.util.*;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@Transactional
 public class EventNotificationService {
 
     private final NotificationService notificationService;
@@ -41,6 +41,7 @@ public class EventNotificationService {
     private final EventTemplateVariableService templateVariableService;
     private final ExternalServicesProperties externalServicesProperties;
 
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public EventNotificationResponse sendNotification(UUID eventId, EventNotificationRequest request) {
         EventNotificationSettings settings = settingsService.getSettingsEntity(eventId);
         validateChannelEnabled(settings, request.getChannel());

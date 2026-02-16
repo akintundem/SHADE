@@ -15,6 +15,7 @@ import eventplanner.common.communication.enums.CommunicationType;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
+import eventplanner.security.util.AuthValidationUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -56,10 +57,7 @@ public class PostCommentService {
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
-        MediaUploadStatus status = post.getMediaUploadStatus();
-        if (status != null && status != MediaUploadStatus.COMPLETED) {
-            throw new IllegalArgumentException("Post not available");
-        }
+        FeedGuard.ensurePostAvailable(post);
 
         if (principal == null || principal.getId() == null) {
             throw new IllegalArgumentException("Authentication required");
@@ -99,10 +97,7 @@ public class PostCommentService {
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
-        MediaUploadStatus status = post.getMediaUploadStatus();
-        if (status != null && status != MediaUploadStatus.COMPLETED) {
-            throw new IllegalArgumentException("Post not available");
-        }
+        FeedGuard.ensurePostAvailable(post);
 
         PostComment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
@@ -145,10 +140,7 @@ public class PostCommentService {
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
-        MediaUploadStatus status = post.getMediaUploadStatus();
-        if (status != null && status != MediaUploadStatus.COMPLETED) {
-            throw new IllegalArgumentException("Post not available");
-        }
+        FeedGuard.ensurePostAvailable(post);
 
         PostComment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
@@ -180,10 +172,7 @@ public class PostCommentService {
         if (post.getEvent() == null || !eventId.equals(post.getEvent().getId())) {
             throw new IllegalArgumentException("Post not found");
         }
-        MediaUploadStatus status = post.getMediaUploadStatus();
-        if (status != null && status != MediaUploadStatus.COMPLETED) {
-            throw new IllegalArgumentException("Post not available");
-        }
+        FeedGuard.ensurePostAvailable(post);
 
         Page<PostComment> comments = commentRepository.findByPostIdOrderByCreatedAtAsc(postId, pageable);
         return comments.map(CommentResponse::from);
@@ -239,8 +228,6 @@ public class PostCommentService {
     }
 
     private String safeTrimToNull(String s) {
-        if (s == null) return null;
-        String t = s.trim();
-        return t.isEmpty() ? null : t;
+        return AuthValidationUtil.safeTrimToNull(s);
     }
 }

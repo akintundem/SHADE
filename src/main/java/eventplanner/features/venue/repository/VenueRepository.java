@@ -42,7 +42,7 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
 
     /**
      * PostGIS: find venues within {@code radiusMeters} of a point, ordered by distance.
-     * Uses geography cast for accurate great-circle distance in metres.
+     * Supports optional server-side filters for venueType, parking, and transit.
      */
     @Query(value =
         "SELECT * FROM venues v " +
@@ -53,6 +53,9 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
         "        ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, " +
         "        :radiusMeters" +
         "      ) " +
+        "  AND (:venueType IS NULL OR LOWER(v.venue_type) = LOWER(:venueType)) " +
+        "  AND (:parkingRequired = false OR v.parking_available = true) " +
+        "  AND (:transitRequired = false OR v.public_transit_nearby = true) " +
         "ORDER BY ST_Distance(" +
         "        v.location::geography, " +
         "        ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography" +
@@ -61,24 +64,33 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
     List<Venue> findNearLocation(
         @Param("lat") double lat,
         @Param("lng") double lng,
-        @Param("radiusMeters") double radiusMeters
+        @Param("radiusMeters") double radiusMeters,
+        @Param("venueType") String venueType,
+        @Param("parkingRequired") boolean parkingRequired,
+        @Param("transitRequired") boolean transitRequired
     );
 
     /**
      * PostGIS: find venues inside a bounding box.
-     * Uses ST_MakeEnvelope (minLng, minLat, maxLng, maxLat, SRID).
+     * Supports optional server-side filters for venueType, parking, and transit.
      */
     @Query(value =
         "SELECT * FROM venues v " +
         "WHERE v.deleted_at IS NULL " +
         "  AND v.location IS NOT NULL " +
-        "  AND ST_Within(v.location, ST_MakeEnvelope(:minLng, :minLat, :maxLng, :maxLat, 4326))",
+        "  AND ST_Within(v.location, ST_MakeEnvelope(:minLng, :minLat, :maxLng, :maxLat, 4326))" +
+        "  AND (:venueType IS NULL OR LOWER(v.venue_type) = LOWER(:venueType)) " +
+        "  AND (:parkingRequired = false OR v.parking_available = true) " +
+        "  AND (:transitRequired = false OR v.public_transit_nearby = true) ",
         nativeQuery = true)
     List<Venue> findWithinBounds(
         @Param("minLat") double minLat,
         @Param("maxLat") double maxLat,
         @Param("minLng") double minLng,
-        @Param("maxLng") double maxLng
+        @Param("maxLng") double maxLng,
+        @Param("venueType") String venueType,
+        @Param("parkingRequired") boolean parkingRequired,
+        @Param("transitRequired") boolean transitRequired
     );
 
     /**

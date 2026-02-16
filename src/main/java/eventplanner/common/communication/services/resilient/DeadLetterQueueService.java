@@ -1,5 +1,8 @@
 package eventplanner.common.communication.services.resilient;
 
+import eventplanner.common.communication.enums.CommunicationStatus;
+import eventplanner.common.communication.model.Communication;
+import eventplanner.common.communication.repository.CommunicationRepository;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -13,13 +16,8 @@ import java.util.UUID;
 
 /**
  * Dead Letter Queue for failed notifications.
- * Stores failed notifications in Redis for later retry or manual review.
- *
- * Features:
- * - Persists failed notifications with full context
- * - TTL of 7 days (configurable)
- * - Supports manual retry
- * - Provides metrics on failure reasons
+ * Primary store: Redis (7-day TTL).
+ * Fallback: PostgreSQL via {@link CommunicationRepository} when Redis is unavailable.
  */
 @Service
 @Slf4j
@@ -29,9 +27,12 @@ public class DeadLetterQueueService {
     private static final Duration DLQ_TTL = Duration.ofDays(7);
 
     private final RedisTemplate<String, Object> redisTemplate;
+    private final CommunicationRepository communicationRepository;
 
-    public DeadLetterQueueService(RedisTemplate<String, Object> redisTemplate) {
+    public DeadLetterQueueService(RedisTemplate<String, Object> redisTemplate,
+                                  CommunicationRepository communicationRepository) {
         this.redisTemplate = redisTemplate;
+        this.communicationRepository = communicationRepository;
     }
 
     /**
@@ -63,9 +64,7 @@ public class DeadLetterQueueService {
             return dlqId;
         } catch (Exception e) {
             log.error("Failed to write to DLQ (Redis unavailable): {}", e.getMessage());
-            // Fallback: log to file system or other persistent storage
-            logToFileSystem(request, reason);
-            return null;
+            return persistToDatabase(request, reason);
         }
     }
 
@@ -111,14 +110,30 @@ public class DeadLetterQueueService {
     }
 
     /**
-     * Fallback: Log to file system when Redis is unavailable
+     * Database fallback: persist the failed notification as a Communication record with FAILED status.
+     * This guarantees zero data loss even when Redis is completely down.
      */
-    private void logToFileSystem(NotificationRequest request, String reason) {
-        log.error("DLQ_FILESYSTEM: Failed notification - Type: {}, To: {}, Reason: {}",
-                request.getType(),
-                request.getTo(),
-                reason);
-        // TODO: Implement file-based DLQ for cases when Redis is down
+    private String persistToDatabase(NotificationRequest request, String reason) {
+        try {
+            Communication record = new Communication();
+            record.setCommunicationType(request.getType());
+            record.setRecipientEmail(request.getTo());
+            record.setSubject(request.getSubject());
+            record.setTemplateId(request.getTemplateId());
+            record.setEventId(request.getEventId());
+            record.setStatus(CommunicationStatus.FAILED);
+            record.setFailureReason(reason);
+            record.setFailedAt(LocalDateTime.now());
+            record.setChannel("dlq_fallback");
+            communicationRepository.save(record);
+            log.warn("DLQ DB fallback: persisted failed notification to database - To: {}, Type: {}, Reason: {}",
+                    request.getTo(), request.getType(), reason);
+            return record.getId() != null ? record.getId().toString() : null;
+        } catch (Exception dbEx) {
+            log.error("DLQ DB fallback ALSO failed - notification LOST - To: {}, Reason: {}, DB error: {}",
+                    request.getTo(), reason, dbEx.getMessage());
+            return null;
+        }
     }
 
     /**

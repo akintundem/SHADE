@@ -1,5 +1,6 @@
 package eventplanner.features.collaboration.service;
 
+import eventplanner.common.util.PaginationUtils;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.enums.CommunicationType;
@@ -197,22 +198,30 @@ public class EventCollaboratorInviteService {
     }
 
     public Page<CollaboratorInviteResponse> listEventInvites(UUID eventId, int page, int size) {
-        int safePage = Math.max(page, 0);
-        int safeSize = Math.min(Math.max(size, 1), 100);
+        int[] p = PaginationUtils.normalize(page, size);
+        int safePage = p[0];
+        int safeSize = p[1];
         return inviteRepository.findByEventId(eventId, PageRequest.of(safePage, safeSize))
                 .map(CollaboratorInviteResponse::from);
     }
 
     public List<CollaboratorInviteResponse> listMyPendingInvites(UserPrincipal principal) {
+        return listMyPendingInvites(principal, 0, 50).getContent();
+    }
+
+    public Page<CollaboratorInviteResponse> listMyPendingInvites(UserPrincipal principal, int page, int size) {
         if (principal == null) {
             throw new IllegalArgumentException("Authentication required");
         }
         UUID userId = principal.getId();
         String email = principal.getUser() != null ? principal.getUser().getEmail() : null;
-        return inviteRepository.findIncomingInvites(userId, email, CollaboratorInviteStatus.PENDING)
-                .stream()
-                .map(CollaboratorInviteResponse::from)
-                .toList();
+        int[] p = PaginationUtils.normalize(page, size);
+        int safePage = p[0];
+        int safeSize = p[1];
+        return inviteRepository.findIncomingInvitesPaginated(
+                userId, email, CollaboratorInviteStatus.PENDING,
+                LocalDateTime.now(), PageRequest.of(safePage, safeSize))
+                .map(CollaboratorInviteResponse::from);
     }
 
     public EventUser acceptInviteById(UUID inviteId, UserPrincipal principal) {

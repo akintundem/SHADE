@@ -25,4 +25,11 @@ public interface TicketCheckoutRepository extends JpaRepository<TicketCheckout, 
     List<TicketCheckout> findByStatusAndExpiresAtBefore(TicketCheckoutStatus status, LocalDateTime expiresAt);
 
     Page<TicketCheckout> findByPurchaserId(UUID purchaserId, Pageable pageable);
+
+    /**
+     * Find an active (non-expired) checkout for a purchaser+event pair.
+     * Used for checkout idempotency — returns the existing session instead of creating a duplicate.
+     */
+    Optional<TicketCheckout> findFirstByPurchaserIdAndEventIdAndStatusAndExpiresAtAfter(
+            UUID purchaserId, UUID eventId, TicketCheckoutStatus status, LocalDateTime now);
 }

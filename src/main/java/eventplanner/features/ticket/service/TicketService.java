@@ -70,8 +70,7 @@ public class TicketService {
     private final String qrSecretKey;
     private final AuthorizationService authorizationService;
     private final BudgetSyncService budgetSyncService;
-
-    private static final int DEFAULT_MAX_TICKETS_PER_PERSON = 5;
+    private final TicketPolicyHelper policyHelper;
 
     public TicketService(TicketRepository ticketRepository,
                          TicketTypeRepository ticketTypeRepository,
@@ -82,6 +81,7 @@ public class TicketService {
                          ExternalServicesProperties externalServicesProperties,
                          AuthorizationService authorizationService,
                          BudgetSyncService budgetSyncService,
+                         TicketPolicyHelper policyHelper,
                          AppProperties appProperties) {
         this.ticketRepository = ticketRepository;
         this.ticketTypeRepository = ticketTypeRepository;
@@ -92,6 +92,7 @@ public class TicketService {
         this.externalServicesProperties = externalServicesProperties;
         this.authorizationService = authorizationService;
         this.budgetSyncService = budgetSyncService;
+        this.policyHelper = policyHelper;
         this.qrSecretKey = requireConfigured(appProperties.getTicket().getQrSecret(), "app.ticket.qr-secret");
     }
 
@@ -198,32 +199,12 @@ public class TicketService {
                 "Not enough tickets available");
         }
 
-        // Check max tickets per person (null means unlimited, otherwise enforce configured; fall back to default only if explicitly set to 0)
-        Integer configuredMax = ticketType.getMaxTicketsPerPerson();
-        int maxTicketsPerPerson = configuredMax == null ? Integer.MAX_VALUE : configuredMax;
-        if (configuredMax != null && configuredMax <= 0) {
-            maxTicketsPerPerson = DEFAULT_MAX_TICKETS_PER_PERSON;
-        }
-        
-        // Check limit for attendee-based tickets
-        if (attendee != null) {
-            long existingTickets = ticketRepository.findByAttendeeIdAndEventId(
-                attendee.getId(), request.getEventId()).size();
-            if (existingTickets + request.getQuantity() > maxTicketsPerPerson) {
-                throw new ApiException(ErrorCode.MAX_TICKETS_EXCEEDED,
-                    "Cannot issue more than " + maxTicketsPerPerson + " tickets per person");
-            }
-        }
-
-        // Check limit for email-based tickets
-        if (attendee == null && request.getOwnerEmail() != null) {
-            long existingTickets = ticketRepository.findByOwnerEmailAndEventId(
-                request.getOwnerEmail(), request.getEventId()).size();
-            if (existingTickets + request.getQuantity() > maxTicketsPerPerson) {
-                throw new ApiException(ErrorCode.MAX_TICKETS_EXCEEDED,
-                    "Cannot issue more than " + maxTicketsPerPerson + " tickets per person");
-            }
-        }
+        // Enforce max tickets per person via shared helper
+        UUID attendeeUserId = attendee != null && attendee.getUser() != null ? attendee.getUser().getId() : null;
+        policyHelper.enforceMaxTicketsPerPerson(
+            ticketType, request.getEventId(),
+            attendeeUserId, request.getOwnerEmail(),
+            request.getQuantity());
 
         if (shouldIssue) {
             incrementSoldOrThrow(ticketType.getId(), request.getQuantity());
@@ -877,12 +858,8 @@ public class TicketService {
         if (ticket == null || ticket.getTicketType() == null || ticket.getEvent() == null) {
             return;
         }
-        Integer configuredMax = ticket.getTicketType().getMaxTicketsPerPerson();
-        int maxTicketsPerPerson = configuredMax == null ? Integer.MAX_VALUE : configuredMax;
-        if (configuredMax != null && configuredMax <= 0) {
-            maxTicketsPerPerson = DEFAULT_MAX_TICKETS_PER_PERSON;
-        }
-        if (maxTicketsPerPerson == Integer.MAX_VALUE) {
+        int max = policyHelper.resolveMaxTicketsPerPerson(ticket.getTicketType());
+        if (max == Integer.MAX_VALUE) {
             return;
         }
 
@@ -901,9 +878,9 @@ public class TicketService {
             }
         }
 
-        if (existingTickets + 1 > maxTicketsPerPerson) {
+        if (existingTickets + 1 > max) {
             throw new ApiException(ErrorCode.MAX_TICKETS_EXCEEDED,
-                "Cannot issue more than " + maxTicketsPerPerson + " tickets per person");
+                "Cannot issue more than " + max + " tickets per person");
         }
     }
 

@@ -1,5 +1,6 @@
 package eventplanner.features.attendee.service;
 
+import eventplanner.common.util.PaginationUtils;
 import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
@@ -242,8 +243,9 @@ public class AttendeeInviteService {
 
     @Transactional(readOnly = true)
     public Page<AttendeeInvite> listEventInvites(UUID eventId, AttendeeInviteStatus status, int page, int size) {
-        int safePage = Math.max(page, 0);
-        int safeSize = Math.min(Math.max(size, 1), 100);
+        int[] p = PaginationUtils.normalize(page, size);
+        int safePage = p[0];
+        int safeSize = p[1];
         if (status != null) {
             return inviteRepository.findByEventIdAndStatus(eventId, status, PageRequest.of(safePage, safeSize));
         }

@@ -20,6 +20,7 @@ import eventplanner.security.auth.entity.UserSettings;
 import eventplanner.security.auth.repository.LocationRepository;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.dto.AuthMapper;
+import eventplanner.common.util.Preconditions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -472,9 +473,7 @@ public class UserAccountService {
      * Get all posts created by the current user.
      */
     public PostListResponse getUserPosts(UserPrincipal principal, Integer page, Integer size) {
-        if (principal == null || principal.getId() == null) {
-            throw new AccessDeniedException("Authentication required");
-        }
+        Preconditions.requireAuthenticatedWithId(principal);
         return getUserPostsById(principal.getId(), page, size, principal);
     }
 
@@ -501,9 +500,7 @@ public class UserAccountService {
      */
     public SecureUserResponse updateNotificationSettings(
             UserPrincipal principal, NotificationSettingsUpdateRequest request) {
-        if (principal == null || principal.getId() == null) {
-            throw new AccessDeniedException("Authentication required");
-        }
+        Preconditions.requireAuthenticatedWithId(principal);
         
         UserAccount user = userAccountRepository.findById(principal.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -555,9 +552,7 @@ public class UserAccountService {
      */
     public SecureUserResponse updatePrivacySettings(
             UserPrincipal principal, PrivacySettingsUpdateRequest request) {
-        if (principal == null || principal.getId() == null) {
-            throw new AccessDeniedException("Authentication required");
-        }
+        Preconditions.requireAuthenticatedWithId(principal);
         
         UserAccount user = userAccountRepository.findById(principal.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -585,9 +580,7 @@ public class UserAccountService {
      */
     public SecureUserResponse updateSecuritySettings(
             UserPrincipal principal, SecuritySettingsUpdateRequest request) {
-        if (principal == null || principal.getId() == null) {
-            throw new AccessDeniedException("Authentication required");
-        }
+        Preconditions.requireAuthenticatedWithId(principal);
         
         UserAccount user = userAccountRepository.findById(principal.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));

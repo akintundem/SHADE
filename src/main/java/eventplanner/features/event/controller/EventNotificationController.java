@@ -8,6 +8,7 @@ import eventplanner.features.event.dto.response.EventReminderResponse;
 import eventplanner.features.event.service.EventNotificationService;
 import eventplanner.features.event.service.EventNotificationSettingsService;
 import eventplanner.features.event.service.EventReminderService;
+import eventplanner.common.util.Preconditions;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.service.AuthorizationService;
 import org.springframework.http.HttpStatus;
@@ -75,9 +76,7 @@ public class EventNotificationController {
     public ResponseEntity<EventNotificationSettingsResponse> getNotificationSettings(
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         // Verify user has access to the event
         if (!authorizationService.canAccessEvent(principal, id)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event notification settings");
@@ -98,11 +97,8 @@ public class EventNotificationController {
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventNotificationRequest request) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        // Verify user is owner or admin
-        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+        Preconditions.requireAuthenticated(principal);
+        if (!authorizationService.canManageEvent(principal, id)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can send notifications");
         }
         return ResponseEntity.ok(notificationService.sendNotification(id, request));
@@ -118,9 +114,7 @@ public class EventNotificationController {
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         // Verify user has access to the event
         if (!authorizationService.canAccessEvent(principal, id)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event reminders");
@@ -135,11 +129,8 @@ public class EventNotificationController {
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventReminderRequest request) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        // Verify user is owner or admin
-        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+        Preconditions.requireAuthenticated(principal);
+        if (!authorizationService.canManageEvent(principal, id)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can create reminders");
         }
         return ResponseEntity.ok(reminderService.create(id, request));
@@ -153,11 +144,8 @@ public class EventNotificationController {
             @Parameter(description = "Reminder ID") @PathVariable UUID reminderId,
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventReminderRequest request) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        // Verify user is owner or admin
-        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+        Preconditions.requireAuthenticated(principal);
+        if (!authorizationService.canManageEvent(principal, id)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update reminders");
         }
         return ResponseEntity.ok(reminderService.update(id, reminderId, request));
@@ -170,11 +158,8 @@ public class EventNotificationController {
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Parameter(description = "Reminder ID") @PathVariable UUID reminderId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        // Verify user is owner or admin
-        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+        Preconditions.requireAuthenticated(principal);
+        if (!authorizationService.canManageEvent(principal, id)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can delete reminders");
         }
         reminderService.delete(id, reminderId);
@@ -188,9 +173,7 @@ public class EventNotificationController {
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Parameter(description = "Reminder ID") @PathVariable UUID reminderId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         // Verify user has access to the event
         if (!authorizationService.canAccessEvent(principal, id)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event reminder");

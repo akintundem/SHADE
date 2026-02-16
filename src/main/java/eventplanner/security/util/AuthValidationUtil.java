@@ -33,6 +33,16 @@ public final class AuthValidationUtil {
     }
 
     /**
+     * Trim and return null when the result is empty.
+     * Shared by feeds, comments, and anywhere a blank string should become null.
+     */
+    public static String safeTrimToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
      * Normalizes usernames/handles for consistent storage and uniqueness checks.
      * - trims whitespace
      * - strips a leading '@'

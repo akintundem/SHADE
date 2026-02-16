@@ -1,5 +1,6 @@
 package eventplanner.features.attendee.service;
 
+import eventplanner.common.util.PaginationUtils;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.enums.CommunicationType;
@@ -296,31 +297,12 @@ public class AttendeeService {
             String sortBy,
             String sortDirection) {
         
-        // Validate and normalize pagination parameters
-        if (page < 0) page = 0;
-        if (size < 1) size = 20;
-        if (size > 100) size = 100; // Max page size
-
-        // Validate sort
-        if (!StringUtils.hasText(sortBy)) {
-            sortBy = "name";
-        }
-        String normalizedSortBy = sortBy.trim();
-        if (!ALLOWED_SORT_FIELDS.contains(normalizedSortBy)) {
+        // Validate sort field
+        if (StringUtils.hasText(sortBy) && !ALLOWED_SORT_FIELDS.contains(sortBy.trim())) {
             throw new BadRequestException("Invalid sort field. Allowed values: " + String.join(",", ALLOWED_SORT_FIELDS));
         }
 
-        Sort.Direction direction;
-        if (!StringUtils.hasText(sortDirection) || "ASC".equalsIgnoreCase(sortDirection)) {
-            direction = Sort.Direction.ASC;
-        } else if ("DESC".equalsIgnoreCase(sortDirection)) {
-            direction = Sort.Direction.DESC;
-        } else {
-            throw new BadRequestException("Invalid sort direction. Allowed values: ASC or DESC");
-        }
-
-        Sort sort = Sort.by(direction, normalizedSortBy);
-        Pageable pageable = PageRequest.of(page, size, sort);
+        Pageable pageable = PaginationUtils.createPageable(page, size, sortBy, sortDirection, "name");
         
         // Apply filters in priority order
         if (StringUtils.hasText(search)) {
@@ -534,7 +516,7 @@ public class AttendeeService {
         attendee.setEvent(event);
         attendee.setUser(user);
         attendee.setName(user.getName());
-        attendee.setEmail(user.getEmail());
+        attendee.setEmail(AuthValidationUtil.normalizeEmail(user.getEmail()));
         attendee.setRsvpStatus(targetStatus);
 
         Attendee saved = repository.save(attendee);
@@ -737,13 +719,8 @@ public class AttendeeService {
     }
 
     private boolean canManageEvent(Event event, UserPrincipal principal) {
-        if (event == null || principal == null) {
-            return false;
-        }
-        if (authorizationService.isAdmin(principal) || authorizationService.isEventOwner(principal, event.getId())) {
-            return true;
-        }
-        return authorizationService.hasEventMembership(principal, event.getId());
+        if (event == null) return false;
+        return authorizationService.canManageEvent(principal, event.getId());
     }
 
     private void ensureCapacityAvailable(Event event) {
@@ -767,6 +744,11 @@ public class AttendeeService {
     }
 
     private AttendeeStatus resolveApprovalStatus(Event event, AttendeeStatus previousStatus, AttendeeStatus requestedStatus) {
+        // NO_SHOW is a terminal state — only organiser bulk-update can override it.
+        if (previousStatus == AttendeeStatus.NO_SHOW) {
+            throw new BadRequestException("Cannot change RSVP status from NO_SHOW; organiser action required.");
+        }
+
         if (!Boolean.TRUE.equals(event.getRequiresApproval())) {
             return requestedStatus;
         }
@@ -854,9 +836,7 @@ public class AttendeeService {
             throw new BadRequestException("User ID is required");
         }
         
-        int pageNum = Math.max(0, page != null ? page : 0);
-        int pageSize = Math.min(100, Math.max(1, size != null ? size : 20));
-        Pageable pageable = PageRequest.of(pageNum, pageSize);
+        Pageable pageable = PaginationUtils.createPageable(page, size);
         
         // Use database-level pagination with JOIN FETCH to avoid N+1 and in-memory pagination
         return repository.findInvitedEventsByUserId(userId, pageable);

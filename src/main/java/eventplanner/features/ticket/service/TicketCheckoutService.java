@@ -46,6 +46,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -98,6 +99,17 @@ public class TicketCheckoutService {
         Event event = eventRepository.findById(eventId)
             .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
         ticketingPolicyService.ensureEventOpenForTicketing(event);
+
+        // Idempotency: return existing active checkout for same user + event
+        Optional<TicketCheckout> existingCheckout = checkoutRepository
+                .findFirstByPurchaserIdAndEventIdAndStatusAndExpiresAtAfter(
+                        purchaser.getId(), eventId, TicketCheckoutStatus.PENDING_PAYMENT, LocalDateTime.now());
+        if (existingCheckout.isPresent()) {
+            TicketCheckout existing = existingCheckout.get();
+            List<TicketCheckoutItem> items = checkoutItemRepository.findByCheckoutId(existing.getId());
+            List<Ticket> tickets = ticketRepository.findByCheckoutId(existing.getId());
+            return TicketCheckoutResponse.from(existing, items, mapTickets(tickets));
+        }
 
         List<TicketCheckoutItemRequest> normalizedItems = normalizeItems(request.getItems());
         Map<UUID, TicketType> ticketTypes = loadTicketTypes(normalizedItems, event.getId());

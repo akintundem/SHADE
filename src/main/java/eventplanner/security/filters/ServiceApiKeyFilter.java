@@ -171,9 +171,6 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
     }
 
     private static boolean requireConfigured(Boolean value, String propertyName) {
-        if (value == null) {
-            throw new IllegalStateException(propertyName + " must be configured");
-        }
-        return value;
+        return eventplanner.common.util.Preconditions.requireConfigured(value, propertyName);
     }
 }

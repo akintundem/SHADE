@@ -88,10 +88,7 @@ public class RbacPolicyStore {
     }
 
     private static String requireConfigured(String value, String propertyName) {
-        if (!StringUtils.hasText(value)) {
-            throw new IllegalStateException(propertyName + " must be configured");
-        }
-        return value;
+        return eventplanner.common.util.Preconditions.requireConfigured(value, propertyName);
     }
 
     public Optional<RbacPermissionDefinition> findPermission(String permissionName) {

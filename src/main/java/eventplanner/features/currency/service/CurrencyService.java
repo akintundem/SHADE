@@ -48,8 +48,11 @@ public class CurrencyService {
     /**
      * Get currency by code (case-insensitive)
      */
-    @Cacheable(value = "currencies", key = "#code.toUpperCase()")
+    @Cacheable(value = "currencies", key = "#code?.toUpperCase() ?: 'NULL'")
     public Optional<Currency> getCurrencyByCode(String code) {
+        if (code == null || code.isBlank()) {
+            return Optional.empty();
+        }
         log.debug("Fetching currency: {}", code);
         return Optional.ofNullable(currencyRepository.findByCodeIgnoreCase(code));
     }

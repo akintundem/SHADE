@@ -7,6 +7,7 @@ import eventplanner.security.auth.entity.UserSettings;
 import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.config.SecurityJwtProperties;
+import eventplanner.security.util.AuthValidationUtil;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -49,9 +50,10 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
         }
 
         String email = normalizeEmailClaim(jwt.getClaimAsString("email"));
+        boolean emailVerified = isEmailVerified(jwt);
         String name = resolveDisplayName(jwt);
 
-        var user = resolveOrProvisionUser(subject, email, name);
+        var user = resolveOrProvisionUser(subject, email, emailVerified, name);
         if (user.getUserType() == UserType.ADMIN) {
             throw invalidToken("Admin identities must use the admin identity provider");
         }
@@ -67,6 +69,10 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
         );
         authentication.setDetails(jwt);
         return authentication;
+    }
+
+    private boolean isEmailVerified(Jwt jwt) {
+        return eventplanner.security.util.JwtClaimUtils.isEmailVerified(jwt);
     }
 
     private OAuth2AuthenticationException invalidToken(String message) {
@@ -93,14 +99,17 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
         return authorities;
     }
 
-    private UserAccount resolveOrProvisionUser(String subject, String email, String name) {
+    private UserAccount resolveOrProvisionUser(String subject, String email, boolean emailVerified, String name) {
         return userAccountRepository.findByCognitoSub(subject)
-                .map(existing -> updateUserFromClaims(existing, subject, email, name))
-                .orElseGet(() -> linkOrProvisionUser(subject, email, name));
+                .map(existing -> updateUserFromClaims(existing, subject, email, emailVerified, name))
+                .orElseGet(() -> linkOrProvisionUser(subject, email, emailVerified, name));
     }
 
-    private UserAccount linkOrProvisionUser(String subject, String email, String name) {
-        if (StringUtils.hasText(email)) {
+    private UserAccount linkOrProvisionUser(String subject, String email, boolean emailVerified, String name) {
+        // Only link by email when the token proves the email is verified.
+        // Without this check an attacker with an unverified email could hijack
+        // an existing account.
+        if (StringUtils.hasText(email) && emailVerified) {
             var existingByEmail = userAccountRepository.findByEmailIgnoreCase(email);
             if (existingByEmail.isPresent()) {
                 UserAccount user = existingByEmail.get();
@@ -109,7 +118,7 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
                     throw invalidToken("Token subject does not match existing account");
                 }
                 user.setCognitoSub(subject);
-                return updateUserFromClaims(user, subject, email, name);
+                return updateUserFromClaims(user, subject, email, emailVerified, name);
             }
         }
 
@@ -124,16 +133,14 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
     }
 
     private static boolean requireConfigured(Boolean value, String propertyName) {
-        if (value == null) {
-            throw new IllegalStateException(propertyName + " must be configured");
-        }
-        return value;
+        return eventplanner.common.util.Preconditions.requireConfigured(value, propertyName);
     }
 
-    private UserAccount updateUserFromClaims(UserAccount user, String subject, String email, String name) {
+    private UserAccount updateUserFromClaims(UserAccount user, String subject, String email, boolean emailVerified, String name) {
         boolean updated = false;
 
-        if (StringUtils.hasText(email) && !email.equalsIgnoreCase(user.getEmail())) {
+        // Only update the email when the JWT proves the new address is verified.
+        if (emailVerified && StringUtils.hasText(email) && !email.equalsIgnoreCase(user.getEmail())) {
             ensureUniqueEmail(email, user.getId());
             user.setEmail(email);
             updated = true;
@@ -248,7 +255,7 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
     }
 
     private String safeTrim(String value) {
-        return value == null ? null : value.trim();
+        return AuthValidationUtil.safeTrim(value);
     }
 
     private void ensureUniqueEmail(String email, UUID currentUserId) {

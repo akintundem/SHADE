@@ -17,6 +17,7 @@ import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.service.EventIdempotencyService;
 import eventplanner.features.event.service.EventMediaService;
 import eventplanner.features.event.service.EventService;
+import eventplanner.common.util.Preconditions;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
@@ -283,9 +284,7 @@ public class EventCrudController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CreateEventWithCoverUploadRequest request) {
         try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
+            Preconditions.requireAuthenticated(principal);
 
             // Enforce one-flow: cover image must be uploaded via S3 presigned flow, not by arbitrary URL
             if (request.getEvent() != null && StringUtils.hasText(request.getEvent().getCoverImageUrl())) {
@@ -362,9 +361,7 @@ public class EventCrudController {
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestBody(required = false) CloneEventRequest request) {
         try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
+            Preconditions.requireAuthenticated(principal);
 
             // Verify user can access the source event
             if (!authorizationService.canAccessEvent(principal, id)) {
@@ -401,17 +398,14 @@ public class EventCrudController {
             @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody UpdateEventWithCoverUploadRequest request) {
         try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
+            Preconditions.requireAuthenticated(principal);
             
             Optional<Event> existingEvent = eventService.getById(id);
             if (existingEvent.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
             
-            // Verify ownership or admin access
-            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            if (!authorizationService.canManageEvent(principal, id)) {
                 throw new AccessDeniedException("Only event owners or admins can update events");
             }
             
@@ -478,15 +472,12 @@ public class EventCrudController {
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam("action") String action) {
         try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
+            Preconditions.requireAuthenticated(principal);
             if (!StringUtils.hasText(action)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "action is required (open|close)");
             }
 
-            // Verify ownership or admin access
-            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            if (!authorizationService.canManageEvent(principal, id)) {
                 throw new AccessDeniedException("Only event owners or admins can update registration state");
             }
 
@@ -524,17 +515,14 @@ public class EventCrudController {
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(required = false) String reason) {
         try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
+            Preconditions.requireAuthenticated(principal);
             
             Optional<Event> existingEvent = eventService.getById(id);
             if (existingEvent.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
             
-            // Verify ownership or admin access
-            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            if (!authorizationService.canManageEvent(principal, id)) {
                 throw new AccessDeniedException("Only event owners or admins can archive events");
             }
             
@@ -563,17 +551,14 @@ public class EventCrudController {
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal) {
         try {
-            if (principal == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-            }
+            Preconditions.requireAuthenticated(principal);
             
             Optional<Event> existingEvent = eventService.getById(id);
             if (existingEvent.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
             
-            // Verify ownership or admin access
-            if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+            if (!authorizationService.canManageEvent(principal, id)) {
                 throw new AccessDeniedException("Only event owners or admins can restore events");
             }
             

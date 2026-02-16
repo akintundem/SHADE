@@ -39,7 +39,7 @@ public class CurrencyController {
     @GetMapping("/{code}")
     @RequiresPermission(RbacPermissions.CURRENCY_READ)
     @Operation(summary = "Get currency by code", description = "Get currency details by ISO 4217 code")
-    public ResponseEntity<CurrencyResponse> getCurrency(@PathVariable String code) {
+    public ResponseEntity<CurrencyResponse> getCurrency(@PathVariable @jakarta.validation.constraints.Pattern(regexp = "^[A-Za-z]{3}$") String code) {
         return currencyService.getCurrencyByCode(code)
             .map(currency -> ResponseEntity.ok(toResponse(currency)))
             .orElse(ResponseEntity.notFound().build());
@@ -48,7 +48,7 @@ public class CurrencyController {
     @GetMapping("/{code}/validate")
     @RequiresPermission(RbacPermissions.CURRENCY_READ)
     @Operation(summary = "Validate currency code", description = "Check if currency code is valid and active")
-    public ResponseEntity<Boolean> validateCurrency(@PathVariable String code) {
+    public ResponseEntity<Boolean> validateCurrency(@PathVariable @jakarta.validation.constraints.Pattern(regexp = "^[A-Za-z]{3}$") String code) {
         boolean isValid = currencyService.isValidCurrency(code);
         return ResponseEntity.ok(isValid);
     }
@@ -56,7 +56,7 @@ public class CurrencyController {
     @GetMapping("/{code}/symbol")
     @RequiresPermission(RbacPermissions.CURRENCY_READ)
     @Operation(summary = "Get currency symbol", description = "Get the currency symbol for a currency code")
-    public ResponseEntity<String> getCurrencySymbol(@PathVariable String code) {
+    public ResponseEntity<String> getCurrencySymbol(@PathVariable @jakarta.validation.constraints.Pattern(regexp = "^[A-Za-z]{3}$") String code) {
         String symbol = currencyService.getCurrencySymbol(code);
         return ResponseEntity.ok(symbol);
     }

@@ -3,6 +3,7 @@ package eventplanner.features.collaboration.controller;
 import eventplanner.features.collaboration.dto.request.EventCollaboratorRequest;
 import eventplanner.features.collaboration.dto.response.EventCollaboratorResponse;
 import eventplanner.features.collaboration.service.EventCollaboratorService;
+import eventplanner.common.util.Preconditions;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
@@ -55,9 +56,7 @@ public class EventCollaborationController {
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
+        Preconditions.requireAuthenticated(principal);
         // Verify user has access to the event
         if (!authorizationService.canAccessEvent(principal, id)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to event collaborators");
@@ -73,11 +72,8 @@ public class EventCollaborationController {
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventCollaboratorRequest request) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        // Verify user is owner or admin
-        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+        Preconditions.requireAuthenticated(principal);
+        if (!authorizationService.canManageEvent(principal, id)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can add collaborators");
         }
         EventCollaboratorResponse response = collaboratorService.addCollaborator(id, request);
@@ -92,11 +88,8 @@ public class EventCollaborationController {
             @Parameter(description = "Collaborator ID") @PathVariable UUID collaboratorId,
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody EventCollaboratorRequest request) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        // Verify user is owner or admin
-        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+        Preconditions.requireAuthenticated(principal);
+        if (!authorizationService.canManageEvent(principal, id)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can update collaborators");
         }
         EventCollaboratorResponse response = collaboratorService.updateCollaborator(id, collaboratorId, request);
@@ -110,11 +103,8 @@ public class EventCollaborationController {
             @Parameter(description = "Event ID") @PathVariable UUID id,
             @Parameter(description = "Collaborator ID") @PathVariable UUID collaboratorId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        // Verify user is owner or admin
-        if (!authorizationService.isEventOwner(principal, id) && !authorizationService.isAdmin(principal)) {
+        Preconditions.requireAuthenticated(principal);
+        if (!authorizationService.canManageEvent(principal, id)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only event owners or admins can remove collaborators");
         }
         collaboratorService.removeCollaborator(id, collaboratorId);
