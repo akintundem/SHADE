@@ -63,7 +63,7 @@ Sade Event Planner is a comprehensive event management platform built as a Sprin
 │                 Common Infrastructure                           │
 │  ┌─────────────┐  ┌───────────┐  ┌──────────────┐  ┌─────────┐│
 │  │  Storage    │  │   RBAC    │  │ Notification │  │  Auth   ││
-│  │  (S3)       │  │           │  │  (RabbitMQ)  │  │(Cognito) ││
+│  │  (S3)       │  │           │  │  (RabbitMQ)  │  │(Auth0)   ││
 │  └─────────────┘  └───────────┘  └──────────────┘  └─────────┘│
 └────────┬───────────────────────────────────────────────────────┘
          │
@@ -351,13 +351,13 @@ Sade Event Planner is a comprehensive event management platform built as a Sprin
 - `Location` - Geographic location data
 
 **Key Services**:
-- `CognitoUserService` - AWS Cognito integration
+- `IdpUserService` / `Auth0IdpUserService` - IdP (Auth0) integration
 - `UserAccountService` - User profile management
 - `AuthorizationService` - Permission checking
 - `RbacAuthorizationService` - Role-based access control
 
 **Authentication**:
-- AWS Cognito JWT token validation
+- OIDC JWT token validation (e.g. Auth0)
 - Auto-provisioning of users on first login
 - Session management
 
@@ -610,7 +610,7 @@ public abstract class BaseEntity {
 - **ORM**: Hibernate / Spring Data JPA
 - **Database**: PostgreSQL
 - **Migrations**: Flyway 10.10.0
-- **Authentication**: AWS Cognito (JWT)
+- **Authentication**: OIDC (e.g. Auth0) JWT
 - **Authorization**: Custom RBAC with Casbin integration
 - **Storage**: AWS S3 (via presigned URLs)
 - **Caching**: Redis (Lettuce client) / Caffeine
@@ -630,7 +630,7 @@ public abstract class BaseEntity {
 - **Optimistic Locking**: `@Version` on all entities
 
 ### Security
-- **Authentication**: JWT tokens from AWS Cognito
+- **Authentication**: JWT tokens from OIDC (e.g. Auth0)
 - **User Provisioning**: Auto-create users on first JWT validation
 - **RBAC**: Policy-based permissions (Casbin CSV policies)
 - **API Gateway**: Kong (API key validation)
@@ -698,7 +698,7 @@ public abstract class BaseEntity {
 - **Spring Boot ↔ PostgreSQL**: Direct JDBC connection
 - **Spring Boot ↔ Redis**: Direct connection
 - **Spring Boot ↔ S3**: AWS SDK (presigned URLs)
-- **Spring Boot ↔ Cognito**: AWS SDK (JWT validation)
+- **Spring Boot ↔ IdP**: OIDC JWT validation; Auth0 Management API for user lifecycle
 
 ---
 

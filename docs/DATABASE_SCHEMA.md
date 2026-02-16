@@ -24,7 +24,7 @@
                     │ id (PK)             │
                     │ email (UNIQUE)      │
                     │ username (UNIQUE)   │
-                    │ cognito_sub (UNIQUE)│
+                    │ auth_sub (UNIQUE)   │
                     │ name                │
                     │ profile_picture_url │
                     │ user_type           │
@@ -388,7 +388,7 @@ Central identity table for all authenticated users.
 
 **Columns**:
 - `id` (UUID, PK) - Unique user identifier
-- `cognito_sub` (VARCHAR(120), UNIQUE) - AWS Cognito subject
+- `auth_sub` (VARCHAR(120), UNIQUE) - IdP subject (e.g. Auth0 user id)
 - `email` (VARCHAR(180), UNIQUE, NOT NULL) - Email address
 - `username` (VARCHAR(40), UNIQUE) - Public handle/username
 - `name` (VARCHAR(120), NOT NULL) - Display name
@@ -409,7 +409,7 @@ Central identity table for all authenticated users.
 - Has many: Events (owner), Collaborators, Attendees, Tickets, Posts, Comments, Likes, Follows
 
 **Indexes**:
-- `cognito_sub` (unique)
+- `auth_sub` (unique)
 - `email` (unique)
 - `username` (unique)
 - `name` (for search)
@@ -1286,7 +1286,7 @@ To avoid expensive COUNT queries, several counts are denormalized:
 
 ### Flyway Versions
 
-**V1**: Cognito-only authentication cleanup
+**V1**: OIDC authentication cleanup
 **V2**: Drop local auth columns
 **V3**: Ticket waitlist and approval requests
 **V4**: Attendee RSVP history

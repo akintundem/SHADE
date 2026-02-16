@@ -34,15 +34,15 @@ SHARED_SECRET = os.getenv("AI_SERVICE_SECRET", "")
 # Whether to require the x-ai-secret header for all requests (except /health)
 REQUIRE_SECRET = os.getenv("AI_SERVICE_REQUIRE_SECRET", "true").lower() == "true"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-COGNITO_ISSUER = os.getenv("AI_COGNITO_ISSUER") or os.getenv("COGNITO_ISSUER_URI") or ""
-COGNITO_AUDIENCE = os.getenv("AI_COGNITO_AUDIENCE") or os.getenv("COGNITO_AUDIENCE") or ""
-JWKS_URL = os.getenv("AI_COGNITO_JWKS_URL") or (f"{COGNITO_ISSUER}/.well-known/jwks.json" if COGNITO_ISSUER else "")
+OIDC_ISSUER = os.getenv("AI_OIDC_ISSUER") or os.getenv("OIDC_ISSUER_URI") or ""
+OIDC_AUDIENCE = os.getenv("AI_OIDC_AUDIENCE") or os.getenv("OIDC_AUDIENCE") or ""
+JWKS_URL = os.getenv("AI_OIDC_JWKS_URL") or (f"{OIDC_ISSUER}/.well-known/jwks.json" if OIDC_ISSUER else "")
 JWKS_CACHE_SECONDS = int(os.getenv("AI_JWKS_CACHE_SECONDS", "3600"))
 
 # Validate required configuration on startup
 if REQUIRE_SECRET and not SHARED_SECRET:
     print("[ai] WARNING: AI_SERVICE_SECRET is not set but REQUIRE_SECRET is true. "
-          "All requests will require valid Cognito JWT instead.")
+          "All requests will require valid OIDC JWT instead.")
 
 jwks_cache: Dict[str, Any] = {"keys": None, "expires_at": datetime.min}
 
@@ -55,14 +55,14 @@ else:
 
 
 async def fetch_jwks():
-    """Fetch and cache JWKS from Cognito."""
+    """Fetch and cache JWKS from OIDC IdP (e.g. Auth0)."""
     global jwks_cache
     now = datetime.utcnow()
     if jwks_cache.get("keys") and jwks_cache.get("expires_at") and now < jwks_cache["expires_at"]:
         return jwks_cache["keys"]
 
     if not JWKS_URL:
-        raise HTTPException(status_code=500, detail="Cognito JWKS URL not configured")
+        raise HTTPException(status_code=500, detail="OIDC JWKS URL not configured")
 
     async with httpx.AsyncClient() as client:
         resp = await client.get(JWKS_URL, timeout=5)
@@ -76,7 +76,7 @@ async def fetch_jwks():
 
 
 async def verify_jwt_token(token: str) -> Dict[str, Any]:
-    """Validate Cognito JWT using JWKS."""
+    """Validate OIDC JWT using JWKS."""
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")
     keys = await fetch_jwks()
@@ -87,13 +87,13 @@ async def verify_jwt_token(token: str) -> Dict[str, Any]:
         if not key:
             raise HTTPException(status_code=401, detail="Unable to match signing key")
 
-        options = {"verify_aud": bool(COGNITO_AUDIENCE)}
+        options = {"verify_aud": bool(OIDC_AUDIENCE)}
         claims = jwt.decode(
             token,
             key,
             algorithms=[key.get("alg", "RS256")],
-            audience=COGNITO_AUDIENCE or None,
-            issuer=COGNITO_ISSUER or None,
+            audience=OIDC_AUDIENCE or None,
+            issuer=OIDC_ISSUER or None,
             options=options
         )
         return claims

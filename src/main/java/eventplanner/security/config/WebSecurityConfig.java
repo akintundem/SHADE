@@ -2,7 +2,7 @@ package eventplanner.security.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.common.exception.util.ProblemBuilder;
-import eventplanner.security.auth.jwt.CognitoJwtAuthenticationConverter;
+import eventplanner.security.auth.jwt.OidcJwtAuthenticationConverter;
 import eventplanner.security.filters.RbacContextFilter;
 import eventplanner.security.filters.SecurityHeadersFilter;
 import eventplanner.security.filters.ServiceApiKeyFilter;
@@ -44,14 +44,14 @@ public class WebSecurityConfig {
     private final SecurityHeadersFilter securityHeadersFilter;
     private final RbacContextFilter rbacContextFilter;
     private final ServiceApiKeyFilter serviceApiKeyFilter;
-    private final CognitoJwtAuthenticationConverter jwtAuthenticationConverter;
+    private final OidcJwtAuthenticationConverter jwtAuthenticationConverter;
     private final ObjectMapper objectMapper;
     private final ResourceServerJwtProperties resourceServerJwtProperties;
 
     public WebSecurityConfig(SecurityHeadersFilter securityHeadersFilter,
                           RbacContextFilter rbacContextFilter,
                           ServiceApiKeyFilter serviceApiKeyFilter,
-                          CognitoJwtAuthenticationConverter jwtAuthenticationConverter,
+                          OidcJwtAuthenticationConverter jwtAuthenticationConverter,
                           ObjectMapper objectMapper,
                           ResourceServerJwtProperties resourceServerJwtProperties) {
         this.securityHeadersFilter = securityHeadersFilter;
@@ -180,14 +180,10 @@ public class WebSecurityConfig {
 
         @Override
         public OAuth2TokenValidatorResult validate(Jwt token) {
-            String tokenUse = token.getClaimAsString("token_use");
-            if ("access".equals(tokenUse)) {
-                String clientId = token.getClaimAsString("client_id");
-                if (StringUtils.hasText(clientId) && allowedAudiences.contains(clientId)) {
-                    return OAuth2TokenValidatorResult.success();
-                }
-            }
             if (token.getAudience() != null && token.getAudience().stream().anyMatch(allowedAudiences::contains)) {
+                return OAuth2TokenValidatorResult.success();
+            }
+            if (allowedAudiences.isEmpty()) {
                 return OAuth2TokenValidatorResult.success();
             }
             OAuth2Error error = new OAuth2Error("invalid_token", "The required audience is missing", null);

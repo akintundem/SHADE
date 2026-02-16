@@ -71,8 +71,8 @@ services:
       EXTERNAL_AI_SERVICE_SECRET: ${EXTERNAL_AI_SERVICE_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       RETURN_BASE64: "false"
-      AI_COGNITO_ISSUER: ${AI_COGNITO_ISSUER:-}
-      AI_COGNITO_AUDIENCE: ${AI_COGNITO_AUDIENCE:-}
+      AI_OIDC_ISSUER: ${AI_OIDC_ISSUER:-}
+      AI_OIDC_AUDIENCE: ${AI_OIDC_AUDIENCE:-}
     # Secrets from host env; do not commit ai-service/.env (use .env.example as template)
     restart: unless-stopped
     networks:

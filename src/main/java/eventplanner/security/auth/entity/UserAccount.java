@@ -42,8 +42,8 @@ public class UserAccount extends BaseEntity {
     @Column(nullable = false, unique = true, length = 180)
     private String email;
 
-    @Column(name = "cognito_sub", unique = true, length = 120)
-    private String cognitoSub;
+    @Column(name = "auth_sub", unique = true, length = 120)
+    private String authSub;
 
     @Column(nullable = false, length = 120)
     private String name;

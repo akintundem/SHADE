@@ -84,9 +84,9 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${COGNITO_ISSUER_URI}
-          jwk-set-uri: ${COGNITO_JWK_SET_URI}
-          audiences: ${COGNITO_AUDIENCE}
+          issuer-uri: ${OIDC_ISSUER_URI}
+          jwk-set-uri: ${OIDC_JWK_SET_URI}
+          audiences: ${OIDC_AUDIENCE}
   
   
   
@@ -121,9 +121,12 @@ aws:
       event: ${AWS_S3_EVENT_BUCKET:}
     endpoint: ${AWS_S3_ENDPOINT:}
     path-style-access-enabled: ${AWS_S3_PATH_STYLE:false}
-  cognito:
-    user-pool-id: ${AWS_COGNITO_USER_POOL_ID}
-    region: ${AWS_COGNITO_REGION}
+# Auth0 Management API (optional; used for profile sync, delete user, sign-out)
+auth0:
+  management:
+    domain: ${AUTH0_DOMAIN:}
+    client-id: ${AUTH0_MANAGEMENT_CLIENT_ID:}
+    client-secret: ${AUTH0_MANAGEMENT_CLIENT_SECRET:}
 
 # Feed Posts Configuration
 feeds:

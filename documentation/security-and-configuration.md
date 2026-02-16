@@ -21,7 +21,7 @@ This document summarizes **security posture** and **deployment configuration** f
 | Item | Detail |
 |------|--------|
 | **Service auth** | Requests without a Bearer JWT must present a valid `X-API-Key` (injected by Kong). Internal (service-role) paths always require the API key even when a JWT is present. |
-| **User auth** | JWT from Cognito; validated by the monolith. Signup requires a verified email in the token; request-body email is not used as identity. Account linking does not attach a Cognito sub to an existing account by email alone. |
+| **User auth** | JWT from OIDC (e.g. Auth0); validated by the monolith. Signup requires a verified email in the token; request-body email is not used as identity. Account linking does not attach an IdP sub to an existing account by email alone. |
 | **RBAC** | Policy in `src/main/resources/rbac/RBAC_policy.yml`. Permissions that declare `conditions` are currently **denied** until condition evaluators are implemented. Event roles (COORDINATOR, STAFF, VOLUNTEER) have been reduced to least privilege. |
 | **Logout** | Allowed only via **POST** `/api/v1/auth/logout`. |
 | **Actuator** | Health details are shown only when authorized (`show-details: when_authorized`). |

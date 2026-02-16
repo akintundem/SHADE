@@ -8,7 +8,7 @@ import eventplanner.common.exception.exceptions.UnauthorizedException;
 import eventplanner.security.auth.dto.req.SignupRequest;
 import eventplanner.security.auth.dto.res.AuthSessionResponse;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
-import eventplanner.security.auth.service.CognitoUserService;
+import eventplanner.security.auth.service.IdpUserService;
 import eventplanner.security.auth.service.UserAccountService;
 import eventplanner.common.util.Preconditions;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -37,11 +37,11 @@ import static eventplanner.security.util.AuthValidationUtil.safeTrim;
 @RequestMapping("/api/v1/auth")
 public class AuthInfoController {
 
-    private final CognitoUserService cognitoUserService;
+    private final IdpUserService idpUserService;
     private final UserAccountService userAccountService;
 
-    public AuthInfoController(CognitoUserService cognitoUserService, UserAccountService userAccountService) {
-        this.cognitoUserService = cognitoUserService;
+    public AuthInfoController(IdpUserService idpUserService, UserAccountService userAccountService) {
+        this.idpUserService = idpUserService;
         this.userAccountService = userAccountService;
     }
 
@@ -61,26 +61,22 @@ public class AuthInfoController {
     @PostMapping("/logout")
     public ResponseEntity<ApiMessageResponse> logout(@AuthenticationPrincipal UserPrincipal principal) {
         Preconditions.requireAuthenticated(principal);
-        cognitoUserService.signOutUser(
-                principal.getUser().getCognitoSub(),
+        idpUserService.signOutUser(
+                principal.getUser().getAuthSub(),
                 principal.getUser().getEmail()
         );
         return ResponseEntity.ok(ApiMessageResponse.success("Logged out successfully"));
     }
 
     /**
-     * Lightweight signup endpoint for Cognito flows.
-     * Creates/updates a local user record so downstream APIs can resolve the user by email/sub.
+     * Lightweight signup endpoint for OIDC (Auth0) flows.
+     * Creates/updates a local user record and syncs profile to IdP.
      */
     @PostMapping("/signup")
     public ResponseEntity<SecureUserResponse> signup(@Valid @RequestBody SignupRequest request,
                                                      Authentication authentication) {
         try {
             Jwt jwt = requireJwt(authentication);
-            String tokenUse = jwt.getClaimAsString("token_use");
-            if (!"access".equals(tokenUse)) {
-                throw new UnauthorizedException("Invalid token");
-            }
             String tokenEmail = resolveTokenEmail(jwt);
             if (!isEmailVerified(jwt)) {
                 throw new ForbiddenException("Email not verified");
@@ -99,9 +95,9 @@ public class AuthInfoController {
             if (!StringUtils.hasText(subject)) {
                 throw new UnauthorizedException("Invalid token");
             }
-            var result = userAccountService.provisionCognitoUser(request, subject);
+            var result = userAccountService.provisionUser(request, subject);
             UserAccount user = result.user();
-            cognitoUserService.updateUserProfile(
+            idpUserService.updateUserProfile(
                     subject,
                     tokenEmail,
                     user.getName(),
@@ -147,9 +143,6 @@ public class AuthInfoController {
         }
 
         String username = safeTrim(jwt.getClaimAsString("username"));
-        if (!StringUtils.hasText(username)) {
-            username = safeTrim(jwt.getClaimAsString("cognito:username"));
-        }
         if (!StringUtils.hasText(username)) {
             username = safeTrim(jwt.getClaimAsString("preferred_username"));
         }

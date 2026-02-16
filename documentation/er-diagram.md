@@ -10,7 +10,7 @@ erDiagram
     UUID id PK
     string email
     string username
-    string cognito_sub
+    string auth_sub
     string name
   }
 
@@ -358,7 +358,7 @@ erDiagram
 
 ## Notes
 
-- **Auth:** Users are in `auth_users` (Cognito `sub`, email, username). `user_settings` and `locations` support profile and location search. `user_preferences` stores key-value preferences.
+- **Auth:** Users are in `auth_users` (IdP `sub` in `auth_sub`, email, username). `user_settings` and `locations` support profile and location search. `user_preferences` stores key-value preferences.
 - **Events:** `events` has embedded venue fields and optional `venue_id` to a standalone `venues` table. Event metadata is in `event_metadata` (key-value). Access is controlled by `access_type` (open, RSVP, invite-only, ticketed).
 - **Collaboration:** `event_users` is the membership table; `event_user_permissions` holds per-member permission overrides; `event_roles` assigns a role name per user per event; `event_collaborator_invites` for invite flow (accept by token in POST body).
 - **Tickets:** Types, price tiers, dependencies, promotions, checkouts, and tickets. Waitlist and approval requests live in `ticket_waitlist_entries` and `ticket_approval_requests`. Metadata tables exist for events, ticket types, and tickets.

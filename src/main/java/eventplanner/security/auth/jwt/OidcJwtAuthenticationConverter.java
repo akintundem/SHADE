@@ -8,6 +8,7 @@ import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.security.auth.service.UserPrincipal;
 import eventplanner.security.config.SecurityJwtProperties;
 import eventplanner.security.util.AuthValidationUtil;
+import eventplanner.security.util.JwtClaimUtils;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -27,17 +28,17 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * Converts a validated Cognito JWT into a UserPrincipal-backed Authentication,
+ * Converts a validated OIDC (e.g. Auth0) JWT into a UserPrincipal-backed Authentication,
  * provisioning a user account on first sight if enabled.
  */
 @Component
-public class CognitoJwtAuthenticationConverter implements Converter<Jwt, UsernamePasswordAuthenticationToken> {
+public class OidcJwtAuthenticationConverter implements Converter<Jwt, UsernamePasswordAuthenticationToken> {
 
     private final UserAccountRepository userAccountRepository;
     private final boolean autoProvision;
 
-    public CognitoJwtAuthenticationConverter(UserAccountRepository userAccountRepository,
-                                             SecurityJwtProperties securityJwtProperties) {
+    public OidcJwtAuthenticationConverter(UserAccountRepository userAccountRepository,
+                                          SecurityJwtProperties securityJwtProperties) {
         this.userAccountRepository = userAccountRepository;
         this.autoProvision = requireConfigured(securityJwtProperties.getAutoProvision(), "security.jwt.auto-provision");
     }
@@ -60,7 +61,7 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
         UserPrincipal principal = new UserPrincipal(user, List.of(), null);
 
         List<GrantedAuthority> authorities = new ArrayList<>(principal.getAuthorities());
-        authorities.addAll(mapGroupsToAuthorities(jwt));
+        authorities.addAll(mapRolesToAuthorities(jwt));
 
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 principal,
@@ -72,25 +73,29 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
     }
 
     private boolean isEmailVerified(Jwt jwt) {
-        return eventplanner.security.util.JwtClaimUtils.isEmailVerified(jwt);
+        return JwtClaimUtils.isEmailVerifiedOrAccessToken(jwt);
     }
 
     private OAuth2AuthenticationException invalidToken(String message) {
         return new OAuth2AuthenticationException(new OAuth2Error("invalid_token", message, null));
     }
 
-    private List<GrantedAuthority> mapGroupsToAuthorities(Jwt jwt) {
-        List<String> groups = jwt.getClaimAsStringList("cognito:groups");
-        if (groups == null || groups.isEmpty()) {
+    /**
+     * Map roles from JWT. Auth0: use custom claim e.g. "https://your-domain/roles" or "roles".
+     * For OIDC we check Auth0 namespace or "roles" claim.
+     */
+    private List<GrantedAuthority> mapRolesToAuthorities(Jwt jwt) {
+        List<String> roles = jwt.getClaimAsStringList("https://auth0.com/roles");
+        if (roles == null) {
+            roles = jwt.getClaimAsStringList("roles");
+        }
+        if (roles == null || roles.isEmpty()) {
             return List.of();
         }
-
         List<GrantedAuthority> authorities = new ArrayList<>();
-        for (String group : groups) {
-            if (!StringUtils.hasText(group)) {
-                continue;
-            }
-            String normalized = group.trim().toUpperCase(Locale.ROOT);
+        for (String role : roles) {
+            if (!StringUtils.hasText(role)) continue;
+            String normalized = role.trim().toUpperCase(Locale.ROOT);
             if ("ADMIN".equals(normalized) || "SUPER_ADMIN".equals(normalized)) {
                 throw invalidToken("Admin identities must use the admin identity provider");
             }
@@ -100,24 +105,21 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
     }
 
     private UserAccount resolveOrProvisionUser(String subject, String email, boolean emailVerified, String name) {
-        return userAccountRepository.findByCognitoSub(subject)
+        return userAccountRepository.findByAuthSub(subject)
                 .map(existing -> updateUserFromClaims(existing, subject, email, emailVerified, name))
                 .orElseGet(() -> linkOrProvisionUser(subject, email, emailVerified, name));
     }
 
     private UserAccount linkOrProvisionUser(String subject, String email, boolean emailVerified, String name) {
-        // Only link by email when the token proves the email is verified.
-        // Without this check an attacker with an unverified email could hijack
-        // an existing account.
         if (StringUtils.hasText(email) && emailVerified) {
             var existingByEmail = userAccountRepository.findByEmailIgnoreCase(email);
             if (existingByEmail.isPresent()) {
                 UserAccount user = existingByEmail.get();
-                String existingSub = safeTrim(user.getCognitoSub());
+                String existingSub = safeTrim(user.getAuthSub());
                 if (StringUtils.hasText(existingSub) && !existingSub.equals(subject)) {
                     throw invalidToken("Token subject does not match existing account");
                 }
-                user.setCognitoSub(subject);
+                user.setAuthSub(subject);
                 return updateUserFromClaims(user, subject, email, emailVerified, name);
             }
         }
@@ -139,7 +141,6 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
     private UserAccount updateUserFromClaims(UserAccount user, String subject, String email, boolean emailVerified, String name) {
         boolean updated = false;
 
-        // Only update the email when the JWT proves the new address is verified.
         if (emailVerified && StringUtils.hasText(email) && !email.equalsIgnoreCase(user.getEmail())) {
             ensureUniqueEmail(email, user.getId());
             user.setEmail(email);
@@ -151,8 +152,8 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
             updated = true;
         }
 
-        if (StringUtils.hasText(subject) && !subject.equals(user.getCognitoSub())) {
-            user.setCognitoSub(subject);
+        if (StringUtils.hasText(subject) && !subject.equals(user.getAuthSub())) {
+            user.setAuthSub(subject);
             updated = true;
         }
 
@@ -169,7 +170,7 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
         String resolvedName = StringUtils.hasText(name) ? name.trim() : normalizedEmail;
         UserAccount user = UserAccount.builder()
                 .email(normalizedEmail)
-                .cognitoSub(subject)
+                .authSub(subject)
                 .name(resolvedName)
                 .acceptTerms(false)
                 .acceptPrivacy(false)
@@ -187,7 +188,7 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
         String resolvedName = StringUtils.hasText(name) ? name.trim() : normalizedEmail;
         UserAccount user = UserAccount.builder()
                 .email(normalizedEmail)
-                .cognitoSub(subject)
+                .authSub(subject)
                 .name(resolvedName)
                 .acceptTerms(false)
                 .acceptPrivacy(false)
@@ -202,30 +203,19 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
 
     private String resolveDisplayName(Jwt jwt) {
         String name = safeTrim(jwt.getClaimAsString("name"));
-        if (StringUtils.hasText(name)) {
-            return name;
-        }
+        if (StringUtils.hasText(name)) return name;
 
         String givenName = safeTrim(jwt.getClaimAsString("given_name"));
         String familyName = safeTrim(jwt.getClaimAsString("family_name"));
         if (StringUtils.hasText(givenName) || StringUtils.hasText(familyName)) {
-            String composite = (StringUtils.hasText(givenName) ? givenName + " " : "")
-                    + (StringUtils.hasText(familyName) ? familyName : "");
-            return composite.trim();
+            return ((StringUtils.hasText(givenName) ? givenName + " " : "") + (StringUtils.hasText(familyName) ? familyName : "")).trim();
         }
 
-        String preferredUsername = safeTrim(jwt.getClaimAsString("cognito:username"));
-        if (!StringUtils.hasText(preferredUsername)) {
-            preferredUsername = safeTrim(jwt.getClaimAsString("preferred_username"));
-        }
-        if (StringUtils.hasText(preferredUsername)) {
-            return preferredUsername;
-        }
+        String preferredUsername = safeTrim(jwt.getClaimAsString("preferred_username"));
+        if (StringUtils.hasText(preferredUsername)) return preferredUsername;
 
         String email = normalizeEmailClaim(jwt.getClaimAsString("email"));
-        if (StringUtils.hasText(email)) {
-            return email.split("@")[0];
-        }
+        if (StringUtils.hasText(email)) return email.split("@")[0];
         return jwt.getSubject();
     }
 
@@ -234,18 +224,14 @@ public class CognitoJwtAuthenticationConverter implements Converter<Jwt, Usernam
             return email.trim().toLowerCase(Locale.ROOT);
         }
         String fallback = StringUtils.hasText(subject) ? subject : UUID.randomUUID().toString();
-        return fallback + "@cognito.local";
+        return fallback + "@auth0.local";
     }
 
     private boolean isSignupRequest() {
         var attributes = RequestContextHolder.getRequestAttributes();
-        if (!(attributes instanceof ServletRequestAttributes servletAttributes)) {
-            return false;
-        }
+        if (!(attributes instanceof ServletRequestAttributes servletAttributes)) return false;
         var request = servletAttributes.getRequest();
-        if (request == null) {
-            return false;
-        }
+        if (request == null) return false;
         String path = request.getRequestURI();
         return "/api/v1/auth/signup".equals(path) || "/api/v1/auth/signup/".equals(path);
     }

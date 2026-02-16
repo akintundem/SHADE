@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Event Planner backend (sade-mono) is a **Java Spring Boot monolith** that provides REST APIs for event planning, ticketing, attendees, budgets, timelines, feeds, and notifications. It runs behind **Kong** as the API gateway, with separate services for **AI** (Python/FastAPI), **email** (Node/Resend), and **push notifications** (Node/Firebase). Persistence is **PostgreSQL** with **Flyway** for schema migrations; **Redis** is used for caching. The front end and mobile clients authenticate via **AWS Cognito** and send a Bearer JWT on each request.
+The Event Planner backend (sade-mono) is a **Java Spring Boot monolith** that provides REST APIs for event planning, ticketing, attendees, budgets, timelines, feeds, and notifications. It runs behind **Kong** as the API gateway, with separate services for **AI** (Python/FastAPI), **email** (Node/Resend), and **push notifications** (Node/Firebase). Persistence is **PostgreSQL** with **Flyway** for schema migrations; **Redis** is used for caching. The front end and mobile clients authenticate via **OIDC (e.g. Auth0)** and send a Bearer JWT on each request.
 
 ## Tech stack
 
@@ -10,7 +10,7 @@ The Event Planner backend (sade-mono) is a **Java Spring Boot monolith** that pr
 |-------|------------|
 | Gateway | Kong 3.x (declarative config) |
 | API | Java 21, Spring Boot 3, Spring Security 6, OAuth2 Resource Server (JWT) |
-| Auth | AWS Cognito (issuer, JWKS, audience) |
+| Auth | OIDC (e.g. Auth0: issuer, JWKS, audience) |
 | Database | PostgreSQL (Hibernate + Flyway; `ddl-auto: validate`) |
 | Cache | Redis (Lettuce) |
 | Queue | RabbitMQ (email and push jobs) |
@@ -48,11 +48,11 @@ flowchart LR
     PG[(PostgreSQL)]
     RD[(Redis)]
     S3[("S3")]
-    CG[("Cognito")]
+    IDP[("IdP (Auth0)")]
   end
 
-  C -->|Sign-in| CG
-  CG -->|JWT| C
+  C -->|Sign-in| IDP
+  IDP -->|JWT| C
   C -->|Bearer JWT| K
   K -->|X-API-Key + JWT| EP_API
   K -->|/ai-service, x-ai-secret| AI
@@ -72,13 +72,13 @@ flowchart LR
   EP_API --> PG
   EP_API --> RD
   EP_API --> S3
-  EP_AUTH -->|validate JWT| CG
-  AI -->|optional JWT| CG
+  EP_AUTH -->|validate JWT| IDP
+  AI -->|optional JWT| IDP
 ```
 
 ## Features and modules
 
-- **Auth & users** — Cognito JWT validation, user provisioning, profile, settings, locations, device tokens. Signup requires verified email in the token; account linking rules prevent hijack.
+- **Auth & users** — OIDC JWT validation, user provisioning, profile, settings, locations, device tokens. Signup requires verified email in the token; account linking rules prevent hijack.
 - **Events** — CRUD, status, visibility, access type (open, RSVP, invite-only, ticketed), venue (embedded or linked), reminders, notification settings, stored objects (media), waitlist.
 - **Collaboration** — Event members (`event_users`), roles (`event_roles` by role name), per-member permissions (`event_user_permissions`), collaborator invites (accept by token in POST body).
 - **Attendees** — Registration, RSVP, check-in, invites. Invite acceptance by token is **POST only** (body); email links use fragment so the token is not in the URL.
@@ -91,10 +91,10 @@ flowchart LR
 
 ## Request flow
 
-1. **Clients** sign in with Cognito and receive a JWT. They call Kong (e.g. `:8000` or `:8443`) with `Authorization: Bearer <token>`.
+1. **Clients** sign in with the IdP (e.g. Auth0) and receive a JWT. They call Kong (e.g. `:8000` or `:8443`) with `Authorization: Bearer <token>`.
 2. **Kong** adds the gateway key (`X-API-Key` for the monolith, `x-ai-secret` for the AI service), applies rate limiting and CORS, and routes `/` to the monolith and `/ai-service` to the AI service. Kong Admin (8001) is not exposed by default.
-3. **Monolith** — `ServiceApiKeyFilter` ensures either a valid Bearer JWT (user request) or a valid `X-API-Key` (and for internal paths, the key is always required). JWT is validated with Cognito JWKS. RBAC is enforced per endpoint via `@RequiresPermission` and `RBAC_policy.yml`.
-4. **AI service** — Accepts requests with a valid gateway secret (constant-time compare) or, when configured, a valid Cognito JWT. Image generation and fetch use allowlisted URLs and timeouts.
+3. **Monolith** — `ServiceApiKeyFilter` ensures either a valid Bearer JWT (user request) or a valid `X-API-Key` (and for internal paths, the key is always required). JWT is validated with OIDC JWKS. RBAC is enforced per endpoint via `@RequiresPermission` and `RBAC_policy.yml`.
+4. **AI service** — Accepts requests with a valid gateway secret (constant-time compare) or, when configured, a valid OIDC JWT. Image generation and fetch use allowlisted URLs and timeouts.
 5. **Email / push** — Monolith publishes jobs to RabbitMQ; Node workers consume, validate payload (recipient count, lengths, formats), and send. Push batch size is capped (e.g. 500 tokens per message).
 
 ## Data flow and persistence
@@ -106,7 +106,7 @@ flowchart LR
 ## Deployment
 
 - **Docker Compose** — Defines the monolith, Kong, AI service, email and push workers, RabbitMQ, and networks. DB, Redis, and S3 are typically external or provided via env.
-- **Secrets** — No secrets in the repo. Set `GATEWAY_SERVICE_API_KEY`, `AI_GATEWAY_SHARED_SECRET`, Cognito and DB URLs, etc., via environment or a secret manager. Use `ai-service/.env.example` and `push-service/.env.example` as templates; do not commit `.env` files.
+- **Secrets** — No secrets in the repo. Set `GATEWAY_SERVICE_API_KEY`, `AI_GATEWAY_SHARED_SECRET`, OIDC/Auth0 and DB URLs, etc., via environment or a secret manager. Use `ai-service/.env.example` and `push-service/.env.example` as templates; do not commit `.env` files.
 - **CORS** — Kong uses an explicit origin allowlist (no wildcard with credentials). Configure for production accordingly.
 
 ## Security and configuration

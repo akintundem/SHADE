@@ -42,26 +42,26 @@ import static eventplanner.security.util.AuthValidationUtil.safeTrim;
 public class UserAccountService {
 
     /**
-     * Result of provisioning a Cognito user - indicates whether user was newly created.
+     * Result of provisioning a user from IdP (Auth0) - indicates whether user was newly created.
      */
     public record ProvisionResult(UserAccount user, boolean created) {}
 
     private final UserAccountRepository userAccountRepository;
     private final ProfileImageService profileImageService;
     private final LocationRepository locationRepository;
-    private final CognitoUserService cognitoUserService;
-    
+    private final IdpUserService idpUserService;
+
     @Autowired(required = false)
     private FeedPostService feedPostService;
 
     public UserAccountService(UserAccountRepository userAccountRepository,
                              ProfileImageService profileImageService,
                              LocationRepository locationRepository,
-                             CognitoUserService cognitoUserService) {
+                             IdpUserService idpUserService) {
         this.userAccountRepository = userAccountRepository;
         this.profileImageService = profileImageService;
         this.locationRepository = locationRepository;
-        this.cognitoUserService = cognitoUserService;
+        this.idpUserService = idpUserService;
     }
 
     public SecureUserResponse getSecureUser(UUID userId) {
@@ -165,8 +165,8 @@ public class UserAccountService {
         UserAccount user = userAccountRepository.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Attempt Cognito removal before marking the account as deleted locally
-        cognitoUserService.deleteUser(user.getCognitoSub(), user.getEmail());
+        // Remove user from IdP (Auth0) before marking as deleted locally
+        idpUserService.deleteUser(user.getAuthSub(), user.getEmail());
 
         if (user.getStatus() != UserStatus.DELETED) {
             user.setStatus(UserStatus.DELETED);
@@ -341,14 +341,13 @@ public class UserAccountService {
     }
 
     /**
-     * Provision or update a local user record from a Cognito signup.
-     * If the user already exists (by email), update their Cognito sub if provided.
-     * Otherwise, create a new user account.
+     * Provision or update a local user record from IdP (Auth0) signup.
      *
      * @param request The signup request containing user details
+     * @param authSub IdP subject (e.g. Auth0 user id)
      * @return ProvisionResult with the user and whether they were newly created
      */
-    public ProvisionResult provisionCognitoUser(SignupRequest request, String cognitoSub) {
+    public ProvisionResult provisionUser(SignupRequest request, String authSub) {
         String email = normalizeEmail(request.getEmail());
         if (email == null) {
             throw new IllegalArgumentException("Valid email is required");
@@ -358,12 +357,11 @@ public class UserAccountService {
             throw new IllegalArgumentException("Username is required");
         }
 
-        // First try to find by cognitoSub (handles auto-provisioned users with fallback emails)
-        if (StringUtils.hasText(cognitoSub)) {
-            Optional<UserAccount> existingBySub = userAccountRepository.findByCognitoSub(cognitoSub);
+        if (StringUtils.hasText(authSub)) {
+            Optional<UserAccount> existingBySub = userAccountRepository.findByAuthSub(authSub);
             if (existingBySub.isPresent()) {
                 UserAccount user = existingBySub.get();
-                // Update email if it was a fallback (e.g. {sub}@cognito.local)
+                // Update email if it was a fallback (e.g. {sub}@auth0.local)
                 if (!email.equalsIgnoreCase(user.getEmail())) {
                     if (userAccountRepository.findByEmailIgnoreCase(email)
                             .filter(u -> !u.getId().equals(user.getId())).isPresent()) {
@@ -382,12 +380,11 @@ public class UserAccountService {
 
         if (existingUser.isPresent()) {
             UserAccount user = existingUser.get();
-            if (StringUtils.hasText(cognitoSub)) {
-                String existingSub = safeTrim(user.getCognitoSub());
-                if (StringUtils.hasText(existingSub) && !existingSub.equals(cognitoSub)) {
+            if (StringUtils.hasText(authSub)) {
+                String existingSub = safeTrim(user.getAuthSub());
+                if (StringUtils.hasText(existingSub) && !existingSub.equals(authSub)) {
                     throw new IllegalArgumentException("Token subject does not match existing account");
                 }
-                // SECURITY: Do not link unlinked accounts by email (prevents account hijack)
                 if (!StringUtils.hasText(existingSub)) {
                     throw new IllegalArgumentException("Account exists with this email; use login or password reset. Do not use signup to link.");
                 }
@@ -406,7 +403,7 @@ public class UserAccountService {
         newUser.setEmail(email);
         newUser.setName(StringUtils.hasText(request.getName()) ? request.getName().trim() : email.split("@")[0]);
         newUser.setUsername(normalizedUsername);
-        newUser.setCognitoSub(StringUtils.hasText(cognitoSub) ? cognitoSub : null);
+        newUser.setAuthSub(StringUtils.hasText(authSub) ? authSub : null);
         newUser.setPhoneNumber(StringUtils.hasText(request.getPhoneNumber()) ? request.getPhoneNumber().trim() : null);
         newUser.setMarketingOptIn(Boolean.TRUE.equals(request.getMarketingOptIn()));
         newUser.setAcceptTerms(Boolean.TRUE.equals(request.getAcceptTerms()));

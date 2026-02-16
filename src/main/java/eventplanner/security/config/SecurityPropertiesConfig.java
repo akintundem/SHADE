@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
         ServiceAuthProperties.class,
         SecurityJwtProperties.class,
         RbacPolicyProperties.class,
-        AwsCognitoProperties.class,
+        Auth0Properties.class,
         ResourceServerJwtProperties.class
 })
 public class SecurityPropertiesConfig {
