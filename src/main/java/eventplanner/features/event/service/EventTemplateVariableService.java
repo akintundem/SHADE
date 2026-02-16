@@ -1,10 +1,12 @@
 package eventplanner.features.event.service;
 
+import eventplanner.features.config.AppProperties;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.entity.Venue;
 import eventplanner.features.event.enums.EmailTemplateType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.time.format.DateTimeFormatter;
@@ -21,6 +23,8 @@ import java.util.Map;
 @Slf4j
 @RequiredArgsConstructor
 public class EventTemplateVariableService {
+
+    private final AppProperties appProperties;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("MMMM d, yyyy");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("h:mm a");
@@ -60,7 +64,7 @@ public class EventTemplateVariableService {
         // Venue information
         addVenueInformation(templateVariables, event.getVenue());
         
-        // Additional event details
+        // Additional event details; actionUrl is sanitized in addTemplateSpecificVariables
         templateVariables.put("coverImageUrl", event.getCoverImageUrl());
         templateVariables.put("eventWebsiteUrl", event.getEventWebsiteUrl());
         templateVariables.put("hashtag", event.getHashtag());
@@ -150,16 +154,49 @@ public class EventTemplateVariableService {
                     templateVariables.put("venue", venueMap.get("fullAddress"));
                 }
                 templateVariables.put("highlight", content);
-                templateVariables.put("actionUrl", event.getEventWebsiteUrl());
+                templateVariables.put("actionUrl", sanitizeEventWebsiteUrl(event.getEventWebsiteUrl(), event.getId()));
                 break;
             case CANCEL_EVENT:
                 templateVariables.put("eventName", event.getName());
                 templateVariables.put("reason", content);
-                templateVariables.put("actionUrl", event.getEventWebsiteUrl());
+                templateVariables.put("actionUrl", sanitizeEventWebsiteUrl(event.getEventWebsiteUrl(), event.getId()));
                 break;
             default:
                 // No additional variables for other types
                 break;
         }
+    }
+
+    /**
+     * Allowlist event website URL for emails to prevent phishing. Only same-origin or relative paths allowed.
+     * Otherwise returns app base URL + event path.
+     */
+    private String sanitizeEventWebsiteUrl(String eventWebsiteUrl, java.util.UUID eventId) {
+        if (!StringUtils.hasText(eventWebsiteUrl)) {
+            return appBaseUrlOrEventPath(eventId);
+        }
+        String base = appProperties.getBaseUrl();
+        if (!StringUtils.hasText(base)) {
+            return appBaseUrlOrEventPath(eventId);
+        }
+        String normalized = eventWebsiteUrl.trim().toLowerCase();
+        String baseNorm = base.endsWith("/") ? base.toLowerCase() : (base + "/").toLowerCase();
+        if (normalized.startsWith(baseNorm) || normalized.equals(base.toLowerCase())) {
+            return eventWebsiteUrl.trim();
+        }
+        if (normalized.startsWith("/")) {
+            return (base.endsWith("/") ? base : base + "/") + eventWebsiteUrl.trim().substring(1);
+        }
+        log.debug("Rejecting external eventWebsiteUrl for email actionUrl, using app base");
+        return appBaseUrlOrEventPath(eventId);
+    }
+
+    private String appBaseUrlOrEventPath(java.util.UUID eventId) {
+        String base = appProperties.getBaseUrl();
+        if (!StringUtils.hasText(base)) {
+            return "";
+        }
+        String path = base.endsWith("/") ? base : base + "/";
+        return eventId != null ? path + "events/" + eventId : path;
     }
 }

@@ -387,8 +387,9 @@ public class UserAccountService {
                 if (StringUtils.hasText(existingSub) && !existingSub.equals(cognitoSub)) {
                     throw new IllegalArgumentException("Token subject does not match existing account");
                 }
+                // SECURITY: Do not link unlinked accounts by email (prevents account hijack)
                 if (!StringUtils.hasText(existingSub)) {
-                    user.setCognitoSub(cognitoSub);
+                    throw new IllegalArgumentException("Account exists with this email; use login or password reset. Do not use signup to link.");
                 }
             }
             applySignupUpdates(user, request, normalizedUsername);
