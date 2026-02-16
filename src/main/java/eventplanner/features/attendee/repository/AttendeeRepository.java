@@ -3,7 +3,6 @@ package eventplanner.features.attendee.repository;
 import eventplanner.security.auth.enums.VisibilityLevel;
 import eventplanner.features.attendee.entity.Attendee;
 import eventplanner.features.attendee.enums.AttendeeStatus;
-import eventplanner.features.event.entity.Event;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -73,17 +72,6 @@ public interface AttendeeRepository extends JpaRepository<Attendee, UUID> {
      */
     @Query("SELECT a FROM Attendee a WHERE a.user.id = :userId")
     List<Attendee> findByUserId(@Param("userId") UUID userId);
-
-    /**
-     * Find events where user is an attendee but not the owner, with database-level pagination.
-     * Uses JOIN FETCH to avoid N+1 queries on the event relationship.
-     */
-    @Query(value = "SELECT DISTINCT e FROM Attendee a JOIN FETCH a.event e " +
-           "WHERE a.user.id = :userId AND e.owner.id <> :userId " +
-           "ORDER BY e.startDateTime DESC",
-           countQuery = "SELECT COUNT(DISTINCT a.event.id) FROM Attendee a " +
-           "WHERE a.user.id = :userId AND a.event.owner.id <> :userId")
-    Page<Event> findInvitedEventsByUserId(@Param("userId") UUID userId, Pageable pageable);
 
     /**
      * Find all PUBLIC attendees for a specific user across all events.

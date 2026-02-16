@@ -64,4 +64,15 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
      */
     @Query("SELECT e FROM Event e WHERE e.owner.id IN :ownerIds AND e.isPublic = true ORDER BY e.startDateTime DESC")
     Page<Event> findByOwnerIdInAndIsPublicTrue(@Param("ownerIds") List<UUID> ownerIds, Pageable pageable);
+
+    /**
+     * Find events where user is an attendee but not the owner, with database-level pagination.
+     * Query is defined on Event so that ORDER BY e.startDateTime is validated against Event.
+     */
+    @Query(value = "SELECT DISTINCT e FROM Event e, Attendee a " +
+           "WHERE a.event = e AND a.user.id = :userId AND e.owner.id <> :userId " +
+           "ORDER BY e.startDateTime DESC",
+           countQuery = "SELECT COUNT(DISTINCT e) FROM Event e, Attendee a " +
+           "WHERE a.event = e AND a.user.id = :userId AND e.owner.id <> :userId")
+    Page<Event> findInvitedEventsByUserId(@Param("userId") UUID userId, Pageable pageable);
 }

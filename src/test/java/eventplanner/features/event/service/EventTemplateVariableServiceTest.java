@@ -1,5 +1,6 @@
 package eventplanner.features.event.service;
 
+import eventplanner.features.config.AppProperties;
 import eventplanner.features.event.entity.Event;
 import eventplanner.features.event.enums.EmailTemplateType;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * Black-box tests for email template variable preparation.
  */
 class EventTemplateVariableServiceTest {
-    private final EventTemplateVariableService service = new EventTemplateVariableService();
+    private final EventTemplateVariableService service = new EventTemplateVariableService(new AppProperties());
 
     @Test
     void prepareTemplateVariables_returnsNonEmptyMap_forMinimalEvent() {

@@ -840,7 +840,7 @@ public class AttendeeService {
         
         Pageable pageable = PaginationUtils.createPageable(page, size);
         
-        // Use database-level pagination with JOIN FETCH to avoid N+1 and in-memory pagination
-        return repository.findInvitedEventsByUserId(userId, pageable);
+        // Query lives on EventRepository so JPQL is validated against Event (e.g. ORDER BY e.startDateTime)
+        return eventRepository.findInvitedEventsByUserId(userId, pageable);
     }
 }
