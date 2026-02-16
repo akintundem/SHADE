@@ -1,6 +1,7 @@
 package eventplanner.features.collaboration.controller;
 
 import eventplanner.features.collaboration.service.EventCollaboratorInviteService;
+import eventplanner.features.event.dto.request.AcceptCollaboratorInviteByTokenRequest;
 import eventplanner.features.event.dto.request.CreateCollaboratorInviteRequest;
 import eventplanner.features.event.dto.request.RespondToCollaboratorInviteRequest;
 import eventplanner.features.event.dto.response.CollaboratorInviteResponse;
@@ -136,15 +137,15 @@ public class EventCollaboratorInviteController {
 
     @PostMapping("/api/v1/collaborator-invites/accept")
     @RequiresPermission(value = RbacPermissions.COLLABORATOR_INVITE_ACCEPT, resources = {"user_id=#principal.id"})
-    @Operation(summary = "Accept collaborator invite by token", description = "Accept a collaborator invite using an email token (requires authentication)")
+    @Operation(summary = "Accept collaborator invite by token", description = "Accept a collaborator invite using an email token (requires authentication). Token is passed in the request body to avoid logging in server/proxy URL logs.")
     public ResponseEntity<EventCollaboratorResponse> acceptInviteByToken(
-            @RequestParam String token,
+            @Valid @RequestBody AcceptCollaboratorInviteByTokenRequest request,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
-        var membership = inviteService.acceptInviteByToken(token, principal);
+        var membership = inviteService.acceptInviteByToken(request.getToken(), principal);
         EventCollaboratorResponse r = new EventCollaboratorResponse();
         r.setCollaboratorId(membership.getId());
         r.setEventId(membership.getEvent() != null ? membership.getEvent().getId() : null);

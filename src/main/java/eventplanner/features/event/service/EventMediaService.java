@@ -20,6 +20,7 @@ import eventplanner.security.auth.repository.UserAccountRepository;
 import eventplanner.common.exception.exceptions.BadRequestException;
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.net.URL;
@@ -36,6 +37,7 @@ import java.util.UUID;
  * Provides presigned URL issuance plus CRUD over stored media records with access checks.
  */
 @Service
+@Transactional
 public class EventMediaService {
 
     private static final BucketAlias EVENT_BUCKET_ALIAS = BucketAlias.EVENT;
@@ -67,6 +69,7 @@ public class EventMediaService {
     /**
      * List event media with optional filtering by category or MIME type prefix.
      */
+    @Transactional(readOnly = true)
     public List<EventMediaResponse> getEventMedia(UUID eventId, UserPrincipal principal, String category, String type) {
         accessControlService.requireMediaView(principal, eventId);
         List<EventStoredObject> items = storedObjectRepository.findByEventIdAndPurposeOrderByCreatedAtDesc(eventId, PURPOSE_EVENT_MEDIA);
@@ -103,6 +106,7 @@ public class EventMediaService {
     /**
      * Fetch a single media item by id.
      */
+    @Transactional(readOnly = true)
     public EventMediaResponse getMedia(UUID eventId, UUID mediaId, UserPrincipal principal) {
         accessControlService.requireMediaView(principal, eventId);
         EventStoredObject item = requireStoredObject(eventId, mediaId, PURPOSE_EVENT_MEDIA);
@@ -151,6 +155,7 @@ public class EventMediaService {
     /**
      * List supporting assets (non-feed media) for an event.
      */
+    @Transactional(readOnly = true)
     public List<EventMediaResponse> getEventAssets(UUID eventId, UserPrincipal principal) {
         accessControlService.requireAssetView(principal, eventId);
         List<EventStoredObject> items = storedObjectRepository.findByEventIdAndPurposeOrderByCreatedAtDesc(eventId, PURPOSE_EVENT_ASSET);
@@ -209,10 +214,24 @@ public class EventMediaService {
     }
 
     /**
-     * Remove cover image metadata (does not delete the stored object).
+     * Remove cover image: clears the event's cover URL, deletes S3 object, and removes stored object record.
      */
     public EventCoverImageResponse removeCoverImage(UUID eventId, UserPrincipal principal) {
         accessControlService.requireCoverManage(principal, eventId);
+
+        // Update the event entity to clear cover image URL
+        Event event = accessControlService.ensureEventExists(eventId);
+        event.setCoverImageUrl(null);
+        eventRepository.save(event);
+
+        // Find and delete cover image stored objects for this event
+        List<EventStoredObject> coverObjects = storedObjectRepository
+            .findByEventIdAndPurposeOrderByCreatedAtDesc(eventId, PURPOSE_EVENT_COVER);
+        for (EventStoredObject obj : coverObjects) {
+            storageService.deleteObject(EVENT_BUCKET_ALIAS, obj.getObjectKey());
+            storedObjectRepository.delete(obj);
+        }
+
         return EventCoverImageResponse.builder()
             .eventId(eventId)
             .coverImageUrl(null)

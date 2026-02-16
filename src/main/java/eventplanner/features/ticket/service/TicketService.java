@@ -45,8 +45,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -787,14 +785,18 @@ public class TicketService {
                 ticketNumber,
                 eventId.toString());
 
-            // Generate hash
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            String hashInput = ticketId.toString() + ticketNumber + eventId.toString() + qrSecretKey;
-            byte[] hashBytes = digest.digest(hashInput.getBytes(StandardCharsets.UTF_8));
-            String hash = bytesToHex(hashBytes).substring(0, 8);
+            // Generate HMAC-SHA256 hash with secret key for cryptographic security
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            javax.crypto.spec.SecretKeySpec keySpec = new javax.crypto.spec.SecretKeySpec(
+                qrSecretKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(keySpec);
+            String hashInput = ticketId.toString() + ":" + ticketNumber + ":" + eventId.toString()
+                + ":" + System.currentTimeMillis();
+            byte[] hashBytes = mac.doFinal(hashInput.getBytes(StandardCharsets.UTF_8));
+            String hash = bytesToHex(hashBytes).substring(0, 32);
 
             return data + ":" + hash;
-        } catch (NoSuchAlgorithmException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to generate QR code hash", e);
         }
     }
@@ -943,18 +945,17 @@ public class TicketService {
     }
 
     private void incrementSoldOrThrow(UUID ticketTypeId, int quantity) {
-        TicketType lockedType = ticketTypeRepository.findByIdForUpdate(ticketTypeId)
-            .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + ticketTypeId));
-
-        if (!lockedType.canPurchase(quantity)) {
-            throw new ApiException(ErrorCode.TICKET_TYPE_SOLD_OUT,
-                "Not enough tickets available");
-        }
-
-        int updated = ticketTypeRepository.incrementQuantitySold(ticketTypeId, quantity);
+        // Use atomic conditional update to check availability and increment in one SQL statement,
+        // avoiding the race condition between lock release and separate increment.
+        int updated = ticketTypeRepository.incrementQuantitySoldAtomic(ticketTypeId, quantity);
         if (updated == 0) {
-            throw new ApiException(ErrorCode.TICKET_TYPE_NOT_AVAILABLE,
-                "Failed to update ticket inventory");
+            // Check if the ticket type exists to provide a better error message
+            TicketType ticketType = ticketTypeRepository.findById(ticketTypeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket type not found: " + ticketTypeId));
+
+            throw new ApiException(ErrorCode.TICKET_TYPE_SOLD_OUT,
+                String.format("Not enough tickets available. Requested: %d, Available: %d",
+                    quantity, ticketType.getQuantityRemaining()));
         }
     }
 

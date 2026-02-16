@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -88,4 +89,22 @@ public interface UserFollowRepository extends JpaRepository<UserFollow, UUID> {
      */
     @Query("SELECT f.followee.id FROM UserFollow f WHERE f.follower.id = :userId AND f.status = 'ACTIVE'")
     java.util.List<UUID> findFollowedUserIdsByFollowerId(@Param("userId") UUID userId);
+
+    /**
+     * Batch check: which of the given followee IDs does the follower actively follow?
+     */
+    @Query("SELECT f.followee.id FROM UserFollow f WHERE f.follower.id = :followerId AND f.followee.id IN :followeeIds AND f.status = 'ACTIVE'")
+    List<UUID> findActiveFolloweeIdsByFollowerIdAndFolloweeIdIn(
+            @Param("followerId") UUID followerId,
+            @Param("followeeIds") List<UUID> followeeIds
+    );
+
+    /**
+     * Batch check: which of the given follower IDs actively follow the followee?
+     */
+    @Query("SELECT f.follower.id FROM UserFollow f WHERE f.followee.id = :followeeId AND f.follower.id IN :followerIds AND f.status = 'ACTIVE'")
+    List<UUID> findActiveFollowerIdsByFolloweeIdAndFollowerIdIn(
+            @Param("followeeId") UUID followeeId,
+            @Param("followerIds") List<UUID> followerIds
+    );
 }

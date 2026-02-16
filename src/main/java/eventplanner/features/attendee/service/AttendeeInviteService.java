@@ -408,7 +408,10 @@ public class AttendeeInviteService {
                     existing.setName(user.getName());
                 }
                 existing.setEmail(user.getEmail());
-                existing.setRsvpStatus(AttendeeStatus.CONFIRMED);
+                existing.setRsvpStatus(
+                    Boolean.TRUE.equals(event.getRequiresApproval()) 
+                        ? AttendeeStatus.PENDING 
+                        : AttendeeStatus.CONFIRMED);
 
                 if (existing.getParticipationVisibility() == null && user.getSettings() != null
                         && user.getSettings().getEventParticipationVisibility() != null) {
@@ -424,7 +427,10 @@ public class AttendeeInviteService {
         Attendee attendee = new Attendee();
         attendee.setEvent(event);
         attendee.setUser(user);
-        attendee.setRsvpStatus(AttendeeStatus.CONFIRMED);
+        attendee.setRsvpStatus(
+            Boolean.TRUE.equals(event.getRequiresApproval()) 
+                ? AttendeeStatus.PENDING 
+                : AttendeeStatus.CONFIRMED);
         
         // Set name and email from user account if available
         if (user.getName() != null) {

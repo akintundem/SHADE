@@ -21,13 +21,11 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -67,21 +65,16 @@ public class FeedPostController {
 
     @GetMapping("/{id}/posts")
     @RequiresPermission(value = RbacPermissions.EVENT_READ, resources = {"event_id=#id"})
-    @Operation(summary = "List posts", description = "List posts for an event. Supports pagination via query parameters.")
-    public ResponseEntity<?> list(
+    @Operation(summary = "List posts", description = "List posts for an event. Always returns paginated response.")
+    public ResponseEntity<PostListResponse> list(
             @Parameter(description = "Event ID") @PathVariable UUID id,
-            @Parameter(description = "Page number (0-indexed)") @RequestParam(required = false) Integer page,
-            @Parameter(description = "Page size (max 100)") @RequestParam(required = false) Integer size,
+            @Parameter(description = "Page number (0-indexed, defaults to 0)") @RequestParam(required = false) Integer page,
+            @Parameter(description = "Page size (max 100, defaults to 20)") @RequestParam(required = false) Integer size,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        // If pagination parameters are provided, use paginated endpoint
-        if (page != null || size != null) {
-            PostListResponse response = postService.listPaginated(id, principal, page, size);
-            return ResponseEntity.ok(response);
-        }
-        // Otherwise, return all posts (backward compatibility)
-        List<FeedPostResponse> posts = postService.list(id, principal);
-        return ResponseEntity.ok(posts);
+        // Always return consistent PostListResponse type regardless of pagination params
+        PostListResponse response = postService.listPaginated(id, principal, page, size);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}/posts/{postId}")

@@ -856,33 +856,9 @@ public class AttendeeService {
         
         int pageNum = Math.max(0, page != null ? page : 0);
         int pageSize = Math.min(100, Math.max(1, size != null ? size : 20));
-        Pageable pageable = PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "event.startDateTime"));
+        Pageable pageable = PageRequest.of(pageNum, pageSize);
         
-        // Get all attendees for this user
-        List<Attendee> attendees = repository.findByUserId(userId);
-        
-        // Extract unique events where user is attendee but not owner, sorted by start date
-        List<Event> allMatchingEvents = attendees.stream()
-                .map(Attendee::getEvent)
-                .filter(event -> event != null && event.getOwner() != null && !event.getOwner().getId().equals(userId))
-                .distinct()
-                .sorted((e1, e2) -> {
-                    if (e1.getStartDateTime() == null && e2.getStartDateTime() == null) return 0;
-                    if (e1.getStartDateTime() == null) return 1;
-                    if (e2.getStartDateTime() == null) return -1;
-                    return e2.getStartDateTime().compareTo(e1.getStartDateTime());
-                })
-                .collect(java.util.stream.Collectors.toList());
-        
-        // Get total count before pagination
-        long totalCount = allMatchingEvents.size();
-        
-        // Apply pagination
-        List<Event> paginatedEvents = allMatchingEvents.stream()
-                .skip((long) pageNum * pageSize)
-                .limit(pageSize)
-                .collect(java.util.stream.Collectors.toList());
-        
-        return new PageImpl<>(paginatedEvents, pageable, totalCount);
+        // Use database-level pagination with JOIN FETCH to avoid N+1 and in-memory pagination
+        return repository.findInvitedEventsByUserId(userId, pageable);
     }
 }

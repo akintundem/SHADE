@@ -192,6 +192,23 @@ public class PostCommentService {
     public long getCommentCount(UUID postId) {
         return commentRepository.countByPostId(postId);
     }
+
+    /**
+     * Batch get comment counts for multiple posts in a single query.
+     */
+    public java.util.Map<UUID, Long> getCommentCountBatch(java.util.List<UUID> postIds) {
+        if (postIds == null || postIds.isEmpty()) {
+            return java.util.Map.of();
+        }
+        java.util.Map<UUID, Long> result = new java.util.HashMap<>();
+        for (UUID id : postIds) {
+            result.put(id, 0L);
+        }
+        for (Object[] row : commentRepository.countByPostIds(postIds)) {
+            result.put((UUID) row[0], (Long) row[1]);
+        }
+        return result;
+    }
     
     private void sendPostOwnerPush(EventFeedPost post, UserAccount actor, String subject, String body) {
         try {

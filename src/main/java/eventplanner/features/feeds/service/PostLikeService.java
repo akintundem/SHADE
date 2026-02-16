@@ -114,6 +114,39 @@ public class PostLikeService {
     public long getLikeCount(UUID postId) {
         return likeRepository.countByPostId(postId);
     }
+
+    /**
+     * Batch get like counts for multiple posts in a single query.
+     */
+    public java.util.Map<UUID, Long> getLikeCountBatch(java.util.List<UUID> postIds) {
+        if (postIds == null || postIds.isEmpty()) {
+            return java.util.Map.of();
+        }
+        java.util.Map<UUID, Long> result = new java.util.HashMap<>();
+        for (UUID id : postIds) {
+            result.put(id, 0L);
+        }
+        for (Object[] row : likeRepository.countByPostIds(postIds)) {
+            result.put((UUID) row[0], (Long) row[1]);
+        }
+        return result;
+    }
+
+    /**
+     * Batch check which posts are liked by a specific user.
+     */
+    public java.util.Map<UUID, Boolean> isLikedBatch(java.util.List<UUID> postIds, UUID userId) {
+        if (userId == null || postIds == null || postIds.isEmpty()) {
+            return java.util.Map.of();
+        }
+        java.util.Set<UUID> likedIds = new java.util.HashSet<>(
+            likeRepository.findLikedPostIdsByUserIdAndPostIds(userId, postIds));
+        java.util.Map<UUID, Boolean> result = new java.util.HashMap<>();
+        for (UUID id : postIds) {
+            result.put(id, likedIds.contains(id));
+        }
+        return result;
+    }
     
     private void sendPostOwnerPush(EventFeedPost post, UserAccount actor, String subject) {
         try {

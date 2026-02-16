@@ -99,12 +99,28 @@ public class TimelineTaskService {
     }
 
     /**
-     * Get all tasks for an event
+     * Get all tasks for an event with batch-loaded checklists to avoid N+1 queries.
      */
     public List<TaskDetailResponse> getAllTasks(UUID eventId, UserPrincipal user) {
         requireTimelineReadAccess(user, eventId);
         List<Task> tasks = taskRepository.findByEventIdOrderByTaskOrderAsc(eventId);
-        return tasks.stream().map(this::mapToTaskDetailResponse).collect(Collectors.toList());
+        
+        if (tasks.isEmpty()) {
+            return List.of();
+        }
+
+        // Batch load all checklists for all tasks in a single query
+        List<UUID> taskIds = tasks.stream().map(Task::getId).collect(Collectors.toList());
+        List<Checklist> allChecklists = checklistRepository.findByTaskIdInOrderByTaskOrderAsc(taskIds);
+        
+        // Group checklists by task ID
+        Map<UUID, List<Checklist>> checklistsByTaskId = allChecklists.stream()
+                .collect(Collectors.groupingBy(c -> c.getTask().getId()));
+
+        return tasks.stream()
+                .map(task -> mapToTaskDetailResponseWithChecklists(task, 
+                    checklistsByTaskId.getOrDefault(task.getId(), List.of())))
+                .collect(Collectors.toList());
     }
 
     /**
@@ -413,6 +429,13 @@ public class TimelineTaskService {
 
     private TaskDetailResponse mapToTaskDetailResponse(Task task) {
         List<Checklist> checklistEntities = checklistRepository.findByTaskIdOrderByTaskOrderAsc(task.getId());
+        return mapToTaskDetailResponseWithChecklists(task, checklistEntities);
+    }
+
+    /**
+     * Map task to response using pre-loaded checklists (avoids N+1 queries).
+     */
+    private TaskDetailResponse mapToTaskDetailResponseWithChecklists(Task task, List<Checklist> checklistEntities) {
         List<TaskDetailResponse.ChecklistItemResponse> checklist = checklistEntities.stream()
             .map(this::mapToChecklistItemResponse)
             .collect(Collectors.toList());
@@ -451,8 +474,13 @@ public class TimelineTaskService {
             .build();
     }
 
+    /**
+     * Recalculate task progress with pessimistic locking to prevent race conditions
+     * from concurrent checklist updates.
+     */
     private void recalculateTaskProgress(UUID taskId) {
-        Task task = taskRepository.findById(taskId).orElse(null);
+        // Acquire pessimistic write lock to prevent concurrent progress updates
+        Task task = taskRepository.findByIdForUpdate(taskId).orElse(null);
         if (task == null) return;
         
         List<Checklist> subtasks = checklistRepository.findByTaskIdOrderByTaskOrderAsc(taskId);
@@ -472,10 +500,13 @@ public class TimelineTaskService {
             task.setCompletedSubtasksCount(completed);
             task.setProgressPercentage(progress);
             
-            if (progress >= 100) {
-                task.setStatus(TimelineStatus.COMPLETED);
-            } else if (progress > 0) {
-                task.setStatus(TimelineStatus.ACTIVE);
+            // Only auto-update status if current status is not manually set to POSTPONED
+            if (task.getStatus() != TimelineStatus.POSTPONED) {
+                if (progress >= 100) {
+                    task.setStatus(TimelineStatus.COMPLETED);
+                } else if (progress > 0) {
+                    task.setStatus(TimelineStatus.ACTIVE);
+                }
             }
         }
         

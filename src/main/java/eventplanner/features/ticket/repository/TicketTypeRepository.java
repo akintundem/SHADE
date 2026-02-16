@@ -37,6 +37,15 @@ public interface TicketTypeRepository extends JpaRepository<TicketType, UUID> {
     @Query("UPDATE TicketType t SET t.quantitySold = t.quantitySold + :quantity WHERE t.id = :id")
     int incrementQuantitySold(@Param("id") UUID id, @Param("quantity") int quantity);
 
+    /**
+     * Atomically increment quantity sold only if enough tickets are available.
+     * Checks availability and updates in a single SQL statement to prevent race conditions.
+     */
+    @Modifying
+    @Query("UPDATE TicketType t SET t.quantitySold = t.quantitySold + :quantity " +
+           "WHERE t.id = :id AND (t.quantityAvailable - t.quantitySold - t.quantityReserved) >= :quantity")
+    int incrementQuantitySoldAtomic(@Param("id") UUID id, @Param("quantity") int quantity);
+
     @Modifying
     @Query("UPDATE TicketType t SET t.quantitySold = t.quantitySold - :quantity WHERE t.id = :id AND t.quantitySold >= :quantity")
     int decrementQuantitySold(@Param("id") UUID id, @Param("quantity") int quantity);

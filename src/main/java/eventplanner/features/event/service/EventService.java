@@ -31,6 +31,7 @@ import eventplanner.features.event.dto.response.EventFeedResponse;
 import eventplanner.features.event.dto.response.FeedPost;
 import eventplanner.features.feeds.entity.EventFeedPost;
 import eventplanner.features.feeds.repository.FeedPostRepository;
+import eventplanner.features.event.entity.EventStoredObject;
 import eventplanner.features.event.repository.EventStoredObjectRepository;
 import eventplanner.features.social.repository.UserFollowRepository;
 import eventplanner.features.budget.service.BudgetService;
@@ -43,7 +44,6 @@ import eventplanner.common.communication.services.core.NotificationTargetResolve
 import eventplanner.common.communication.services.core.dto.BulkNotificationRequest;
 import eventplanner.common.communication.services.core.dto.NotificationTarget;
 import java.util.Set;
-import java.util.Comparator;
 import eventplanner.features.event.repository.EventRoleRepository;
 import eventplanner.security.authorization.service.AuthorizationService;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -1296,28 +1296,17 @@ public class EventService {
         int size = request != null && request.getSize() != null ? request.getSize() : 20;
         size = Math.min(50, Math.max(1, size)); // Enforce max page size
         
-        // Aggregate all posts from various sources
-        List<FeedPost> allPosts = aggregateAllFeedPosts(event, user, request);
-        
-        // Calculate pagination
-        long totalPosts = allPosts.size();
-        int totalPages = (int) Math.ceil((double) totalPosts / size);
-        int start = page * size;
-        int end = Math.min(start + size, allPosts.size());
-        
-        // Get paginated subset
-        List<FeedPost> paginatedPosts = start < allPosts.size() 
-            ? allPosts.subList(start, end) 
-            : new ArrayList<>();
+        // Use database-level pagination to avoid loading all posts into memory
+        org.springframework.data.domain.Page<FeedPost> postPage = aggregateFeedPostsPaginated(event, user, request, page, size);
         
         // Set posts and pagination metadata
-        feed.setPosts(paginatedPosts);
+        feed.setPosts(postPage.getContent());
         feed.setCurrentPage(page);
         feed.setPageSize(size);
-        feed.setTotalPosts(totalPosts);
-        feed.setTotalPages(totalPages);
-        feed.setHasNext(page < totalPages - 1);
-        feed.setHasPrevious(page > 0);
+        feed.setTotalPosts(postPage.getTotalElements());
+        feed.setTotalPages(postPage.getTotalPages());
+        feed.setHasNext(postPage.hasNext());
+        feed.setHasPrevious(postPage.hasPrevious());
         feed.setScope(EventScope.FEED); // Feed view response
         
         // Access control settings
@@ -1344,128 +1333,125 @@ public class EventService {
     }
 
     /**
-     * Aggregate all feed posts from internal sources only
-     * @param event The event entity
-     * @param user The user principal
-     * @param request The feed request with filters
-     * @return List of all feed posts (before pagination)
+     * Aggregate feed posts with database-level pagination to prevent OOM for popular events.
      */
-    private List<FeedPost> aggregateAllFeedPosts(Event event, UserPrincipal user, EventFeedRequest request) {
-        List<FeedPost> posts = new ArrayList<>();
-
+    private org.springframework.data.domain.Page<FeedPost> aggregateFeedPostsPaginated(
+            Event event, UserPrincipal user, EventFeedRequest request, int page, int size) {
+        
         // Don't show feed posts for archived events
         if (Boolean.TRUE.equals(event.getIsArchived())) {
-            return posts;
+            return new org.springframework.data.domain.PageImpl<>(new ArrayList<>());
         }
 
         // Validate access based on event access type
-        // Note: This is a secondary check - buildEventFeed() already checks access,
-        // but this ensures aggregation respects access type
+        if (!hasEventFeedAccess(event, user)) {
+            return new org.springframework.data.domain.PageImpl<>(new ArrayList<>());
+        }
+
+        // Use database-level pagination
+        if (eventPostRepository == null) {
+            return new org.springframework.data.domain.PageImpl<>(new ArrayList<>());
+        }
+
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
+            page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        org.springframework.data.domain.Page<EventFeedPost> eventPostPage = 
+            eventPostRepository.findByEventIdOrderByCreatedAtDesc(event.getId(), pageable);
+
+        // Fetch authors in one shot
+        Map<java.util.UUID, UserAccount> authorsById = Map.of();
+        if (userAccountRepository != null && !eventPostPage.getContent().isEmpty()) {
+            Set<java.util.UUID> authorIds = eventPostPage.getContent().stream()
+                    .map(EventFeedPost::getCreatedBy)
+                    .filter(java.util.Objects::nonNull)
+                    .map(UserAccount::getId)
+                    .collect(Collectors.toSet());
+            if (!authorIds.isEmpty()) {
+                authorsById = userAccountRepository.findAllById(authorIds).stream()
+                        .collect(Collectors.toMap(UserAccount::getId, a -> a));
+            }
+        }
+
+        // Batch load media objects to avoid N+1 queries
+        Map<java.util.UUID, EventStoredObject> mediaObjectsById = Map.of();
+        if (eventStoredObjectRepository != null) {
+            Set<java.util.UUID> mediaObjectIds = eventPostPage.getContent().stream()
+                    .map(EventFeedPost::getMediaObjectId)
+                    .filter(java.util.Objects::nonNull)
+                    .collect(Collectors.toSet());
+            if (!mediaObjectIds.isEmpty()) {
+                mediaObjectsById = eventStoredObjectRepository.findAllById(mediaObjectIds).stream()
+                        .collect(Collectors.toMap(EventStoredObject::getId, o -> o));
+            }
+        }
+
+        final Map<java.util.UUID, UserAccount> finalAuthorsById = authorsById;
+        final Map<java.util.UUID, EventStoredObject> finalMediaById = mediaObjectsById;
+        
+        List<FeedPost> feedPosts = eventPostPage.getContent().stream().map(p -> {
+            FeedPost fp = new FeedPost();
+            fp.setId(p.getId());
+            fp.setType(p.getPostType() != null ? p.getPostType().name() : "TEXT");
+            fp.setContent(p.getContent());
+            fp.setPostedAt(p.getCreatedAt());
+
+            UserAccount author = p.getCreatedBy() != null ? finalAuthorsById.get(p.getCreatedBy().getId()) : null;
+            fp.setAuthorName(author != null ? author.getName() : null);
+            fp.setAuthorAvatarUrl(author != null ? author.getProfilePictureUrl() : null);
+
+            // Attach media if available (using batch-loaded objects)
+            if (p.getMediaObjectId() != null && s3StorageService != null) {
+                EventStoredObject obj = finalMediaById.get(p.getMediaObjectId());
+                if (obj != null && obj.getEvent() != null && event.getId().equals(obj.getEvent().getId())) {
+                    fp.setMediaUrl(s3StorageService.generatePresignedGetUrl(BucketAlias.EVENT, obj.getObjectKey(), java.time.Duration.ofMinutes(10)).toString());
+                }
+            }
+
+            fp.setLikes(0);
+            fp.setComments(0);
+            return fp;
+        }).collect(Collectors.toList());
+
+        return new org.springframework.data.domain.PageImpl<>(feedPosts, pageable, eventPostPage.getTotalElements());
+    }
+
+    /**
+     * Check if a user has access to view event feed posts based on event access type.
+     */
+    private boolean hasEventFeedAccess(Event event, UserPrincipal user) {
         EventAccessType accessType = event.getAccessType() != null ? event.getAccessType() : EventAccessType.OPEN;
         
-        // For TICKETED events, verify user has valid ticket
-        if (accessType == EventAccessType.TICKETED && user != null) {
-            if (ticketRepository != null) {
-                boolean hasValidTicket = ticketRepository.hasValidTicketByUserId(event.getId(), user.getId());
-                if (!hasValidTicket && user.getUsername() != null) {
-                    // Check by email as fallback
-                    hasValidTicket = ticketRepository.hasValidTicketByEmail(event.getId(), user.getUsername());
+        if (accessType == EventAccessType.TICKETED && user != null && ticketRepository != null) {
+            boolean hasValidTicket = ticketRepository.hasValidTicketByUserId(event.getId(), user.getId());
+            if (!hasValidTicket && user.getUsername() != null) {
+                hasValidTicket = ticketRepository.hasValidTicketByEmail(event.getId(), user.getUsername());
+            }
+            if (!hasValidTicket && 
+                (event.getOwner() == null || !event.getOwner().getId().equals(user.getId()))) {
+                boolean isCollaborator = authorizationService != null && 
+                    authorizationService.hasEventMembership(user, event.getId());
+                if (!isCollaborator) {
+                    return false;
                 }
-                // Owner and collaborators have access (checked in buildEventFeed)
-                // If no valid ticket and not owner/collaborator, return empty
-                if (!hasValidTicket && 
-                    (event.getOwner() == null || !event.getOwner().getId().equals(user.getId()))) {
-                    // Double-check if user is collaborator
-                    boolean isCollaborator = false;
-                    if (authorizationService != null) {
-                        isCollaborator = authorizationService.hasEventMembership(user, event.getId());
-                    }
+            }
+        }
+        
+        if (accessType == EventAccessType.RSVP_REQUIRED && user != null && attendeeRepository != null) {
+            Optional<eventplanner.features.attendee.entity.Attendee> attendee = 
+                attendeeRepository.findByEventIdAndUserId(event.getId(), user.getId());
+            if (attendee.isEmpty() || 
+                attendee.get().getRsvpStatus() != eventplanner.features.attendee.enums.AttendeeStatus.CONFIRMED) {
+                if (event.getOwner() == null || !event.getOwner().getId().equals(user.getId())) {
+                    boolean isCollaborator = authorizationService != null && 
+                        authorizationService.hasEventMembership(user, event.getId());
                     if (!isCollaborator) {
-                        return posts; // No access
+                        return false;
                     }
                 }
             }
         }
         
-        // For RSVP_REQUIRED events, verify user has confirmed RSVP
-        if (accessType == EventAccessType.RSVP_REQUIRED && user != null) {
-            if (attendeeRepository != null) {
-                Optional<eventplanner.features.attendee.entity.Attendee> attendee = 
-                    attendeeRepository.findByEventIdAndUserId(event.getId(), user.getId());
-                if (attendee.isEmpty() || 
-                    attendee.get().getRsvpStatus() != eventplanner.features.attendee.enums.AttendeeStatus.CONFIRMED) {
-                    // Owner and collaborators have access (checked in buildEventFeed)
-                    if ((event.getOwner() == null || !event.getOwner().getId().equals(user.getId()))) {
-                        boolean isCollaborator = false;
-                        if (authorizationService != null) {
-                            isCollaborator = authorizationService.hasEventMembership(user, event.getId());
-                        }
-                        if (!isCollaborator) {
-                            return posts; // No access
-                        }
-                    }
-                }
-            }
-        }
-
-        // Internal app posts (Feeds)
-        if (eventPostRepository != null) {
-            List<EventFeedPost> eventPosts = eventPostRepository.findByEventIdOrderByCreatedAtDesc(event.getId());
-
-            // Fetch authors in one shot (no stubs)
-            Map<java.util.UUID, UserAccount> authorsById = Map.of();
-            if (userAccountRepository != null) {
-                Set<java.util.UUID> authorIds = eventPosts.stream()
-                        .map(EventFeedPost::getCreatedBy)
-                        .filter(java.util.Objects::nonNull)
-                        .map(UserAccount::getId)
-                        .collect(Collectors.toSet());
-                if (!authorIds.isEmpty()) {
-                    authorsById = userAccountRepository.findAllById(authorIds).stream()
-                            .collect(Collectors.toMap(UserAccount::getId, a -> a));
-                }
-            }
-
-            for (EventFeedPost p : eventPosts) {
-                FeedPost fp = new FeedPost();
-                fp.setId(p.getId());
-                fp.setType(p.getPostType() != null ? p.getPostType().name() : "TEXT");
-                fp.setContent(p.getContent());
-                fp.setPostedAt(p.getCreatedAt());
-
-                UserAccount author = p.getCreatedBy() != null ? authorsById.get(p.getCreatedBy().getId()) : null;
-                fp.setAuthorName(author != null ? author.getName() : null);
-                fp.setAuthorAvatarUrl(author != null ? author.getProfilePictureUrl() : null);
-
-                // Attach media if available
-                if (p.getMediaObjectId() != null && eventStoredObjectRepository != null && s3StorageService != null) {
-                    eventStoredObjectRepository.findById(p.getMediaObjectId()).ifPresent(obj -> {
-                        if (obj.getEvent() != null && event.getId().equals(obj.getEvent().getId())) {
-                            fp.setMediaUrl(s3StorageService.generatePresignedGetUrl(BucketAlias.EVENT, obj.getObjectKey(), java.time.Duration.ofMinutes(10)).toString());
-                        }
-                    });
-                }
-
-                // Like/comment counts not implemented yet; default to 0 for now
-                fp.setLikes(0);
-                fp.setComments(0);
-
-                posts.add(fp);
-            }
-        }
-        
-        // Apply filters if specified
-        if (request != null && request.getPostType() != null && !request.getPostType().equals("ALL")) {
-            posts = posts.stream()
-                .filter(post -> request.getPostType().equalsIgnoreCase(post.getType()))
-                .collect(Collectors.toList());
-        }
-        
-        // Sort by posted date (newest first)
-        posts.sort(Comparator.comparing(FeedPost::getPostedAt, 
-            Comparator.nullsLast(Comparator.reverseOrder())));
-        
-        return posts;
+        return true;
     }
 
     /**

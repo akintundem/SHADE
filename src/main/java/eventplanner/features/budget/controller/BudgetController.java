@@ -27,11 +27,6 @@ import java.util.UUID;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
 import eventplanner.security.auth.service.UserPrincipal;
-import eventplanner.security.authorization.service.AuthorizationService;
-import eventplanner.features.collaboration.service.EventPermissionEvaluator;
-import eventplanner.features.collaboration.repository.EventUserRepository;
-import eventplanner.features.collaboration.entity.EventUser;
-import eventplanner.features.collaboration.enums.EventPermission;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 /**
@@ -43,37 +38,14 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 public class BudgetController {
 
 	private final BudgetService budgetService;
-	private final AuthorizationService authorizationService;
-	private final EventPermissionEvaluator permissionEvaluator;
-	private final EventUserRepository eventUserRepository;
 
-	public BudgetController(BudgetService budgetService,
-							AuthorizationService authorizationService,
-							EventPermissionEvaluator permissionEvaluator,
-							EventUserRepository eventUserRepository) {
+	public BudgetController(BudgetService budgetService) {
 		this.budgetService = budgetService;
-		this.authorizationService = authorizationService;
-		this.permissionEvaluator = permissionEvaluator;
-		this.eventUserRepository = eventUserRepository;
-	}
-
-	private void requireBudgetAccess(UUID eventId, UserPrincipal user, EventPermission permission) {
-		if (user == null) {
-			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-		}
-		if (authorizationService.isAdmin(user) || authorizationService.isEventOwner(user, eventId)) {
-			return;
-		}
-		EventUser membership = eventUserRepository.findByEventIdAndUserId(eventId, user.getId())
-				.orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
-						"Access denied: you are not a collaborator on this event"));
-		if (!permissionEvaluator.hasPermission(membership, permission)) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-					"Access denied: missing " + permission + " permission");
-		}
 	}
 
 	// ==================== CORE BUDGET CRUD ====================
+	// Authorization is handled solely by @RequiresPermission (RBAC) to avoid divergence
+	// between dual authorization layers.
 
 	@GetMapping
     @RequiresPermission(value = RbacPermissions.BUDGET_READ, resources = {"event_id=#eventId"})
@@ -89,7 +61,6 @@ public class BudgetController {
 			@PathVariable String eventId,
 			@AuthenticationPrincipal UserPrincipal user) {
 		UUID uuid = UUID.fromString(eventId);
-		requireBudgetAccess(uuid, user, EventPermission.VIEW_EVENT);
 		Budget budget = budgetService.getByEventId(uuid)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
 		return BudgetHttpUtil.wrapResponse(budget, BudgetDetailResponse.fromEntity(budget));
@@ -110,7 +81,6 @@ public class BudgetController {
 			@RequestHeader(value = "If-Match", required = false) String ifMatch,
 			@AuthenticationPrincipal UserPrincipal user) {
 		UUID uuid = UUID.fromString(eventId);
-		requireBudgetAccess(uuid, user, EventPermission.MANAGE_BUDGET);
 		Budget existing = budgetService.getByEventId(uuid)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
 
@@ -132,7 +102,6 @@ public class BudgetController {
 			@PathVariable String eventId,
 			@AuthenticationPrincipal UserPrincipal user) {
 		UUID eventUuid = UUID.fromString(eventId);
-		requireBudgetAccess(eventUuid, user, EventPermission.VIEW_EVENT);
 		Budget budget = budgetService.getByEventId(eventUuid)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Budget not found"));
 		List<BudgetCategory> categories = budgetService.listCategories(budget.getId());

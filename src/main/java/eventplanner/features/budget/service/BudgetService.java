@@ -237,7 +237,10 @@ public class BudgetService {
     public void deleteLineItem(Budget budget, UUID itemId) {
         BudgetLineItem item = lineItemRepository.findByIdWithCategory(itemId)
                 .orElseGet(() -> lineItemRepository.findById(itemId).orElse(null));
-        if (item == null) return;
+        if (item == null) {
+            throw new eventplanner.common.exception.exceptions.ResourceNotFoundException(
+                "Budget line item not found: " + itemId);
+        }
 
         UUID budgetId = item.getBudget().getId();
         if (!budget.getId().equals(budgetId)) {

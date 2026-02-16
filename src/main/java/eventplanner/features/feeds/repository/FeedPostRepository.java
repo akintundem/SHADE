@@ -5,6 +5,7 @@ import eventplanner.features.feeds.entity.EventFeedPost;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -60,6 +61,13 @@ public interface FeedPostRepository extends JpaRepository<EventFeedPost, UUID> {
             @Param("userId") UUID userId,
             @Param("originalPostId") UUID originalPostId
     );
+
+    /**
+     * Atomically increment repost count to prevent race conditions.
+     */
+    @Modifying
+    @Query("UPDATE EventFeedPost p SET p.repostCount = COALESCE(p.repostCount, 0) + 1 WHERE p.id = :postId")
+    int incrementRepostCount(@Param("postId") UUID postId);
 }
 
 

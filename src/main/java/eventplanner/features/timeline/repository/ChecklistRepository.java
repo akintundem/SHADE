@@ -14,5 +14,11 @@ public interface ChecklistRepository extends JpaRepository<Checklist, UUID> {
     
     @Query("SELECT c FROM Checklist c WHERE c.task.id = :taskId ORDER BY c.taskOrder ASC")
     List<Checklist> findByTaskIdOrderByTaskOrderAsc(@Param("taskId") UUID taskId);
+
+    /**
+     * Batch load checklists for multiple tasks in a single query to avoid N+1.
+     */
+    @Query("SELECT c FROM Checklist c WHERE c.task.id IN :taskIds ORDER BY c.task.id ASC, c.taskOrder ASC")
+    List<Checklist> findByTaskIdInOrderByTaskOrderAsc(@Param("taskIds") List<UUID> taskIds);
 }
 

@@ -363,24 +363,20 @@ public class FeedPostService {
         }
 
         // Extract author information from relationships (already loaded or will be lazy loaded)
-        // Since we're using relationships, we can access authors directly from posts
         Map<UUID, UserAccount> authorsById = posts.stream()
                 .map(EventFeedPost::getCreatedBy)
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .collect(Collectors.toMap(UserAccount::getId, Function.identity(), (a, b) -> a));
 
-        // Load engagement counts in batch
+        // Load engagement counts using batch queries (3 queries instead of 3*N)
         List<UUID> postIds = posts.stream().map(EventFeedPost::getId).collect(Collectors.toList());
-        Map<UUID, Long> likeCounts = postIds.stream()
-                .collect(Collectors.toMap(Function.identity(), likeService::getLikeCount));
-        Map<UUID, Long> commentCounts = postIds.stream()
-                .collect(Collectors.toMap(Function.identity(), commentService::getCommentCount));
+        Map<UUID, Long> likeCounts = likeService.getLikeCountBatch(postIds);
+        Map<UUID, Long> commentCounts = commentService.getCommentCountBatch(postIds);
         
         UUID currentUserId = principal != null ? principal.getId() : null;
         Map<UUID, Boolean> likedByUser = currentUserId != null 
-                ? postIds.stream().collect(Collectors.toMap(Function.identity(), 
-                        postId -> likeService.isLiked(postId, currentUserId)))
+                ? likeService.isLikedBatch(postIds, currentUserId)
                 : Map.of();
 
         return posts.stream()
@@ -616,11 +612,11 @@ public class FeedPostService {
             repost.setQuoteText(trimmedQuote);
         }
 
-        // Increment repost count on original post
-        originalPost.setRepostCount((originalPost.getRepostCount() != null ? originalPost.getRepostCount() : 0) + 1);
-        postRepository.save(originalPost);
-
+        // Save repost first, then atomically increment count on original post
         EventFeedPost saved = postRepository.save(repost);
+
+        // Atomic increment prevents race conditions with concurrent reposts
+        postRepository.incrementRepostCount(originalPost.getId());
 
         // Convert to response
         return enrichPostsWithEngagement(List.of(saved), eventId, principal).get(0);

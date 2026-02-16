@@ -106,6 +106,15 @@ public class EventCollaboratorInviteService {
             }
         }
 
+        // Prevent self-invite
+        if (inviteeUserId != null && inviteeUserId.equals(inviter.getId())) {
+            throw new IllegalArgumentException("Cannot invite yourself as a collaborator");
+        }
+        if (inviteeEmail != null && inviter.getUser() != null 
+                && inviteeEmail.equalsIgnoreCase(inviter.getUser().getEmail())) {
+            throw new IllegalArgumentException("Cannot invite yourself as a collaborator");
+        }
+
         // Prevent inviting someone already on the event
         if (inviteeUserId != null) {
             if (eventUserRepository.findByEventIdAndUserId(eventId, inviteeUserId).isPresent()) {
@@ -421,7 +430,9 @@ public class EventCollaboratorInviteService {
             variables.put("message", invite.getMessage());
         }
 
-        String acceptUrl = appBaseUrl + "/api/v1/collaborator-invites/accept?token=" + rawToken;
+        // Token is now submitted via POST body, not URL query string, to avoid logging in server/proxy logs.
+        // The front-end should extract the token from this URL and submit it via POST body.
+        String acceptUrl = appBaseUrl + "/collaborator-invites/accept/" + rawToken;
         variables.put("acceptUrl", acceptUrl);
 
         // CRITICAL: Collaboration invitation emails must be delivered

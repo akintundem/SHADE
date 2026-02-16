@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -226,10 +225,7 @@ public class VenueService {
                 throw new BadRequestException("Both latitude and longitude must be provided");
             }
 
-            validateGeoCoordinates(
-                venue.getLatitude(), venue.getLatitude(),
-                venue.getLongitude(), venue.getLongitude()
-            );
+            validateSinglePointCoordinates(venue.getLatitude(), venue.getLongitude());
         }
 
         // Validate capacity if provided
@@ -239,7 +235,21 @@ public class VenueService {
     }
 
     /**
-     * Validate geographic coordinates
+     * Validate a single geographic coordinate point (latitude + longitude).
+     */
+    private void validateSinglePointCoordinates(BigDecimal latitude, BigDecimal longitude) {
+        if (latitude.compareTo(BigDecimal.valueOf(-90)) < 0 ||
+            latitude.compareTo(BigDecimal.valueOf(90)) > 0) {
+            throw new BadRequestException("Latitude must be between -90 and 90");
+        }
+        if (longitude.compareTo(BigDecimal.valueOf(-180)) < 0 ||
+            longitude.compareTo(BigDecimal.valueOf(180)) > 0) {
+            throw new BadRequestException("Longitude must be between -180 and 180");
+        }
+    }
+
+    /**
+     * Validate geographic coordinate ranges (bounding box).
      */
     private void validateGeoCoordinates(
         BigDecimal minLat,
