@@ -84,7 +84,7 @@ public class VenueController {
     ) {
         List<Venue> venues;
 
-        // Geo-spatial search (bounding box)
+        // PostGIS: bounding-box search (ST_MakeEnvelope)
         if (request.getMinLatitude() != null && request.getMaxLatitude() != null &&
             request.getMinLongitude() != null && request.getMaxLongitude() != null) {
 
@@ -95,12 +95,12 @@ public class VenueController {
                 request.getMaxLongitude()
             );
         }
-        // Geo-spatial search (radius)
+        // PostGIS: radius search (ST_DWithin, km)
         else if (request.getLatitude() != null && request.getLongitude() != null) {
             venues = venueService.findVenuesNearLocation(
                 request.getLatitude(),
                 request.getLongitude(),
-                request.getRadiusDegrees()
+                request.getRadiusKm()
             );
         }
         // Search by city and state with capacity filter

@@ -120,7 +120,18 @@ public class Event extends BaseEntity {
     
     @Embedded
     private Venue venue;
-    
+
+    /**
+     * Sync embedded venue's PostGIS Point before persist/update.
+     */
+    @PrePersist
+    @PreUpdate
+    private void syncVenueLocation() {
+        if (venue != null) {
+            venue.syncLocation();
+        }
+    }
+
     // Platform payment tracking
     @Column(name = "platform_payment_id")
     private UUID platformPaymentId;

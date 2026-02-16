@@ -1,19 +1,19 @@
 package eventplanner.security.auth.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Index;
-import jakarta.persistence.Table;
+import eventplanner.common.util.GeoUtils;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.locationtech.jts.geom.Point;
 
 import java.math.BigDecimal;
 
 /**
  * Entity representing an available city location.
+ * Uses PostGIS geometry(Point, 4326) for spatial queries.
  */
 @Entity
 @Table(
@@ -43,6 +43,19 @@ public class Location extends BaseEntity {
 
     @Column(name = "longitude", precision = 10, scale = 7, nullable = false)
     private BigDecimal longitude;
+
+    /**
+     * PostGIS Point (SRID 4326) for spatial queries.
+     * Automatically synced from latitude/longitude before persist/update.
+     */
+    @Column(columnDefinition = "geometry(Point, 4326)")
+    private Point location;
+
+    @PrePersist
+    @PreUpdate
+    private void syncLocation() {
+        this.location = GeoUtils.createPoint(latitude, longitude);
+    }
 
     @Column(name = "gst_rate_bps")
     private Integer gstRateBps = 0;

@@ -5,7 +5,9 @@ import lombok.Data;
 import java.math.BigDecimal;
 
 /**
- * Request DTO for searching venues
+ * Request DTO for searching venues.
+ * Geo-spatial search is now handled natively by PostGIS — radiusKm is
+ * passed directly (no more degree-conversion hack).
  */
 @Data
 public class VenueSearchRequest {
@@ -16,12 +18,16 @@ public class VenueSearchRequest {
     private String country;
     private Integer minCapacity;
 
-    // Geo-spatial search parameters
+    /** Centre-point latitude for radius search (PostGIS ST_DWithin). */
     private BigDecimal latitude;
+
+    /** Centre-point longitude for radius search (PostGIS ST_DWithin). */
     private BigDecimal longitude;
+
+    /** Search radius in kilometres (defaults to 10 km on the server side). */
     private BigDecimal radiusKm;
 
-    // Bounding box search parameters
+    // Bounding box search parameters (PostGIS ST_MakeEnvelope)
     private BigDecimal minLatitude;
     private BigDecimal maxLatitude;
     private BigDecimal minLongitude;
@@ -30,15 +36,4 @@ public class VenueSearchRequest {
     private String venueType;
     private Boolean parkingRequired;
     private Boolean transitRequired;
-
-    /**
-     * Convert radius in kilometers to degrees (approximate)
-     * ~111km per degree latitude
-     */
-    public BigDecimal getRadiusDegrees() {
-        if (radiusKm == null) {
-            return BigDecimal.valueOf(0.09); // Default ~10km
-        }
-        return radiusKm.divide(BigDecimal.valueOf(111), 6, java.math.RoundingMode.HALF_UP);
-    }
 }

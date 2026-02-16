@@ -1,17 +1,20 @@
 package eventplanner.features.venue.entity;
 
 import eventplanner.common.domain.entity.BaseEntity;
+import eventplanner.common.util.GeoUtils;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.locationtech.jts.geom.Point;
 
 import java.math.BigDecimal;
 
 /**
  * Venue entity - normalized from events.venue JSON field.
  * Reusable venues across multiple events.
+ * Uses PostGIS geometry(Point, 4326) for spatial queries.
  */
 @Entity
 @Table(name = "venues",
@@ -72,16 +75,29 @@ public class Venue extends BaseEntity {
     private String postalCode;
 
     /**
-     * Latitude for geo queries
+     * Latitude — kept for API compatibility; synced to PostGIS Point on persist.
      */
     @Column(name = "latitude", precision = 10, scale = 8)
     private BigDecimal latitude;
 
     /**
-     * Longitude for geo queries
+     * Longitude — kept for API compatibility; synced to PostGIS Point on persist.
      */
     @Column(name = "longitude", precision = 11, scale = 8)
     private BigDecimal longitude;
+
+    /**
+     * PostGIS Point (SRID 4326) — single source of truth for spatial queries.
+     * Automatically synced from latitude/longitude before persist/update.
+     */
+    @Column(columnDefinition = "geometry(Point, 4326)")
+    private Point location;
+
+    @PrePersist
+    @PreUpdate
+    private void syncLocation() {
+        this.location = GeoUtils.createPoint(latitude, longitude);
+    }
 
     /**
      * Venue capacity (maximum attendees)

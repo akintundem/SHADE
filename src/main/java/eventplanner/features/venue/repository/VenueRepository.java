@@ -6,12 +6,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
 /**
  * Repository for Venue entity.
+ * Geo-spatial queries powered by PostGIS (SRID 4326, geography casts for metre accuracy).
  */
 @Repository
 public interface VenueRepository extends JpaRepository<Venue, UUID> {
@@ -41,14 +41,57 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
     List<Venue> searchByName(@Param("name") String name);
 
     /**
-     * Find venues within a bounding box (for geo-based searches).
-     * Simple implementation - for production, consider PostGIS or spatial indexes.
+     * PostGIS: find venues within {@code radiusMeters} of a point, ordered by distance.
+     * Uses geography cast for accurate great-circle distance in metres.
      */
-    @Query("SELECT v FROM Venue v WHERE v.latitude BETWEEN :minLat AND :maxLat AND v.longitude BETWEEN :minLng AND :maxLng")
+    @Query(value =
+        "SELECT * FROM venues v " +
+        "WHERE v.deleted_at IS NULL " +
+        "  AND v.location IS NOT NULL " +
+        "  AND ST_DWithin(" +
+        "        v.location::geography, " +
+        "        ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, " +
+        "        :radiusMeters" +
+        "      ) " +
+        "ORDER BY ST_Distance(" +
+        "        v.location::geography, " +
+        "        ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography" +
+        "      )",
+        nativeQuery = true)
+    List<Venue> findNearLocation(
+        @Param("lat") double lat,
+        @Param("lng") double lng,
+        @Param("radiusMeters") double radiusMeters
+    );
+
+    /**
+     * PostGIS: find venues inside a bounding box.
+     * Uses ST_MakeEnvelope (minLng, minLat, maxLng, maxLat, SRID).
+     */
+    @Query(value =
+        "SELECT * FROM venues v " +
+        "WHERE v.deleted_at IS NULL " +
+        "  AND v.location IS NOT NULL " +
+        "  AND ST_Within(v.location, ST_MakeEnvelope(:minLng, :minLat, :maxLng, :maxLat, 4326))",
+        nativeQuery = true)
     List<Venue> findWithinBounds(
-        @Param("minLat") BigDecimal minLat,
-        @Param("maxLat") BigDecimal maxLat,
-        @Param("minLng") BigDecimal minLng,
-        @Param("maxLng") BigDecimal maxLng
+        @Param("minLat") double minLat,
+        @Param("maxLat") double maxLat,
+        @Param("minLng") double minLng,
+        @Param("maxLng") double maxLng
+    );
+
+    /**
+     * PostGIS: calculate distance in metres between a venue and a point.
+     */
+    @Query(value =
+        "SELECT ST_Distance(v.location::geography, " +
+        "       ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography) " +
+        "FROM venues v WHERE v.id = :venueId",
+        nativeQuery = true)
+    Double calculateDistanceMeters(
+        @Param("venueId") UUID venueId,
+        @Param("lat") double lat,
+        @Param("lng") double lng
     );
 }

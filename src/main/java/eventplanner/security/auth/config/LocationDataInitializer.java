@@ -1,6 +1,7 @@
 package eventplanner.security.auth.config;
 
 import com.opencsv.CSVReader;
+import eventplanner.common.util.GeoUtils;
 import eventplanner.security.auth.entity.Location;
 import eventplanner.security.auth.repository.LocationRepository;
 import jakarta.annotation.PostConstruct;
@@ -62,6 +63,7 @@ public class LocationDataInitializer {
                     location.setCountry(country);
                     location.setLatitude(latitude);
                     location.setLongitude(longitude);
+                    location.setLocation(GeoUtils.createPoint(latitude, longitude));
                     location.setGstRateBps(gstBps);
                     location.setPstRateBps(pstBps);
                     location.setHstRateBps(hstBps);

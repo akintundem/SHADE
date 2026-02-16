@@ -1,5 +1,6 @@
 package eventplanner.features.venue.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -7,7 +8,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Response DTO for venue data
+ * Response DTO for venue data.
+ * {@code distanceMeters} is populated only for proximity-based searches.
  */
 @Data
 public class VenueResponse {
@@ -33,6 +35,10 @@ public class VenueResponse {
     private Boolean publicTransitNearby;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /** Distance from search point in metres — only present for proximity queries. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Double distanceMeters;
 
     /**
      * Get full address as a single string

@@ -1207,6 +1207,7 @@ public class EventService {
         venue.setLongitude(dto.getLongitude());
         venue.setGooglePlaceId(dto.getGooglePlaceId());
         venue.setGooglePlaceData(dto.getGooglePlaceData());
+        venue.syncLocation();
         return venue;
     }
 

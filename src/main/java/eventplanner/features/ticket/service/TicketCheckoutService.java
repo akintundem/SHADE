@@ -632,15 +632,26 @@ public class TicketCheckoutService {
             return 0;
         }
         var venue = event.getVenue();
-        if (venue.getCity() == null || venue.getCountry() == null) {
-            return 0;
+
+        // 1. Try exact city/state/country name match
+        var location = (venue.getCity() != null && venue.getCountry() != null)
+            ? locationRepository
+                .findFirstByCityIgnoreCaseAndStateIgnoreCaseAndCountryIgnoreCase(
+                    venue.getCity(), venue.getState(), venue.getCountry())
+                .or(() -> locationRepository.findFirstByCityIgnoreCaseAndCountryIgnoreCase(
+                    venue.getCity(), venue.getCountry()))
+                .orElse(null)
+            : null;
+
+        // 2. PostGIS fallback: find nearest location by coordinates
+        if (location == null && venue.getLatitude() != null && venue.getLongitude() != null) {
+            location = locationRepository
+                .findNearestLocation(
+                    venue.getLatitude().doubleValue(),
+                    venue.getLongitude().doubleValue())
+                .orElse(null);
         }
-        var location = locationRepository
-            .findFirstByCityIgnoreCaseAndStateIgnoreCaseAndCountryIgnoreCase(
-                venue.getCity(), venue.getState(), venue.getCountry())
-            .or(() -> locationRepository.findFirstByCityIgnoreCaseAndCountryIgnoreCase(
-                venue.getCity(), venue.getCountry()))
-            .orElse(null);
+
         if (location == null) {
             return 0;
         }

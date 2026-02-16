@@ -1,5 +1,6 @@
 package eventplanner.features.venue.service;
 
+import eventplanner.common.util.GeoUtils;
 import eventplanner.features.venue.entity.Venue;
 import eventplanner.features.venue.repository.VenueRepository;
 import eventplanner.common.exception.exceptions.BadRequestException;
@@ -17,13 +18,15 @@ import java.util.UUID;
 
 /**
  * Service for managing venues.
- * Handles venue CRUD operations, search, and geo-spatial queries.
+ * Handles venue CRUD operations, search, and PostGIS-powered spatial queries.
  */
 @Service
 @Transactional
 @RequiredArgsConstructor
 @Slf4j
 public class VenueService {
+
+    private static final double DEFAULT_RADIUS_KM = 10.0;
 
     private final VenueRepository venueRepository;
 
@@ -45,7 +48,6 @@ public class VenueService {
 
         Venue venue = getVenueById(venueId);
 
-        // Update fields
         if (updatedVenue.getName() != null) {
             venue.setName(updatedVenue.getName());
         }
@@ -145,8 +147,8 @@ public class VenueService {
     }
 
     /**
-     * Find venues within geographic bounds (bounding box)
-     * Useful for "find venues near me" functionality
+     * PostGIS: find venues within a geographic bounding box.
+     * Delegates to PostGIS ST_Within + ST_MakeEnvelope.
      */
     public List<Venue> findVenuesWithinBounds(
         BigDecimal minLatitude,
@@ -154,32 +156,53 @@ public class VenueService {
         BigDecimal minLongitude,
         BigDecimal maxLongitude
     ) {
-        log.debug("Finding venues within bounds: lat [{}, {}], lng [{}, {}]",
+        log.debug("PostGIS: finding venues within bounds: lat [{}, {}], lng [{}, {}]",
             minLatitude, maxLatitude, minLongitude, maxLongitude);
 
         validateGeoCoordinates(minLatitude, maxLatitude, minLongitude, maxLongitude);
 
-        return venueRepository.findWithinBounds(minLatitude, maxLatitude, minLongitude, maxLongitude);
+        return venueRepository.findWithinBounds(
+            minLatitude.doubleValue(),
+            maxLatitude.doubleValue(),
+            minLongitude.doubleValue(),
+            maxLongitude.doubleValue()
+        );
     }
 
     /**
-     * Find venues near a specific location (within radius)
-     * Radius is approximate in degrees (~111km per degree latitude)
+     * PostGIS: find venues near a specific location within a radius in kilometres.
+     * Uses ST_DWithin with geography cast for accurate great-circle distance.
      */
     public List<Venue> findVenuesNearLocation(
         BigDecimal latitude,
         BigDecimal longitude,
-        BigDecimal radiusDegrees
+        BigDecimal radiusKm
     ) {
-        log.debug("Finding venues near location: ({}, {}) within radius: {}",
-            latitude, longitude, radiusDegrees);
+        validateSinglePointCoordinates(latitude, longitude);
 
-        BigDecimal minLat = latitude.subtract(radiusDegrees);
-        BigDecimal maxLat = latitude.add(radiusDegrees);
-        BigDecimal minLng = longitude.subtract(radiusDegrees);
-        BigDecimal maxLng = longitude.add(radiusDegrees);
+        double radiusMeters = radiusKm != null
+            ? GeoUtils.kmToMeters(radiusKm)
+            : GeoUtils.kmToMeters(DEFAULT_RADIUS_KM);
 
-        return findVenuesWithinBounds(minLat, maxLat, minLng, maxLng);
+        log.debug("PostGIS: finding venues near ({}, {}) within {} m",
+            latitude, longitude, radiusMeters);
+
+        return venueRepository.findNearLocation(
+            latitude.doubleValue(),
+            longitude.doubleValue(),
+            radiusMeters
+        );
+    }
+
+    /**
+     * PostGIS: calculate distance in metres between a venue and a point.
+     */
+    public Double calculateDistanceMeters(UUID venueId, BigDecimal latitude, BigDecimal longitude) {
+        return venueRepository.calculateDistanceMeters(
+            venueId,
+            latitude.doubleValue(),
+            longitude.doubleValue()
+        );
     }
 
     /**
@@ -219,7 +242,6 @@ public class VenueService {
             throw new BadRequestException("Venue name is required");
         }
 
-        // Validate coordinates if provided
         if (venue.getLatitude() != null || venue.getLongitude() != null) {
             if (venue.getLatitude() == null || venue.getLongitude() == null) {
                 throw new BadRequestException("Both latitude and longitude must be provided");
@@ -228,7 +250,6 @@ public class VenueService {
             validateSinglePointCoordinates(venue.getLatitude(), venue.getLongitude());
         }
 
-        // Validate capacity if provided
         if (venue.getCapacity() != null && venue.getCapacity() < 0) {
             throw new BadRequestException("Capacity cannot be negative");
         }
@@ -257,19 +278,16 @@ public class VenueService {
         BigDecimal minLng,
         BigDecimal maxLng
     ) {
-        // Latitude must be between -90 and 90
         if (minLat.compareTo(BigDecimal.valueOf(-90)) < 0 ||
             maxLat.compareTo(BigDecimal.valueOf(90)) > 0) {
             throw new BadRequestException("Latitude must be between -90 and 90");
         }
 
-        // Longitude must be between -180 and 180
         if (minLng.compareTo(BigDecimal.valueOf(-180)) < 0 ||
             maxLng.compareTo(BigDecimal.valueOf(180)) > 0) {
             throw new BadRequestException("Longitude must be between -180 and 180");
         }
 
-        // Min must be less than max
         if (minLat.compareTo(maxLat) > 0) {
             throw new BadRequestException("Minimum latitude must be less than maximum latitude");
         }
