@@ -54,7 +54,7 @@ spring:
     defer-datasource-initialization: false
   
   # Database Configuration
-  # Uses environment variables directly (set in Railway or .env.prod for local)
+  # Uses environment variables from .env (see .env.example for template)
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE:require}
     driver-class-name: org.postgresql.Driver
@@ -68,7 +68,7 @@ spring:
       max-lifetime: 1800000
   
   redis:
-    # Uses environment variables directly (set in Railway or .env.prod for local)
+    # Uses environment variables from .env (see .env.example for template)
     host: ${SPRING_REDIS_HOST}
     port: ${SPRING_REDIS_PORT}
     password: ${SPRING_REDIS_PASSWORD:}

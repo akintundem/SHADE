@@ -100,14 +100,14 @@ services:
       - ./src:/app/src
       - ./pom.xml:/app/pom.xml
     env_file:
-      - ${ENV_FILE:-.env.prod}
+      - ${ENV_FILE:-.env}
     environment:
       # Enable Spring Boot DevTools for hot-reload
       SPRING_DEVTOOLS_RESTART_ENABLED: "true"
       SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "true"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: "2s"
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: "1s"
-      # Note: All other environment variables are loaded from env_file (.env.prod)
+      # Note: All other environment variables are loaded from env_file (.env)
 
     # Extended startup time for Maven build on first run
     healthcheck:
