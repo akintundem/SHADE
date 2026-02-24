@@ -1,6 +1,8 @@
 # Entity-relationship diagram
 
-This diagram reflects the main domain model and database tables. Schema is managed by **Flyway** migrations under `src/main/resources/db/migration/`; Hibernate uses `ddl-auto: validate` and does not change the schema.
+This document describes the main domain model and database tables for the Event Planner backend. Schema may be managed by **Flyway** migrations under `src/main/resources/db/migration/`, or by Hibernate DDL for initial setup; when using Flyway, Hibernate is set to `ddl-auto: validate` and does not change the schema.
+
+---
 
 ## Diagram
 
@@ -356,6 +358,99 @@ erDiagram
   EVENTS ||--o{ COMMUNICATIONS : communications
 ```
 
+---
+
+## Table and aggregate descriptions
+
+### Auth and users
+
+| Table | Description |
+|-------|-------------|
+| **auth_users** | Core user identity: `id` (PK), `email`, `username`, `auth_sub` (IdP subject), `name`. One row per user; identity is tied to OIDC and verified email at signup. |
+| **user_settings** | Per-user settings: default location, preferences pointer. Links to `auth_users` and optionally `locations`. |
+| **user_preferences** | Key-value user preferences (`preference_key`, `value`). |
+| **locations** | Reusable location records: `city`, `state`, `country`. Used by user settings and events/venues. |
+
+### Venues and events
+
+| Table | Description |
+|-------|-------------|
+| **venues** | Standalone venue records: `name`, `address`, `city`, `country`. Events can reference a venue via `venue_id` or store venue data inline. |
+| **events** | Main event entity: `owner_id`, optional `venue_id`, `name`, `event_status`, `access_type` (open, RSVP, invite-only, ticketed). Tracks `timeline_published_by`, `archived_by` for lifecycle. |
+| **event_metadata** | Key-value extensible metadata per event. |
+| **event_reminders** | Reminder definitions for an event. |
+| **event_notification_settings** | Per-event notification configuration. |
+| **event_stored_objects** | Event media/stored files; `uploaded_by` references user. |
+| **event_waitlist_entries** | Waitlist for events (e.g. when capacity or registration is closed). |
+
+### Collaboration
+
+| Table | Description |
+|-------|-------------|
+| **event_users** | Membership: which users belong to which event; `user_type` distinguishes member kinds. |
+| **event_user_permissions** | Per-member permission overrides (granular permissions beyond role). |
+| **event_roles** | Role assignment per user per event (`role_name`, e.g. ORGANIZER, COORDINATOR, STAFF); `assigned_by` for audit. |
+| **event_collaborator_invites** | Pending collaborator invites: `inviter_user_id`, `invitee_user_id`. Accept/decline via token in POST body. |
+
+### Budget
+
+| Table | Description |
+|-------|-------------|
+| **currencies** | Currency codes (e.g. USD, EUR). |
+| **budgets** | One budget per event; `owner_id` for ownership. |
+| **budget_categories** | Categories within a budget. |
+| **budget_line_items** | Line items under a category; amounts and metadata. |
+
+### Tickets
+
+| Table | Description |
+|-------|-------------|
+| **ticket_types** | Ticket type definition per event (name, capacity, etc.). |
+| **ticket_type_metadata** | Key-value metadata for a ticket type. |
+| **ticket_price_tiers** | Price tiers (`price_minor` for currency minor units). |
+| **ticket_type_dependencies** | Required ticket type relationships (e.g. VIP requires General). |
+| **ticket_promotions** | Promotions applicable to event or ticket type. |
+| **ticket_type_templates** | User-level reusable ticket type templates (not event-scoped). |
+| **ticket_checkouts** | Checkout session; `purchaser_id` links to user. |
+| **ticket_checkout_items** | Items in a checkout (ticket type + quantity). |
+| **tickets** | Issued tickets: link to event, ticket type, attendee, checkout. |
+| **ticket_metadata** | Key-value metadata per issued ticket. |
+| **ticket_waitlist_entries** | Waitlist for a ticket type. |
+| **ticket_approval_requests** | Approval workflow for restricted ticket types. |
+
+### Attendees
+
+| Table | Description |
+|-------|-------------|
+| **attendees** | Attendance record: event + user (or external guest). |
+| **attendee_invites** | Invites sent to users; accept/decline via token in POST body (token in fragment in email links). |
+| **attendee_rsvp_history** | History of RSVP status changes; `previous_status`, `new_status`, `changed_by`. |
+
+### Timeline (tasks)
+
+| Table | Description |
+|-------|-------------|
+| **tasks** | Task entity: event, `assigned_to`, `title`, `status`, ordering. |
+| **checklists** | Checklist items belonging to a task. |
+
+### Feeds
+
+| Table | Description |
+|-------|-------------|
+| **event_posts** | Posts in an event feed; `created_by` user. |
+| **post_comments** | Comments on a post. |
+| **post_likes** | Likes on a post. |
+| **user_follows** | Social graph: follower/following between users. |
+
+### Communications
+
+| Table | Description |
+|-------|-------------|
+| **device_tokens** | Push notification device tokens per user. |
+| **communications** | Audit log of sent communications (email/push); content stored redacted. |
+
+---
+
 ## Notes
 
 - **Auth:** Users are in `auth_users` (IdP `sub` in `auth_sub`, email, username). `user_settings` and `locations` support profile and location search. `user_preferences` stores key-value preferences.
@@ -365,3 +460,4 @@ erDiagram
 - **Timeline:** Represented by `tasks` and `checklists`; the event has timeline publication state (e.g. `timeline_published`, `timeline_published_by`). There are no separate `event_timelines` or `timeline_items` tables.
 - **Feeds:** `event_posts`, `post_comments`, `post_likes`.
 - **Communications:** `device_tokens` for push; `communications` stores send records with redacted content for audit.
+- **Identifiers:** Primary keys are UUIDs unless otherwise defined in migrations. Foreign keys follow naming conventions (e.g. `event_id`, `user_id`, `ticket_type_id`).
