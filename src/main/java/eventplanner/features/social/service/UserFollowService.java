@@ -10,6 +10,7 @@ import eventplanner.features.social.entity.UserFollow;
 import eventplanner.features.social.repository.UserFollowRepository;
 import eventplanner.security.auth.entity.UserAccount;
 import eventplanner.security.auth.repository.UserAccountRepository;
+import eventplanner.security.auth.service.ProfileImageService;
 import eventplanner.security.auth.service.UserPrincipal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -30,11 +31,14 @@ public class UserFollowService {
 
     private final UserFollowRepository followRepository;
     private final UserAccountRepository userAccountRepository;
+    private final ProfileImageService profileImageService;
 
     public UserFollowService(UserFollowRepository followRepository,
-                            UserAccountRepository userAccountRepository) {
+                            UserAccountRepository userAccountRepository,
+                            ProfileImageService profileImageService) {
         this.followRepository = followRepository;
         this.userAccountRepository = userAccountRepository;
+        this.profileImageService = profileImageService;
     }
 
     /**
@@ -219,7 +223,7 @@ public class UserFollowService {
         response.setId(user.getId());
         response.setName(user.getName());
         response.setEmail(user.getEmail());
-        response.setProfilePictureUrl(user.getProfilePictureUrl());
+        response.setProfilePictureUrl(profileImageService.presignProfilePictureUrl(user.getProfilePictureUrl()));
         response.setIsFollowing(isFollowing);
         response.setIsFollowedBy(isFollowedBy);
         response.setIsMutual(isFollowing && isFollowedBy);

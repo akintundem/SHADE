@@ -1,6 +1,8 @@
 package eventplanner.features.feeds.service;
 
 import eventplanner.common.exception.exceptions.ResourceNotFoundException;
+import eventplanner.common.storage.s3.registry.BucketAlias;
+import eventplanner.common.storage.s3.services.S3StorageService;
 import eventplanner.features.event.service.EventAccessControlService;
 import eventplanner.features.feeds.dto.request.CommentCreateRequest;
 import eventplanner.features.feeds.dto.request.CommentUpdateRequest;
@@ -31,22 +33,33 @@ import java.util.HashMap;
 @Transactional
 public class PostCommentService {
 
+    private static final java.time.Duration AVATAR_URL_TTL = java.time.Duration.ofMinutes(15);
+
     private final PostCommentRepository commentRepository;
     private final FeedPostRepository postRepository;
     private final UserAccountRepository userAccountRepository;
     private final EventAccessControlService accessControlService;
     private final NotificationService notificationService;
+    private final S3StorageService storageService;
 
     public PostCommentService(PostCommentRepository commentRepository,
                              FeedPostRepository postRepository,
                              UserAccountRepository userAccountRepository,
                              EventAccessControlService accessControlService,
-                             NotificationService notificationService) {
+                             NotificationService notificationService,
+                             S3StorageService storageService) {
         this.commentRepository = commentRepository;
         this.postRepository = postRepository;
         this.userAccountRepository = userAccountRepository;
         this.accessControlService = accessControlService;
         this.notificationService = notificationService;
+        this.storageService = storageService;
+    }
+
+    private String presignAvatar(PostComment comment) {
+        if (comment.getUser() == null) return null;
+        return storageService.presignedGetUrlFromBareUrl(
+                BucketAlias.USER, comment.getUser().getProfilePictureUrl(), AVATAR_URL_TTL);
     }
 
     public CommentResponse createComment(UUID eventId, UUID postId, UserPrincipal principal, CommentCreateRequest request) {
@@ -85,8 +98,8 @@ public class PostCommentService {
         
         log.debug("User {} created comment {} on post {}", principal.getId(), saved.getId(), postId);
         sendPostOwnerPush(post, user, "New comment on your post", content);
-        
-        return CommentResponse.from(saved);
+
+        return CommentResponse.from(saved, presignAvatar(saved));
     }
 
     public CommentResponse updateComment(UUID eventId, UUID postId, UUID commentId, UserPrincipal principal, CommentUpdateRequest request) {
@@ -128,8 +141,8 @@ public class PostCommentService {
         PostComment updated = commentRepository.save(comment);
         
         log.debug("User {} updated comment {}", principal.getId(), commentId);
-        
-        return CommentResponse.from(updated);
+
+        return CommentResponse.from(updated, presignAvatar(updated));
     }
 
     public void deleteComment(UUID eventId, UUID postId, UUID commentId, UserPrincipal principal) {

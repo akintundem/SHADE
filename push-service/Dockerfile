@@ -6,6 +6,8 @@ RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit
 
 # Copy application files (excluding cred folder for security)
 COPY server.js config.js ./
-COPY .env* ./
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
 
 CMD ["npm", "run", "start"]

@@ -404,7 +404,8 @@ public class FeedPostService {
         if (post.getCreatedBy() != null) {
             resp.setCreatedBy(post.getCreatedBy().getId());
             resp.setAuthorName(post.getCreatedBy().getName());
-            resp.setAuthorAvatarUrl(post.getCreatedBy().getProfilePictureUrl());
+            resp.setAuthorAvatarUrl(storageService.presignedGetUrlFromBareUrl(
+                    BucketAlias.USER, post.getCreatedBy().getProfilePictureUrl(), DOWNLOAD_URL_TTL));
         } else {
             resp.setCreatedBy(null);
         }
@@ -431,7 +432,8 @@ public class FeedPostService {
             if (originalPost.getCreatedBy() != null) {
                 originalPostInfo.setAuthorId(originalPost.getCreatedBy().getId());
                 originalPostInfo.setAuthorName(originalPost.getCreatedBy().getName());
-                originalPostInfo.setAuthorAvatarUrl(originalPost.getCreatedBy().getProfilePictureUrl());
+                originalPostInfo.setAuthorAvatarUrl(storageService.presignedGetUrlFromBareUrl(
+                        BucketAlias.USER, originalPost.getCreatedBy().getProfilePictureUrl(), DOWNLOAD_URL_TTL));
             }
 
             // Add media URL for original post if it has media

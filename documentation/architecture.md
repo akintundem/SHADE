@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Event Planner backend (sade-mono) is a **Java Spring Boot monolith** that provides REST APIs for event planning, ticketing, attendees, budgets, timelines, feeds, and notifications. It runs behind **Kong** as the API gateway, with separate services for **AI** (Python/FastAPI), **email** (Node/Resend), and **push notifications** (Node/Firebase). Persistence is **PostgreSQL**; schema can be managed by **Flyway** migrations or, for initial setup, Hibernate DDL. **Redis** is used for caching. The front end and mobile clients authenticate via **OIDC (e.g. Auth0)** and send a Bearer JWT on each request.
+The Event Planner backend (**sade-mono**) is a **Java Spring Boot monolith** providing REST APIs for event planning, ticketing, attendees, budgets, timelines, feeds, and notifications. It runs behind **Kong** as the API gateway, with separate microservices for **AI** (Python/FastAPI), **email** (Node.js/Resend), and **push notifications** (Node.js/Firebase). Persistence is **PostgreSQL + PostGIS**; schema is managed by Hibernate DDL (initial) or Flyway migrations. **Redis** is used for caching and JWT revocation. **MinIO** (Homebrew, native on host) provides S3-compatible object storage — all stored objects are accessed exclusively via **pre-signed URLs**. The front end and mobile clients authenticate via **Auth0 OIDC** and send a Bearer JWT on each request.
 
 ---
 
@@ -11,31 +11,35 @@ The Event Planner backend (sade-mono) is a **Java Spring Boot monolith** that pr
 | Layer | Technology |
 |-------|------------|
 | Gateway | Kong 3.x (declarative config in `infra/kong/kong.yml`) |
-| API | Java 17+, Spring Boot 3, Spring Security 6, OAuth2 Resource Server (JWT) |
-| Auth | OIDC (e.g. Auth0: issuer, JWKS, audience) |
-| Database | PostgreSQL (Hibernate + optional Flyway; `ddl-auto` configurable) |
-| Cache | Redis (Lettuce client; also Caffeine in-process for some caches) |
-| Queue | RabbitMQ (email and push jobs) |
-| Storage | S3-compatible (MinIO locally; AWS S3 in production — event media, user assets) |
-| AI | Python FastAPI (OpenAI for event cover image generation) |
-| Email | Node + Resend (React Email templates) |
-| Push | Node + Firebase Cloud Messaging |
+| API | Java 17, Spring Boot 3.3, Spring Security 6, OAuth2 Resource Server (JWT) |
+| Auth | OIDC via **Auth0** (issuer, JWKS, audience); migrated from AWS Cognito |
+| Database | PostgreSQL + PostGIS extension (Hibernate; Flyway optional) |
+| Cache | Redis (Lettuce); JWT revocation blocklist; Caffeine (in-process) |
+| Queue | RabbitMQ 3.13 — email and push jobs with **DLX/DLQ** retry topology |
+| Storage | **MinIO** (native Homebrew on host, port 9000) — S3-compatible, private buckets, pre-signed URLs |
+| RBAC | Custom aspect (`@RequiresPermission`) + YAML policy (`RBAC_policy.yml`); integrity via SHA-256 digest |
+| Resilience | Resilience4j circuit breakers + Spring Retry |
+| AI | Python FastAPI; OpenAI image generation; Kong gateway secret auth |
+| Email | Node.js TypeScript worker (Resend + React Email templates) |
+| Push | Node.js worker (Firebase Cloud Messaging) |
 
 ---
 
-## Ports and URLs
+## Ports and URLs (local development)
 
 | Component | Port(s) | Notes |
 |-----------|---------|--------|
-| **Kong (proxy)** | 8000 (HTTP), 8443 (HTTPS) | Client-facing; all API traffic should go here. |
-| **Kong Admin** | 8001 | Bound to 127.0.0.1 only in container; not published in `docker-compose`. |
-| **Monolith (Spring Boot)** | 8080 | Internal; exposed only within Docker network. |
-| **AI service** | 8000 (internal) | Exposed as `/ai-service` via Kong; path stripped. |
-| **RabbitMQ** | 5672 (AMQP), 15672 (Management UI) | Used by email and push workers. |
-| **MinIO** | 9000 (API), 9001 (Console) | S3-compatible storage when running via Docker. |
+| **Kong (proxy)** | 8000 (HTTP), 8443 (HTTPS) | Client-facing; all API traffic should go here |
+| **Kong Admin** | 8001 | Bound to `127.0.0.1` only; not published in `docker-compose` |
+| **Monolith (Spring Boot)** | 8080 | Internal to Docker network; hot-reload via DevTools |
+| **AI service** | 8000 (internal) | Exposed as `/ai-service/` via Kong; path stripped |
+| **RabbitMQ** | 5672 (AMQP), 15672 (Management UI) | Management UI bound to `127.0.0.1:15672` only |
+| **MinIO** | 9000 (S3 API), 9001 (Console) | **Runs natively on host via Homebrew** (not in Docker) |
+| **PostgreSQL** | 5432 | External; on host or managed service |
+| **Redis** | 6379 | External; on host or managed service |
 
-- **Base URL for clients:** `http://localhost:8000` (or your deployed host). Monolith APIs live under `/api/v1/`; AI under `/ai-service/`.
-- **Direct monolith (dev only):** `http://localhost:8080` when running the JAR locally; bypasses Kong (service key may still be required depending on config).
+- **Client base URL:** `http://localhost:8000` (Kong). Monolith APIs: `/api/v1/`; AI: `/ai-service/`.
+- **Direct monolith (dev only):** `http://localhost:8080` — bypasses Kong (service key may still be required).
 
 ---
 
@@ -44,10 +48,17 @@ The Event Planner backend (sade-mono) is a **Java Spring Boot monolith** that pr
 ```mermaid
 flowchart LR
   C[Web/Mobile Clients]
-  K[Kong API Gateway]
+  IDP[("Auth0 IdP")]
+  K[Kong API Gateway\n:8000/:8443]
+
+  subgraph H["Host machine"]
+    PG[(PostgreSQL\n:5432)]
+    RD[(Redis\n:6379)]
+    MN[("MinIO\n:9000/:9001\nHomebrew native")]
+  end
 
   subgraph N["Docker network: event-planner-network"]
-    subgraph EP_APP["Event Planner Monolith (Spring Boot)"]
+    subgraph EP_APP["Event Planner Monolith (Spring Boot :8080)"]
       EP_API[REST API]
       EP_AUTH[Auth & RBAC]
       EP_EVENTS[Events]
@@ -57,21 +68,15 @@ flowchart LR
       EP_ATTENDEES[Attendees]
       EP_FEEDS[Feeds]
       EP_COLLAB[Collaboration]
+      EP_STORAGE[S3StorageService\npre-signed URLs]
     end
-    AI["AI Service (Python)"]
-    ES["Email Service (Node)"]
-    PS["Push Service (Node)"]
-    RMQ["RabbitMQ"]
+    AI["AI Service\n(Python/FastAPI)"]
+    ES["Email Service\n(Node.js/TypeScript)"]
+    PS["Push Service\n(Node.js)"]
+    RMQ["RabbitMQ :5672\nDLX/DLQ topology"]
   end
 
-  subgraph X["External"]
-    PG[(PostgreSQL)]
-    RD[(Redis)]
-    S3[("S3")]
-    IDP[("IdP (Auth0)")]
-  end
-
-  C -->|Sign-in| IDP
+  C -->|sign-in| IDP
   IDP -->|JWT| C
   C -->|Bearer JWT| K
   K -->|X-API-Key + JWT| EP_API
@@ -85,114 +90,214 @@ flowchart LR
   EP_API --> EP_ATTENDEES
   EP_API --> EP_FEEDS
   EP_API --> EP_COLLAB
+  EP_API --> EP_STORAGE
 
-  EP_API -->|jobs| RMQ
-  RMQ --> ES
-  RMQ --> PS
+  EP_API -->|publish jobs| RMQ
+  RMQ -->|email.queue| ES
+  RMQ -->|push.queue| PS
+  RMQ -->|dead.email / dead.push| RMQ
+
   EP_API --> PG
   EP_API --> RD
-  EP_API --> S3
-  EP_AUTH -->|validate JWT| IDP
-  AI -->|optional JWT| IDP
+  EP_STORAGE -->|presigned GET/PUT| MN
+  EP_AUTH -->|JWKS validate| IDP
+  EP_AUTH -->|JTI blocklist| RD
+  AI -->|JWKS or secret| IDP
 ```
 
 ---
 
 ## Features and modules
 
-- **Auth & users** — OIDC JWT validation, user provisioning (optional auto-provision from JWT), profile, settings, locations, device tokens. Signup requires verified email in the token; account linking rules prevent hijack.
-- **Events** — CRUD, status, visibility, access type (open, RSVP, invite-only, ticketed), venue (embedded or linked), reminders, notification settings, stored objects (media), waitlist.
-- **Collaboration** — Event members (`event_users`), roles (`event_roles` by role name), per-member permissions (`event_user_permissions`), collaborator invites (accept by token in POST body).
-- **Attendees** — Registration, RSVP, check-in, invites. Invite acceptance by token is **POST only** (body); email links use fragment so the token is not in the URL.
-- **Tickets** — Ticket types, price tiers, promotions, dependencies, checkouts, issuance, validation, waitlist, approval requests.
-- **Budget** — One budget per event, categories, line items, revenue tracking.
-- **Timeline** — Tasks and checklists (no separate “timeline” entity); event has timeline publication state.
-- **Feeds** — Event posts, comments, likes.
-- **Communications** — Email and push via RabbitMQ; templates and payload validation in workers; communication records stored with redacted content.
-- **AI** — Cover image generation (OpenAI); gateway secret or JWT; allowlisted image fetch URLs.
+- **Auth & users** — Auth0 OIDC JWT validation, auto-provisioning (verified email required), profile, settings, locations, device tokens. Account linking guards: `email_verified` required, ADMIN accounts cannot be linked via OIDC flow. Logout revokes JTI via Redis blocklist (`TokenRevocationService`).
+- **Events** — CRUD, status, visibility, access type (open, RSVP, invite-only, ticketed), venue (embedded or linked), reminders, notification settings, stored objects (media), waitlist. Cover images stored in MinIO; pre-signed URLs returned at every read boundary.
+- **Collaboration** — Event members (`event_users`), roles (`event_roles`), per-member permissions (`event_user_permissions`), collaborator invites (accepted by POST body token, never query string).
+- **Attendees** — Registration, RSVP, check-in, invites. Token delivered in fragment (`#<token>`), accepted via `POST /api/v1/attendees/invites/accept` with body.
+- **Tickets** — Ticket types, price tiers, promotions, dependencies, checkouts, issuance, validation (pessimistic write lock prevents TOCTOU race), waitlist, approval requests. Max page size 50.
+- **Budget** — One budget per event; categories, line items, revenue tracking.
+- **Timeline** — Tasks and checklists.
+- **Feeds** — Event posts, comments, likes. Author avatar pre-signed at read boundary.
+- **Communications** — Email and push via RabbitMQ DLX/DLQ pattern (max 3 retries, then dead-lettered).
+- **AI** — Cover image generation (OpenAI); Kong secret auth with `secrets.compare_digest`; allowlisted SSRF-safe image fetch URLs; image dimensions validated against `ALLOWED_IMAGE_SIZES` whitelist.
+- **Object storage** — All media stored as private objects in MinIO. Bare URL stored in DB; `S3StorageService.presignedGetUrlFromBareUrl()` generates time-limited signed URLs at every API read boundary. `mc anonymous` public access is **not** used.
 
 ---
 
-## API surface (main resource paths)
+## Object storage: MinIO (native Homebrew)
 
-All monolith REST APIs are versioned under **`/api/v1/`**. The following are the main controller base paths (details in [api-overview.md](api-overview.md)):
+MinIO is **not** in `docker-compose.yml`. It runs directly on the host machine via Homebrew.
 
-| Base path | Purpose |
-|-----------|---------|
-| `/api/v1/auth` | Auth info, signup, logout, profile image |
-| `/api/v1/auth/users` | User management (admin/self) |
-| `/api/v1/users/me/preferences` | User preferences |
-| `/api/v1/users` | User follow (social), user-related endpoints |
-| `/api/v1/events` | Event CRUD, media, reminders, notification settings, waitlist, feeds (posts, comments, likes), collaboration |
-| `/api/v1/events/{eventId}/budget` | Budget, categories, line items |
-| `/api/v1/events/{eventId}/tasks` | Timeline tasks |
-| `/api/v1/events/{eventId}/ticket-types` | Ticket types |
-| `/api/v1/events/{eventId}/tickets/checkout` | Checkout sessions |
-| `/api/v1/events/{eventId}/tickets` | Ticket requests, validation |
-| `/api/v1/attendees` | Attendees, invites, RSVP, check-in, QR codes |
-| `/api/v1/tickets` | Ticket wallet, ticket operations |
-| `/api/v1/ticket-type-templates` | User-level ticket type templates |
-| `/api/v1/venues` | Venues |
-| `/api/v1/currencies` | Currencies (e.g. for budget) |
-| `/api/v1/push-notifications` | Device token registration |
-| `/api/v1/collaborator-invites` | Incoming invites, accept/decline (also under events) |
-| `/tasks/{taskId}/checklist` | Checklist items for a task |
+```bash
+# Install
+brew install minio/stable/minio mc
 
-- **OpenAPI:** Swagger UI at `/swagger-ui`, API docs at `/v3/api-docs` (when accessed via monolith; in production often behind same base URL as gateway).
-- **Actuator:** Health, info, metrics, Prometheus, circuit breakers, retry at `/actuator/*`.
+# Start (data dir: ~/minio-data)
+minio server ~/minio-data --console-address :9001
+
+# Or as a service
+brew services start minio
+
+# Access
+#   S3 API:  http://localhost:9000
+#   Console: http://localhost:9001
+#   Credentials: set MINIO_ROOT_USER / MINIO_ROOT_PASSWORD in .env
+```
+
+Buckets are created on first run by the monolith (or manually via Console/mc). Both buckets use **private** access — no public anonymous reads.
+
+```bash
+# Create buckets manually (after MinIO is running)
+mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
+mc mb local/shade-user-assets
+mc mb local/shade-event-assets
+# DO NOT run: mc anonymous set download local/<bucket>
+```
+
+The Java app connects to MinIO using:
+- `AWS_S3_ENDPOINT=http://localhost:9000` (or `http://host.docker.internal:9000` when running in Docker)
+- `AWS_S3_PATH_STYLE=true` (required for MinIO path-style URLs)
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` = MinIO root credentials
+
+---
+
+## Pre-signed URL pattern
+
+All object storage access uses pre-signed URLs. No object is directly public.
+
+```
+Client request
+    ↓
+API read boundary (e.g. EventService.toResponse())
+    ↓
+S3StorageService.presignedGetUrlFromBareUrl(BucketAlias, bareUrl, Duration)
+    ↓  parses stored URL → strips bucket segment → extracts object key
+generatePresignedGetUrl(bucket, key, expiry)
+    ↓
+Returns time-limited signed URL to client (default: 1 hour)
+```
+
+**Applied at all read boundaries:**
+
+| Boundary | File |
+|----------|------|
+| Event responses (detail + feed) | `EventService.java` |
+| Event media (cover image) | `EventMediaService.java` |
+| Profile picture URL | `ProfileImageService.java` |
+| User account responses | `UserAccountService.java` + `AuthMapper.java` |
+| Feed post author avatars | `FeedPostService.java` |
+| Comment author avatars | `PostCommentService.java` |
+| Follow/follower profile responses | `UserFollowService.java` |
+
+---
+
+## Messaging: RabbitMQ DLX/DLQ topology
+
+```
+Monolith (producer)
+    │ publish
+    ▼
+notifications exchange (direct, durable)
+    ├─→ [routing: push.notifications] → push.queue (x-dlx: dlx.notifications, x-dlrk: dead.push)
+    └─→ [routing: email.notifications] → email.queue (x-dlx: dlx.notifications, x-dlrk: dead.email)
+         │ consume                           │ consume
+         ▼                                   ▼
+   push-service                      email-service
+         │ on failure (nack, requeue=false)  │
+         └───────────────┬───────────────────┘
+                         ▼
+               dlx.notifications exchange (direct, durable)
+                    ├─→ [dead.push]  → dlq.push  (durable)
+                    └─→ [dead.email] → dlq.email (durable)
+```
+
+**Retry protocol:**
+- Transient errors: republish to main exchange with `x-retry-count` header incremented; max 3 attempts then dead-letter.
+- Permanent errors (bad JSON / HTTP 400 validation): dead-letter immediately, no retry.
+- Connection errors: `process.exit(1)` → container restarts; reconnect with `RABBITMQ_RECONNECT_MS` delay on graceful close.
+
+See `SECURITY_REVIEW.md` Section 3 for full operational DLQ documentation (inspect/replay commands, alert thresholds).
 
 ---
 
 ## Request flow
 
-1. **Clients** sign in with the IdP (e.g. Auth0) and receive a JWT. They call Kong (e.g. `:8000` or `:8443`) with `Authorization: Bearer <token>`.
-2. **Kong** adds the gateway key (`X-API-Key` for the monolith, `x-ai-secret` for the AI service), applies CORS, request-size limits, correlation ID, and routes `/` to the monolith and `/ai-service` to the AI service. Kong Admin (8001) is not exposed by default.
-3. **Monolith** — `ServiceApiKeyFilter` ensures either a valid Bearer JWT (user request) or a valid `X-API-Key` (and for service-role paths, the key is required). JWT is validated with OIDC JWKS. RBAC is enforced per endpoint via `@RequiresPermission` and `RBAC_policy.yml`.
-4. **AI service** — Accepts requests with a valid gateway secret (constant-time compare) or, when configured, a valid OIDC JWT. Image generation and fetch use allowlisted URLs and timeouts.
-5. **Email / push** — Monolith publishes jobs to RabbitMQ; Node workers consume, validate payload (recipient count, lengths, formats), and send. Push batch size is capped (e.g. 500 tokens per message).
+1. **Clients** sign in with Auth0, receive a JWT. Call Kong (`:8000`/`:8443`) with `Authorization: Bearer <token>`.
+2. **Kong** strips client-supplied `X-API-Key` / `x-ai-secret`, injects server-side values, applies CORS, request-size limits (50MB), correlation ID (`X-Request-ID`), and security headers. Routes `/` → monolith (8080); `/ai-service/` → AI service (8000 internal).
+3. **Monolith** — `ServiceApiKeyFilter` validates `X-API-Key` (always, even when Bearer is present). JWT validated against Auth0 JWKS; `TokenRevocationFilter` checks Redis JTI blocklist before validation. RBAC enforced via `@RequiresPermission` + `RBAC_policy.yml` (SHA-256 integrity checked at startup).
+4. **AI service** — Accepts Kong-injected `x-ai-secret` (constant-time compare via `secrets.compare_digest`) or OIDC JWT when secret not configured. Image sizes validated against `ALLOWED_IMAGE_SIZES`. SSRF-safe image fetch (allowlisted hosts only).
+5. **Email / push** — Monolith publishes jobs to RabbitMQ exchange. Node workers consume, validate payload, send via Resend/Firebase. DLX handles failures.
+
+---
+
+## Security hardening summary
+
+| Area | Status |
+|------|--------|
+| Auth0 OIDC (migrated from Cognito) | Active |
+| `email_verified` required for auto-provision | Fixed |
+| ADMIN block in OIDC provisioning | Fixed |
+| JWT revocation (Redis JTI blocklist) | Active |
+| API key rotation (primary + secondary) | Active |
+| CORS re-enabled with restrictive allowlist | Fixed |
+| Swagger restricted to `ROLE_ADMIN`, default off | Fixed |
+| Actuator `show-details: when-authorized` | Fixed |
+| Email template variable HTML escaping | Fixed |
+| Ticket `sortBy` whitelist | Fixed |
+| Ticket validation pessimistic write lock | Fixed |
+| RBAC policy SHA-256 integrity logging | Active |
+| Security headers unconditional (no UA gating) | Fixed |
+| MinIO private buckets + pre-signed URLs | Active |
+| Non-root USER in all Dockerfiles | Fixed |
+| RabbitMQ management UI localhost-only | Fixed |
+| DLX/DLQ for email + push workers | Active |
+| No default credentials fallbacks | Fixed |
+| Resource limits on all containers | Active |
+| `python-jose` → `PyJWT[cryptography]` | Fixed |
+
+For the full remediation list, see `SECURITY_REVIEW.md`.
 
 ---
 
 ## Data flow and persistence
 
-- **Single `application.yml`** — No profile-specific YAML for core behaviour. All config lives in `src/main/resources/application.yml`; overrides via environment variables (e.g. `SPRING_DATASOURCE_URL`, `OIDC_ISSUER_URI`).
-- **Schema** — When using Flyway, migrations live under `src/main/resources/db/migration/`. Hibernate can be set to `validate` so it does not create or alter tables. For initial setup, the project may use `ddl-auto: create` once (see `.env.example` and scripts), then switch to `validate` or rely on Flyway.
-- **Domain model** — See [Entity-relationship diagram](er-diagram.md). Main aggregates: users (`auth_users`, `user_settings`, `locations`), events (`events`, `venues`), collaboration (`event_users`, `event_roles`, `event_user_permissions`, `event_collaborator_invites`), attendees (`attendees`, `attendee_invites`, `attendee_rsvp_history`), tickets (types, checkouts, tickets, waitlist, approval requests), budget (budgets, categories, line items), timeline (tasks, checklists), feeds (event_posts, post_comments, post_likes), and communications (device_tokens, communications).
+- **Single `application.yml`** — All config in `src/main/resources/application.yml`; overrides via environment variables.
+- **Schema** — Hibernate `ddl-auto: update` (or `create` for initial setup). Flyway migrations in `src/main/resources/db/migration/` when active.
+- **Domain model** — See [er-diagram.md](er-diagram.md). Main aggregates: users, events, collaboration, attendees, tickets, budget, timeline, feeds, communications.
 
 ---
 
 ## Resilience and fault tolerance
 
-- **Resilience4j** (configured in `application.yml`):
-  - **Circuit breakers:** `notificationService`, `emailService`, `s3Service`. On repeated failures (e.g. notification/email/AMQP/IO), the circuit opens and fails fast; after a wait duration it moves to half-open and allows a few test calls.
-  - **Retry:** Retry with exponential backoff for notification, email, S3 upload, and connection timeouts; ignores non-retryable exceptions (e.g. `BadRequestException`).
-- **RabbitMQ:** Email and push workers use prefetch, reconnect, and optional requeue-on-error; monolith publishes with exchange/routing keys as configured.
-- **Database:** HikariCP connection pool (max pool size, timeouts, idle/max lifetime) configured in `application.yml`.
-- **Redis:** Lettuce pool settings; used for caching and optionally session/rate data.
+- **Resilience4j** — Circuit breakers: `notificationService`, `emailService`, `s3Service`. On repeated failures the circuit opens (fast-fail); after wait window moves to half-open.
+- **Retry** — Exponential backoff for notification, email, S3 upload; ignores `BadRequestException` and similar non-retryable exceptions.
+- **RabbitMQ** — DLX/DLQ topology with `x-retry-count` header (max 3); permanent failures dead-lettered immediately.
+- **Database** — HikariCP (max pool 20, min idle 5, timeouts configured).
+- **Redis** — Lettuce pool; used for caching (Caffeine fallback) and JWT blocklist.
+- **MinIO** — S3StorageService circuit-breaker wrapped; upload/download failures do not cascade to request.
 
 ---
 
 ## Observability
 
-- **Actuator endpoints** (exposed: health, info, metrics, prometheus, circuitbreakers, retry):
-  - **Health:** `/actuator/health` — includes DB, Redis, and custom components; `show-details` configurable.
-  - **Metrics:** `/actuator/metrics` — application and JVM metrics.
-  - **Prometheus:** `/actuator/prometheus` — scrape-friendly format for notification and email metrics (e.g. `notification.send`, `email.send`).
-- **Logging:** Log levels and pattern configured in `application.yml` (e.g. `ai.eventplanner`, Spring Security, Spring Web). No sensitive data in logs; AI debug logging gated by env.
-- **Kong:** Access and error logs to stdout/stderr; correlation ID (`X-Request-ID`) passed through for tracing.
-- **Security:** `env` endpoint is not exposed to avoid leaking configuration/secrets.
+- **Actuator** (exposed: health, info, metrics, prometheus, circuitbreakers, retry):
+  - Health: `/actuator/health` — DB, Redis; `show-details: when-authorized` (requires `ACTUATOR_ADMIN` role).
+  - Prometheus: `/actuator/prometheus` — notification and email send metrics.
+- **Logging** — RBAC policy SHA-256 digest logged at startup. AI debug content gated by `AI_DEBUG_LOGGING=true`.
+- **Kong** — Access/error logs to stdout/stderr; `X-Request-ID` correlation ID propagated.
+- **DLQ monitoring** — Alert when `dlq.push.messages > 0` or `dlq.email.messages > 0`.
 
 ---
 
 ## Deployment
 
-- **Docker Compose** — Defines the monolith (`java-app`), Kong, AI service, email and push workers, RabbitMQ, MinIO (+ minio-init), and a single bridge network. PostgreSQL and Redis are typically supplied via host or external services (e.g. `DB_HOST=host.docker.internal`).
-- **Secrets** — No secrets in the repo. Set `GATEWAY_SERVICE_API_KEY`, `AI_GATEWAY_SHARED_SECRET`, OIDC/Auth0, DB URLs, Resend, Firebase, etc., via environment or a secret manager. Use `.env.example`, `ai-service/.env.example`, and `push-service/.env.example` as templates; do not commit `.env` files.
-- **CORS** — Kong uses an explicit origin allowlist (no wildcard when credentials are enabled). Set `KONG_CORS_ORIGINS` for production; defaults in `kong.yml` are dev-oriented.
-- **Rate limiting** — Commented out in `kong.yml` for flexibility (e.g. DB seeding); enable and tune for production.
+- **Docker Compose** — Runs: monolith (`java-app`), Kong, AI service, email worker, push worker, RabbitMQ. **PostgreSQL, Redis, and MinIO are external** (host machine or managed services).
+- **MinIO** — Native Homebrew on host. App container connects via `AWS_S3_ENDPOINT=http://host.docker.internal:9000` when Java runs in Docker.
+- **Secrets** — No hardcoded secrets. Use `.env` (from `.env.example`) or a secret manager. Files to never commit: `.env`, `push-service/.env`, `ai-service/.env`, `push-service/cred/`.
+- **CORS** — Kong explicit origin allowlist. Set `KONG_CORS_ORIGINS` for production; dev defaults in `kong.yml`.
+- **Rate limiting** — Commented out in `kong.yml` (disabled for seeding/dev); enable and tune for production.
 
 ---
 
 ## Security and configuration
 
-For auth details, RBAC, invite flows, worker validation, and hardening, see [Security and configuration](security-and-configuration.md).
+For auth details, RBAC, invite flows, worker validation, environment variables, and hardening, see [security-and-configuration.md](security-and-configuration.md).

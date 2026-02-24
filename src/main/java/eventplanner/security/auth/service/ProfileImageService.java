@@ -4,6 +4,7 @@ import eventplanner.common.exception.exceptions.BadRequestException;
 import eventplanner.common.storage.s3.dto.PresignedUploadResult;
 import eventplanner.common.storage.s3.registry.BucketAlias;
 import eventplanner.common.storage.s3.services.S3ImageUploadService;
+import eventplanner.common.storage.s3.services.S3StorageService;
 import eventplanner.security.auth.dto.req.ProfileImageCompleteRequest;
 import eventplanner.security.auth.dto.req.ProfileImageUploadRequest;
 import eventplanner.security.auth.dto.res.ProfileImageCompleteResponse;
@@ -23,10 +24,12 @@ import java.time.LocalDateTime;
 public class ProfileImageService {
 
     private static final Duration UPLOAD_URL_TTL = Duration.ofMinutes(10);
+    private static final Duration DOWNLOAD_URL_TTL = Duration.ofMinutes(15);
     private static final BucketAlias USER_BUCKET_ALIAS = BucketAlias.USER;
     private static final String PROFILE_KEY_PREFIX_TEMPLATE = "users/%s/profile";
 
     private final S3ImageUploadService imageUploadService;
+    private final S3StorageService s3StorageService;
     private final UserAccountRepository userAccountRepository;
     private final Clock clock;
 
@@ -59,6 +62,14 @@ public class ProfileImageService {
     }
 
     /**
+     * Generates a time-limited presigned GET URL for a stored profile picture bare URL.
+     * Returns {@code null} if {@code bareUrl} is blank or cannot be parsed.
+     */
+    public String presignProfilePictureUrl(String bareUrl) {
+        return s3StorageService.presignedGetUrlFromBareUrl(USER_BUCKET_ALIAS, bareUrl, DOWNLOAD_URL_TTL);
+    }
+
+    /**
      * Called AFTER the client uploads directly to S3 using the presigned URL.
      * Persists the resulting resourceUrl on the user record.
      */
@@ -76,6 +87,7 @@ public class ProfileImageService {
             throw new BadRequestException("Invalid object key for this user");
         }
 
+        // Store bare URL as stable DB reference; bucket is private so we presign for API responses
         String resourceUrl = imageUploadService.buildResourceUrl(USER_BUCKET_ALIAS, objectKey);
         if (!StringUtils.hasText(resourceUrl)) {
             throw new BadRequestException("Invalid resourceUrl");
@@ -84,8 +96,10 @@ public class ProfileImageService {
         user.setProfilePictureUrl(resourceUrl);
         userAccountRepository.save(user);
 
+        // Return a time-limited presigned GET URL for immediate client use
+        String presignedGetUrl = s3StorageService.generatePresignedGetUrl(USER_BUCKET_ALIAS, objectKey, DOWNLOAD_URL_TTL).toString();
         return ProfileImageCompleteResponse.builder()
-            .profilePictureUrl(resourceUrl)
+            .profilePictureUrl(presignedGetUrl)
             .updatedAt(LocalDateTime.now(clock))
             .build();
     }

@@ -1,9 +1,19 @@
-// @ts-nocheck
 import amqp from 'amqplib'
 import { render } from '@react-email/render'
 import { Resend } from 'resend'
 import { config } from './config'
 import { EMAIL_TEMPLATES } from './templates/index'
+
+interface EmailJobPayload {
+  templateId: string
+  to: string | string[]
+  cc?: string | string[]
+  bcc?: string | string[]
+  replyTo?: string
+  from?: string
+  subject?: string
+  variables?: Record<string, unknown>
+}
 
 if (!config.resendApiKey) throw new Error('RESEND_API_KEY is required')
 if (!config.resendFrom) throw new Error('RESEND_FROM is required')
@@ -13,11 +23,13 @@ if (!config.rabbitmqQueue) throw new Error('RABBITMQ_EMAIL_QUEUE is required')
 if (!config.rabbitmqRoutingKey) throw new Error('RABBITMQ_EMAIL_ROUTING_KEY is required')
 if (!config.rabbitmqPrefetch) throw new Error('RABBITMQ_PREFETCH is required')
 if (!config.rabbitmqReconnectMs) throw new Error('RABBITMQ_RECONNECT_MS is required')
-if (!config.rabbitmqRequeueOnError) throw new Error('RABBITMQ_REQUEUE_ON_ERROR is required')
+// RABBITMQ_REQUEUE_ON_ERROR is no longer used — retry logic is handled by DLX + x-retry-count header
 
 const rabbitmqPrefetch = Number(config.rabbitmqPrefetch)
 const rabbitmqReconnectMs = Number(config.rabbitmqReconnectMs)
-const rabbitmqRequeueOnError = config.rabbitmqRequeueOnError === 'true'
+const MAX_RETRIES = 3
+const DLX_EXCHANGE = 'dlx.notifications'
+const DLX_EMAIL_QUEUE = 'dlq.email'
 const DEFAULT_FROM = config.resendFrom as string
 const ALLOWED = new Set(
   (config.allowedTemplates || '')
@@ -36,10 +48,11 @@ function isValidEmail(s: string): boolean {
   return typeof s === 'string' && s.length <= 254 && BASIC_EMAIL_REGEX.test(s.trim())
 }
 
-const templateLookup = new Map()
+type TemplateLookupEntry = { key: string; id: string; subject: unknown; component: (props: never) => unknown }
+const templateLookup = new Map<string, TemplateLookupEntry>()
 Object.entries(EMAIL_TEMPLATES).forEach(([key, entry]) => {
-  templateLookup.set(key, { key, ...entry })
-  templateLookup.set(entry.id, { key, ...entry })
+  templateLookup.set(key, { key, ...entry } as TemplateLookupEntry)
+  templateLookup.set(entry.id, { key, ...entry } as TemplateLookupEntry)
 })
 
 const normalizeList = (value?: string | string[]) => {
@@ -53,7 +66,7 @@ const requestError = (message: string) => {
   throw err
 }
 
-const resolveEmailRequest = (payload: any) => {
+const resolveEmailRequest = (payload: EmailJobPayload) => {
   const { templateId, to, cc, bcc, replyTo, subject, from, variables = {} } = payload || {}
   if (!templateId) requestError('templateId is required')
 
@@ -100,7 +113,7 @@ const resolveEmailRequest = (payload: any) => {
   }
 }
 
-const sendEmail = async (payload: any) => {
+const sendEmail = async (payload: EmailJobPayload) => {
   const { toList, ccList, bccList, replyTo, resolvedSubject, fromAddress, props, template } =
     resolveEmailRequest(payload)
 
@@ -122,14 +135,29 @@ const sendEmail = async (payload: any) => {
 const startRabbitConsumer = async () => {
   try {
     const connection = await amqp.connect(config.rabbitmqUrl as string)
-    connection.on('error', () => {})
+    connection.on('error', (err: Error) => {
+      console.error('[rabbitmq] connection error:', err)
+      process.exit(1)
+    })
     connection.on('close', () => {
       setTimeout(startRabbitConsumer, rabbitmqReconnectMs)
     })
 
     const channel = await connection.createChannel()
+
+    // Assert dead-letter exchange and queue first
+    await channel.assertExchange(DLX_EXCHANGE, 'direct', { durable: true })
+    await channel.assertQueue(DLX_EMAIL_QUEUE, { durable: true })
+    await channel.bindQueue(DLX_EMAIL_QUEUE, DLX_EXCHANGE, 'dead.email')
+
     await channel.assertExchange(config.rabbitmqExchange as string, 'direct', { durable: true })
-    await channel.assertQueue(config.rabbitmqQueue as string, { durable: true })
+    await channel.assertQueue(config.rabbitmqQueue as string, {
+      durable: true,
+      arguments: {
+        'x-dead-letter-exchange': DLX_EXCHANGE,
+        'x-dead-letter-routing-key': 'dead.email',
+      },
+    })
     await channel.bindQueue(
       config.rabbitmqQueue as string,
       config.rabbitmqExchange as string,
@@ -139,23 +167,40 @@ const startRabbitConsumer = async () => {
 
     await channel.consume(config.rabbitmqQueue as string, async (msg) => {
       if (!msg) return
-      let payload: any
+      let payload: EmailJobPayload
       try {
-        payload = JSON.parse(msg.content.toString())
+        payload = JSON.parse(msg.content.toString()) as EmailJobPayload
       } catch (err) {
-        channel.ack(msg)
+        // Unparseable message — dead-letter immediately, do not requeue
+        channel.nack(msg, false, false)
         return
       }
 
       try {
         await sendEmail(payload)
         channel.ack(msg)
-      } catch (err: any) {
-        if (err?.statusCode === 400) {
-          channel.ack(msg)
+      } catch (err: unknown) {
+        if ((err as { statusCode?: number })?.statusCode === 400) {
+          // Validation error — message is permanently bad, dead-letter it
+          channel.nack(msg, false, false)
           return
         }
-        channel.nack(msg, false, rabbitmqRequeueOnError)
+        // Transient error — track retry count
+        const headers = (msg.properties.headers as Record<string, unknown>) || {}
+        const retryCount = (Number(headers['x-retry-count']) || 0) + 1
+        if (retryCount >= MAX_RETRIES) {
+          console.error(`[email] message failed after ${MAX_RETRIES} attempts, dead-lettering`)
+          channel.nack(msg, false, false)
+        } else {
+          // Republish with incremented retry count rather than requeue to head
+          channel.ack(msg)
+          channel.publish(
+            config.rabbitmqExchange as string,
+            config.rabbitmqRoutingKey as string,
+            msg.content,
+            { headers: { ...headers, 'x-retry-count': retryCount }, persistent: true }
+          )
+        }
       }
     })
 

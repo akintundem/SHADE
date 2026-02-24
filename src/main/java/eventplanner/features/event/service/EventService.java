@@ -63,6 +63,7 @@ import org.springframework.transaction.annotation.Transactional;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -968,7 +969,12 @@ public class EventService {
         response.setCurrentAttendeeCount(event.getCurrentAttendeeCount());
         response.setIsPublic(event.getIsPublic());
         response.setRequiresApproval(event.getRequiresApproval());
-        response.setCoverImageUrl(event.getCoverImageUrl());
+        // Buckets are private — generate a presigned GET URL from the stored bare URL.
+        // Falls back to null if the URL cannot be parsed or s3StorageService is unavailable.
+        String coverImagePresigned = (s3StorageService != null)
+                ? s3StorageService.presignedGetUrlFromBareUrl(BucketAlias.EVENT, event.getCoverImageUrl(), Duration.ofMinutes(15))
+                : event.getCoverImageUrl();
+        response.setCoverImageUrl(coverImagePresigned);
         response.setEventWebsiteUrl(event.getEventWebsiteUrl());
         response.setHashtag(event.getHashtag());
         response.setTheme(event.getTheme());
@@ -1289,7 +1295,10 @@ public class EventService {
         feed.setEventId(event.getId());
         feed.setEventName(event.getName());
         feed.setDescription(event.getDescription());
-        feed.setCoverImageUrl(event.getCoverImageUrl());
+        String feedCoverPresigned = (s3StorageService != null)
+                ? s3StorageService.presignedGetUrlFromBareUrl(BucketAlias.EVENT, event.getCoverImageUrl(), Duration.ofMinutes(15))
+                : event.getCoverImageUrl();
+        feed.setCoverImageUrl(feedCoverPresigned);
         feed.setStartDateTime(event.getStartDateTime());
         feed.setEndDateTime(event.getEndDateTime());
         feed.setHashtag(event.getHashtag());
@@ -1401,7 +1410,9 @@ public class EventService {
 
             UserAccount author = p.getCreatedBy() != null ? finalAuthorsById.get(p.getCreatedBy().getId()) : null;
             fp.setAuthorName(author != null ? author.getName() : null);
-            fp.setAuthorAvatarUrl(author != null ? author.getProfilePictureUrl() : null);
+            fp.setAuthorAvatarUrl(author != null && s3StorageService != null
+                    ? s3StorageService.presignedGetUrlFromBareUrl(BucketAlias.USER, author.getProfilePictureUrl(), java.time.Duration.ofMinutes(15))
+                    : (author != null ? author.getProfilePictureUrl() : null));
 
             // Attach media if available (using batch-loaded objects)
             if (p.getMediaObjectId() != null && s3StorageService != null) {

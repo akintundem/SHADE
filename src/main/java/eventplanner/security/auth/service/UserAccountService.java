@@ -67,7 +67,7 @@ public class UserAccountService {
     public SecureUserResponse getSecureUser(UUID userId) {
         UserAccount user = userAccountRepository.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        return AuthMapper.toSecureUserResponse(user);
+        return toSecureResponse(user);
     }
 
     public SecureUserResponse updateSecureUser(UUID userId, UserAccount requester, UpdateUserProfileRequest request) {
@@ -148,7 +148,7 @@ public class UserAccountService {
         }
 
         userAccountRepository.save(user);
-        return AuthMapper.toSecureUserResponse(user);
+        return toSecureResponse(user);
     }
 
     /**
@@ -283,7 +283,7 @@ public class UserAccountService {
 
         return userAccountRepository
             .findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(sanitized, sanitized, pageable)
-            .map(AuthMapper::toSecureUserResponse);
+            .map(this::toSecureResponse);
     }
 
     public Page<PublicUserResponse> searchPublicUsers(String term, Pageable pageable) {
@@ -320,11 +320,12 @@ public class UserAccountService {
     }
 
     private PublicUserResponse toPublicUserResponse(UserAccount user) {
+        String presignedPicture = profileImageService.presignProfilePictureUrl(user.getProfilePictureUrl());
         return PublicUserResponse.builder()
                 .id(user.getId())
                 .name(user.getName())
                 .username(user.getUsername())
-                .profilePictureUrl(user.getProfilePictureUrl())
+                .profilePictureUrl(presignedPicture)
                 .build();
     }
 
@@ -542,7 +543,7 @@ public class UserAccountService {
         }
         
         userAccountRepository.save(user);
-        return AuthMapper.toSecureUserResponse(user);
+        return toSecureResponse(user);
     }
 
     /**
@@ -570,7 +571,7 @@ public class UserAccountService {
         }
         
         userAccountRepository.save(user);
-        return AuthMapper.toSecureUserResponse(user);
+        return toSecureResponse(user);
     }
 
     /**
@@ -595,7 +596,16 @@ public class UserAccountService {
         }
         
         userAccountRepository.save(user);
-        return AuthMapper.toSecureUserResponse(user);
+        return toSecureResponse(user);
+    }
+
+    /**
+     * Builds a {@link SecureUserResponse} with a presigned GET URL for the profile picture.
+     * Buckets are private — bare storage URLs must not be returned directly to clients.
+     */
+    private SecureUserResponse toSecureResponse(UserAccount user) {
+        String presignedPicture = profileImageService.presignProfilePictureUrl(user.getProfilePictureUrl());
+        return AuthMapper.toSecureUserResponse(user, presignedPicture);
     }
 
 }

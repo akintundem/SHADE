@@ -206,12 +206,15 @@ public class EventMediaService {
         EventStoredObject saved = completeStoredObject(eventId, coverId, principal, request, PURPOSE_EVENT_COVER, eventId, "cover");
 
         Event event = accessControlService.ensureEventExists(eventId);
+        // Store the bare object URL as a stable DB reference (key is in saved.getObjectKey())
         event.setCoverImageUrl(saved.getResourceUrl());
         eventRepository.save(event);
 
+        // Return a time-limited presigned GET URL — the bucket is private
+        URL presignedGet = storageService.generatePresignedGetUrl(EVENT_BUCKET_ALIAS, saved.getObjectKey(), DOWNLOAD_URL_TTL);
         return EventCoverImageResponse.builder()
             .eventId(eventId)
-            .coverImageUrl(saved.getResourceUrl())
+            .coverImageUrl(presignedGet.toString())
             .updatedAt(LocalDateTime.now())
             .build();
     }

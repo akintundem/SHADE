@@ -1,13 +1,37 @@
 services:
+  # Postgres + PostGIS for schema (avoids host PostGIS requirement)
+  postgres:
+    image: postgis/postgis:15-3.4
+    container_name: shade-postgres
+    environment:
+      POSTGRES_DB: shade_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d shade_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - event-planner-network
+
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: shade-rabbitmq
     ports:
       - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
     restart: unless-stopped
     networks:
       - event-planner-network
@@ -31,6 +55,17 @@ services:
       RABBITMQ_REQUEUE_ON_ERROR: ${RABBITMQ_REQUEUE_ON_ERROR}
       APP_ASSET_BUCKET: ${APP_ASSET_BUCKET}
       LOGO_URL: ${LOGO_URL}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
     networks:
       - event-planner-network
@@ -54,6 +89,17 @@ services:
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
     volumes:
       - ./push-service/cred:/app/cred:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
     networks:
       - event-planner-network
@@ -74,6 +120,11 @@ services:
       AI_OIDC_ISSUER: ${AI_OIDC_ISSUER:-}
       AI_OIDC_AUDIENCE: ${AI_OIDC_AUDIENCE:-}
     # Secrets from host env; do not commit ai-service/.env (use .env.example as template)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
     restart: unless-stopped
     networks:
       - event-planner-network
@@ -83,12 +134,19 @@ services:
     build: .
     container_name: event-planner-app
     depends_on:
-      - email-service
-      - push-service
-      - ai-service
+      postgres:
+        condition: service_healthy
+      email-service:
+        condition: service_started
+      push-service:
+        condition: service_started
+      ai-service:
+        condition: service_started
     expose:
       - "8080"
-    # Allow container to connect to services on host machine (local Redis, Postgres, etc.)
+    ports:
+      - "8080:8080"   # Direct access for local smoke tests (bypasses Kong API key)
+    # Allow container to connect to services on host machine (MinIO, Redis, etc.)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # DNS servers for resolving external hostnames
@@ -102,14 +160,35 @@ services:
     env_file:
       - ${ENV_FILE:-.env}
     environment:
+      # Use compose Postgres (with PostGIS) and MinIO on host
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: shade_dev
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_SSLMODE: disable
+      # Redis on host (when using compose)
+      SPRING_REDIS_HOST: ${SPRING_REDIS_HOST:-host.docker.internal}
+      # MinIO on host: use localhost so presigned URLs work when clients (e.g. smoke script, browser) run on host
+      AWS_S3_ENDPOINT: http://localhost:9000
+      AWS_S3_PATH_STYLE: "true"
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
+      AWS_S3_USER_BUCKET: ${AWS_S3_USER_BUCKET:-shade-user-assets}
+      AWS_S3_EVENT_BUCKET: ${AWS_S3_EVENT_BUCKET:-shade-event-assets}
+      # Schema already created; use validate to avoid recreating tables
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       # Enable Spring Boot DevTools for hot-reload
       SPRING_DEVTOOLS_RESTART_ENABLED: "true"
       SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "true"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: "2s"
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: "1s"
-      # Optional: set SPRING_JPA_HIBERNATE_DDL_AUTO=create in .env for one run to create tables (PostGIS required); then remove or set to validate.
-      # Note: All other environment variables are loaded from env_file (.env)
 
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
     # Extended startup time for Maven build on first run
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
@@ -121,47 +200,10 @@ services:
     networks:
       - event-planner-network
 
-  # MinIO — lightweight S3-compatible object storage (replaces AWS S3 locally)
-  minio:
-    image: minio/minio:latest
-    container_name: shade-minio
-    ports:
-      - "9000:9000"    # S3 API
-      - "9001:9001"    # MinIO Console (web UI)
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - event-planner-network
-
-  # MinIO bucket initializer — creates required buckets on startup
-  minio-init:
-    image: minio/mc:latest
-    container_name: shade-minio-init
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin};
-      mc mb --ignore-existing local/$${AWS_S3_USER_BUCKET:-shade-user-assets};
-      mc mb --ignore-existing local/$${AWS_S3_EVENT_BUCKET:-shade-event-assets};
-      mc anonymous set download local/$${AWS_S3_USER_BUCKET:-shade-user-assets};
-      mc anonymous set download local/$${AWS_S3_EVENT_BUCKET:-shade-event-assets};
-      echo 'Buckets created successfully';
-      "
-    restart: "no"
-    networks:
-      - event-planner-network
+  # MinIO runs natively on the host (not in Docker). Start with:
+  #   brew services start minio  (or launchctl load ~/Library/LaunchAgents/io.minio.server.plist)
+  # S3 API: http://localhost:9000  |  Console: http://localhost:9001
+  # Credentials: minioadmin / minioadmin  |  Data dir: ~/minio-data
 
   kong:
     image: kong:3.7
@@ -198,7 +240,6 @@ services:
 
 volumes:
   maven_cache:  # Cache Maven dependencies for faster builds
-  minio_data:   # Persist MinIO data across restarts
 
 networks:
   event-planner-network:

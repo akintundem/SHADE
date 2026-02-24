@@ -19,6 +19,14 @@ public class AuthMapper {
      * Includes userId so clients can use it in subsequent requests.
      */
     public SecureUserResponse toSecureUserResponse(UserAccount user) {
+        return toSecureUserResponse(user, user.getProfilePictureUrl());
+    }
+
+    /**
+     * Creates a secure user response with an explicit (e.g. presigned) profile picture URL.
+     * Use this overload when the bucket is private and a time-limited presigned GET URL is required.
+     */
+    public SecureUserResponse toSecureUserResponse(UserAccount user, String profilePictureUrl) {
         return SecureUserResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
@@ -28,7 +36,7 @@ public class AuthMapper {
                 .dateOfBirth(user.getDateOfBirth())
                 .userType(user.getUserType())
                 .marketingOptIn(user.isMarketingOptIn())
-                .profilePictureUrl(user.getProfilePictureUrl())
+                .profilePictureUrl(profilePictureUrl)
                 .preferences(user.getPreferences())
                 .settings(toUserSettingsResponse(user.getSettings()))
                 .createdAt(user.getCreatedAt())

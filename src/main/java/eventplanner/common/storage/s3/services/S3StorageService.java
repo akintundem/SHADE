@@ -152,6 +152,45 @@ public class S3StorageService {
     }
 
     /**
+     * Given a bare (non-presigned) S3/MinIO object URL previously built by {@link #buildObjectUrl},
+     * extracts the object key from the URL path and generates a time-limited presigned GET URL.
+     *
+     * <p>Returns {@code null} if {@code bareUrl} is blank or cannot be parsed, so callers can
+     * pass nullable stored URLs safely.</p>
+     */
+    public String presignedGetUrlFromBareUrl(BucketAlias bucketAlias, String bareUrl, Duration expiresIn) {
+        String alias = bucketAlias != null ? bucketAlias.getAlias() : null;
+        return presignedGetUrlFromBareUrl(alias, bareUrl, expiresIn);
+    }
+
+    public String presignedGetUrlFromBareUrl(String bucketAliasOrName, String bareUrl, Duration expiresIn) {
+        if (!StringUtils.hasText(bareUrl)) {
+            return null;
+        }
+        try {
+            URI uri = new URI(bareUrl.trim());
+            // S3/MinIO path is "/<bucket>/<key>" — strip the leading "/<bucket>/" segment
+            String path = uri.getPath(); // e.g. "/shade-event-assets/events/uuid/cover/uuid"
+            if (!StringUtils.hasText(path) || path.equals("/")) {
+                return null;
+            }
+            // Remove leading slash, then skip the first segment (bucket name)
+            String withoutLeadingSlash = path.startsWith("/") ? path.substring(1) : path;
+            int firstSlash = withoutLeadingSlash.indexOf('/');
+            if (firstSlash < 0) {
+                return null; // no key after bucket segment
+            }
+            String objectKey = withoutLeadingSlash.substring(firstSlash + 1);
+            if (!StringUtils.hasText(objectKey)) {
+                return null;
+            }
+            return generatePresignedGetUrl(bucketAliasOrName, objectKey, expiresIn).toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * Strips the query string and fragment from a URL.
      * Useful when storing/displaying "resource URLs" that must not contain presign credentials.
      */

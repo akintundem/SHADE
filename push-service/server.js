@@ -10,15 +10,17 @@ if (!config.rabbitmqQueue) throw new Error("RABBITMQ_PUSH_QUEUE is required");
 if (!config.rabbitmqRoutingKey) throw new Error("RABBITMQ_PUSH_ROUTING_KEY is required");
 if (!config.rabbitmqPrefetch) throw new Error("RABBITMQ_PREFETCH is required");
 if (!config.rabbitmqReconnectMs) throw new Error("RABBITMQ_RECONNECT_MS is required");
-if (!config.rabbitmqRequeueOnError) throw new Error("RABBITMQ_REQUEUE_ON_ERROR is required");
 if (!config.firebaseKeyPath) throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY_PATH is required");
 if (!config.firebaseProjectId) throw new Error("FIREBASE_PROJECT_ID is required");
 
 const rabbitmqPrefetch = Number(config.rabbitmqPrefetch);
 const rabbitmqReconnectMs = Number(config.rabbitmqReconnectMs);
-const rabbitmqRequeueOnError = config.rabbitmqRequeueOnError === "true";
 /** Max tokens per push message to align with Java producer and provider limits. */
 const MAX_PUSH_TOKENS_PER_MESSAGE = 500;
+/** Maximum delivery attempts before a message is dead-lettered. */
+const MAX_RETRIES = 3;
+const DLX_EXCHANGE = "dlx.notifications";
+const DLX_PUSH_QUEUE = "dlq.push";
 
 let firebaseApp;
 
@@ -123,14 +125,29 @@ async function sendPush(payload) {
 async function startRabbitConsumer() {
   try {
     const connection = await amqp.connect(config.rabbitmqUrl);
-    connection.on("error", () => {});
+    connection.on("error", (err) => {
+      console.error("[rabbitmq] connection error:", err);
+      process.exit(1);
+    });
     connection.on("close", () => {
       setTimeout(startRabbitConsumer, rabbitmqReconnectMs);
     });
 
     const channel = await connection.createChannel();
+
+    // Assert dead-letter exchange and queue first
+    await channel.assertExchange(DLX_EXCHANGE, "direct", { durable: true });
+    await channel.assertQueue(DLX_PUSH_QUEUE, { durable: true });
+    await channel.bindQueue(DLX_PUSH_QUEUE, DLX_EXCHANGE, "dead.push");
+
     await channel.assertExchange(config.rabbitmqExchange, "direct", { durable: true });
-    await channel.assertQueue(config.rabbitmqQueue, { durable: true });
+    await channel.assertQueue(config.rabbitmqQueue, {
+      durable: true,
+      arguments: {
+        "x-dead-letter-exchange": DLX_EXCHANGE,
+        "x-dead-letter-routing-key": "dead.push",
+      },
+    });
     await channel.bindQueue(
       config.rabbitmqQueue,
       config.rabbitmqExchange,
@@ -145,7 +162,8 @@ async function startRabbitConsumer() {
       try {
         payload = JSON.parse(msg.content.toString());
       } catch (err) {
-        channel.ack(msg);
+        // Unparseable message — dead-letter immediately, do not requeue
+        channel.nack(msg, false, false);
         return;
       }
 
@@ -154,10 +172,26 @@ async function startRabbitConsumer() {
         channel.ack(msg);
       } catch (err) {
         if (err?.statusCode === 400) {
-          channel.ack(msg);
+          // Validation error — message is permanently bad, dead-letter it
+          channel.nack(msg, false, false);
           return;
         }
-        channel.nack(msg, false, rabbitmqRequeueOnError);
+        // Transient error — track retry count
+        const headers = msg.properties.headers || {};
+        const retryCount = (headers["x-retry-count"] || 0) + 1;
+        if (retryCount >= MAX_RETRIES) {
+          console.error(`[push] message failed after ${MAX_RETRIES} attempts, dead-lettering`);
+          channel.nack(msg, false, false);
+        } else {
+          // Republish with incremented retry count rather than requeue to head
+          channel.ack(msg);
+          channel.publish(
+            config.rabbitmqExchange,
+            config.rabbitmqRoutingKey,
+            msg.content,
+            { headers: { ...headers, "x-retry-count": retryCount }, persistent: true }
+          );
+        }
       }
     });
 

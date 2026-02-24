@@ -1,18 +1,32 @@
+# --- Build stage ---
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+
+# Install all deps (including devDeps needed for tsc)
+RUN npm ci && npm cache clean --force
+
+COPY . .
+
+# Compile TypeScript to dist/
+RUN npm run build
+
+# --- Runtime stage ---
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Clear npm cache and ensure clean install
-RUN npm cache clean --force
-
 COPY package.json package-lock.json ./
 
-# Use npm ci for reliable, reproducible builds
-# Remove node_modules if it exists to ensure clean install
-RUN rm -rf node_modules && \
-    npm ci --omit=dev && \
-    npm cache clean --force
+# Install production deps only
+RUN npm ci --omit=dev && npm cache clean --force
 
-COPY . .
+# Copy compiled output from builder
+COPY --from=builder /app/dist ./dist
 
-CMD ["npm", "start"]
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+CMD ["node", "dist/server.js"]

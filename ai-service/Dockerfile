@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY main.py .
 
+RUN useradd -r -s /bin/false appuser
+USER appuser
+
 # Expose port
 EXPOSE 8000
 

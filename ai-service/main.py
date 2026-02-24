@@ -4,7 +4,6 @@ Handles AI-powered features including image generation for event covers
 """
 import os
 import base64
-import io
 import random
 import secrets
 from typing import Optional, Dict, Any, List, Tuple
@@ -16,7 +15,9 @@ from pydantic import BaseModel, Field
 from openai import OpenAI
 from dotenv import load_dotenv
 import httpx
-from jose import jwt, JWTError
+import jwt as pyjwt
+from jwt.algorithms import RSAAlgorithm
+from jwt.exceptions import PyJWTError
 
 # Load environment variables
 load_dotenv()
@@ -54,12 +55,12 @@ else:
     print("[ai] WARNING: OPENAI_API_KEY not configured. Image generation will not work.")
 
 
-async def fetch_jwks():
+async def fetch_jwks() -> List[Dict[str, Any]]:
     """Fetch and cache JWKS from OIDC IdP (e.g. Auth0)."""
     global jwks_cache
     now = datetime.utcnow()
     if jwks_cache.get("keys") and jwks_cache.get("expires_at") and now < jwks_cache["expires_at"]:
-        return jwks_cache["keys"]
+        return jwks_cache["keys"]  # type: ignore[return-value]
 
     if not JWKS_URL:
         raise HTTPException(status_code=500, detail="OIDC JWKS URL not configured")
@@ -72,36 +73,49 @@ async def fetch_jwks():
             "keys": data.get("keys", []),
             "expires_at": now + timedelta(seconds=JWKS_CACHE_SECONDS)
         }
-        return jwks_cache["keys"]
+        return jwks_cache["keys"]  # type: ignore[return-value]
 
 
-async def verify_jwt_token(token: str) -> Dict[str, Any]:
-    """Validate OIDC JWT using JWKS."""
+async def verify_jwt_token(token: Optional[str]) -> Dict[str, Any]:
+    """Validate OIDC JWT using JWKS (PyJWT)."""
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")
     keys = await fetch_jwks()
     try:
-        header = jwt.get_unverified_header(token)
-        kid = header.get("kid")
-        key = next((k for k in keys if k.get("kid") == kid), None)
-        if not key:
+        unverified_header = pyjwt.get_unverified_header(token)
+        kid = unverified_header.get("kid")
+        alg = unverified_header.get("alg", "RS256")
+
+        # Find the matching JWK by kid
+        jwk = next((k for k in keys if k.get("kid") == kid), None)
+        if not jwk:
             raise HTTPException(status_code=401, detail="Unable to match signing key")
 
-        options = {"verify_aud": bool(OIDC_AUDIENCE)}
-        claims = jwt.decode(
+        # Convert JWK dict to a public key object that PyJWT can use
+        public_key = RSAAlgorithm.from_jwk(jwk)
+
+        decode_options: Dict[str, Any] = {}
+        if not OIDC_AUDIENCE:
+            decode_options["verify_aud"] = False
+
+        claims = pyjwt.decode(
             token,
-            key,
-            algorithms=[key.get("alg", "RS256")],
+            public_key,
+            algorithms=[alg],
             audience=OIDC_AUDIENCE or None,
             issuer=OIDC_ISSUER or None,
-            options=options
+            options=decode_options,
         )
         return claims
-    except JWTError as exc:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
+    except PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token") from None
 
 
 # Request/Response Models
+# DALL-E 3 / gpt-image-1 supported sizes only
+ALLOWED_IMAGE_SIZES = {"1024x1024", "1792x1024", "1024x1792"}
+
+
 class ImageGenerationRequest(BaseModel):
     """Request model for image generation"""
     event_name: str = Field(..., description="Name of the event")
@@ -120,7 +134,6 @@ class ImageGenerationResponse(BaseModel):
     image_url: Optional[str] = None
     image_base64: Optional[str] = None
     error: Optional[str] = None
-    prompt_used: Optional[str] = None
 
 
 class VenueDTO(BaseModel):
@@ -161,37 +174,43 @@ async def verify_auth(request: Request, call_next):
     if request.url.path == "/health":
         return await call_next(request)
 
-    # Check for Kong-injected service secret
+    # Check for Kong-injected service secret first
     secret_header = request.headers.get("x-ai-secret")
-    
-    # Constant-time comparison to prevent timing attacks
+
+    if REQUIRE_SECRET:
+        # If the shared secret is configured, it is the sole accepted credential.
+        # A present-but-wrong secret is rejected immediately — no JWT fallback.
+        if SHARED_SECRET:
+            if secret_header and secrets.compare_digest(secret_header, SHARED_SECRET):
+                return await call_next(request)
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "error": "Unauthorized"}
+            )
+        # SHARED_SECRET not configured — fall back to JWT verification
+        auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+        token = auth_header[len("Bearer "):] if auth_header and auth_header.startswith("Bearer ") else None
+        try:
+            await verify_jwt_token(token)
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"success": False, "error": "Unauthorized"}
+            )
+        return await call_next(request)
+
+    # REQUIRE_SECRET is False: accept valid shared secret or valid JWT
     if SHARED_SECRET and secret_header and secrets.compare_digest(secret_header, SHARED_SECRET):
         return await call_next(request)
-    
-    # If secret is required but missing/invalid, check for valid JWT as fallback
+
     auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
     token = auth_header[len("Bearer "):] if auth_header and auth_header.startswith("Bearer ") else None
-
-    # If no secret provided and we require it, reject unless JWT is valid
-    if REQUIRE_SECRET and not secret_header:
-        if not token:
-            return JSONResponse(
-                status_code=403,
-                content={"success": False, "error": "Missing required x-ai-secret header"}
-            )
-
     try:
         await verify_jwt_token(token)
     except HTTPException as exc:
-        # If secret was provided but invalid, give specific error
-        if secret_header and SHARED_SECRET and not secrets.compare_digest(secret_header, SHARED_SECRET):
-            return JSONResponse(
-                status_code=403,
-                content={"success": False, "error": "Invalid x-ai-secret header"}
-            )
         return JSONResponse(
             status_code=exc.status_code,
-            content={"success": False, "error": exc.detail}
+            content={"success": False, "error": "Unauthorized"}
         )
 
     return await call_next(request)
@@ -309,10 +328,10 @@ def generate_enhanced_event_prompt(
     Generate a creative, varied prompt for event cover image generation.
     Uses all available event data and adds randomness for visual variation.
     """
-    # Set random seed if provided for consistent variation
-    if variation_seed is not None:
-        random.seed(variation_seed)
-    
+    # Use an isolated Random instance so we don't pollute the global random state
+    # with a user-controlled seed (which would affect all concurrent requests).
+    rng = random.Random(variation_seed)
+
     # Define variation pools for randomness
     artistic_styles = [
         "modern minimalist design", "vibrant contemporary art", "elegant sophisticated style",
@@ -345,12 +364,12 @@ def generate_enhanced_event_prompt(
         "cool blue hour lighting", "dynamic stage lighting", "elegant soft glow"
     ]
     
-    # Select random variations
-    selected_style = random.choice(artistic_styles)
-    selected_colors = random.choice(color_palettes)
-    selected_composition = random.choice(compositions)
-    selected_perspective = random.choice(perspectives)
-    selected_lighting = random.choice(lighting_styles)
+    # Select random variations (using isolated rng instance)
+    selected_style = rng.choice(artistic_styles)
+    selected_colors = rng.choice(color_palettes)
+    selected_composition = rng.choice(compositions)
+    selected_perspective = rng.choice(perspectives)
+    selected_lighting = rng.choice(lighting_styles)
     
     # Build context from event data
     context_parts = []
@@ -586,7 +605,11 @@ async def generate_cover_image(
             status_code=503,
             detail="OpenAI API not configured. Please set OPENAI_API_KEY environment variable."
         )
-    
+
+    size_str = f"{request.width}x{request.height}"
+    if size_str not in ALLOWED_IMAGE_SIZES:
+        raise HTTPException(status_code=400, detail="Unsupported image dimensions")
+
     try:
         # Generate optimized prompt
         prompt = generate_image_prompt(
@@ -597,61 +620,59 @@ async def generate_cover_image(
             date=request.date,
             style=request.style
         )
-        
+
         # Do not log prompt content (user/event data) unless debug
         if os.getenv("AI_DEBUG_LOGGING", "").lower() == "true":
             print(f"[ai] Generating image (prompt length={len(prompt)})")
-        
+
         # Generate image using OpenAI's latest image generation model
-        # GPT Image 1.5 is the latest model (replacing legacy DALL-E)
-        # Use images.generate() API with the newer model name
         image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
-        
+
         try:
-            # Try using the latest GPT Image 1.5 model
             response = openai_client.images.generate(
                 model=image_model,
                 prompt=prompt,
-                size=f"{request.width}x{request.height}",
+                size=size_str,
                 quality="hd",
                 n=1
             )
             image_url = response.data[0].url
         except Exception as e:
-            # Fallback to DALL-E 3 if GPT Image 1.5 is not available
-            print(f"[ai] GPT Image 1.5 not available, falling back to DALL-E 3: {e}")
+            # Fallback to DALL-E 3 if primary model is not available
+            print(f"[ai] Primary image model not available, falling back to DALL-E 3")
             response = openai_client.images.generate(
                 model="dall-e-3",
                 prompt=prompt,
-                size=f"{request.width}x{request.height}",
+                size=size_str,
                 quality="hd",
                 n=1
             )
             image_url = response.data[0].url
-        
+
         # Optionally fetch and return as base64 (SSRF-safe: allowlisted hosts only)
         image_base64 = None
         if os.getenv("RETURN_BASE64", "false").lower() == "true":
             ok, reason = _is_safe_image_url(image_url)
             if not ok:
-                raise HTTPException(status_code=502, detail=f"Unsafe or unsupported image URL: {reason}")
+                raise HTTPException(status_code=502, detail="Unable to retrieve generated image")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 img_response = await client.get(image_url)
                 img_response.raise_for_status()
                 image_base64 = base64.b64encode(img_response.content).decode('utf-8')
-        
+
         return ImageGenerationResponse(
             success=True,
             image_url=image_url,
             image_base64=image_base64,
-            prompt_used=prompt
         )
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"[ai] Error generating image: {e}")
+        print(f"[ai] Error generating image: {type(e).__name__}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate image: {str(e)}"
+            detail="Failed to generate image"
         )
 
 
@@ -669,7 +690,11 @@ async def generate_cover_image_v2(
             status_code=503,
             detail="OpenAI API not configured"
         )
-    
+
+    size_str = f"{request.width}x{request.height}"
+    if size_str not in ALLOWED_IMAGE_SIZES:
+        raise HTTPException(status_code=400, detail="Unsupported image dimensions")
+
     try:
         prompt = generate_image_prompt(
             event_name=request.event_name,
@@ -679,59 +704,52 @@ async def generate_cover_image_v2(
             date=request.date,
             style=request.style
         )
-        
-        # Generate image using OpenAI's latest image generation model
-        # GPT Image 1.5 is the latest model (replacing legacy DALL-E)
+
         image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
-        
+
         try:
-            # Try using the latest GPT Image 1.5 model
             response = openai_client.images.generate(
                 model=image_model,
                 prompt=prompt,
-                size=f"{request.width}x{request.height}",
+                size=size_str,
                 quality="hd",
                 n=1
             )
             image_url = response.data[0].url
-        except Exception as e:
-            # Fallback to DALL-E 3 if GPT Image 1.5 is not available
-            print(f"[ai] GPT Image 1.5 not available, falling back to DALL-E 3: {e}")
+        except Exception:
+            # Fallback to DALL-E 3 if primary model is not available
+            print("[ai] Primary image model not available, falling back to DALL-E 3")
             response = openai_client.images.generate(
                 model="dall-e-3",
                 prompt=prompt,
-                size=f"{request.width}x{request.height}",
+                size=size_str,
                 quality="hd",
                 n=1
             )
             image_url = response.data[0].url
-        
+
         # Always fetch and return as base64 (SSRF-safe)
         ok, reason = _is_safe_image_url(image_url)
         if not ok:
-            return JSONResponse(status_code=502, content={"success": False, "error": f"Unsafe image URL: {reason}"})
+            return JSONResponse(status_code=502, content={"success": False, "error": "Unable to retrieve generated image"})
         async with httpx.AsyncClient(timeout=30.0) as client:
             img_response = await client.get(image_url)
             img_response.raise_for_status()
             image_base64 = base64.b64encode(img_response.content).decode('utf-8')
-        
+
         return ImageGenerationResponse(
             success=True,
             image_url=image_url,
             image_base64=image_base64,
-            prompt_used=prompt
         )
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        if os.getenv("AI_DEBUG_LOGGING", "").lower() == "true":
-            print(f"[ai] Error: {type(e).__name__}")
+        print(f"[ai] Error: {type(e).__name__}")
         return JSONResponse(
             status_code=500,
-            content={
-                "success": False,
-                "error": str(e),
-                "prompt_used": prompt if 'prompt' in locals() else None
-            }
+            content={"success": False, "error": "Failed to generate image"}
         )
 
 
@@ -758,7 +776,11 @@ async def generate_event_cover_image(
             status_code=503,
             detail="OpenAI API not configured. Please set OPENAI_API_KEY environment variable."
         )
-    
+
+    size_str = f"{request.width}x{request.height}"
+    if size_str not in ALLOWED_IMAGE_SIZES:
+        raise HTTPException(status_code=400, detail="Unsupported image dimensions")
+
     try:
         # Generate enhanced prompt with all event data and randomness
         prompt = generate_enhanced_event_prompt(
@@ -774,61 +796,59 @@ async def generate_event_cover_image(
             start_date_time=request.startDateTime,
             variation_seed=request.variationSeed
         )
-        
+
         if os.getenv("AI_DEBUG_LOGGING", "").lower() == "true":
             print(f"[ai] Generating event cover for '{request.name}' (prompt len={len(prompt)})")
-        
+
         # Generate image using OpenAI's latest image generation model
         image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
-        
+
         try:
-            # Try using the latest GPT Image 1.5 model
             response = openai_client.images.generate(
                 model=image_model,
                 prompt=prompt,
-                size=f"{request.width}x{request.height}",
+                size=size_str,
                 quality="hd",
                 n=1
             )
             image_url = response.data[0].url
-        except Exception as e:
-            # Fallback to DALL-E 3 if GPT Image 1.5 is not available
-            print(f"[ai] GPT Image 1.5 not available, falling back to DALL-E 3: {e}")
+        except Exception:
+            # Fallback to DALL-E 3 if primary model is not available
+            print("[ai] Primary image model not available, falling back to DALL-E 3")
             response = openai_client.images.generate(
                 model="dall-e-3",
                 prompt=prompt,
-                size=f"{request.width}x{request.height}",
+                size=size_str,
                 quality="hd",
                 n=1
             )
             image_url = response.data[0].url
-        
+
         # Always fetch and return as base64 for mobile (SSRF-safe)
         ok, reason = _is_safe_image_url(image_url)
         if not ok:
-            raise HTTPException(status_code=502, detail=f"Unsafe image URL: {reason}")
+            raise HTTPException(status_code=502, detail="Unable to retrieve generated image")
         async with httpx.AsyncClient(timeout=30.0) as client:
             img_response = await client.get(image_url)
             img_response.raise_for_status()
             image_base64 = base64.b64encode(img_response.content).decode('utf-8')
-        
+
         return ImageGenerationResponse(
             success=True,
-            image_url=image_url,  # Also return URL for reference
-            image_base64=image_base64,  # Base64 for mobile to save to S3
-            prompt_used=prompt
+            image_url=image_url,
+            image_base64=image_base64,
         )
-        
+
     except httpx.HTTPError as e:
-        if os.getenv("AI_DEBUG_LOGGING", "").lower() == "true":
-            print(f"[ai] HTTP error: {type(e).__name__}")
+        print(f"[ai] HTTP error fetching image: {type(e).__name__}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch generated image: {str(e)}"
+            detail="Failed to fetch generated image"
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        if os.getenv("AI_DEBUG_LOGGING", "").lower() == "true":
-            print(f"[ai] Error: {type(e).__name__}")
+        print(f"[ai] Error: {type(e).__name__}")
         raise HTTPException(
             status_code=500,
             detail="Failed to generate image"

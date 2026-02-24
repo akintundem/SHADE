@@ -29,9 +29,19 @@ public class CommentResponse {
     private LocalDateTime updatedAt;
 
     /**
-     * Create a CommentResponse from a PostComment entity.
+     * Create a CommentResponse from a PostComment entity (avatar URL not resolved).
      */
     public static CommentResponse from(PostComment comment) {
+        return from(comment, null);
+    }
+
+    /**
+     * Create a CommentResponse from a PostComment entity.
+     *
+     * @param comment      the comment entity
+     * @param avatarUrl    presigned GET URL for the author's avatar (may be null)
+     */
+    public static CommentResponse from(PostComment comment, String avatarUrl) {
         CommentResponse resp = new CommentResponse();
         resp.setId(comment.getId());
         resp.setPostId(comment.getPost() != null ? comment.getPost().getId() : null);
@@ -42,7 +52,7 @@ public class CommentResponse {
         if (comment.getUser() != null) {
             resp.setUserId(comment.getUser().getId());
             resp.setAuthorName(comment.getUser().getName());
-            resp.setAuthorAvatarUrl(comment.getUser().getProfilePictureUrl());
+            resp.setAuthorAvatarUrl(avatarUrl);
         }
 
         return resp;
