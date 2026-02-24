@@ -40,7 +40,7 @@ public class TicketTypeTemplateController {
 
     @PostMapping
     @Operation(summary = "Create ticket type template", description = "Create a reusable ticket type template.")
-    @RequiresPermission(RbacPermissions.TICKET_TYPE_CREATE)
+    @RequiresPermission(RbacPermissions.TICKET_TYPE_TEMPLATE_CREATE)
     public ResponseEntity<TicketTypeTemplateResponse> createTemplate(
             @Valid @RequestBody CreateTicketTypeTemplateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -50,7 +50,7 @@ public class TicketTypeTemplateController {
 
     @GetMapping
     @Operation(summary = "List ticket type templates", description = "List ticket type templates for the authenticated user.")
-    @RequiresPermission(RbacPermissions.TICKET_TYPE_READ)
+    @RequiresPermission(RbacPermissions.TICKET_TYPE_TEMPLATE_READ)
     public ResponseEntity<List<TicketTypeTemplateResponse>> listTemplates(
             @AuthenticationPrincipal UserPrincipal principal) {
         List<TicketTypeTemplateResponse> responses = templateService.listTemplates(principal).stream()
@@ -61,7 +61,7 @@ public class TicketTypeTemplateController {
 
     @PutMapping("/{templateId}")
     @Operation(summary = "Update ticket type template", description = "Update a ticket type template.")
-    @RequiresPermission(RbacPermissions.TICKET_TYPE_UPDATE)
+    @RequiresPermission(RbacPermissions.TICKET_TYPE_TEMPLATE_UPDATE)
     public ResponseEntity<TicketTypeTemplateResponse> updateTemplate(
             @PathVariable UUID templateId,
             @Valid @RequestBody UpdateTicketTypeTemplateRequest request,
@@ -72,7 +72,7 @@ public class TicketTypeTemplateController {
 
     @DeleteMapping("/{templateId}")
     @Operation(summary = "Delete ticket type template", description = "Delete a ticket type template.")
-    @RequiresPermission(RbacPermissions.TICKET_TYPE_DELETE)
+    @RequiresPermission(RbacPermissions.TICKET_TYPE_TEMPLATE_DELETE)
     public ResponseEntity<Void> deleteTemplate(
             @PathVariable UUID templateId,
             @AuthenticationPrincipal UserPrincipal principal) {

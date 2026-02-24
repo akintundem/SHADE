@@ -46,7 +46,7 @@ public class EventWaitlistController {
     private final EventWaitlistService waitlistService;
 
     @PostMapping
-    @RequiresPermission(RbacPermissions.ATTENDEE_CREATE)
+    @RequiresPermission(value = RbacPermissions.ATTENDEE_CREATE, resources = {"event_id=#eventId"})
     @Operation(summary = "Join event waitlist", 
             description = "Join the waitlist for an event when it's at capacity. " +
                          "You will be automatically promoted when spots become available.")

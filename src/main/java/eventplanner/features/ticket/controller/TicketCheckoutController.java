@@ -3,6 +3,7 @@ package eventplanner.features.ticket.controller;
 import eventplanner.features.ticket.dto.request.CreateTicketCheckoutRequest;
 import eventplanner.features.ticket.dto.response.TicketCheckoutResponse;
 import eventplanner.features.ticket.dto.response.TicketPaymentInitResponse;
+import eventplanner.features.ticket.dto.response.TicketFakePaymentResponse;
 import eventplanner.features.ticket.service.TicketCheckoutService;
 import eventplanner.security.authorization.rbac.constants.RbacPermissions;
 import eventplanner.security.authorization.rbac.annotation.RequiresPermission;
@@ -62,6 +63,20 @@ public class TicketCheckoutController {
             throw new ForbiddenException("Access denied to event: " + eventId);
         }
         TicketPaymentInitResponse response = checkoutService.startPayment(checkoutId, eventId, principal);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{checkoutId}/fake-payment")
+    @Operation(summary = "Complete fake payment (demo)", description = "Simulate payment outcome: ~90% success, ~10% failure. On success, completes checkout and issues tickets.")
+    @RequiresPermission(value = RbacPermissions.TICKET_CHECKOUT, resources = {"event_id=#eventId"})
+    public ResponseEntity<TicketFakePaymentResponse> completeFakePayment(
+            @PathVariable UUID eventId,
+            @PathVariable UUID checkoutId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (!canAccessCheckout(principal, eventId)) {
+            throw new ForbiddenException("Access denied to event: " + eventId);
+        }
+        TicketFakePaymentResponse response = checkoutService.completeFakePayment(checkoutId, eventId, principal);
         return ResponseEntity.ok(response);
     }
 

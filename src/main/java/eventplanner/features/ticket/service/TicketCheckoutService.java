@@ -13,6 +13,7 @@ import eventplanner.features.ticket.dto.request.TicketCheckoutItemRequest;
 import eventplanner.features.ticket.dto.response.TicketCheckoutResponse;
 import eventplanner.features.ticket.dto.response.TicketResponse;
 import eventplanner.features.ticket.dto.response.TicketPaymentInitResponse;
+import eventplanner.features.ticket.dto.response.TicketFakePaymentResponse;
 import eventplanner.features.ticket.entity.Ticket;
 import eventplanner.features.ticket.entity.TicketCheckout;
 import eventplanner.features.ticket.entity.TicketCheckoutItem;
@@ -38,6 +39,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -77,6 +79,10 @@ public class TicketCheckoutService {
     private final TicketingPolicyService ticketingPolicyService;
     private final BudgetSyncService budgetSyncService;
     private final Clock clock;
+    private static final SecureRandom RANDOM = new SecureRandom();
+    /** Ratio 1:9 = fail 1 in 10 (randomized). */
+    private static final int FAKE_PAYMENT_FAIL_NUMERATOR = 1;
+    private static final int FAKE_PAYMENT_FAIL_DENOMINATOR = 10;
 
     /**
      * Start a new checkout session and reserve tickets.
@@ -311,6 +317,53 @@ public class TicketCheckoutService {
             .checkoutId(checkout.getId())
             .paymentUrl(fakePaymentUrl)
             .message("Placeholder payment link. Replace with Stripe/PSP integration.")
+            .build();
+    }
+
+    /**
+     * Complete checkout with fake payment (demo mode).
+     * Randomizes success vs failure in ratio 1:9 (fail once per ~10 attempts).
+     * On success, finalizes checkout and issues tickets; on failure, leaves checkout in PENDING_PAYMENT.
+     */
+    public TicketFakePaymentResponse completeFakePayment(UUID checkoutId, UUID eventId, UserPrincipal principal) {
+        TicketCheckout checkout = checkoutRepository.findWithItemsById(checkoutId)
+            .orElseThrow(() -> new ResourceNotFoundException("Checkout not found: " + checkoutId));
+        validateCheckoutEvent(checkout, eventId);
+
+        if (checkout.getStatus() == TicketCheckoutStatus.CANCELLED || checkout.getStatus() == TicketCheckoutStatus.EXPIRED) {
+            throw new ApiException(ErrorCode.CHECKOUT_INACTIVE, "Checkout is not active");
+        }
+        if (checkout.getStatus() == TicketCheckoutStatus.COMPLETED) {
+            TicketCheckoutResponse already = TicketCheckoutResponse.from(
+                checkout,
+                checkout.getItems() != null ? checkout.getItems() : List.of(),
+                mapTickets(ticketRepository.findByCheckoutId(checkoutId))
+            );
+            return TicketFakePaymentResponse.builder()
+                .success(true)
+                .message(null)
+                .checkout(already)
+                .build();
+        }
+
+        boolean success = RANDOM.nextInt(FAKE_PAYMENT_FAIL_DENOMINATOR) >= FAKE_PAYMENT_FAIL_NUMERATOR;
+        List<TicketCheckoutItem> items = checkout.getItems() != null ? checkout.getItems() : List.of();
+        List<Ticket> tickets = ticketRepository.findByCheckoutId(checkoutId);
+
+        if (success) {
+            TicketCheckout finalized = finalizeCheckout(checkout, tickets, principal);
+            TicketCheckoutResponse response = TicketCheckoutResponse.from(finalized, items, mapTickets(tickets));
+            return TicketFakePaymentResponse.builder()
+                .success(true)
+                .message(null)
+                .checkout(response)
+                .build();
+        }
+
+        return TicketFakePaymentResponse.builder()
+            .success(false)
+            .message("Payment declined. Please try again.")
+            .checkout(null)
             .build();
     }
 

@@ -107,6 +107,7 @@ services:
       SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "true"
       SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: "2s"
       SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: "1s"
+      # Optional: set SPRING_JPA_HIBERNATE_DDL_AUTO=create in .env for one run to create tables (PostGIS required); then remove or set to validate.
       # Note: All other environment variables are loaded from env_file (.env)
 
     # Extended startup time for Maven build on first run

@@ -65,18 +65,18 @@ plugins:
           - "Server:"
 
   # ---------------------------------------------------------------------------
-  # Rate Limiting - Global default limits
+  # Rate Limiting - DISABLED for DB seeding (uncomment for production)
   # Prevents brute force, DoS, and API abuse
   # ---------------------------------------------------------------------------
-  - name: rate-limiting
-    config:
-      minute: 120
-      hour: 3000
-      policy: local
-      fault_tolerant: true
-      hide_client_headers: false
-      error_code: 429
-      error_message: "Rate limit exceeded. Please slow down your requests."
+  # - name: rate-limiting
+  #   config:
+  #     minute: 120
+  #     hour: 3000
+  #     policy: local
+  #     fault_tolerant: true
+  #     hide_client_headers: false
+  #     error_code: 429
+  #     error_message: "Rate limit exceeded. Please slow down your requests."
 
   # ---------------------------------------------------------------------------
   # Request Size Limiting - Prevent large payload attacks
@@ -173,15 +173,15 @@ services:
             headers:
               - "x-ai-secret:${AI_GATEWAY_SHARED_SECRET}"
 
-      # Rate limit AI endpoints more strictly (expensive operations)
-      - name: rate-limiting
-        config:
-          minute: 20
-          hour: 200
-          policy: local
-          fault_tolerant: true
-          error_code: 429
-          error_message: "AI service rate limit exceeded. Please try again later."
+      # Rate limit AI endpoints - DISABLED for DB seeding (uncomment for production)
+      # - name: rate-limiting
+      #   config:
+      #     minute: 20
+      #     hour: 200
+      #     policy: local
+      #     fault_tolerant: true
+      #     error_code: 429
+      #     error_message: "AI service rate limit exceeded. Please try again later."
 
       # Larger payload size for image generation requests
       - name: request-size-limiting

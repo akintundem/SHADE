@@ -107,7 +107,7 @@ public class EventCollaboratorInviteController {
     }
 
     @PostMapping("/api/v1/collaborator-invites/{inviteId}/accept")
-    @RequiresPermission(value = RbacPermissions.ROLE_ASSIGN, resources = {"invite_id=#inviteId"})
+    @RequiresPermission(value = RbacPermissions.COLLABORATOR_INVITE_ACCEPT, resources = {"user_id=#principal.id"})
     @Operation(summary = "Accept collaborator invite", description = "Accept a collaborator invite (in-app)")
     public ResponseEntity<EventCollaboratorResponse> acceptInvite(
             @PathVariable UUID inviteId,

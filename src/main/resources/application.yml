@@ -40,7 +40,7 @@ spring:
   # JPA Configuration — schema is managed by Flyway only; Hibernate does not change DDL
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     show-sql: false
     open-in-view: false  # Disable Open Session In View to prevent lazy loading issues
     properties:
@@ -99,6 +99,8 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
     check-location: true
+  retry:
+    enabled: true
 
 rabbitmq:
   url: ${RABBITMQ_URL}
@@ -217,20 +219,98 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
 
-# Management endpoints
+# Management endpoints (includes circuitbreakers/retry for Resilience4j)
 # SECURITY: Removed 'env' from default exposure to prevent secret leakage
-# If needed for debugging, enable only in development and ensure proper authentication
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus,circuitbreakers,retry
   endpoint:
     health:
-      show-details: when_authorized
+      show-details: always
   health:
     elasticsearch:
       enabled: false
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        notification.send: true
+        email.send: true
+    tags:
+      application: ${spring.application.name}
+      environment: ${spring.profiles.active:default}
+
+# Resilience4j — circuit breakers, retry for external integrations
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        registerHealthIndicator: true
+        slidingWindowSize: 100
+        minimumNumberOfCalls: 10
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 60s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+        recordExceptions:
+          - eventplanner.common.communication.exception.NotificationFailureException
+          - eventplanner.common.communication.exception.EmailFailureException
+          - org.springframework.amqp.AmqpException
+          - java.io.IOException
+          - java.net.ConnectException
+    instances:
+      notificationService:
+        baseConfig: default
+        slidingWindowSize: 50
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 60
+        waitDurationInOpenState: 30s
+      emailService:
+        baseConfig: default
+        slidingWindowSize: 50
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 70
+        waitDurationInOpenState: 20s
+      s3Service:
+        baseConfig: default
+        slidingWindowSize: 100
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 40
+        waitDurationInOpenState: 60s
+  retry:
+    configs:
+      default:
+        maxAttempts: 3
+        waitDuration: 1000ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - eventplanner.common.communication.exception.NotificationFailureException
+          - org.springframework.amqp.AmqpException
+          - java.net.ConnectException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - java.lang.IllegalArgumentException
+          - eventplanner.common.exception.exceptions.BadRequestException
+    instances:
+      notificationService:
+        baseConfig: default
+        maxAttempts: 3
+        waitDuration: 500ms
+      emailService:
+        baseConfig: default
+        maxAttempts: 2
+        waitDuration: 1000ms
+      s3Upload:
+        baseConfig: default
+        maxAttempts: 3
+        waitDuration: 2000ms
+        exponentialBackoffMultiplier: 3
 
 # OpenAPI Documentation
 springdoc:

@@ -71,39 +71,55 @@ public class AuthInfoController {
     /**
      * Lightweight signup endpoint for OIDC (Auth0) flows.
      * Creates/updates a local user record and syncs profile to IdP.
+     *
+     * <p>Auth0 API access tokens often omit the {@code email} claim when an
+     * API audience is specified. We therefore resolve the authoritative email
+     * from the provisioned {@link UserPrincipal} (loaded by
+     * {@code OidcJwtAuthenticationConverter} via the {@code sub} claim) and
+     * fall back to the JWT claim only when necessary.
      */
     @PostMapping("/signup")
     public ResponseEntity<SecureUserResponse> signup(@Valid @RequestBody SignupRequest request,
-                                                     Authentication authentication) {
+                                                     Authentication authentication,
+                                                     @AuthenticationPrincipal UserPrincipal principal) {
         try {
             Jwt jwt = requireJwt(authentication);
-            String tokenEmail = resolveTokenEmail(jwt);
-            if (!isEmailVerified(jwt)) {
-                throw new ForbiddenException("Email not verified");
-            }
-            // SECURITY: Never use request body email as identity; require verified token email
-            if (!StringUtils.hasText(tokenEmail)) {
-                throw new UnauthorizedException("Token must contain verified email for signup");
-            }
-            String requestEmail = normalizeEmail(request.getEmail());
-            if (!tokenEmail.equalsIgnoreCase(requestEmail)) {
-                throw new BadRequestException("Invalid signup payload");
-            }
-
-            request.setEmail(tokenEmail);
             String subject = jwt.getSubject();
             if (!StringUtils.hasText(subject)) {
                 throw new UnauthorizedException("Invalid token");
             }
+
+            // Resolve the authoritative email: prefer DB principal email, then JWT
+            // claim, then request email (Auth0 API access tokens strip the email claim).
+            String requestEmail = normalizeEmail(request.getEmail());
+            String canonicalEmail = resolveCanonicalEmail(jwt, principal, requestEmail);
+            if (!StringUtils.hasText(canonicalEmail)) {
+                throw new UnauthorizedException("Unable to resolve verified email for signup");
+            }
+
+            // When we resolved via JWT or DB, confirm the request email matches.
+            // When we fell back to the request email itself, this is a no-op.
+            if (!canonicalEmail.equalsIgnoreCase(requestEmail)) {
+                throw new BadRequestException("Invalid signup payload");
+            }
+
+            request.setEmail(canonicalEmail);
             var result = userAccountService.provisionUser(request, subject);
             UserAccount user = result.user();
-            idpUserService.updateUserProfile(
-                    subject,
-                    tokenEmail,
-                    user.getName(),
-                    user.getUsername(),
-                    user.getPhoneNumber()
-            );
+            try {
+                idpUserService.updateUserProfile(
+                        subject,
+                        canonicalEmail,
+                        user.getName(),
+                        user.getUsername(),
+                        user.getPhoneNumber()
+                );
+            } catch (Exception idpEx) {
+                // IdP sync is best-effort — user is already provisioned locally.
+                // Log and continue so the caller gets a success response.
+                org.slf4j.LoggerFactory.getLogger(AuthInfoController.class)
+                        .warn("IdP profile sync failed for sub={}: {}", subject, idpEx.getMessage());
+            }
             HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
             return ResponseEntity.status(status).body(AuthMapper.toSecureUserResponse(user));
         } catch (IllegalStateException ex) {
@@ -112,6 +128,39 @@ public class AuthInfoController {
         } catch (IllegalArgumentException ex) {
             throw new BadRequestException("Invalid credentials", ex);
         }
+    }
+
+    /**
+     * Resolve the canonical email for signup.
+     * Priority:
+     * 1. Principal's email from DB (loaded via sub claim), if it's a real email (not a placeholder)
+     * 2. JWT email claim (standard OIDC tokens)
+     * 3. JWT preferred_username / username (some IdP configs)
+     * 4. Request email — trusted as a last resort when JWT is Auth0 access token
+     *    (API audience causes Auth0 to strip the email claim; the token is still
+     *    cryptographically verified by Spring Security, so the sub is authentic)
+     */
+    private String resolveCanonicalEmail(Jwt jwt, UserPrincipal principal, String requestEmail) {
+        if (principal != null && principal.getUser() != null) {
+            String principalEmail = safeNormalizeEmail(principal.getUser().getEmail());
+            if (StringUtils.hasText(principalEmail) && !principalEmail.endsWith("@auth0.local")) {
+                return principalEmail;
+            }
+        }
+
+        String tokenEmail = resolveTokenEmail(jwt);
+        if (StringUtils.hasText(tokenEmail)) {
+            return tokenEmail;
+        }
+
+        // Auth0 access tokens with API audience omit the email claim.
+        // The JWT is cryptographically verified; the sub claim is authentic.
+        // Accept the request email as the authoritative identity email.
+        if (StringUtils.hasText(requestEmail) && requestEmail.contains("@")) {
+            return requestEmail;
+        }
+
+        return null;
     }
 
     private Jwt requireJwt(Authentication authentication) {

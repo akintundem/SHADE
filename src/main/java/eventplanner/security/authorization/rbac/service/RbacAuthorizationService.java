@@ -150,7 +150,7 @@ public class RbacAuthorizationService {
                     // but allows validation to run first and return 400 instead of 403
                     return roles;
                 }
-                roles.addAll(resolveEventRoles(context, resources));
+                roles.addAll(resolveEventRoles(principal, context, resources));
             }
             default -> {
             }
@@ -158,15 +158,17 @@ public class RbacAuthorizationService {
         return roles;
     }
 
-    private Collection<String> resolveEventRoles(RbacRequestContext context, Map<String, Object> resources) {
-        if (context == null) {
-            return Set.of();
-        }
+    private Collection<String> resolveEventRoles(UserPrincipal principal, RbacRequestContext context, Map<String, Object> resources) {
         UUID eventId = extractUuid(resources, "event_id");
         if (eventId == null) {
             return Set.of();
         }
-        return context.getEventRoles(eventId);
+        Set<String> roles = context != null ? context.getEventRoles(eventId) : Set.of();
+        // If user has no collaborator role but can access the event (attendee, ticket holder, public), grant ATTENDEE
+        if (roles.isEmpty() && principal != null && authorizationService.canAccessEventWithInvite(principal, eventId)) {
+            return Set.of("ATTENDEE");
+        }
+        return roles;
     }
 
     private boolean ownsScope(UserPrincipal principal, RbacScope scope, Map<String, Object> resources) {
@@ -269,14 +271,18 @@ public class RbacAuthorizationService {
                 if (eventId != null && !resources.containsKey("event_id")) {
                     resources.put("event_id", eventId);
                 }
-                if (!resolveEventRoles(context, resources).isEmpty()) {
+                if (!resolveEventRoles(principal, context, resources).isEmpty()) {
                     yield true;
                 }
                 // Event owner is automatically a member
                 if (authorizationService.isEventOwner(principal, eventId)) {
                     yield true;
                 }
-                yield authorizationService.hasEventMembership(principal, eventId);
+                if (authorizationService.hasEventMembership(principal, eventId)) {
+                    yield true;
+                }
+                // Attendees, ticket holders, and users with access to public events can interact (e.g. feed, waitlist, checkout)
+                yield authorizationService.canAccessEventWithInvite(principal, eventId);
             }
             case PUBLIC -> true;
         };

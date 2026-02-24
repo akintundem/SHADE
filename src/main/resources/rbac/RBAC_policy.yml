@@ -1058,6 +1058,42 @@ policy:
         owns_scope: false
         is_member: false
     -
+      name: ticket.type.template.create
+      scope: SYSTEM
+      resources: null
+      description: Create ticket type templates (user-level, not event-scoped)
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: ticket.type.template.read
+      scope: SYSTEM
+      resources: null
+      description: List and view own ticket type templates
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: ticket.type.template.update
+      scope: SYSTEM
+      resources: null
+      description: Update own ticket type templates
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
+      name: ticket.type.template.delete
+      scope: SYSTEM
+      resources: null
+      description: Delete own ticket type templates
+      abac:
+        is_authenticated: true
+        owns_scope: false
+        is_member: false
+    -
       name: public.events.search
       scope: SYSTEM
       resources: null
@@ -1123,6 +1159,10 @@ policy:
         - collaborator.invite.accept
         - organization.create
         - organization.search
+        - ticket.type.template.create
+        - ticket.type.template.read
+        - ticket.type.template.update
+        - ticket.type.template.delete
         - user.notifications.manage
         - user.social.read
         - user.social.update
@@ -1140,6 +1180,10 @@ policy:
         - payment.create
         - payment.process
         - payment.read
+        - ticket.type.template.create
+        - ticket.type.template.read
+        - ticket.type.template.update
+        - ticket.type.template.delete
         - user.delete
         - user.notifications.manage
         - user.read
@@ -1542,3 +1586,8 @@ policy:
         - event.media.read
         - event.media.update
         - event.media.upload
+      # Virtual role for attendees/ticket holders/public-access users (resolved when canAccessEventWithInvite)
+      ATTENDEE:
+        - event.read
+        - attendee.create
+        - ticket.checkout

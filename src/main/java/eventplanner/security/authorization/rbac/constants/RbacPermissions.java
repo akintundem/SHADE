@@ -105,6 +105,10 @@ public final class RbacPermissions {
     public static final String TICKET_TYPE_DELETE = "ticket.type.delete";
     public static final String TICKET_TYPE_READ = "ticket.type.read";
     public static final String TICKET_TYPE_UPDATE = "ticket.type.update";
+    public static final String TICKET_TYPE_TEMPLATE_CREATE = "ticket.type.template.create";
+    public static final String TICKET_TYPE_TEMPLATE_READ = "ticket.type.template.read";
+    public static final String TICKET_TYPE_TEMPLATE_UPDATE = "ticket.type.template.update";
+    public static final String TICKET_TYPE_TEMPLATE_DELETE = "ticket.type.template.delete";
     public static final String TICKET_VALIDATE = "ticket.validate";
     public static final String USER_DELETE = "user.delete";
     public static final String USER_NOTIFICATIONS_MANAGE = "user.notifications.manage";
