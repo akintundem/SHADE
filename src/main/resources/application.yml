@@ -113,11 +113,13 @@ external:
     from: ${EXTERNAL_EMAIL_FROM}
     from-events: ${EXTERNAL_EMAIL_FROM_EVENTS}
 
+# S3-compatible object storage (AWS S3 or MinIO). For MinIO: set endpoint (e.g. http://localhost:9000)
+# and path-style-access-enabled: true so cover/profile image URLs point to MinIO.
 aws:
   s3:
     access-key-id: ${AWS_ACCESS_KEY_ID:}
     secret-access-key: ${AWS_SECRET_ACCESS_KEY:}
-    region: ${AWS_REGION:}
+    region: ${AWS_REGION:us-east-1}
     buckets:
       user: ${AWS_S3_USER_BUCKET:}
       event: ${AWS_S3_EVENT_BUCKET:}

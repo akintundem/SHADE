@@ -1,7 +1,5 @@
 package eventplanner.features.event.service;
 
-import eventplanner.common.communication.model.Communication;
-import eventplanner.common.communication.repository.CommunicationRepository;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationRequest;
 import eventplanner.common.communication.services.core.dto.NotificationResponse;
@@ -21,7 +19,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
@@ -34,14 +31,13 @@ public class EventNotificationService {
 
     private final NotificationService notificationService;
     private final EventNotificationSettingsService settingsService;
-    private final CommunicationRepository communicationRepository;
     private final EventRecipientResolverService recipientResolverService;
     private final EventEmailTemplateService emailTemplateService;
     private final EventRepository eventRepository;
     private final EventTemplateVariableService templateVariableService;
     private final ExternalServicesProperties externalServicesProperties;
 
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @Transactional
     public EventNotificationResponse sendNotification(UUID eventId, EventNotificationRequest request) {
         EventNotificationSettings settings = settingsService.getSettingsEntity(eventId);
         validateChannelEnabled(settings, request.getChannel());
@@ -161,15 +157,7 @@ public class EventNotificationService {
             log.warn("Some notifications failed: {}", failedRecipients);
         }
 
-        // Get a sample communication for response (latest one)
-        Communication communication = communicationRepository
-                .findByEventIdOrderByCreatedAtDesc(eventId)
-                .stream()
-                .filter(c -> c.getCommunicationType() == type)
-                .findFirst()
-                .orElse(null);
-
-        return toResponse(eventId, request, communication, recipients, successfulRecipients, failedRecipients);
+        return toResponse(eventId, request, recipients, successfulRecipients, failedRecipients);
     }
 
     /**
@@ -190,7 +178,10 @@ public class EventNotificationService {
         if (type == CommunicationType.EMAIL) {
             if (request.getEmailTemplateType() == null) {
                 throw new BadRequestException(
-                    "emailTemplateType is required for EMAIL channel. Options: ANNOUNCEMENT, CANCEL_EVENT"
+                    "emailTemplateType is required for EMAIL channel. " +
+                    "Options: ANNOUNCEMENT, CANCEL_EVENT, EVENT_REMINDER, " +
+                    "ATTENDEE_WELCOME, ATTENDEE_INVITE, ATTENDEE_INVITE_RESPONSE, " +
+                    "TICKET_CONFIRMATION, COLLABORATOR_INVITE, COLLABORATOR_WELCOME"
                 );
             }
             return emailTemplateService.getTemplateId(request.getEmailTemplateType());
@@ -215,25 +206,20 @@ public class EventNotificationService {
         }
     }
 
-    private EventNotificationResponse toResponse(UUID eventId, 
-                                                 EventNotificationRequest request, 
-                                                 Communication communication,
+    private EventNotificationResponse toResponse(UUID eventId,
+                                                 EventNotificationRequest request,
                                                  EventRecipientResolverService.RecipientInfo recipients,
                                                  List<String> successfulRecipients,
                                                  List<String> failedRecipients) {
+        boolean allFailed  = successfulRecipients.isEmpty() && !failedRecipients.isEmpty();
+        boolean allSuccess = failedRecipients.isEmpty()     && !successfulRecipients.isEmpty();
+        String status = allSuccess ? "sent" : allFailed ? "failed" : "partial";
+
         EventNotificationResponse response = new EventNotificationResponse();
-        if (communication != null) {
-            response.setNotificationId(communication.getId());
-            response.setStatus(communication.getStatus() != null ? communication.getStatus().name().toLowerCase() : null);
-            response.setSentAt(communication.getSentAt());
-            response.setCreatedAt(communication.getCreatedAt());
-        } else {
-            // No communication record persisted; infer status from recipient results.
-            response.setNotificationId(null);
-            response.setStatus(successfulRecipients.isEmpty() ? "failed" : "partial");
-            response.setSentAt(null);
-            response.setCreatedAt(null);
-        }
+        response.setNotificationId(null);   // individual Communications are recorded per-recipient in NotificationService
+        response.setStatus(status);
+        response.setSentAt(allFailed ? null : java.time.LocalDateTime.now());
+        response.setCreatedAt(java.time.LocalDateTime.now());
         response.setEventId(eventId);
         response.setChannel(request.getChannel());
         response.setSubject(request.getSubject());

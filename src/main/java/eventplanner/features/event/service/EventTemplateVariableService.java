@@ -134,35 +134,92 @@ public class EventTemplateVariableService {
     }
 
     /**
-     * Add template-specific variables based on template type
+     * Add template-specific variables based on template type.
+     *
+     * <p>Variable names here must match the props expected by the corresponding
+     * React component in email/templates/. When a template is updated on the
+     * Node side, update the matching case below.</p>
      */
-    private void addTemplateSpecificVariables(Map<String, Object> templateVariables, 
-                                              EmailTemplateType templateType, 
-                                              String content, 
+    private void addTemplateSpecificVariables(Map<String, Object> templateVariables,
+                                              EmailTemplateType templateType,
+                                              String content,
                                               Event event) {
         if (templateType == null) {
             return;
         }
-        
+
+        String actionUrl = sanitizeEventWebsiteUrl(event.getEventWebsiteUrl(), event.getId());
+        Object venueRaw = templateVariables.get("venue");
+        String venueAddress = (venueRaw instanceof Map<?, ?> vm && vm.get("fullAddress") != null)
+                ? String.valueOf(vm.get("fullAddress")) : null;
+        Object startDateTime = templateVariables.getOrDefault("startDateTime", templateVariables.get("startDate"));
+
         switch (templateType) {
             case ANNOUNCEMENT:
-                templateVariables.put("eventName", event.getName());
+                // EventAnnouncement: { eventName, subjectLine, eventDate, venue, highlight, actionUrl }
                 templateVariables.put("subjectLine", templateVariables.getOrDefault("subject", content));
-                templateVariables.put("eventDate", templateVariables.getOrDefault("startDateTime", templateVariables.get("startDate")));
-                Object venue = templateVariables.get("venue");
-                if (venue instanceof Map<?, ?> venueMap && venueMap.get("fullAddress") != null) {
-                    templateVariables.put("venue", venueMap.get("fullAddress"));
-                }
+                templateVariables.put("eventDate", startDateTime);
+                templateVariables.put("venue", venueAddress);
                 templateVariables.put("highlight", content);
-                templateVariables.put("actionUrl", sanitizeEventWebsiteUrl(event.getEventWebsiteUrl(), event.getId()));
+                templateVariables.put("actionUrl", actionUrl);
                 break;
+
             case CANCEL_EVENT:
-                templateVariables.put("eventName", event.getName());
+                // EventCancelled: { eventName, reason, actionUrl }
                 templateVariables.put("reason", content);
-                templateVariables.put("actionUrl", sanitizeEventWebsiteUrl(event.getEventWebsiteUrl(), event.getId()));
+                templateVariables.put("actionUrl", actionUrl);
                 break;
+
+            case EVENT_REMINDER:
+                // EventReminder: { eventName, eventDate, message, actionUrl }
+                templateVariables.put("eventDate", startDateTime);
+                templateVariables.put("message", content);
+                templateVariables.put("actionUrl", actionUrl);
+                break;
+
+            case ATTENDEE_WELCOME:
+                // AttendeeWelcome: { attendeeName, eventName, eventDate, venue, actionUrl }
+                templateVariables.put("eventDate", startDateTime);
+                templateVariables.put("venue", venueAddress);
+                templateVariables.put("actionUrl", actionUrl);
+                // attendeeName is caller-supplied; default handled by the template itself
+                break;
+
+            case ATTENDEE_INVITE:
+                // AttendeeInvite: { inviteeName, inviterName, eventName, message, acceptUrl }
+                templateVariables.put("message", content);
+                templateVariables.put("acceptUrl", actionUrl);
+                // inviteeName / inviterName are caller-supplied
+                break;
+
+            case ATTENDEE_INVITE_RESPONSE:
+                // AttendeeInviteResponse: { inviterName, inviteeName, eventName, status, eventUrl }
+                templateVariables.put("eventUrl", actionUrl);
+                // status, inviterName, inviteeName are caller-supplied
+                break;
+
+            case TICKET_CONFIRMATION:
+                // TicketConfirmation: { eventName, eventDate, venue, actionUrl, ... }
+                templateVariables.put("eventDate", startDateTime);
+                templateVariables.put("venue", venueAddress);
+                templateVariables.put("actionUrl", actionUrl);
+                break;
+
+            case COLLABORATOR_INVITE:
+                // CollaboratorInvite: { inviteeName, inviterName, eventName, role, message, acceptUrl }
+                templateVariables.put("message", content);
+                templateVariables.put("acceptUrl", actionUrl);
+                // role, inviteeName, inviterName are caller-supplied
+                break;
+
+            case COLLABORATOR_WELCOME:
+                // CollaboratorWelcome: { collaboratorName, eventName, role, eventDate, actionUrl }
+                templateVariables.put("eventDate", startDateTime);
+                templateVariables.put("actionUrl", actionUrl);
+                // collaboratorName, role are caller-supplied
+                break;
+
             default:
-                // No additional variables for other types
                 break;
         }
     }

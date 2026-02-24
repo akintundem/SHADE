@@ -1,7 +1,6 @@
 package eventplanner.features.event.service;
 
 import eventplanner.common.communication.enums.CommunicationStatus;
-import eventplanner.common.communication.repository.CommunicationRepository;
 import eventplanner.common.communication.services.core.NotificationService;
 import eventplanner.common.communication.services.core.dto.NotificationResponse;
 import eventplanner.common.config.ExternalServicesProperties;
@@ -40,9 +39,6 @@ class EventNotificationServiceTest {
     private EventNotificationSettingsService settingsService;
 
     @Mock
-    private CommunicationRepository communicationRepository;
-
-    @Mock
     private EventRecipientResolverService recipientResolverService;
 
     @Mock
@@ -64,7 +60,6 @@ class EventNotificationServiceTest {
         service = new EventNotificationService(
                 notificationService,
                 settingsService,
-                communicationRepository,
                 recipientResolverService,
                 emailTemplateService,
                 eventRepository,

@@ -23,10 +23,17 @@ public class EventEmailTemplateService {
     private static final Map<EmailTemplateType, String> TEMPLATE_ID_MAP = new HashMap<>();
 
     static {
-        // Map enum values to Resend template IDs/aliases
-        // These must match the template aliases configured in Resend dashboard
-        TEMPLATE_ID_MAP.put(EmailTemplateType.ANNOUNCEMENT, "general-announcement");
-        TEMPLATE_ID_MAP.put(EmailTemplateType.CANCEL_EVENT, "event-cancellation-notice");
+        // Template IDs must match the `id` field in email/templates/index.ts exactly.
+        // When a new template is added to the email service, add a matching entry here.
+        TEMPLATE_ID_MAP.put(EmailTemplateType.ANNOUNCEMENT,             "general-announcement");
+        TEMPLATE_ID_MAP.put(EmailTemplateType.CANCEL_EVENT,             "event-cancellation-notice");
+        TEMPLATE_ID_MAP.put(EmailTemplateType.EVENT_REMINDER,           "event-reminder");
+        TEMPLATE_ID_MAP.put(EmailTemplateType.ATTENDEE_WELCOME,         "attendee-welcome");
+        TEMPLATE_ID_MAP.put(EmailTemplateType.ATTENDEE_INVITE,          "attendee-invite");
+        TEMPLATE_ID_MAP.put(EmailTemplateType.ATTENDEE_INVITE_RESPONSE, "attendee-invite-response");
+        TEMPLATE_ID_MAP.put(EmailTemplateType.TICKET_CONFIRMATION,      "ticket-confirmation");
+        TEMPLATE_ID_MAP.put(EmailTemplateType.COLLABORATOR_INVITE,      "event-invitation");
+        TEMPLATE_ID_MAP.put(EmailTemplateType.COLLABORATOR_WELCOME,     "collaborator-welcome");
     }
 
     /**
