@@ -42,50 +42,17 @@ public class SecurityHeadersFilter implements Filter {
             httpResponse.setHeader("Expires", "0");
         }
 
-        // Web-specific headers (only apply to web browsers)
-        if (isWebBrowserRequest(httpRequest)) {
-            addWebSpecificHeaders(httpResponse);
-        }
-        
+        // SECURITY: Apply web security headers unconditionally — User-Agent is
+        // trivially spoofed so it must not be used as a security gate.
+        // These headers are harmless for API/mobile clients and critical for browsers.
+        addWebSpecificHeaders(httpResponse);
+
         // HSTS (only for HTTPS)
         if (httpRequest.isSecure()) {
             httpResponse.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
         }
 
         chain.doFilter(request, response);
-    }
-    
-    /**
-     * Check if request is from a web browser (not mobile app)
-     */
-    private boolean isWebBrowserRequest(HttpServletRequest request) {
-        String userAgent = request.getHeader("User-Agent");
-        if (userAgent == null) {
-            return false;
-        }
-        
-        // Mobile app user agents typically contain app-specific identifiers
-        String lowerUserAgent = userAgent.toLowerCase();
-        
-        // Common mobile app patterns
-        boolean isMobileApp = lowerUserAgent.contains("okhttp") ||  // Android HTTP client
-                             lowerUserAgent.contains("alamofire") || // iOS HTTP client
-                             lowerUserAgent.contains("cfnetwork") || // iOS networking
-                             lowerUserAgent.contains("mobile app") ||
-                             lowerUserAgent.contains("android app") ||
-                             lowerUserAgent.contains("ios app");
-        
-        // If it's clearly a mobile app, don't apply web headers
-        if (isMobileApp) {
-            return false;
-        }
-        
-        // If it's a web browser, apply web headers
-        return lowerUserAgent.contains("mozilla") || 
-               lowerUserAgent.contains("chrome") || 
-               lowerUserAgent.contains("safari") || 
-               lowerUserAgent.contains("firefox") ||
-               lowerUserAgent.contains("edge");
     }
     
     /**

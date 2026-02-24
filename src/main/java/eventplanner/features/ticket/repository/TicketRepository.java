@@ -5,9 +5,12 @@ import eventplanner.features.ticket.enums.TicketStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import jakarta.persistence.LockModeType;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,6 +28,15 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
      */
     @Query("SELECT t FROM Ticket t WHERE t.qrCodeData = :qrCodeData")
     Optional<Ticket> findByQrCodeData(@Param("qrCodeData") String qrCodeData);
+
+    /**
+     * Find ticket by QR code data with a pessimistic write lock.
+     * Use this in ticket validation to prevent concurrent double-validation (TOCTOU).
+     * The lock is held for the duration of the enclosing @Transactional method.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM Ticket t WHERE t.qrCodeData = :qrCodeData")
+    Optional<Ticket> findByQrCodeDataForUpdate(@Param("qrCodeData") String qrCodeData);
 
     /**
      * Find all tickets for an attendee.

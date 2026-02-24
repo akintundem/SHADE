@@ -263,8 +263,9 @@ public class TicketService {
             throw new BadRequestException("Request cannot be null");
         }
 
-        // Find ticket by QR code data
-        Ticket ticket = ticketRepository.findByQrCodeData(request.getQrCodeData())
+        // Find ticket by QR code data with a pessimistic write lock to prevent
+        // concurrent double-validation (TOCTOU race condition).
+        Ticket ticket = ticketRepository.findByQrCodeDataForUpdate(request.getQrCodeData())
             .orElseThrow(() -> new BadRequestException("Invalid QR code"));
 
         // Verify event exists and matches

@@ -156,6 +156,10 @@ service:
     enabled: ${SERVICE_AUTH_ENABLED}
     # REQUIRED: API key injected by Kong via X-API-Key header
     api-key: ${SERVICE_API_KEY}
+    # OPTIONAL: Secondary key for zero-downtime rotation.
+    # During rotation: set SERVICE_API_KEY to the new key, SERVICE_API_KEY_SECONDARY to the old key.
+    # Once all callers are updated, remove SERVICE_API_KEY_SECONDARY.
+    api-key-secondary: ${SERVICE_API_KEY_SECONDARY:}
     # Require X-API-Key header for all non-actuator requests (enforced in production)
     require-header: ${SERVICE_AUTH_REQUIRE_HEADER}
     allow-service-role-paths: ${SERVICE_ROLE_ALLOWED_PATHS}
@@ -223,14 +227,17 @@ logging:
 
 # Management endpoints (includes circuitbreakers/retry for Resilience4j)
 # SECURITY: Removed 'env' from default exposure to prevent secret leakage
+# SECURITY: health show-details restricted to authenticated users only
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus,circuitbreakers,retry
+      base-path: /actuator
   endpoint:
     health:
-      show-details: always
+      show-details: when-authorized
+      roles: ACTUATOR_ADMIN
   health:
     elasticsearch:
       enabled: false
@@ -315,11 +322,15 @@ resilience4j:
         exponentialBackoffMultiplier: 3
 
 # OpenAPI Documentation
+# SECURITY: swagger-ui and api-docs are disabled by default in production.
+# Set SWAGGER_UI_ENABLED=true only in development/staging environments.
 springdoc:
   swagger-ui:
     path: /swagger-ui
+    enabled: ${SWAGGER_UI_ENABLED:false}
   api-docs:
     path: /v3/api-docs
+    enabled: ${OPENAPI_DOCS_ENABLED:false}
   info:
     title: Event Planner API
     description: Event planning platform

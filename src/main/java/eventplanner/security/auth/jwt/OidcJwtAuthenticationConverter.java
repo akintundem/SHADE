@@ -117,7 +117,18 @@ public class OidcJwtAuthenticationConverter implements Converter<Jwt, UsernamePa
                 UserAccount user = existingByEmail.get();
                 String existingSub = safeTrim(user.getAuthSub());
                 if (StringUtils.hasText(existingSub) && !existingSub.equals(subject)) {
+                    // A different auth subject already owns this email — reject to prevent
+                    // account takeover via email-claim spoofing.
                     throw invalidToken("Token subject does not match existing account");
+                }
+                // SECURITY: Only link when email is verified. Unverified email claims
+                // must not be used to take over an existing account.
+                if (!emailVerified) {
+                    throw invalidToken("Email must be verified to link to an existing account");
+                }
+                // SECURITY: Never link a token to an ADMIN account via the user IDP path.
+                if (user.getUserType() == UserType.ADMIN) {
+                    throw invalidToken("Admin identities must use the admin identity provider");
                 }
                 user.setAuthSub(subject);
                 return updateUserFromClaims(user, subject, email, emailVerified, name);
@@ -175,6 +186,8 @@ public class OidcJwtAuthenticationConverter implements Converter<Jwt, UsernamePa
                 .acceptTerms(false)
                 .acceptPrivacy(false)
                 .marketingOptIn(false)
+                // SECURITY: Always provision as INDIVIDUAL. ADMIN type must only be
+                // assigned through the admin identity provider, never auto-provisioned.
                 .userType(UserType.INDIVIDUAL)
                 .status(UserStatus.ACTIVE)
                 .profileCompleted(false)

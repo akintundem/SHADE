@@ -33,6 +33,8 @@ import java.util.Map;
 public class ServiceApiKeyFilter extends OncePerRequestFilter {
 
     private final String expectedApiKey;
+    /** Secondary key for zero-downtime rotation. Accepted alongside the primary. */
+    private final String secondaryApiKey;
     private final boolean serviceAuthEnabled;
     private final boolean requireApiKeyHeader;
     private final String allowServiceRolePaths;
@@ -44,6 +46,7 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
     public ServiceApiKeyFilter(ObjectMapper objectMapper, ServiceAuthProperties serviceAuthProperties) {
         this.objectMapper = objectMapper;
         this.expectedApiKey = serviceAuthProperties.getApiKey();
+        this.secondaryApiKey = serviceAuthProperties.getApiKeySecondary();
         this.serviceAuthEnabled = requireConfigured(serviceAuthProperties.getEnabled(), "service.auth.enabled");
         this.requireApiKeyHeader = requireConfigured(serviceAuthProperties.getRequireHeader(), "service.auth.require-header");
         this.allowServiceRolePaths = serviceAuthProperties.getAllowServiceRolePaths();
@@ -67,9 +70,43 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Internal/service paths must always validate API key (no Bearer bypass)
-        // to enforce gateway-only access for trusted service routes.
         boolean isInternalPath = isServicePathAllowed(path);
+        String apiKey = request.getHeader(HEADER_NAME);
+
+        // SECURITY: If an X-API-Key header is present, always validate it — even when
+        // a Bearer token is also present. An invalid key must never be silently ignored
+        // regardless of what other credentials are on the request.
+        if (StringUtils.hasText(apiKey)) {
+            if (!StringUtils.hasText(expectedApiKey)) {
+                if (requireApiKeyHeader) {
+                    sendForbiddenResponse(response, "Service API key not configured on server", path);
+                    return;
+                }
+                filterChain.doFilter(request, response);
+                return;
+            }
+            // Accept primary key or secondary key (for zero-downtime rotation).
+            boolean primaryMatch = constantTimeEquals(apiKey, expectedApiKey);
+            boolean secondaryMatch = StringUtils.hasText(secondaryApiKey) && constantTimeEquals(apiKey, secondaryApiKey);
+            if (!primaryMatch && !secondaryMatch) {
+                sendForbiddenResponse(response, "Invalid service API key", path);
+                return;
+            }
+            // Valid API key — attach service role for internal paths
+            if (SecurityContextHolder.getContext().getAuthentication() == null && isInternalPath) {
+                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                    "service",
+                    null,
+                    List.of(new SimpleGrantedAuthority("ROLE_SERVICE"))
+                );
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // No API key present.
+        // Non-internal paths with a valid Bearer token are user requests — no key required.
         if (!isInternalPath) {
             String authorizationHeader = request.getHeader("Authorization");
             boolean hasBearerToken = StringUtils.hasText(authorizationHeader) &&
@@ -80,51 +117,12 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
             }
         }
 
-        // No Bearer token - validate API key for service-to-service requests
-        String apiKey = request.getHeader(HEADER_NAME);
-
-        // Case 1: No API key provided
-        if (!StringUtils.hasText(apiKey)) {
-            // If require-header is true, the API key is mandatory for service requests
-            // This enforces that all service traffic comes through Kong (which injects X-API-Key)
-            if (requireApiKeyHeader) {
-                sendForbiddenResponse(response, "Missing required X-API-Key header", path);
-                return;
-            }
-            // Dev mode: pass through if header enforcement is disabled
-            filterChain.doFilter(request, response);
+        // No API key and no Bearer token (or internal path without a key).
+        if (requireApiKeyHeader) {
+            sendForbiddenResponse(response, "Missing required X-API-Key header", path);
             return;
         }
-
-        // Case 2: API key is present - validate it
-        if (!StringUtils.hasText(expectedApiKey)) {
-            // Expected API key not configured - this is a configuration error in production
-            if (requireApiKeyHeader) {
-                sendForbiddenResponse(response, "Service API key not configured on server", path);
-                return;
-            }
-            // Dev mode: pass through if header enforcement is disabled
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        if (!constantTimeEquals(apiKey, expectedApiKey)) {
-            // Invalid API key - always reject
-            sendForbiddenResponse(response, "Invalid service API key", request.getRequestURI());
-            return;
-        }
-
-        // Case 3: Valid API key - attach service-level authentication for allowed paths
-        if (SecurityContextHolder.getContext().getAuthentication() == null && isServicePathAllowed(path)) {
-            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                "service",
-                null,
-                List.of(new SimpleGrantedAuthority("ROLE_SERVICE"))
-            );
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-        }
-
-        // API key is valid, continue
+        // Dev mode: pass through
         filterChain.doFilter(request, response);
     }
 

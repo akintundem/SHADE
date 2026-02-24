@@ -2,13 +2,12 @@ package eventplanner.security.auth.controller;
 
 import eventplanner.common.dto.ApiMessageResponse;
 import eventplanner.common.exception.exceptions.BadRequestException;
-import eventplanner.common.exception.exceptions.ForbiddenException;
-import eventplanner.common.exception.exceptions.ResourceNotFoundException;
 import eventplanner.common.exception.exceptions.UnauthorizedException;
 import eventplanner.security.auth.dto.req.SignupRequest;
 import eventplanner.security.auth.dto.res.AuthSessionResponse;
 import eventplanner.security.auth.dto.res.SecureUserResponse;
 import eventplanner.security.auth.service.IdpUserService;
+import eventplanner.security.auth.service.TokenRevocationService;
 import eventplanner.security.auth.service.UserAccountService;
 import eventplanner.common.util.Preconditions;
 import eventplanner.security.auth.service.UserPrincipal;
@@ -39,10 +38,14 @@ public class AuthInfoController {
 
     private final IdpUserService idpUserService;
     private final UserAccountService userAccountService;
+    private final TokenRevocationService tokenRevocationService;
 
-    public AuthInfoController(IdpUserService idpUserService, UserAccountService userAccountService) {
+    public AuthInfoController(IdpUserService idpUserService,
+                              UserAccountService userAccountService,
+                              TokenRevocationService tokenRevocationService) {
         this.idpUserService = idpUserService;
         this.userAccountService = userAccountService;
+        this.tokenRevocationService = tokenRevocationService;
     }
 
     @GetMapping("/session")
@@ -59,8 +62,25 @@ public class AuthInfoController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiMessageResponse> logout(@AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<ApiMessageResponse> logout(@AuthenticationPrincipal UserPrincipal principal,
+                                                     Authentication authentication) {
         Preconditions.requireAuthenticated(principal);
+
+        // Revoke the current JWT so it cannot be reused even before it expires.
+        if (authentication != null) {
+            Jwt jwt = null;
+            if (authentication instanceof JwtAuthenticationToken jwtAuth) {
+                jwt = jwtAuth.getToken();
+            } else if (authentication.getDetails() instanceof Jwt j) {
+                jwt = j;
+            } else if (authentication.getCredentials() instanceof Jwt j) {
+                jwt = j;
+            }
+            if (jwt != null && jwt.getId() != null) {
+                tokenRevocationService.revoke(jwt.getId(), jwt.getExpiresAt());
+            }
+        }
+
         idpUserService.signOutUser(
                 principal.getUser().getAuthSub(),
                 principal.getUser().getEmail()

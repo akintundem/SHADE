@@ -6,6 +6,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class ServiceAuthProperties {
 
     private String apiKey;
+    /** Optional secondary key to allow zero-downtime API key rotation.
+     *  During rotation: set api-key to the new key, set api-key-secondary to the old key.
+     *  Once all callers are updated, clear api-key-secondary. */
+    private String apiKeySecondary;
     private Boolean enabled;
     private Boolean requireHeader;
     private String allowServiceRolePaths;
@@ -16,6 +20,14 @@ public class ServiceAuthProperties {
 
     public void setApiKey(String apiKey) {
         this.apiKey = apiKey;
+    }
+
+    public String getApiKeySecondary() {
+        return apiKeySecondary;
+    }
+
+    public void setApiKeySecondary(String apiKeySecondary) {
+        this.apiKeySecondary = apiKeySecondary;
     }
 
     public Boolean getEnabled() {

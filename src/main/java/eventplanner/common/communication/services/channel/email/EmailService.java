@@ -3,12 +3,12 @@ package eventplanner.common.communication.services.channel.email;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import eventplanner.common.communication.services.channel.email.dto.EmailJobRequest;
 import eventplanner.common.communication.services.channel.email.dto.EmailResult;
+import eventplanner.common.communication.util.EmailVariableSanitizer;
 import eventplanner.common.config.RabbitMqProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -52,12 +52,17 @@ public class EmailService {
      */
     public EmailResult sendEmail(String to, String subject, String from, String templateId, Map<String, Object> variables) {
         try {
+            // SECURITY: Sanitize template variables to prevent HTML injection in emails.
+            // User-controlled values (event names, user names, etc.) are HTML-escaped
+            // before being passed to the template renderer.
+            Map<String, Object> sanitizedVariables = EmailVariableSanitizer.sanitize(variables);
+
             EmailJobRequest payload = EmailJobRequest.builder()
                     .templateId(templateId)
                     .to(List.of(to))
                     .from(from)
                     .subject(subject)
-                    .variables(variables != null ? variables : new HashMap<>())
+                    .variables(sanitizedVariables)
                     .build();
 
             String payloadJson = objectMapper.writeValueAsString(payload);

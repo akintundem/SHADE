@@ -15,8 +15,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import jakarta.annotation.PostConstruct;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -61,29 +64,56 @@ public class RbacPolicyStore {
             if (!resource.exists()) {
                 throw new IllegalStateException("RBAC policy not found at " + policyLocation);
             }
+            // Read all bytes first so we can compute the integrity digest
+            // and parse from the same buffer — no double-read race window.
+            byte[] policyBytes;
             try (InputStream in = resource.getInputStream()) {
-                JsonNode root = objectMapper.readTree(in);
-                JsonNode policyNode = root.path("policy");
-                metadata = RbacPolicyMetadata.builder()
-                        .name(policyNode.path("name").asText("undefined"))
-                        .version(policyNode.path("version").asText("unknown"))
-                        .source(policyNode.path("source").asText("unknown"))
-                        .build();
-
-                permissionIndex.clear();
-                roleIndex.clear();
-
-                parsePermissions(policyNode.path("permissions"));
-                parseRoles(policyNode.path("roles"));
-
-                log.info("Loaded RBAC policy '{}' (version {}) with {} permissions across {} scopes",
-                        metadata.getName(),
-                        metadata.getVersion(),
-                        permissionIndex.size(),
-                        roleIndex.size());
+                ByteArrayOutputStream buf = new ByteArrayOutputStream();
+                in.transferTo(buf);
+                policyBytes = buf.toByteArray();
             }
+
+            // SECURITY: Log a SHA-256 digest of the policy file at startup.
+            // Any silent modification to the file on disk will produce a different
+            // digest, making tampering detectable in audit logs.
+            String digest = sha256Hex(policyBytes);
+            log.info("Loading RBAC policy from '{}' (SHA-256: {})", policyLocation, digest);
+
+            JsonNode root = objectMapper.readTree(policyBytes);
+            JsonNode policyNode = root.path("policy");
+            metadata = RbacPolicyMetadata.builder()
+                    .name(policyNode.path("name").asText("undefined"))
+                    .version(policyNode.path("version").asText("unknown"))
+                    .source(policyNode.path("source").asText("unknown"))
+                    .build();
+
+            permissionIndex.clear();
+            roleIndex.clear();
+
+            parsePermissions(policyNode.path("permissions"));
+            parseRoles(policyNode.path("roles"));
+
+            log.info("Loaded RBAC policy '{}' (version {}) with {} permissions across {} scopes",
+                    metadata.getName(),
+                    metadata.getVersion(),
+                    permissionIndex.size(),
+                    roleIndex.size());
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to read RBAC policy at " + policyLocation, ex);
+        }
+    }
+
+    private static String sha256Hex(byte[] data) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(data);
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            return "unavailable";
         }
     }
 

@@ -33,6 +33,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -44,6 +45,15 @@ import java.util.stream.Collectors;
 @Tag(name = "Tickets")
 @RequiredArgsConstructor
 public class TicketController {
+
+    /** Maximum page size for ticket queries to prevent large result-set scraping. */
+    private static final int MAX_PAGE_SIZE = 50;
+
+    /** Whitelist of allowed sort fields — rejects arbitrary column names that could
+     *  leak schema info or trigger expensive sorts on non-indexed columns. */
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+            "createdAt", "updatedAt", "status", "ownerEmail", "ownerName", "ticketNumber"
+    );
 
     private final TicketService ticketService;
     private final AuthorizationService authorizationService;
@@ -105,8 +115,13 @@ public class TicketController {
         // Validate pagination
         if (page < 0) page = 0;
         if (size < 1) size = 20;
-        if (size > 100) size = 100;
-        Sort.Direction direction = "ASC".equalsIgnoreCase(sortDirection) 
+        if (size > MAX_PAGE_SIZE) size = MAX_PAGE_SIZE;
+        // Whitelist sort field to prevent schema probing and unindexed-column DoS
+        if (!ALLOWED_SORT_FIELDS.contains(sortBy)) {
+            throw new BadRequestException(
+                "Invalid sort field. Allowed: " + ALLOWED_SORT_FIELDS);
+        }
+        Sort.Direction direction = "ASC".equalsIgnoreCase(sortDirection)
             ? Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
         Page<TicketResponse> tickets = ticketService.getTicketsByEventId(

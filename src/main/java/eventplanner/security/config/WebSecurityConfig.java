@@ -6,6 +6,7 @@ import eventplanner.security.auth.jwt.OidcJwtAuthenticationConverter;
 import eventplanner.security.filters.RbacContextFilter;
 import eventplanner.security.filters.SecurityHeadersFilter;
 import eventplanner.security.filters.ServiceApiKeyFilter;
+import eventplanner.security.filters.TokenRevocationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -13,8 +14,10 @@ import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
@@ -44,6 +47,7 @@ public class WebSecurityConfig {
     private final SecurityHeadersFilter securityHeadersFilter;
     private final RbacContextFilter rbacContextFilter;
     private final ServiceApiKeyFilter serviceApiKeyFilter;
+    private final TokenRevocationFilter tokenRevocationFilter;
     private final OidcJwtAuthenticationConverter jwtAuthenticationConverter;
     private final ObjectMapper objectMapper;
     private final ResourceServerJwtProperties resourceServerJwtProperties;
@@ -51,12 +55,14 @@ public class WebSecurityConfig {
     public WebSecurityConfig(SecurityHeadersFilter securityHeadersFilter,
                           RbacContextFilter rbacContextFilter,
                           ServiceApiKeyFilter serviceApiKeyFilter,
+                          TokenRevocationFilter tokenRevocationFilter,
                           OidcJwtAuthenticationConverter jwtAuthenticationConverter,
                           ObjectMapper objectMapper,
                           ResourceServerJwtProperties resourceServerJwtProperties) {
         this.securityHeadersFilter = securityHeadersFilter;
         this.rbacContextFilter = rbacContextFilter;
         this.serviceApiKeyFilter = serviceApiKeyFilter;
+        this.tokenRevocationFilter = tokenRevocationFilter;
         this.jwtAuthenticationConverter = jwtAuthenticationConverter;
         this.objectMapper = objectMapper;
         this.resourceServerJwtProperties = resourceServerJwtProperties;
@@ -70,10 +76,32 @@ public class WebSecurityConfig {
     }
 
     @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        // Defence-in-depth CORS: primary enforcement is at the Kong gateway,
+        // but we also configure restrictive defaults here so direct calls are
+        // safe even if the gateway is bypassed.
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOriginPatterns(java.util.List.of(
+                "${CORS_ALLOWED_ORIGINS:http://localhost:3000}"
+        ));
+        config.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(java.util.List.of(
+                "Authorization", "Content-Type", "X-API-Key", "X-Requested-With"
+        ));
+        config.setExposedHeaders(java.util.List.of("X-Request-ID"));
+        config.setAllowCredentials(false);
+        config.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
+    @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            // Perimeter CORS is enforced at the gateway; disable Spring CORS here.
-            .cors(AbstractHttpConfigurer::disable)
+            // Defence-in-depth CORS: primary enforcement at Kong gateway;
+            // Spring-level config is a restrictive fallback.
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf
                 .csrfTokenRepository(csrfTokenRepository())
                 .ignoringRequestMatchers(
@@ -85,7 +113,8 @@ public class WebSecurityConfig {
                 .requestMatchers("/actuator/info").permitAll()
                 .requestMatchers("/actuator/metrics").authenticated()
                 .requestMatchers("/error", "/favicon.ico", "/css/**", "/js/**", "/images/**").permitAll()
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").authenticated()
+                // SECURITY: Swagger restricted to ROLE_ADMIN only; disabled in prod via SWAGGER_UI_ENABLED=false
+                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/").permitAll()
                 .anyRequest().authenticated()
             )
@@ -106,6 +135,9 @@ public class WebSecurityConfig {
         http.addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterAfter(serviceApiKeyFilter, SecurityHeadersFilter.class);
         http.addFilterAfter(rbacContextFilter, BearerTokenAuthenticationFilter.class);
+        // TokenRevocationFilter runs after BearerTokenAuthenticationFilter so the JWT is already
+        // parsed into the SecurityContext; we then check the JTI against the Redis blocklist.
+        http.addFilterAfter(tokenRevocationFilter, BearerTokenAuthenticationFilter.class);
 
         String issuerUri = resourceServerJwtProperties.getIssuerUri();
         String jwkSetUri = resourceServerJwtProperties.getJwkSetUri();
