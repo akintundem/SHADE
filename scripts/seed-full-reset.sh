@@ -44,12 +44,20 @@ else
 fi
 
 # ── 2. Wipe DB ───────────────────────────────────────────────────────────────
+# Use compose Postgres (port 5434) when available so reset matches the DB the app uses
 if [ "${SEED_SKIP_DB_RESET:-}" != "1" ]; then
   echo "==> 2/4 Wiping database (Reset_Clean_Up_DB.sh)..."
-  echo y | (cd "$BACKEND_DIR" && bash "$SCRIPT_DIR/Reset_Clean_Up_DB.sh") || {
+  export RESET_DB_NONINTERACTIVE=1
+  export RESET_DB_HOST="${SEED_DB_HOST:-localhost}"
+  export RESET_DB_PORT="${SEED_DB_PORT:-5434}"
+  export RESET_DB_NAME="${SEED_DB_NAME:-shade_dev}"
+  export RESET_DB_USERNAME="${SEED_DB_USERNAME:-postgres}"
+  export RESET_DB_PASSWORD="${SEED_DB_PASSWORD:-postgres}"
+  (cd "$BACKEND_DIR" && bash "$SCRIPT_DIR/Reset_Clean_Up_DB.sh") || {
     echo "[Error] DB reset failed."
     exit 1
   }
+  unset RESET_DB_NONINTERACTIVE RESET_DB_HOST RESET_DB_PORT RESET_DB_NAME RESET_DB_USERNAME RESET_DB_PASSWORD
   echo ""
 else
   echo "==> 2/4 Skipping DB reset (SEED_SKIP_DB_RESET=1)"
@@ -83,7 +91,9 @@ else
 fi
 
 # ── 4. Run seed suite ────────────────────────────────────────────────────────
-echo "==> 4/4 Running seed suite..."
-(cd "$SEED_FE_DIR" && npx vitest run test/seed/seed.test.ts --reporter=verbose)
+# Use Java app directly (8080) so no Kong API key is required; override FE .env if set
+export API_BASE_URL="${SEED_API_BASE_URL:-http://localhost:8080}"
+echo "==> 4/4 Running seed suite (API_BASE_URL=$API_BASE_URL)..."
+(cd "$SEED_FE_DIR" && API_BASE_URL="$API_BASE_URL" npx vitest run test/seed/seed.test.ts --reporter=verbose)
 echo ""
 echo "==> Seed complete."

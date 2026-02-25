@@ -176,8 +176,8 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_S3_USER_BUCKET: ${AWS_S3_USER_BUCKET:-shade-user-assets}
       AWS_S3_EVENT_BUCKET: ${AWS_S3_EVENT_BUCKET:-shade-event-assets}
-      # Schema already created; use validate to avoid recreating tables
-      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      # Recreate schema after DB reset (set to validate after first successful seed)
+      SPRING_JPA_HIBERNATE_DDL_AUTO: create
       # Enable Spring Boot DevTools for hot-reload
       SPRING_DEVTOOLS_RESTART_ENABLED: "true"
       SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "true"

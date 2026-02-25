@@ -35,11 +35,13 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
   done < "${REPO_ROOT}/.env"
 fi
 
-DB_HOST="${DB_HOST:-localhost}"
-DB_PORT="${DB_PORT:-5432}"
-DB_NAME="${DB_NAME:-shade_dev}"
-DB_USERNAME="${DB_USERNAME:-$(whoami)}"
-export PGPASSWORD="${DB_PASSWORD:-}"
+# Allow overrides from env (e.g. seed-full-reset targets compose Postgres on 5434)
+DB_HOST="${RESET_DB_HOST:-${DB_HOST:-localhost}}"
+DB_PORT="${RESET_DB_PORT:-${DB_PORT:-5432}}"
+DB_NAME="${RESET_DB_NAME:-${DB_NAME:-shade_dev}}"
+DB_USERNAME="${RESET_DB_USERNAME:-${DB_USERNAME:-$(whoami)}}"
+DB_PASSWORD="${RESET_DB_PASSWORD:-${DB_PASSWORD:-}}"
+export PGPASSWORD="${DB_PASSWORD}"
 
 # When .env uses host.docker.internal (for app in Docker), use localhost for psql on host
 if [[ "${DB_HOST}" == "host.docker.internal" ]]; then
