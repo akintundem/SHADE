@@ -134,6 +134,9 @@ public class AuthInfoController {
                         user.getUsername(),
                         user.getPhoneNumber()
                 );
+                // Mark email verified so the user can immediately sign in via password grant
+                // without waiting for a verification email (our signup flow is the verification).
+                idpUserService.markEmailVerified(subject);
             } catch (Exception idpEx) {
                 // IdP sync is best-effort — user is already provisioned locally.
                 // Log and continue so the caller gets a success response.

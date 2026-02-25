@@ -112,4 +112,22 @@ public class Auth0IdpUserService implements IdpUserService {
             // no-op on failure
         }
     }
+
+    @Override
+    public void markEmailVerified(String authSub) {
+        if (!isConfigured() || !StringUtils.hasText(authSub)) {
+            return;
+        }
+        try {
+            String token = getManagementToken();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(token);
+            Map<String, Object> body = Map.of("email_verified", true);
+            String url = baseUrl() + "/api/v2/users/" + authSub;
+            restTemplate.exchange(url, HttpMethod.PATCH, new HttpEntity<>(body, headers), Map.class);
+        } catch (Exception ignored) {
+            // no-op on failure — email_verified stays false but user is already provisioned
+        }
+    }
 }

@@ -24,4 +24,12 @@ public interface IdpUserService {
                            String name,
                            String preferredUsername,
                            String phoneNumber);
+
+    /**
+     * Mark the user's email as verified in the IdP. No-op if not configured.
+     * Used after JIT signup so the user can immediately log in without waiting
+     * for a verification email (email verification enforcement is delegated to
+     * application-level policy, not the IdP when using this flow).
+     */
+    void markEmailVerified(String authSub);
 }
