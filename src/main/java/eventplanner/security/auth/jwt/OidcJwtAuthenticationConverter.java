@@ -158,7 +158,13 @@ public class OidcJwtAuthenticationConverter implements Converter<Jwt, UsernamePa
             updated = true;
         }
 
-        if (StringUtils.hasText(name) && !name.equals(user.getName())) {
+        // Only update the name from JWT if the user doesn't already have a real name set,
+        // or if the current name looks like an auto-generated placeholder (e.g. auth0 sub).
+        // This prevents overwriting a properly onboarded user's name with the JWT subject.
+        boolean userHasRealName = StringUtils.hasText(user.getName())
+                && !user.getName().startsWith("auth0|")
+                && !user.getName().contains("@");
+        if (!userHasRealName && StringUtils.hasText(name) && !name.equals(user.getName())) {
             user.setName(name);
             updated = true;
         }

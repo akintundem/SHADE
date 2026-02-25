@@ -73,10 +73,20 @@ public class ServiceApiKeyFilter extends OncePerRequestFilter {
         boolean isInternalPath = isServicePathAllowed(path);
         String apiKey = request.getHeader(HEADER_NAME);
 
-        // SECURITY: If an X-API-Key header is present, always validate it — even when
-        // a Bearer token is also present. An invalid key must never be silently ignored
-        // regardless of what other credentials are on the request.
+        // If an X-API-Key header is present, validate it.
+        // Exception: if the request also carries a Bearer token it is a user request routed
+        // through the gateway — let JWT authentication handle it and skip API key enforcement.
         if (StringUtils.hasText(apiKey)) {
+            String authorizationHeader = request.getHeader("Authorization");
+            boolean hasBearerToken = StringUtils.hasText(authorizationHeader) &&
+                                    authorizationHeader.trim().startsWith("Bearer ");
+
+            if (hasBearerToken) {
+                // User request via gateway — JWT auth will validate the Bearer token.
+                filterChain.doFilter(request, response);
+                return;
+            }
+
             if (!StringUtils.hasText(expectedApiKey)) {
                 if (requireApiKeyHeader) {
                     sendForbiddenResponse(response, "Service API key not configured on server", path);
